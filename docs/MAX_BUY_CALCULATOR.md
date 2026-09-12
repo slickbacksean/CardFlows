@@ -180,10 +180,10 @@ From `CRM_DATA_MODEL.md` §14.10:
 
 | Field | Default | Purpose |
 |-------|---------|---------|
-| `max_buy_target_margin_pct` | `0.20` | **Assumption** |
-| `max_buy_fees_buffer_pct` | `0.13` | **Assumption** |
-| `max_buy_condition_adjustments_json` | `null` | **Founder decision** — optional map |
-| `default_currency` | `USD` | **Assumption** |
+| `max_buy_target_margin_pct` | `0.20` | **Confirmed** |
+| `max_buy_fees_buffer_pct` | `0.13` | **Confirmed** |
+| `max_buy_condition_adjustments_json` | `null` | **Confirmed** — optional map |
+| `default_currency` | `USD` | **Confirmed** |
 
 ---
 
