@@ -1,6 +1,6 @@
 # CardFlow Mock Fixtures
 
-**Purpose:** Typed mock responses for CardSight identify and TCGdex catalog/mapping, enabling development and CI without live API keys, self-hosting, or a full catalog import.
+**Purpose:** Typed mock responses for CardSight identify, TCGdex catalog/mapping, and CardFlow CRM / inventory examples, enabling development and CI without live API keys, self-hosting, a full catalog import, or production tables.
 
 All fixtures include `_meta.mocked: true`. Treat JSON as **mock examples**, not production dumps.
 
@@ -87,6 +87,37 @@ Rules encoded in fixtures:
 
 ---
 
+## CRM / inventory fixtures
+
+Shapes follow `docs/CRM_DATA_MODEL.md`, `docs/CRM_INVENTORY_GRAIN.md`, `docs/CRM_WORKFLOW_STATES.md`, and `docs/CRM_LISTING_DRAFT_FIELDS.md`. No production tables. No marketplace publish fields. No TCGdex `pricing`.
+
+| File | Scenario | Use Case |
+|------|----------|----------|
+| `crm-canonical-card-example.json` | Canonical card minted on Confirm (`base1-58` Pikachu) | Field ownership; mint-on-confirm; `selectedVariant` is not on the canonical grain |
+| `crm-scan-example.json` | Camera photo + High proposal, no Confirm yet | Scan-only record; `cardflowCardId` and inventory still null; `user_capture` provenance |
+| `crm-inventory-item-purchased-example.json` | Purchased raw single, one physical copy | All-in cost, location, Max Buy without a live provider, `acquired` |
+| `crm-inventory-item-watchlist-example.json` | Watchlist after manual Charizard picker (`base1-4`) | Interest grain; no cost; no draft; `watching` |
+| `crm-listing-draft-example.json` | Internal draft for the purchased Pikachu copy | Draft fields only; explicitly not published |
+| `crm-correction-audit-example.json` | Re-scan conflicts (`base1-14` vs `base1-58`); user keeps original | `provider_conflict` + `correction`; no silent inventory retarget |
+
+Shared mock ids (Pikachu path):
+
+- `cardflowCardId`: `7c2e1a90-4b3d-4f6a-9c11-2e8f0a1b3c58`
+- `tcgdexId`: `base1-58`
+- `cardsightCardId`: `a1b2c3d4-e5f6-7890-abcd-ef1234567890`
+- `scanId`: `a0b1c2d3-e4f5-4678-9012-3456789abcde`
+- `inventoryItemId` (purchased): `c2d3e4f5-a6b7-4890-1234-56789abcdef0`
+
+Rules encoded in CRM fixtures:
+
+- Confirm before Purchased / Watchlist / inventory write.
+- Purchased grain = one physical copy (`quantity: 1`, `tags: ["raw"]`).
+- Watchlist grain = interest, not a copy (`quantity: null`, no `costBasis`).
+- Listing drafts stay inside CardFlow (`publication.published: false`).
+- Price snapshots use `user_entered` — never `tcgdex_pricing`.
+
+---
+
 ## Usage
 
 ### MockCardRecognitionProvider
@@ -134,6 +165,19 @@ import ambiguousMap from './tcgdex-ambiguous-match-example.json';
 // TCGDEX_MOCK_SCENARIO: card | canonical | high-map | no-match | ambiguous
 ```
 
+### CRM fixtures (docs / later mock CRM)
+
+```typescript
+import crmCanonical from './crm-canonical-card-example.json';
+import crmScan from './crm-scan-example.json';
+import crmPurchased from './crm-inventory-item-purchased-example.json';
+import crmWatchlist from './crm-inventory-item-watchlist-example.json';
+import crmDraft from './crm-listing-draft-example.json';
+import crmAudit from './crm-correction-audit-example.json';
+
+// CRM_MOCK_SCENARIO: canonical | scan | purchased | watchlist | draft | correction
+```
+
 ### Test Detection
 
 All fixtures include `_meta.mocked: true` for runtime test detection:
@@ -160,7 +204,13 @@ When official TCGdex card/set/image docs change:
 2. Keep `pricing` stripped
 3. Update `docs/TCGDEX_VALIDATION.md` Confirmed/Unconfirmed tables
 
+When CRM recommendations change:
+
+1. Update `docs/CRM_*.md` first, then keep fixtures aligned
+2. Keep `_meta.mocked: true`
+3. Do not add marketplace publication fields or TCGdex pricing
+
 ---
 
 **Version:** 2026-09-12  
-**Related:** `docs/CARDSIGHT_INTEGRATION_RECOMMENDATION.md` §3; `docs/TCGDEX_ARCHITECTURE.md`; `docs/CARD_ID_MAPPING_PLAN.md`.
+**Related:** `docs/CARDSIGHT_INTEGRATION_RECOMMENDATION.md` §3; `docs/TCGDEX_ARCHITECTURE.md`; `docs/CARD_ID_MAPPING_PLAN.md`; `docs/CRM_DATA_MODEL.md`.

@@ -1,0 +1,82 @@
+{
+  "provider": "mock",
+  "ok": true,
+  "inventoryItem": {
+    "inventoryItemId": "d3e4f5a6-b7c8-4901-2345-6789abcdef01",
+    "userId": "9f1a2b3c-4d5e-6789-abcd-ef0123456789",
+    "cardflowCardId": "8d3f2b01-5c4e-4a7b-8d22-3f9e1b2c4d69",
+    "confirmationId": "c4d5e6f7-a8b9-4012-3456-7890abcdef12",
+    "scanId": "a1b2c3d4-e5f6-4789-0123-456789abcd00",
+    "intent": "watchlist",
+    "grain": "interest_not_physical_copy",
+    "selectedVariant": "holo",
+    "condition": null,
+    "quantity": null,
+    "tags": ["raw"],
+    "workflowState": "watching",
+    "location": null,
+    "targetMaxBuyAmount": "120.00",
+    "closedAt": null,
+    "createdAt": "2026-09-12T16:12:08.000Z"
+  },
+  "confirmation": {
+    "confirmationId": "c4d5e6f7-a8b9-4012-3456-7890abcdef12",
+    "scanId": "a1b2c3d4-e5f6-4789-0123-456789abcd00",
+    "cardflowCardId": "8d3f2b01-5c4e-4a7b-8d22-3f9e1b2c4d69",
+    "tcgdexId": "base1-4",
+    "language": "en",
+    "selectedVariant": "holo",
+    "matchMethod": "manual",
+    "mappingConfidence": "Medium",
+    "confirmedAt": "2026-09-12T16:11:40.000Z",
+    "mintedCardflowCardId": true,
+    "sourceMappingFixture": "tcgdex-ambiguous-match-example.json",
+    "pickerChoice": "User picked Base Set Charizard #4 from three reprint candidates. Name-only was not auto-mapped."
+  },
+  "canonicalCard": {
+    "cardflowCardId": "8d3f2b01-5c4e-4a7b-8d22-3f9e1b2c4d69",
+    "language": "en",
+    "tcgdexId": "base1-4",
+    "tcgdexSetId": "base1",
+    "localId": "4",
+    "name": "Charizard",
+    "category": "Pokemon",
+    "rarity": "Rare",
+    "catalogFingerprint": "en:base1-4",
+    "image": {
+      "baseUrl": "https://assets.tcgdex.net/en/base/base1/4",
+      "source": "tcgdex_assets",
+      "quality": "low",
+      "extension": "webp",
+      "constructedUrl": "https://assets.tcgdex.net/en/base/base1/4/low.webp",
+      "provenance": "tcgdex assets.tcgdex.net; card id base1-4; lang en; database not affiliated with Nintendo or The Pokémon Company"
+    }
+  },
+  "purchase": null,
+  "costBasis": null,
+  "priceSnapshot": {
+    "snapshotId": "1728394a-5b6c-4d7e-9f0a-1b2c3d4e5f60",
+    "cardflowCardId": "8d3f2b01-5c4e-4a7b-8d22-3f9e1b2c4d69",
+    "inventoryItemId": "d3e4f5a6-b7c8-4901-2345-6789abcdef01",
+    "source": "user_entered",
+    "amount": "180.00",
+    "currency": "USD",
+    "capturedAt": "2026-09-12T16:11:55.000Z",
+    "providerName": null,
+    "isEstimate": true,
+    "note": "User-typed comparable so Max Buy can run without a live pricing provider. Not TCGdex pricing."
+  },
+  "listingDraftAllowed": false,
+  "crmRules": {
+    "createdOnlyAfterConfirm": true,
+    "keyedOn": "cardflowCardId",
+    "notKeyedOn": ["cardsightCardId", "tcgdexId_alone"],
+    "uniqueOpenWatchlistOn": ["userId", "cardflowCardId", "selectedVariant"],
+    "convertToPurchased": "close this row and create a new purchased physical copy",
+    "pricingOmitted": true
+  },
+  "_meta": {
+    "mocked": true,
+    "description": "MOCK EXAMPLE — Watchlist interest for confirmed Base Set Charizard (base1-4) after a manual picker choice. Not a physical copy: no quantity, no all-in cost, no listing draft. Max Buy target is user guidance only. Not a live API recording. Not a production table row."
+  }
+}

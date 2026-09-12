@@ -1,0 +1,57 @@
+{
+  "provider": "mock",
+  "ok": true,
+  "scan": {
+    "scanId": "a0b1c2d3-e4f5-4678-9012-3456789abcde",
+    "userId": "9f1a2b3c-4d5e-6789-abcd-ef0123456789",
+    "capturedAt": "2026-09-12T16:02:11.000Z",
+    "captureMethod": "camera_photo",
+    "preInventoryState": "identity_unconfirmed",
+    "cardflowCardId": null,
+    "inventoryItemId": null,
+    "image": {
+      "storageRef": "users/9f1a2b3c-4d5e-6789-abcd-ef0123456789/scans/a0b1c2d3-e4f5-4678-9012-3456789abcde.jpg",
+      "source": "user_capture",
+      "mimeType": "image/jpeg",
+      "provenance": "User camera photo captured in CardFlow. Not TCGdex catalog art. Not a CardSight asset."
+    },
+    "recognition": {
+      "sourceFixture": "cardsight-high-confidence.json",
+      "provider": "mock",
+      "ok": true,
+      "vendorRequestId": "req_mock_pikachu_high_001",
+      "processingTimeMs": 342,
+      "confidence": "High",
+      "matchLevel": "exact",
+      "cardsightCardId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+      "name": "Pikachu",
+      "setName": "Base Set",
+      "number": "58",
+      "language": "en"
+    },
+    "mapping": {
+      "confidence": "High",
+      "status": "matched",
+      "matchedOn": ["language", "set", "localId", "name"],
+      "tcgdexId": "base1-58",
+      "proposedCardflowCardId": null,
+      "canonicalWriteAllowed": false,
+      "crmWriteAllowedBeforeConfirm": false
+    }
+  },
+  "userConfirmation": {
+    "required": true,
+    "recommendedUx": "Pre-select Base Set Pikachu #58. User must tap Confirm before Purchased or Watchlist. Do not mint cardflow_card_id on scan alone."
+  },
+  "neverStoredOnScan": [
+    "CARDSIGHT_API_KEY",
+    "X-API-Key",
+    "tcgdex.pricing",
+    "raw CardSight multipart",
+    "marketplace credentials"
+  ],
+  "_meta": {
+    "mocked": true,
+    "description": "MOCK EXAMPLE — Scan after Camera Photo + High CardSight identify + High mapper proposal. cardflow_card_id and inventory_item_id are still null. User scan photo provenance is user_capture, not tcgdex_assets. Not a live API recording. Not a production table row."
+  }
+}

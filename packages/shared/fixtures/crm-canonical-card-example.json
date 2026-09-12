@@ -1,0 +1,84 @@
+{
+  "provider": "mock",
+  "ok": true,
+  "canonicalCard": {
+    "cardflowCardId": "7c2e1a90-4b3d-4f6a-9c11-2e8f0a1b3c58",
+    "language": "en",
+    "tcgdexId": "base1-58",
+    "tcgdexSetId": "base1",
+    "localId": "58",
+    "name": "Pikachu",
+    "category": "Pokemon",
+    "rarity": "Common",
+    "illustrator": "Mitsuhiro Arita",
+    "variants": {
+      "firstEdition": true,
+      "holo": false,
+      "normal": true,
+      "reverse": false,
+      "wPromo": false
+    },
+    "selectedVariant": null,
+    "set": {
+      "id": "base1",
+      "name": "Base Set",
+      "logo": "https://assets.tcgdex.net/en/base/base1/logo",
+      "cardCount": {
+        "official": 102,
+        "total": 102
+      }
+    },
+    "image": {
+      "baseUrl": "https://assets.tcgdex.net/en/base/base1/58",
+      "source": "tcgdex_assets",
+      "quality": "high",
+      "extension": "webp",
+      "constructedUrl": "https://assets.tcgdex.net/en/base/base1/58/high.webp",
+      "provenance": "tcgdex assets.tcgdex.net; card id base1-58; lang en; database not affiliated with Nintendo or The Pokémon Company"
+    },
+    "catalogFingerprint": "en:base1-58",
+    "mintedOn": "confirm",
+    "matchMethod": "identify",
+    "mappingConfidence": "High",
+    "mappingStatus": "matched"
+  },
+  "fieldOwnership": {
+    "cardflowOwned": ["cardflowCardId", "mintedOn", "matchMethod", "mappingConfidence", "mappingStatus"],
+    "copiedCatalogCache": [
+      "name",
+      "tcgdexSetId",
+      "localId",
+      "rarity",
+      "category",
+      "illustrator",
+      "variants",
+      "set",
+      "image.baseUrl"
+    ],
+    "externalRefs": ["tcgdexId", "cardsightCardId"]
+  },
+  "externalRefs": [
+    {
+      "provider": "tcgdex",
+      "externalId": "base1-58",
+      "setExternalId": "base1",
+      "language": "en"
+    },
+    {
+      "provider": "cardsight",
+      "externalId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+      "setExternalId": null,
+      "language": "en"
+    }
+  ],
+  "crmRules": {
+    "mintCardflowCardId": "confirm_only",
+    "inventoryKeyedOn": "cardflowCardId",
+    "neverKeyInventoryOn": ["cardsightCardId", "tcgdexId_alone"],
+    "pricingOmitted": true
+  },
+  "_meta": {
+    "mocked": true,
+    "description": "MOCK EXAMPLE — CRM view of a canonical CardFlow card minted on Confirm. Same Pikachu / base1-58 / CardFlow UUID as cardflow-canonical-card-example.json. selectedVariant is null on the canonical row; it belongs on inventory/scan lines. No TCGdex pricing. Not a production table row."
+  }
+}
