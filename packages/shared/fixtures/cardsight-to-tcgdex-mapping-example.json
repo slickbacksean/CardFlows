@@ -1,0 +1,67 @@
+{
+  "provider": "mock",
+  "ok": true,
+  "confidence": "High",
+  "status": "matched",
+  "matchedOn": ["language", "set", "localId", "name"],
+  "cardflowCardId": "7c2e1a90-4b3d-4f6a-9c11-2e8f0a1b3c58",
+  "tcgdexId": "base1-58",
+  "cardsightCardId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "recognition": {
+    "sourceFixture": "cardsight-high-confidence.json",
+    "confidence": "High",
+    "matchLevel": "exact",
+    "vendorCardId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+    "name": "Pikachu",
+    "setName": "Base Set",
+    "number": "58",
+    "language": "en"
+  },
+  "lookup": {
+    "language": "en",
+    "setName": "Base Set",
+    "resolvedSetId": "base1",
+    "localId": "58",
+    "method": "GET /v2/en/sets/base1/58",
+    "nameVerified": true,
+    "variantHint": null
+  },
+  "canonicalCard": {
+    "cardflowCardId": "7c2e1a90-4b3d-4f6a-9c11-2e8f0a1b3c58",
+    "language": "en",
+    "tcgdexId": "base1-58",
+    "tcgdexSetId": "base1",
+    "localId": "58",
+    "name": "Pikachu",
+    "category": "Pokemon",
+    "rarity": "Common",
+    "variants": {
+      "firstEdition": true,
+      "holo": false,
+      "normal": true,
+      "reverse": false,
+      "wPromo": false
+    },
+    "selectedVariant": null,
+    "image": {
+      "baseUrl": "https://assets.tcgdex.net/en/base/base1/58",
+      "source": "tcgdex_assets",
+      "quality": "high",
+      "extension": "webp",
+      "constructedUrl": "https://assets.tcgdex.net/en/base/base1/58/high.webp",
+      "provenance": "tcgdex assets.tcgdex.net; card id base1-58; lang en; database not affiliated with Nintendo or The Pokémon Company"
+    },
+    "cardsightCardId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+  },
+  "candidates": [],
+  "error": null,
+  "userConfirmation": {
+    "required": true,
+    "crmWriteAllowedBeforeConfirm": false,
+    "recommendedUx": "Pre-select this card on the confirm screen; user must tap Confirm before Purchased or Watchlist"
+  },
+  "_meta": {
+    "mocked": true,
+    "description": "MOCK EXAMPLE — High mapping: CardSight Pikachu Base Set #58 to TCGdex base1-58 using language + set + localId + name. CardSight UUID is not the TCGdex id. Never map on name alone. Not a live API recording."
+  }
+}
