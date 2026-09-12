@@ -1,0 +1,99 @@
+{
+  "_comment": "MOCK FIXTURE - Example of successful CardSight → TCGdex mapping with high confidence",
+  "_scenario": "User scans a Charizard ex card from Pitch Black set. CardSight returns good metadata. Mapping service finds exact TCGdex match.",
+  "_last_updated": "2026-09-12",
+  "cardSightDetection": {
+    "confidence": "High",
+    "card": {
+      "id": "cs_abc123def456",
+      "name": "Charizard ex",
+      "number": "054",
+      "releaseName": "Pitch Black",
+      "setId": "cs_set_sv8a",
+      "year": "2026",
+      "manufacturer": "Pokémon Company International",
+      "fields": [
+        {
+          "key": "CARD_LANGUAGE",
+          "value": "ja"
+        },
+        {
+          "key": "RARITY",
+          "value": "Special Illustration Rare"
+        },
+        {
+          "key": "HP",
+          "value": "330"
+        }
+      ]
+    }
+  },
+  "mappingProcess": {
+    "step1_extract_metadata": {
+      "language": "ja",
+      "rarity": "Special Illustration Rare",
+      "cardNumber": "054",
+      "setName": "Pitch Black",
+      "cardName": "Charizard ex"
+    },
+    "step2_resolve_set": {
+      "cardSightSetName": "Pitch Black",
+      "tcgdexSetId": "sv8a",
+      "matchStrategy": "exact_match_from_mapping_table",
+      "confidence": "high"
+    },
+    "step3_query_tcgdex": {
+      "query": {
+        "method": "getCardById",
+        "cardId": "sv8a-054"
+      },
+      "response": "success",
+      "cardsReturned": 1
+    },
+    "step4_rank_candidates": [
+      {
+        "tcgdexId": "sv8a-054",
+        "name": "Charizard ex",
+        "score": 38,
+        "matchedFields": ["language", "set", "number", "rarity", "name"],
+        "unmatchedFields": []
+      }
+    ],
+    "step5_determine_confidence": {
+      "confidence": "high",
+      "reason": "Exact match on language + set + number + rarity. Score: 38/40.",
+      "requiresUserConfirmation": false
+    }
+  },
+  "mappingResult": {
+    "confidence": "high",
+    "tcgdexCard": {
+      "id": "sv8a-054",
+      "localId": "054",
+      "name": "Charizard ex",
+      "category": "Pokemon",
+      "set": {
+        "id": "sv8a",
+        "name": "Pitch Black"
+      },
+      "rarity": "Special Illustration Rare",
+      "language": "ja",
+      "hp": 330,
+      "types": ["Fire"],
+      "image": "https://assets.tcgdex.net/ja/sv/sv8a/054",
+      "variants": {
+        "normal": false,
+        "reverse": false,
+        "holo": true,
+        "firstEdition": false
+      }
+    },
+    "matchedFields": ["language", "set", "number", "rarity", "name"],
+    "unmatchedFields": [],
+    "requiresUserConfirmation": false
+  },
+  "nextAction": {
+    "action": "auto_accept",
+    "description": "High confidence match. Create or retrieve CardFlowCard entity and show user 'Add to Inventory' UI."
+  }
+}

@@ -1,0 +1,247 @@
+{
+  "_comment": "MOCK FIXTURE - Example of CardSight detection with multiple possible TCGdex matches (low confidence)",
+  "_scenario": "User scans a Pikachu card, but set name is unclear from photo. TCGdex returns multiple Pikachu cards with number '25' from different sets. User must choose.",
+  "_last_updated": "2026-09-12",
+  "cardSightDetection": {
+    "confidence": "Medium",
+    "card": {
+      "id": "cs_pikachu456",
+      "name": "Pikachu",
+      "number": "25",
+      "releaseName": null,
+      "setId": null,
+      "year": null,
+      "manufacturer": "Pokémon Company International",
+      "fields": [
+        {
+          "key": "CARD_LANGUAGE",
+          "value": "en"
+        },
+        {
+          "key": "RARITY",
+          "value": "Common"
+        },
+        {
+          "key": "HP",
+          "value": "60"
+        }
+      ]
+    }
+  },
+  "mappingProcess": {
+    "step1_extract_metadata": {
+      "language": "en",
+      "rarity": "Common",
+      "cardNumber": "25",
+      "setName": null,
+      "cardName": "Pikachu"
+    },
+    "step2_resolve_set": {
+      "cardSightSetName": null,
+      "tcgdexSetId": null,
+      "matchStrategy": "no_set_provided",
+      "confidence": "low"
+    },
+    "step3_query_tcgdex": {
+      "query": {
+        "method": "findCards",
+        "criteria": {
+          "name": "Pikachu",
+          "localId": "25",
+          "language": "en"
+        }
+      },
+      "response": "success",
+      "cardsReturned": 4,
+      "note": "Multiple sets contain Pikachu #25"
+    },
+    "step4_rank_candidates": [
+      {
+        "tcgdexId": "base1-25",
+        "name": "Pikachu",
+        "set": {
+          "id": "base1",
+          "name": "Base Set"
+        },
+        "score": 13,
+        "matchedFields": ["language", "number", "name"],
+        "unmatchedFields": ["set", "rarity"],
+        "rarity": "Common",
+        "image": "https://assets.tcgdex.net/en/base/base1/25"
+      },
+      {
+        "tcgdexId": "xy1-25",
+        "name": "Pikachu",
+        "set": {
+          "id": "xy1",
+          "name": "XY Base Set"
+        },
+        "score": 13,
+        "matchedFields": ["language", "number", "name"],
+        "unmatchedFields": ["set", "rarity"],
+        "rarity": "Common",
+        "image": "https://assets.tcgdex.net/en/xy/xy1/25"
+      },
+      {
+        "tcgdexId": "sm1-25",
+        "name": "Pikachu",
+        "set": {
+          "id": "sm1",
+          "name": "Sun & Moon Base Set"
+        },
+        "score": 13,
+        "matchedFields": ["language", "number", "name"],
+        "unmatchedFields": ["set", "rarity"],
+        "rarity": "Common",
+        "image": "https://assets.tcgdex.net/en/sm/sm1/25"
+      },
+      {
+        "tcgdexId": "swsh1-25",
+        "name": "Pikachu",
+        "set": {
+          "id": "swsh1",
+          "name": "Sword & Shield Base Set"
+        },
+        "score": 13,
+        "matchedFields": ["language", "number", "name"],
+        "unmatchedFields": ["set", "rarity"],
+        "rarity": "Common",
+        "image": "https://assets.tcgdex.net/en/swsh/swsh1/25"
+      }
+    ],
+    "step5_determine_confidence": {
+      "confidence": "low",
+      "reason": "Multiple candidates with equal match score (13). Set information missing from CardSight. User disambiguation required.",
+      "requiresUserConfirmation": true
+    }
+  },
+  "mappingResult": {
+    "confidence": "low",
+    "tcgdexCard": null,
+    "candidates": [
+      {
+        "id": "base1-25",
+        "localId": "25",
+        "name": "Pikachu",
+        "set": {
+          "id": "base1",
+          "name": "Base Set"
+        },
+        "rarity": "Common",
+        "hp": 60,
+        "types": ["Lightning"],
+        "image": "https://assets.tcgdex.net/en/base/base1/25"
+      },
+      {
+        "id": "xy1-25",
+        "localId": "25",
+        "name": "Pikachu",
+        "set": {
+          "id": "xy1",
+          "name": "XY Base Set"
+        },
+        "rarity": "Common",
+        "hp": 60,
+        "types": ["Lightning"],
+        "image": "https://assets.tcgdex.net/en/xy/xy1/25"
+      },
+      {
+        "id": "sm1-25",
+        "localId": "25",
+        "name": "Pikachu",
+        "set": {
+          "id": "sm1",
+          "name": "Sun & Moon Base Set"
+        },
+        "rarity": "Common",
+        "hp": 60,
+        "types": ["Lightning"],
+        "image": "https://assets.tcgdex.net/en/sm/sm1/25"
+      },
+      {
+        "id": "swsh1-25",
+        "localId": "25",
+        "name": "Pikachu",
+        "set": {
+          "id": "swsh1",
+          "name": "Sword & Shield Base Set"
+        },
+        "rarity": "Common",
+        "hp": 60,
+        "types": ["Lightning"],
+        "image": "https://assets.tcgdex.net/en/swsh/swsh1/25"
+      }
+    ],
+    "matchedFields": ["language", "number", "name"],
+    "unmatchedFields": ["set"],
+    "requiresUserConfirmation": true
+  },
+  "nextAction": {
+    "action": "show_disambiguation_ui",
+    "description": "Show user list of candidate cards with images and set names. User selects the correct one.",
+    "uiElements": {
+      "title": "Which Pikachu card did you scan?",
+      "subtitle": "We found 4 possible matches. Select the correct set:",
+      "candidates": [
+        {
+          "id": "base1-25",
+          "displayName": "Pikachu #25",
+          "displaySubtext": "Base Set (1999)",
+          "imageUrl": "https://assets.tcgdex.net/en/base/base1/25/low.webp",
+          "action": "select_candidate"
+        },
+        {
+          "id": "xy1-25",
+          "displayName": "Pikachu #25",
+          "displaySubtext": "XY Base Set (2014)",
+          "imageUrl": "https://assets.tcgdex.net/en/xy/xy1/25/low.webp",
+          "action": "select_candidate"
+        },
+        {
+          "id": "sm1-25",
+          "displayName": "Pikachu #25",
+          "displaySubtext": "Sun & Moon Base Set (2017)",
+          "imageUrl": "https://assets.tcgdex.net/en/sm/sm1/25/low.webp",
+          "action": "select_candidate"
+        },
+        {
+          "id": "swsh1-25",
+          "displayName": "Pikachu #25",
+          "displaySubtext": "Sword & Shield Base Set (2020)",
+          "imageUrl": "https://assets.tcgdex.net/en/swsh/swsh1/25/low.webp",
+          "action": "select_candidate"
+        }
+      ],
+      "fallbackOption": {
+        "label": "None of these",
+        "action": "prompt_manual_entry"
+      }
+    }
+  },
+  "userSelectionHandler": {
+    "onCandidateSelected": {
+      "action": "create_or_retrieve_cardflow_card",
+      "logMapping": {
+        "cardSightDetectionId": "cs_pikachu456",
+        "selectedTCGdexId": "{{selectedId}}",
+        "userConfirmed": true,
+        "disambiguationRequired": true
+      }
+    },
+    "onNoneOfThese": {
+      "action": "show_manual_entry_form",
+      "prefill": {
+        "name": "Pikachu",
+        "number": "25",
+        "language": "en",
+        "rarity": "Common",
+        "hp": "60"
+      }
+    }
+  },
+  "improvementOpportunities": {
+    "machineLeaning": "Future: Train ML model to predict most likely set based on card visual features (art style, border, set symbol location).",
+    "userHistory": "Future: If user has previously scanned Base Set cards, prioritize Base Set in candidate ranking.",
+    "releaseDate": "Future: If CardFlow knows user's collection focus (e.g., modern cards), deprioritize vintage sets."
+  }
+}

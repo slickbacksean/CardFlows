@@ -1,0 +1,126 @@
+{
+  "_comment": "MOCK FIXTURE - Example of CardSight detection that cannot be mapped to TCGdex (unresolved)",
+  "_scenario": "User scans a brand new card released this week. TCGdex database hasn't been updated yet with this card.",
+  "_last_updated": "2026-09-12",
+  "cardSightDetection": {
+    "confidence": "High",
+    "card": {
+      "id": "cs_newcard789",
+      "name": "Mewtwo VMAX",
+      "number": "119",
+      "releaseName": "Stellar Crown",
+      "setId": "cs_set_sv7",
+      "year": "2026",
+      "manufacturer": "Pokémon Company International",
+      "fields": [
+        {
+          "key": "CARD_LANGUAGE",
+          "value": "en"
+        },
+        {
+          "key": "RARITY",
+          "value": "Hyper Rare"
+        },
+        {
+          "key": "HP",
+          "value": "320"
+        }
+      ]
+    }
+  },
+  "mappingProcess": {
+    "step1_extract_metadata": {
+      "language": "en",
+      "rarity": "Hyper Rare",
+      "cardNumber": "119",
+      "setName": "Stellar Crown",
+      "cardName": "Mewtwo VMAX"
+    },
+    "step2_resolve_set": {
+      "cardSightSetName": "Stellar Crown",
+      "tcgdexSetId": "sv7",
+      "matchStrategy": "fuzzy_match",
+      "confidence": "medium"
+    },
+    "step3_query_tcgdex": {
+      "query": {
+        "method": "getCardById",
+        "cardId": "sv7-119"
+      },
+      "response": "404_not_found",
+      "error": "Endpoint or id not found"
+    },
+    "step3b_fallback_query_by_name": {
+      "query": {
+        "method": "findCards",
+        "criteria": {
+          "name": "Mewtwo VMAX",
+          "setId": "sv7"
+        }
+      },
+      "response": "success",
+      "cardsReturned": 0
+    },
+    "step3c_fallback_query_name_only": {
+      "query": {
+        "method": "findCards",
+        "criteria": {
+          "name": "Mewtwo VMAX"
+        }
+      },
+      "response": "success",
+      "cardsReturned": 3,
+      "note": "Found 3 Mewtwo VMAX cards in other sets, but none match sv7-119"
+    },
+    "step4_rank_candidates": [],
+    "step5_determine_confidence": {
+      "confidence": "unresolved",
+      "reason": "Card not found in TCGdex. Likely new release not yet added to database.",
+      "requiresUserConfirmation": true
+    }
+  },
+  "mappingResult": {
+    "confidence": "unresolved",
+    "tcgdexCard": null,
+    "candidates": [],
+    "matchedFields": [],
+    "unmatchedFields": ["set", "number"],
+    "requiresUserConfirmation": true,
+    "errorType": "card_not_in_catalog",
+    "errorMessage": "This card isn't in our catalog yet. It may be a very new release."
+  },
+  "nextAction": {
+    "action": "prompt_manual_entry",
+    "description": "Show user: 'Card not in catalog yet. You can add it manually or wait for catalog update.'",
+    "options": [
+      {
+        "label": "Add Manually",
+        "action": "show_manual_entry_form",
+        "prefill": {
+          "name": "Mewtwo VMAX",
+          "number": "119",
+          "set": "Stellar Crown",
+          "rarity": "Hyper Rare",
+          "language": "en",
+          "hp": "320"
+        }
+      },
+      {
+        "label": "Retry Later",
+        "action": "save_as_pending_catalog_match",
+        "description": "Queue for daily background retry. Notify user when match found."
+      },
+      {
+        "label": "Cancel",
+        "action": "dismiss"
+      }
+    ]
+  },
+  "backgroundRetryStrategy": {
+    "enabled": true,
+    "retryFrequency": "daily",
+    "maxRetries": 30,
+    "notifyUserOnSuccess": true,
+    "note": "Background job will retry TCGdex lookup daily for 30 days. If found, create CardFlowCard entity and notify user."
+  }
+}

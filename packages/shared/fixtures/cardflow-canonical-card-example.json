@@ -1,0 +1,80 @@
+{
+  "_comment": "MOCK FIXTURE - Example CardFlow internal card entity structure",
+  "_note": "This represents how CardFlow stores card catalog data internally, mapping TCGdex metadata to CardFlow's owned schema",
+  "_last_updated": "2026-09-12",
+  "id": "cfcard_a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "providerReferences": {
+    "tcgdex": {
+      "id": "swsh3-136",
+      "lastSynced": "2026-09-12T17:30:00.000Z"
+    },
+    "cardSight": {
+      "detectionId": "det_xyz789abc123",
+      "confidence": "High"
+    }
+  },
+  "catalog": {
+    "name": "Furret",
+    "set": {
+      "id": "swsh3",
+      "name": "Darkness Ablaze"
+    },
+    "localId": "136",
+    "rarity": "Uncommon",
+    "language": "en",
+    "variant": {
+      "normal": true,
+      "reverse": true,
+      "holo": false,
+      "firstEdition": false
+    },
+    "category": "Pokemon",
+    "types": ["Colorless"],
+    "hp": 110,
+    "stage": "Stage1",
+    "evolveFrom": "Sentret",
+    "dexId": [162],
+    "attacks": [
+      {
+        "cost": ["Colorless"],
+        "name": "Feelin' Fine",
+        "effect": "Draw 3 cards."
+      },
+      {
+        "cost": ["Colorless"],
+        "name": "Tail Smash",
+        "effect": "Flip a coin. If tails, this attack does nothing.",
+        "damage": 90
+      }
+    ],
+    "weaknesses": [
+      {
+        "type": "Fighting",
+        "value": "×2"
+      }
+    ],
+    "retreat": 1,
+    "regulationMark": "D",
+    "legal": {
+      "standard": false,
+      "expanded": true
+    },
+    "image": "https://assets.tcgdex.net/en/swsh/swsh3/136",
+    "illustrator": "tetsuya koizumi",
+    "description": "It makes a nest to suit its long and skinny body. The nest is impossible for other Pokémon to enter."
+  },
+  "internal": {
+    "createdAt": "2026-09-12T17:30:00.000Z",
+    "updatedAt": "2026-09-12T17:30:00.000Z",
+    "catalogSource": "tcgdex",
+    "catalogLastSyncedAt": "2026-09-12T17:30:00.000Z",
+    "userConfirmedCorrect": false,
+    "userCorrectionNotes": null
+  },
+  "_separation_of_concerns": {
+    "_comment": "The following data is NOT stored in this CardFlowCard entity. It lives in separate tables/entities:",
+    "_inventory": "UserCardInventoryItem - Links user → card with quantity, condition, purchase date/price, location, notes",
+    "_pricing": "PriceSnapshot - Stores historical market prices per card (CardFlow's own price tracking, NOT from TCGdex)",
+    "_listings": "ListingDraft - Stores user's marketplace listing details (price, platform, status, description)"
+  }
+}
