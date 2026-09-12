@@ -1,0 +1,60 @@
+{
+  "correction_audit_id": "ca12ab34-cd56-ef78-9012-3456789abcde",
+  "cardflow_card_id": "a1b2c3d4-e5f6-7890-1234-567890abcdef",
+  "user_id": "u1a2b3c4-d5e6-f789-0123-456789abcdef",
+  "correction_type": "provider_conflict",
+  "field_name": "language",
+  "old_value": "ja",
+  "new_value": "en",
+  "reason": "CardSight detected language as Japanese (ja) but TCGdex catalog and user visual inspection confirm English language card. Overriding CardSight detection.",
+  "created_at": "2026-09-12T14:35:00.000Z",
+  "context": {
+    "scan_id": "sc12ab34-cd56-ef78-9012-3456789abcde",
+    "confirmation_id": "cf12ab34-cd56-ef78-9012-3456789abcde",
+    "cardsight_detection": {
+      "vendor_card_id": "cs_a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+      "confidence": "High",
+      "fields": {
+        "CARD_LANGUAGE": "ja"
+      }
+    },
+    "tcgdex_resolution": {
+      "tcgdex_id": "base1-58",
+      "language": "en"
+    },
+    "user_action": "User manually corrected language to English after visual inspection of card language indicator"
+  },
+  "additional_examples": [
+    {
+      "correction_audit_id": "ca_override_12ab34-cd56-ef78-9012-3456789abcde",
+      "correction_type": "user_override",
+      "field_name": "condition",
+      "old_value": "NM",
+      "new_value": "LP",
+      "reason": "User re-inspected card and found light edge wear not visible in scan photo. Downgrading condition from NM to LP.",
+      "context": "User override after physical inspection revealed wear not captured in recognition photo"
+    },
+    {
+      "correction_audit_id": "ca_manual_12ab34-cd56-ef78-9012-3456789abcde",
+      "correction_type": "manual_correction",
+      "field_name": "tcgdex_id",
+      "old_value": "base1-58",
+      "new_value": "base2-85",
+      "reason": "Card was initially confirmed as Base Set but user later identified it as Base Set 2 based on set symbol. Correcting TCGdex catalog mapping.",
+      "context": "Manual correction after user noticed incorrect set identification post-confirmation"
+    },
+    {
+      "correction_audit_id": "ca_conflict_12ab34-cd56-ef78-9012-3456789abcde",
+      "correction_type": "provider_conflict",
+      "field_name": "set_name",
+      "old_value": "Base Set 2",
+      "new_value": "Base Set",
+      "reason": "CardSight suggested Base Set 2 but TCGdex card number 58 does not exist in Base Set 2. User confirmed Base Set via set symbol. Resolving conflict in favor of TCGdex + user inspection.",
+      "context": "Provider mismatch: CardSight set detection conflicted with TCGdex catalog structure and user visual confirmation"
+    }
+  ],
+  "_meta": {
+    "mocked": true,
+    "description": "Correction audit record showing CardSight vs TCGdex language conflict (detected Japanese vs catalog English) - user manually corrected to English after visual inspection. Includes additional examples of user_override (condition downgrade) and manual_correction (set re-identification) scenarios."
+  }
+}

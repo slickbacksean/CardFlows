@@ -1,0 +1,62 @@
+{
+  "inventory_item_id": "inv12ab34-cd56-ef78-9012-3456789abcde",
+  "user_id": "u1a2b3c4-d5e6-f789-0123-456789abcdef",
+  "cardflow_card_id": "a1b2c3d4-e5f6-7890-1234-567890abcdef",
+  "status": "purchased",
+  "quantity": 3,
+  "condition": "NM",
+  "storage_location_id": "sl12ab34-cd56-ef78-9012-3456789abcde",
+  "tags_json": ["raw"],
+  "notes": "Purchased from local card shop, all in excellent condition",
+  "created_at": "2026-09-12T14:32:30.123Z",
+  "updated_at": "2026-09-12T14:32:30.123Z",
+  "purchase": {
+    "purchase_id": "pur12ab34-cd56-ef78-9012-3456789abcde",
+    "inventory_item_id": "inv12ab34-cd56-ef78-9012-3456789abcde",
+    "user_id": "u1a2b3c4-d5e6-f789-0123-456789abcdef",
+    "purchase_price_cents": 1500,
+    "shipping_cents": 0,
+    "tax_cents": 120,
+    "fees_cents": 0,
+    "supplies_cents": 150,
+    "all_in_cost_cents": 1770,
+    "currency": "USD",
+    "purchase_date": "2026-09-12",
+    "vendor_name": "Downtown Cards & Collectibles",
+    "receipt_image_url": "https://cdn.cardflow.app/receipts/u1a2b3c4/receipt_2026-09-12.jpg",
+    "created_at": "2026-09-12T14:32:30.123Z",
+    "updated_at": "2026-09-12T14:32:30.123Z"
+  },
+  "storage_location": {
+    "storage_location_id": "sl12ab34-cd56-ef78-9012-3456789abcde",
+    "user_id": "u1a2b3c4-d5e6-f789-0123-456789abcdef",
+    "name": "Binder A - Commons",
+    "description": "Red binder with common singles for quick flips",
+    "created_at": "2026-09-01T10:00:00.000Z"
+  },
+  "price_snapshot": {
+    "price_snapshot_id": "ps12ab34-cd56-ef78-9012-3456789abcde",
+    "cardflow_card_id": "a1b2c3d4-e5f6-7890-1234-567890abcdef",
+    "provider": "mock_pricing",
+    "condition": "NM",
+    "low_price_cents": 400,
+    "market_price_cents": 500,
+    "high_price_cents": 650,
+    "currency": "USD",
+    "snapshot_at": "2026-09-12T14:32:10.000Z",
+    "created_at": "2026-09-12T14:32:10.000Z"
+  },
+  "max_buy_calculation": {
+    "estimate_market_price_cents": 500,
+    "target_margin_pct": 30,
+    "platform_fees_pct": 13,
+    "shipping_buffer_cents": 300,
+    "condition_adjustment": 1.0,
+    "calculated_max_buy_cents": 239,
+    "calculation_notes": "Max Buy = (500 × 0.87 - 300) × 0.7 = 239 cents ($2.39 max)"
+  },
+  "_meta": {
+    "mocked": true,
+    "description": "Purchased inventory item for Pikachu Base Set #58 (English, non-holo common) - 3 copies acquired at $5.00 each + supplies, stored in Binder A, with price snapshot and Max Buy calculation snapshot at time of purchase"
+  }
+}

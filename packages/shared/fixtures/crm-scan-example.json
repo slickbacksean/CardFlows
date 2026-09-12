@@ -1,0 +1,50 @@
+{
+  "scan_id": "sc12ab34-cd56-ef78-9012-3456789abcde",
+  "user_id": "u1a2b3c4-d5e6-f789-0123-456789abcdef",
+  "image_url": "https://cdn.cardflow.app/scans/u1a2b3c4/scan_2026-09-12_143201.jpg",
+  "image_fingerprint": "sha256:a1b2c3d4e5f67890abcdef1234567890abcdef1234567890abcdef1234567890",
+  "scan_method": "camera_photo",
+  "created_at": "2026-09-12T14:32:01.234Z",
+  "recognition_attempt": {
+    "recognition_attempt_id": "ra12ab34-cd56-ef78-9012-3456789abcde",
+    "scan_id": "sc12ab34-cd56-ef78-9012-3456789abcde",
+    "provider": "cardsight",
+    "vendor_request_id": "req_cardsight_pikachu_001",
+    "processing_time_ms": 342,
+    "ok": true,
+    "error_code": null,
+    "error_message": null,
+    "created_at": "2026-09-12T14:32:02.456Z",
+    "candidates": [
+      {
+        "recognition_candidate_id": "rc12ab34-cd56-ef78-9012-3456789abcde",
+        "recognition_attempt_id": "ra12ab34-cd56-ef78-9012-3456789abcde",
+        "vendor_card_id": "cs_a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+        "confidence": "High",
+        "match_level": "exact",
+        "name": "Pikachu",
+        "set_name": "Base Set",
+        "number": "58",
+        "language": "en",
+        "rank": 0,
+        "fields_json": {
+          "CARD_LANGUAGE": "en",
+          "RARITY": "Common",
+          "SET_YEAR": "1999"
+        }
+      }
+    ]
+  },
+  "confirmation": {
+    "confirmation_id": "cf12ab34-cd56-ef78-9012-3456789abcde",
+    "scan_id": "sc12ab34-cd56-ef78-9012-3456789abcde",
+    "recognition_candidate_id": "rc12ab34-cd56-ef78-9012-3456789abcde",
+    "user_id": "u1a2b3c4-d5e6-f789-0123-456789abcdef",
+    "action": "confirmed",
+    "created_at": "2026-09-12T14:32:15.123Z"
+  },
+  "_meta": {
+    "mocked": true,
+    "description": "Complete scan record with recognition attempt (High confidence exact match) and user confirmation - represents successful manual camera photo scan → CardSight identify → user confirms Pikachu Base Set #58"
+  }
+}

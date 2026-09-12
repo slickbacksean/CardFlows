@@ -1,0 +1,33 @@
+{
+  "cardflow_card_id": "a1b2c3d4-e5f6-7890-1234-567890abcdef",
+  "user_id": "u1a2b3c4-d5e6-f789-0123-456789abcdef",
+  "confirmation_id": "cf12ab34-cd56-ef78-9012-3456789abcde",
+  "tcgdex_id": "base1-58",
+  "cardsight_card_id": "cs_a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "language": "en",
+  "match_method": "identify",
+  "created_at": "2026-09-12T14:32:15.123Z",
+  "updated_at": "2026-09-12T14:32:15.123Z",
+  "catalog_cache": {
+    "catalog_cache_id": "cc12ab34-cd56-ef78-9012-3456789abcde",
+    "cardflow_card_id": "a1b2c3d4-e5f6-7890-1234-567890abcdef",
+    "tcgdex_id": "base1-58",
+    "name": "Pikachu",
+    "set_name": "Base Set",
+    "set_id": "base1",
+    "number": "58",
+    "rarity": "Common",
+    "image_url": "https://api.tcgdex.net/v2/en/cards/base1-58/image/high",
+    "variants_json": {
+      "normal": {
+        "name": "Normal",
+        "image_url": "https://api.tcgdex.net/v2/en/cards/base1-58/image/high"
+      }
+    },
+    "cached_at": "2026-09-12T14:32:15.456Z"
+  },
+  "_meta": {
+    "mocked": true,
+    "description": "Canonical card entity for Pikachu Base Set #58 (English) - minted on user confirmation after CardSight High confidence match → TCGdex resolution"
+  }
+}

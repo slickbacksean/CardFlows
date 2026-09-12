@@ -1,0 +1,48 @@
+{
+  "listing_draft_id": "ld12ab34-cd56-ef78-9012-3456789abcde",
+  "inventory_item_id": "inv12ab34-cd56-ef78-9012-3456789abcde",
+  "user_id": "u1a2b3c4-d5e6-f789-0123-456789abcdef",
+  "title": "Pikachu Base Set #58 English Common Raw NM",
+  "description": "English Pokémon TCG card in Near Mint condition.\n\nFrom Base Set, card #58 (Common).\n\nShips in sleeve + toploader via USPS First Class within 1 business day.\n\nAll cards carefully inspected and stored in smoke-free environment.\n\nBuyer satisfaction guaranteed - returns accepted within 14 days.",
+  "asking_price_cents": 500,
+  "condition": "NM",
+  "photos_json": [
+    "https://cdn.cardflow.app/listing-photos/u1a2b3c4/pikachu_base58_front.jpg",
+    "https://cdn.cardflow.app/listing-photos/u1a2b3c4/pikachu_base58_back.jpg",
+    "https://cdn.cardflow.app/listing-photos/u1a2b3c4/pikachu_base58_closeup.jpg"
+  ],
+  "quantity_to_list": 1,
+  "shipping_price_cents": 400,
+  "notes": "List on eBay first, then TCGplayer if no bites within 7 days",
+  "status": "ready",
+  "created_at": "2026-09-12T15:00:00.000Z",
+  "updated_at": "2026-09-12T15:30:00.000Z",
+  "inventory_item_context": {
+    "cardflow_card_id": "a1b2c3d4-e5f6-7890-1234-567890abcdef",
+    "catalog_cache": {
+      "name": "Pikachu",
+      "set_name": "Base Set",
+      "set_id": "base1",
+      "number": "58",
+      "rarity": "Common"
+    },
+    "quantity_available": 3,
+    "purchase_all_in_cost_cents": 1770,
+    "cost_basis_per_copy_cents": 590
+  },
+  "pricing_analysis": {
+    "cost_basis_cents": 590,
+    "asking_price_cents": 500,
+    "shipping_price_cents": 400,
+    "gross_revenue_cents": 900,
+    "estimated_platform_fees_cents": 117,
+    "estimated_net_cents": 783,
+    "estimated_profit_cents": 193,
+    "estimated_margin_pct": 32.7,
+    "notes": "Assumes 13% platform fees. Net profit $1.93 per card, 32.7% margin."
+  },
+  "_meta": {
+    "mocked": true,
+    "description": "Reviewed listing draft for Pikachu Base Set #58 (1 of 3 copies) - marked ready for manual publication to eBay/TCGplayer, includes user photos (distinct from scan photo), asking price $5.00 + $4.00 shipping, cost basis $5.90 per copy yielding 32.7% estimated margin"
+  }
+}

@@ -1,0 +1,68 @@
+{
+  "inventory_item_id": "inv_wl_12ab34-cd56-ef78-9012-3456789abcde",
+  "user_id": "u1a2b3c4-d5e6-f789-0123-456789abcdef",
+  "cardflow_card_id": "wl_a1b2c3d4-e5f6-7890-1234-567890fedcba",
+  "status": "watchlist",
+  "quantity": 1,
+  "condition": "NM",
+  "storage_location_id": null,
+  "tags_json": ["raw"],
+  "notes": "Waiting for price to drop below Max Buy before purchasing",
+  "created_at": "2026-09-10T09:15:00.000Z",
+  "updated_at": "2026-09-12T14:00:00.000Z",
+  "purchase": null,
+  "canonical_card": {
+    "cardflow_card_id": "wl_a1b2c3d4-e5f6-7890-1234-567890fedcba",
+    "tcgdex_id": "base1-4",
+    "cardsight_card_id": "cs_charizard_base_holo_001",
+    "language": "en",
+    "catalog_cache": {
+      "name": "Charizard",
+      "set_name": "Base Set",
+      "set_id": "base1",
+      "number": "4",
+      "rarity": "Rare Holo"
+    }
+  },
+  "price_snapshots": [
+    {
+      "price_snapshot_id": "ps_wl_1_12ab34-cd56-ef78-9012-3456789abcde",
+      "cardflow_card_id": "wl_a1b2c3d4-e5f6-7890-1234-567890fedcba",
+      "provider": "mock_pricing",
+      "condition": "NM",
+      "low_price_cents": 12000,
+      "market_price_cents": 15000,
+      "high_price_cents": 18000,
+      "currency": "USD",
+      "snapshot_at": "2026-09-10T09:15:00.000Z",
+      "created_at": "2026-09-10T09:15:00.000Z"
+    },
+    {
+      "price_snapshot_id": "ps_wl_2_12ab34-cd56-ef78-9012-3456789abcde",
+      "cardflow_card_id": "wl_a1b2c3d4-e5f6-7890-1234-567890fedcba",
+      "provider": "mock_pricing",
+      "condition": "NM",
+      "low_price_cents": 11500,
+      "market_price_cents": 14500,
+      "high_price_cents": 17500,
+      "currency": "USD",
+      "snapshot_at": "2026-09-12T14:00:00.000Z",
+      "created_at": "2026-09-12T14:00:00.000Z"
+    }
+  ],
+  "max_buy_calculation": {
+    "estimate_market_price_cents": 14500,
+    "target_margin_pct": 30,
+    "platform_fees_pct": 13,
+    "shipping_buffer_cents": 500,
+    "condition_adjustment": 1.0,
+    "calculated_max_buy_cents": 8309,
+    "calculation_notes": "Max Buy = (14500 × 0.87 - 500) × 0.7 = 8309 cents ($83.09 max)",
+    "current_market_estimate_cents": 14500,
+    "watchlist_alert": "Price dropped $5.00 since added to watchlist"
+  },
+  "_meta": {
+    "mocked": true,
+    "description": "Watchlist item for Charizard Base Set #4 Holo (English) - user watching price movement, no purchase yet, multiple price snapshots showing price drop, Max Buy guidance shows target price of $83.09"
+  }
+}
