@@ -1,0 +1,108 @@
+{
+  "provider": "mock",
+  "ok": true,
+  "inventoryItem": {
+    "inventoryItemId": "d3e4f5a6-b7c8-4901-2345-6789abcdef01",
+    "userId": "9f1a2b3c-4d5e-6789-abcd-ef0123456789",
+    "cardflowCardId": "8d3f2b01-5c4e-4a7b-8d22-3f9e1b2c4d69",
+    "confirmationId": "c4d5e6f7-a8b9-4012-3456-7890abcdef12",
+    "scanId": "a1b2c3d4-e5f6-4789-0123-456789abcd00",
+    "intent": "watchlist",
+    "grain": "interest_not_physical_copy",
+    "selectedVariant": "holo",
+    "condition": null,
+    "quantity": null,
+    "tags": ["raw"],
+    "workflowState": "watching",
+    "location": null,
+    "targetMaxBuyAmount": "120.00",
+    "closedAt": null,
+    "createdAt": "2026-09-12T16:12:08.000Z"
+  },
+  "maxBuy": {
+    "referencePriceAmount": "180.00",
+    "referencePriceSource": "user_entered",
+    "currency": "USD",
+    "currentTargetMarginPct": 0.2,
+    "currentFeesBufferPct": 0.13,
+    "currentConditionFactor": 1.0,
+    "computedMaxBuyAmount": "125.28",
+    "targetMaxBuyAmount": "120.00",
+    "isRecomputedGuidance": true,
+    "note": "Computed: 180 × 0.80 × 0.87 = 125.28. User saved target as $120.00 (user override or rounded down). Max Buy recomputed from CURRENT preferences."
+  },
+  "formula": {
+    "expression": "reference_price × (1 - target_margin_pct) × (1 - fees_buffer_pct) × condition_factor",
+    "calculation": "180.00 × (1 - 0.20) × (1 - 0.13) × 1.0 = 180.00 × 0.80 × 0.87 × 1.0 = 125.28",
+    "storedReminder": "120.00",
+    "reminderNote": "Watchlist stores the target reminder; may differ from live computed guidance if user overrode or preferences changed."
+  },
+  "cardContext": {
+    "cardflowCardId": "8d3f2b01-5c4e-4a7b-8d22-3f9e1b2c4d69",
+    "tcgdexId": "base1-4",
+    "tcgdexSetId": "base1",
+    "localId": "4",
+    "name": "Charizard",
+    "setName": "Base Set",
+    "category": "Pokemon",
+    "rarity": "Rare",
+    "language": "en",
+    "catalogFingerprint": "en:base1-4"
+  },
+  "priceSnapshot": {
+    "snapshotId": "1728394a-5b6c-4d7e-9f0a-1b2c3d4e5f60",
+    "cardflowCardId": "8d3f2b01-5c4e-4a7b-8d22-3f9e1b2c4d69",
+    "inventoryItemId": "d3e4f5a6-b7c8-4901-2345-6789abcdef01",
+    "source": "user_entered",
+    "amount": "180.00",
+    "currency": "USD",
+    "capturedAt": "2026-09-12T16:11:55.000Z",
+    "providerName": null,
+    "isEstimate": true,
+    "note": "User-typed comparable so Max Buy can run without a live pricing provider."
+  },
+  "watchlistBehavior": {
+    "noCostBasis": true,
+    "noPurchaseRow": true,
+    "noAllInCost": true,
+    "noListingDraft": true,
+    "uniqueOpenRowOn": ["userId", "cardflowCardId", "selectedVariant"],
+    "convertToPurchased": "close this watchlist row and create a new purchased physical copy with purchase row"
+  },
+  "pricingProviderBehavior": {
+    "alertsOnPriceChange": "NOT in MVP without a chosen pricing provider",
+    "watchlistWithoutProvider": "manual shopping list; no automated alerts",
+    "whenProviderLaterAdded": "may enable alerts as a founder decision"
+  },
+  "uiCopy": {
+    "display": "Watchlist: Base Set Charizard (holo). Your target Max Buy: $120.00",
+    "disclaimer": "This is your reminder, not a live feed or guaranteed price.",
+    "noAlert": "No price-change alerts until a pricing provider is enabled."
+  },
+  "rules": {
+    "watchlistIsInterest": true,
+    "notAPhysicalCopy": true,
+    "maxBuyIsReminder": true,
+    "notCostBasis": true,
+    "recomputedFromCurrentPreferences": true,
+    "notSnapshotted": true,
+    "neverUse": [
+      "tcgdex_pricing",
+      "cardsight_as_price_source",
+      "scraped_marketplaces"
+    ]
+  },
+  "_meta": {
+    "mocked": true,
+    "description": "MOCK EXAMPLE — Watchlist item for confirmed Base Set Charizard (base1-4) after manual picker choice. User entered reference $180.00; computed Max Buy guidance $125.28. User saved target reminder as $120.00 (override or rounded). CONFIRMED: Max Buy is recomputed from CURRENT crm_user_preferences; not snapshotted. Watchlist is interest, not a physical copy: no quantity, no all-in cost, no listing draft. No price-change alerts without a pricing provider. Amounts shown as decimal strings for readability; persist minor units later.",
+    "relatedFixtures": [
+      "crm-inventory-item-watchlist-example.json",
+      "max-buy-with-reference-price-example.json"
+    ],
+    "relatedDocs": [
+      "docs/MAX_BUY_CALCULATOR.md",
+      "docs/MAX_BUY_WITHOUT_PRICING_PROVIDER.md",
+      "docs/CRM_INVENTORY_GRAIN.md"
+    ]
+  }
+}
