@@ -1,0 +1,54 @@
+{
+  "provider": "mock",
+  "ok": true,
+  "disclosureChecklist": {
+    "optional": true,
+    "shipInMvp": true,
+    "shortItems": [
+      {
+        "id": "corners",
+        "answer": "sharp"
+      },
+      {
+        "id": "edges",
+        "answer": "clean"
+      },
+      {
+        "id": "surface",
+        "answer": "light sleeve scuffs"
+      },
+      {
+        "id": "whitening",
+        "answer": "none noted"
+      },
+      {
+        "id": "centering",
+        "answer": "looks good"
+      }
+    ],
+    "overallConditionLabel": "NM",
+    "requireFullGradeTable": false
+  },
+  "mappedDraftFields": {
+    "condition": "NM",
+    "descriptionSnippet": "Corners: sharp. Edges: clean. Surface: light sleeve scuffs. Whitening: none noted. Centering: looks good."
+  },
+  "forbiddenClaims": {
+    "psaOrBgsOrCgc": false,
+    "aiGrade": false,
+    "cardflowAuthenticityGuarantee": false
+  },
+  "crmRules": {
+    "internalDocumentOnly": true,
+    "userEnteredOnly": true,
+    "checklistIsUxNotRequiredColumn": true,
+    "fieldSchema": "CRM_LISTING_DRAFT_FIELDS.md",
+    "checklistOptional": true,
+    "mapsToConditionAndDescriptionOnly": true,
+    "noNewSchemaColumn": true
+  },
+  "_meta": {
+    "mocked": true,
+    "description": "MOCK EXAMPLE \u2014 Short optional disclosure checklist (corners, edges, surface, whitening, centering) mapping into condition + description only. No grade table required."
+  }
+}

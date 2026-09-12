@@ -1,0 +1,76 @@
+{
+  "provider": "mock",
+  "ok": true,
+  "clipboardExport": {
+    "exportKind": "clipboard",
+    "published": false,
+    "draftId": "28394a5b-6c7d-4e8f-0a1b-2c3d4e5f6071",
+    "inventoryItemId": "c2d3e4f5-a6b7-4890-1234-56789abcdef0",
+    "userId": "9f1a2b3c-4d5e-6789-abcd-ef0123456789",
+    "disclaimer": "CardFlow clipboard export only. CardFlow did not publish this listing to any marketplace.",
+    "plainText": "Title: Pikachu - Base Set #58 [normal] EN\nCondition: NM\nAsking: 9.00 USD\n\nDescription:\nRaw English Base Set Pikachu #58, NM. Pulled from my binder. Photos are mine.",
+    "structuredFields": {
+      "title": "Pikachu - Base Set #58 [normal] EN",
+      "description": "Pikachu \u2014 Base Set #58 \u2014 English \u2014 normal (Raw)\nCondition: NM\nCorners: sharp. Edges: clean. Surface: light sleeve scuffs. Centering: looks good.\nNo creases, writing, or bends noted. No smoke odor noted.\nRaw English Base Set Pikachu #58, NM. Pulled from my binder. Photos are mine (front scan + back photo).\nUser affirms this is a genuine Pok\u00e9mon TCG card to the best of their knowledge \u2014 not a CardFlow authenticity guarantee.",
+      "condition": "NM",
+      "askingPrice": "9.00",
+      "currency": "USD",
+      "intendedChannelNote": "Maybe list on eBay later \u2014 note only, CardFlow does not publish.",
+      "notes": null,
+      "quantity": 1
+    },
+    "omittedPrivateNotesByDefault": true,
+    "costToAskOptional": {
+      "included": false,
+      "allInTotal": "4.04",
+      "spread": "4.96",
+      "labelIfIncluded": "spread / cost-to-ask gap",
+      "neverLabelAsProfit": true
+    },
+    "trigger": "user_tap_copy",
+    "autoCopyOnSave": false,
+    "includedFields": [
+      "title",
+      "description",
+      "condition",
+      "asking_price",
+      "currency"
+    ],
+    "excludedFields": [
+      "notes",
+      "intended_channel_note"
+    ]
+  },
+  "publication": {
+    "published": false,
+    "marketplace": null,
+    "notPublication": true,
+    "forbiddenFieldsOmitted": [
+      "ebay_item_id",
+      "whatnot_show_id",
+      "tcgplayer_listing_id",
+      "shopify_product_id",
+      "published_at",
+      "auto_publish",
+      "marketplace_listing_url"
+    ]
+  },
+  "laterCsvChecklist": {
+    "inBeta": false,
+    "marketplaceCsvFormats": "later",
+    "note": "Confirmed founder 2026-09-12: clipboard-only for beta."
+  },
+  "crmRules": {
+    "internalDocumentOnly": true,
+    "clipboardIsNotPublish": true,
+    "fieldSchema": "CRM_LISTING_DRAFT_FIELDS.md",
+    "clipboardOnlyForBeta": true,
+    "neverIncludePrivateNotes": true,
+    "userTapOnly": true,
+    "csvDeferredPastBeta": true
+  },
+  "_meta": {
+    "mocked": true,
+    "description": "MOCK EXAMPLE \u2014 Clipboard export on user tap Copy only. Includes title, description, condition, asking price. Never private notes. No channel note in default payload. published:false. CSV deferred past beta."
+  }
+}
