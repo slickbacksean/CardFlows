@@ -1,0 +1,84 @@
+{
+  "provider": "mock",
+  "ok": true,
+  "vendorRequestId": "req_mock_charizard_medium_002",
+  "processingTimeMs": 487,
+  "detections": [
+    {
+      "confidence": "Medium",
+      "matchLevel": "set",
+      "vendorCardId": null,
+      "name": "Charizard",
+      "setName": null,
+      "number": null,
+      "language": "en",
+      "fields": [
+        {
+          "key": "CARD_LANGUAGE",
+          "value": "en"
+        }
+      ],
+      "candidates": [
+        {
+          "vendorCardId": "b2c3d4e5-f6a7-8901-bcde-f12345678901",
+          "name": "Charizard",
+          "setName": "Base Set",
+          "number": "4",
+          "language": "en",
+          "fields": [
+            {
+              "key": "RARITY",
+              "value": "Rare Holo"
+            },
+            {
+              "key": "SET_YEAR",
+              "value": "1999"
+            }
+          ],
+          "rank": 0
+        },
+        {
+          "vendorCardId": "c3d4e5f6-a7b8-9012-cdef-123456789012",
+          "name": "Charizard",
+          "setName": "Base Set 2",
+          "number": "4",
+          "language": "en",
+          "fields": [
+            {
+              "key": "RARITY",
+              "value": "Rare Holo"
+            },
+            {
+              "key": "SET_YEAR",
+              "value": "2000"
+            }
+          ],
+          "rank": 1
+        },
+        {
+          "vendorCardId": "d4e5f6a7-b8c9-0123-def1-234567890123",
+          "name": "Charizard",
+          "setName": "Legendary Collection",
+          "number": "3",
+          "language": "en",
+          "fields": [
+            {
+              "key": "RARITY",
+              "value": "Rare Holo"
+            },
+            {
+              "key": "SET_YEAR",
+              "value": "2002"
+            }
+          ],
+          "rank": 2
+        }
+      ]
+    }
+  ],
+  "error": null,
+  "_meta": {
+    "mocked": true,
+    "description": "Medium confidence ambiguous match - Charizard with 3 candidates (Base Set, Base Set 2, Legendary Collection)"
+  }
+}

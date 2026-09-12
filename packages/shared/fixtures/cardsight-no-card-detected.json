@@ -1,0 +1,12 @@
+{
+  "provider": "mock",
+  "ok": true,
+  "vendorRequestId": "req_mock_no_card_003",
+  "processingTimeMs": 256,
+  "detections": [],
+  "error": null,
+  "_meta": {
+    "mocked": true,
+    "description": "No card detected - empty detections array"
+  }
+}
