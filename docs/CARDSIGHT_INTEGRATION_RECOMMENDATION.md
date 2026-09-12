@@ -139,7 +139,7 @@ export interface CardRecognitionProvider {
 Validate **client → CardFlow** uploads before calling the provider:
 
 - `mimeType` enum: `image/jpeg` | `image/png` | `image/webp`.  
-- Max size: **Assumption** — enforce a CardFlow limit (e.g. 5–10 MB) even though vendor max is **Unconfirmed**; tighten when vendor answers.  
+- Max size: **20 MB** (**Confirmed** — OpenAPI documents max file size for identify and detect).  
 - `segment` optional string (UUID or shortname).  
 - Reject empty bodies; do not forward arbitrary form fields to CardSight.
 
@@ -271,8 +271,8 @@ Notes:
 
 | Topic | Label |
 |-------|--------|
-| `X-API-Key`, base URL, identify/detect shapes, confidence bands | **Confirmed** (OpenAPI) |
+| `X-API-Key`, base URL, identify/detect shapes, confidence bands, 20 MB max, `CARD_LANGUAGE` field | **Confirmed** (OpenAPI + SDK) |
 | Free pre-flight list/check sets | **Confirmed** (SDK README) |
-| Marketed rate tiers + 429 | **Confirmed** (marketing); 429 vs OpenAPI identify list = **discrepancy** |
-| Image size limits, key rotation, cache/image retention | **Unconfirmed** |
-| 10–15s timeout, CardFlow max upload, flag names, separate pricing provider | **Assumption** / product decision |
+| Rate tiers (Free 750/mo @ 4 req/sec, Pro/Premium/Ultra pricing + quotas + RPS), 429 rate limit | **Confirmed** (marketing); 429 vs OpenAPI identify list = **discrepancy** |
+| Key rotation, cache/image retention | **Unconfirmed** |
+| 10–15s timeout, flag names, separate pricing provider | **Assumption** / product decision |

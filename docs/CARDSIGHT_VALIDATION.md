@@ -51,47 +51,58 @@ Validate CardSight API feasibility for CardFlow MVP card recognition by:
 
 - Path: `/v1/identify/card` or `/v1/identify/card/{segment}`
 - Method: `POST`
-- Request: `multipart/form-data` with binary field `image`
+- Request: `multipart/form-data` with binary field `image`, or direct binary upload (`image/jpeg`, `image/png`, `image/webp`)
+- Max file size: **20 MB** (OpenAPI)
 - Auth: `X-API-Key` header
-- Response: `200` with `IdentifyResponse` schema
+- Response: `200` with `IdentifyCardResponse` schema
 
-**Response shape** (simplified):
+**Response shape** (OpenAPI):
 
 ```json
 {
+  "success": boolean,
+  "requestId": "string",
   "detections": [
     {
       "confidence": "High" | "Medium" | "Low",
       "card": {
         "id": "uuid",
+        "segmentId": "uuid",
+        "releaseId": "uuid",
+        "setId": "uuid",
+        "year": "string",
+        "manufacturer": "string",
+        "releaseName": "string",
+        "setName": "string",
         "name": "string",
-        "set": {
-          "id": "uuid",
-          "name": "string",
-          "shortname": "string"
-        },
         "number": "string",
-        "fields": [
-          { "key": "CARD_LANGUAGE", "value": "en" }
-        ]
+        "fields": { "CARD_LANGUAGE": "en", ... },
+        "suggestions": [...],
+        "parallelSuggestions": [...]
       },
-      "suggestions": [...]
+      "grading": { ... }
     }
   ],
-  "meta": { "processedInMs": number }
+  "processingTime": number,
+  "messages": [...]
 }
 ```
 
 **Confirmed semantics:**
 
-- `confidence`: enum `"High"`, `"Medium"`, `"Low"` (OpenAPI `ConfidenceLevel`)
-- High → exact match with `card.id`
-- Medium/Low → ambiguous; `suggestions[]` array present
+- `success`: boolean indicating completion (OpenAPI)
+- `requestId`: unique tracking ID (OpenAPI)
+- `detections[]`: array of `IdentificationData` (OpenAPI)
+- `confidence`: enum `"High"`, `"Medium"`, `"Low"` (OpenAPI: High 90-100%, Medium 75-89%, Low 50-74%)
+- `card`: `CardDetails` object — full fields for exact match, set-level fields for set match, empty `{}` for unmatched (OpenAPI)
+- High → exact match with `card.id` present
+- Medium/Low → ambiguous; `card.suggestions[]` array present when alternatives exist (OpenAPI)
 - Empty `detections: []` → no card detected (still `200 OK`)
+- `processingTime`: milliseconds (OpenAPI)
+- `messages[]`: server advisory messages, e.g. image quality warnings (OpenAPI)
 
 **Unconfirmed:**
 
-- Max image upload size (bytes)
 - Max / min image dimensions (pixels)
 - Supported aspect ratios
 - Behavior when >1 card in image (max cards per call?)
@@ -99,19 +110,31 @@ Validate CardSight API feasibility for CardFlow MVP card recognition by:
 
 **Assumption:**
 
-- Enforce CardFlow client limit: **5–10 MB** max until vendor confirms
 - Timeout: **10–15 seconds** for identify call
 
 ### 2.2 POST /v1/detect/card
 
 **Confirmed** (OpenAPI):
 
-- Path: `/v1/detect/card` or `/v1/detect/card/{segment}`
+- Path: `/v1/detect/card` (no `{segment}` variant in OpenAPI)
 - Method: `POST`
-- Request: `multipart/form-data` with binary field `image`
-- Response: `DetectResponse` with `detections[].boundingBox` (pixel coordinates)
+- Request: `multipart/form-data` with binary field `image`, or direct binary upload (`image/jpeg`, `image/png`, `image/webp`)
+- Max file size: **20 MB** (OpenAPI)
+- Response: `DetectCardResponse` with `detected`, `count`, `requestId`, `processingTime`, `messages[]`
 
-**Purpose:** Bounding-box detection only; no card identity. Not required for MVP still-image → identify flow.
+**Response shape** (OpenAPI):
+
+```json
+{
+  "detected": boolean,
+  "count": integer,
+  "requestId": "string",
+  "processingTime": number,
+  "messages": [...]
+}
+```
+
+**Purpose:** Free presence check — detects whether cards are present and returns count. Does not identify or catalog cards. Marketing confirms detect is free (does not consume quota). Not required for MVP still-image → identify flow.
 
 ---
 
@@ -141,13 +164,9 @@ Which segment should CardFlow pass for Pokémon? e.g. `"pokemon"`, `"pkm"`, UUID
 
 ### 4.2 Language Field
 
-**Confirmed:** OpenAPI shows `fields[]` array with `{ key, value }` shape.  
-**Assumption:** `CARD_LANGUAGE` is the key for language (common in TCG APIs); values follow ISO 639-1 (`"en"`, `"ja"`, etc.).
+**Confirmed:** OpenAPI `CardDetails.fields` description documents `CARD_LANGUAGE` entry with ISO 639-1 code (e.g., `"en"`, `"ja"`). SDK README examples show `getFieldValue(detection, 'CARD_LANGUAGE')` for Pokémon, Magic: The Gathering, and One Piece.
 
-**Unconfirmed:** Exact key name and value format for Pokémon language in CardSight responses.
-
-**Question for vendor (see `CARDSIGHT_QUESTIONS_FOR_VENDOR.md` C13):**  
-Confirm `CARD_LANGUAGE` field key and ISO 639-1 codes for Pokémon.
+**Status:** Field key `CARD_LANGUAGE` and ISO 639-1 format are **Confirmed** for Pokémon and other TCGs.
 
 ---
 
@@ -192,13 +211,14 @@ Confirm `CARD_LANGUAGE` field key and ISO 639-1 codes for Pokémon.
 **Confirmed** (marketing):
 
 - Requires **Enterprise plan**
-- WebSocket or gRPC streaming
+- Transports: **gRPC**, **gRPC-Web** (OpenAPI / marketing)
+- Video protocols: **SRT**, **WebSocket**, **RTMP**, **RTSP** (marketing)
 - Marketed latency: ~200–300 ms end-to-end
 
 **Unconfirmed:**
 
 - Minimum contract size / pricing for Enterprise
-- React Native gRPC feasibility (gRPC-Web? Custom bridge?)
+- React Native gRPC-Web feasibility (custom bridge requirements?)
 - Sample client SDKs for mobile
 
 **CardFlow decision:** Live video is **OUT OF MVP**. Feature flag `cardsight_live_video_enabled` must default to `false` unless founder-approved. See `CARDSIGHT_INTEGRATION_RECOMMENDATION.md` section 6.
@@ -209,14 +229,17 @@ Confirm `CARD_LANGUAGE` field key and ISO 639-1 codes for Pokémon.
 
 ### 8.1 Marketing Tiers (Confirmed)
 
-| Tier | Quota/month | Notes |
-|------|-------------|-------|
-| Free | 100 identify calls | Marketed on website |
-| Starter | 1,000 | Marketed on website |
-| Pro | 10,000 | Marketed on website |
-| Enterprise | Custom | Contact sales |
+**Source:** https://cardsight.ai/pricing (as of 2026-09-12)
 
-**Confirmed:** Monthly quotas documented in public pricing page.
+| Tier | Price | Quota/month | Rate limit (req/sec) |
+|------|-------|-------------|----------------------|
+| Free | $0 | **750** calls | **4 req/sec** |
+| Pro | **$14.95/mo** | **5,000** calls | **6 req/sec** |
+| Premium | **$74.95/mo** | **30,000** calls | **8 req/sec** |
+| Ultra | **$199.95/mo** | **100,000** calls | **10 req/sec** |
+| Enterprise | Custom pricing | Custom quota | Custom rate | Contact sales |
+
+**Confirmed:** Monthly quotas and RPS limits documented in public marketing materials.
 
 ### 8.2 HTTP 429 Rate Limiting
 
@@ -238,9 +261,10 @@ Confirm `429` behavior, response shape, and recommended backoff strategy.
 
 ### 8.3 Request Rate (RPS)
 
+**Confirmed:** Per-tier RPS limits documented in marketing (see section 8.1 table): Free 4 req/sec, Pro 6, Premium 8, Ultra 10, Enterprise custom.
+
 **Unconfirmed:**
 
-- Requests-per-second limit (separate from monthly quota)
 - Sliding window vs fixed window enforcement
 - Shared across multiple keys on one account?
 
@@ -325,29 +349,29 @@ See `packages/shared/fixtures/README.md` for usage.
 
 1. **Auth:** `X-API-Key` header (OpenAPI).
 2. **Base URL:** `https://api.cardsight.ai` (OpenAPI).
-3. **Identify:** `POST /v1/identify/card[/{segment}]`, multipart `image`, returns `IdentifyResponse` with `detections[]` (OpenAPI).
-4. **Confidence:** Three tiers: `High`, `Medium`, `Low` (OpenAPI enum).
-5. **Detect:** `POST /v1/detect/card[/{segment}]` for bounding boxes (OpenAPI).
-6. **Pre-flight:** `GET /v1/identify/list/sets` and `.../check/set/{set_id}` are free (SDK README).
-7. **Pricing:** `GET /v1/pricing/{card_id}` and `POST /v1/pricing/` for bulk (OpenAPI).
-8. **Commercial terms:** End User Application use permitted; standalone DB restricted (marketing).
-9. **Rate tiers:** Free 100/mo, Starter 1k, Pro 10k, Enterprise custom (marketing).
-10. **Live video:** Enterprise-only, WebSocket/gRPC, ~200–300ms (marketing).
+3. **Identify:** `POST /v1/identify/card[/{segment}]`, multipart `image` or direct binary, max 20 MB, returns `IdentifyCardResponse` with `success`, `requestId`, `detections[]`, `processingTime`, `messages[]` (OpenAPI).
+4. **Confidence:** Three tiers: `High` (90-100%), `Medium` (75-89%), `Low` (50-74%) (OpenAPI enum).
+5. **Detect:** `POST /v1/detect/card` for presence check — returns `detected`, `count`, `requestId`, `processingTime` (OpenAPI). Free, does not consume quota (marketing).
+6. **CARD_LANGUAGE:** Field key for ISO 639-1 language codes in `CardDetails.fields` — documented in OpenAPI and SDK README for Pokémon, Magic, One Piece (OpenAPI + SDK).
+7. **Pre-flight:** `GET /v1/identify/list/sets` and `.../check/set/{set_id}` are free (SDK README).
+8. **Pricing:** `GET /v1/pricing/{card_id}` and `POST /v1/pricing/` for bulk (OpenAPI).
+9. **Commercial terms:** End User Application use permitted; standalone DB restricted (marketing).
+10. **Rate tiers:** Free 750/mo @ 4 req/sec, Pro $14.95 5k @ 6 req/sec, Premium $74.95 30k @ 8 req/sec, Ultra $199.95 100k @ 10 req/sec, Enterprise custom (marketing).
+11. **Live video:** Enterprise-only, gRPC + gRPC-Web, video protocols SRT/WebSocket/RTMP/RTSP, ~200–300ms (marketing).
 
 ---
 
 ## 13. Unconfirmed Items (Vendor Q&A Required)
 
-1. Image upload: max bytes, dimensions, aspect ratio (B4–B5).
+1. Image upload: dimensions, aspect ratio (B4–B5).
 2. Pokémon segment shortname/UUID (C8).
-3. Language field: exact key (`CARD_LANGUAGE`?) and ISO 639-1 values (C13).
-4. `429` rate limit: response shape, `Retry-After` header (D14–D16).
-5. RPS limits: window type, shared across keys (D16).
-6. Image retention: duration, ephemeral option (E18).
-7. Cache retention: allowed duration for pricing and identify results (E19).
-8. Model training: are uploaded images used? Opt-out? (E21).
-9. Pricing freshness: SLA for Pokémon `last_sale_date` (F22).
-10. Key rotation: process, multi-key, grace period (A1–A3).
+3. `429` rate limit: response shape, `Retry-After` header (D14–D16).
+4. RPS enforcement: sliding vs fixed window, shared across keys (D16).
+5. Image retention: duration, ephemeral option (E18).
+6. Cache retention: allowed duration for pricing and identify results (E19).
+7. Model training: are uploaded images used? Opt-out? (E21).
+8. Pricing freshness: SLA for Pokémon `last_sale_date` (F22).
+9. Key rotation: process, multi-key, grace period (A1–A3).
 
 See full list in `CARDSIGHT_QUESTIONS_FOR_VENDOR.md`.
 
@@ -356,13 +380,12 @@ See full list in `CARDSIGHT_QUESTIONS_FOR_VENDOR.md`.
 ## 14. Assumptions (CardFlow Product Decisions)
 
 1. **Timeout:** 10–15 seconds for identify calls (section 2.1).
-2. **Max upload:** Enforce 5–10 MB client limit until vendor confirms (section 2.1).
-3. **Feature flags:** `cardsight_identify_enabled` (default true in staging), `cardsight_pricing_enabled` (default false), `cardsight_live_video_enabled` (default **false** — Enterprise-only).
-4. **Error mapping:** CardFlow normalized error codes (`PROVIDER_TIMEOUT`, `RATE_LIMITED`, etc.) — see section 9.2.
-5. **Retry logic:** Exponential backoff + jitter for `408`, `5xx`, `429`; never retry `400`, `401` (Integration Recommendation section 5).
-6. **Manual fallback:** Always available; ambiguous matches show picker + "Search manually" (Integration Recommendation section 9).
-7. **Separate pricing provider:** Keep `MarketPricingProvider` decoupled from `CardRecognitionProvider` (Integration Recommendation section 10).
-8. **Canonical IDs:** Prefer internal CardFlow + TCGdex IDs; treat CardSight UUIDs as external refs only (Integration Recommendation section 11).
+2. **Feature flags:** `cardsight_identify_enabled` (default true in staging), `cardsight_pricing_enabled` (default false), `cardsight_live_video_enabled` (default **false** — Enterprise-only).
+3. **Error mapping:** CardFlow normalized error codes (`PROVIDER_TIMEOUT`, `RATE_LIMITED`, etc.) — see section 9.2.
+4. **Retry logic:** Exponential backoff + jitter for `408`, `5xx`, `429`; never retry `400`, `401` (Integration Recommendation section 5).
+5. **Manual fallback:** Always available; ambiguous matches show picker + "Search manually" (Integration Recommendation section 9).
+6. **Separate pricing provider:** Keep `MarketPricingProvider` decoupled from `CardRecognitionProvider` (Integration Recommendation section 10).
+7. **Canonical IDs:** Prefer internal CardFlow + TCGdex IDs; treat CardSight UUIDs as external refs only (Integration Recommendation section 11).
 
 ---
 
@@ -382,14 +405,13 @@ See full list in `CARDSIGHT_QUESTIONS_FOR_VENDOR.md`.
 
 | Risk | Mitigation |
 |------|------------|
-| Unconfirmed image size limits | Enforce CardFlow 5–10 MB client cap; ask vendor for official limit |
 | `429` discrepancy (marketing vs OpenAPI) | Implement `RATE_LIMITED` handler anyway; verify with vendor |
 | Pokémon segment unknown | Ask vendor C8; fall back to segment-less `/v1/identify/card` if needed |
-| Language field key unknown | Ask vendor C13; parse all `fields[]` generically until confirmed |
 | Image retention unclear | Ask vendor E18; assume HTTPS-only, never log images in CardFlow |
 | Cache retention unknown | Ask vendor E19; conservative: cache identify results ≤24h, pricing ≤1h until confirmed |
 | Live video Enterprise cost | OUT OF MVP; requires founder approval + Enterprise contract |
 | TCGdex mapping gaps | Separate spike (recommended next issue); ambiguous → picker UX |
+| RPS enforcement details | Marketing confirms per-tier RPS limits; ask vendor about window type (sliding vs fixed) and multi-key behavior |
 
 ---
 

@@ -15,8 +15,9 @@
 
 ## B. Upload constraints (still image)
 
-4. What are **hard limits** for image upload: max bytes, max dimensions, min dimensions, aspect ratio?  
-   - OpenAPI `FileUploadInput` documents binary `image` only — **Unconfirmed** size/dimension limits.
+4. What are **hard limits** for image dimensions: max width/height, min dimensions, aspect ratio?  
+   - OpenAPI confirms **20 MB max file size** for identify and detect.  
+   - Dimension limits not documented.
 5. Preferred encoding for mobile: JPEG quality guidance? WebP support parity with JPEG/PNG?
 6. Multi-card images: max cards per identify call? Behavior when more cards are present than billed/counted?
 7. Are EXIF / GPS metadata stripped server-side? Any PII retention from uploads?
@@ -26,9 +27,9 @@
 8. For Pokémon specifically: which **segments / shortnames** should CardFlow use on `POST /v1/identify/card/{segment}`?
 9. Coverage: % of modern English Pokémon sets identifiable? Japanese / other languages?
 10. How should clients interpret **set-level** matches (no `card.id`) for UX — force picker vs auto-navigate set?
-11. Ordering of `suggestions[]`: always best-first? Stable across identical images?
-12. `parallelSuggestions` is marked beta in OpenAPI — production-ready for Pokémon? SLA for breaking changes?
-13. Confirm `CARD_LANGUAGE` field key and ISO 639-1 values for Pokémon identify responses.
+11. Ordering of `card.suggestions[]`: always best-first? Stable across identical images?
+12. `card.parallelSuggestions` is marked beta in OpenAPI — production-ready for Pokémon? SLA for breaking changes?
+13. ~~Confirm `CARD_LANGUAGE` field key and ISO 639-1 values for Pokémon identify responses.~~ **Confirmed** — OpenAPI + SDK document `CARD_LANGUAGE` with ISO 639-1 codes.
 
 ## D. Errors, rate limits, quotas
 
@@ -71,7 +72,7 @@
 ## Suggested send order
 
 1. **Blockers for MVP still-image:** B4–B5, C8–C9, D14–D16, E18–E20.  
-2. **Soon after:** A1, C10–C13, D17, H28–H30.  
+2. **Soon after:** A1, C10–C12, D17, H28–H30.  
 3. **Later:** Pricing (F), Live video (G).
 
 Record vendor answers with date + contact; then update `CARDSIGHT_VALIDATION.md` Confirmed/Unconfirmed tables.
