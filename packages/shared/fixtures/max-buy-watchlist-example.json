@@ -23,12 +23,13 @@
     "referencePriceAmount": "180.00",
     "referencePriceSource": "user_entered",
     "currency": "USD",
-    "targetMarginPct": 0.2,
-    "feesBufferPct": 0.13,
-    "conditionFactor": 1.0,
+    "currentTargetMarginPct": 0.2,
+    "currentFeesBufferPct": 0.13,
+    "currentConditionFactor": 1.0,
     "computedMaxBuyAmount": "125.28",
     "targetMaxBuyAmount": "120.00",
-    "note": "Computed: 180 × 0.80 × 0.87 = 125.28. User saved target as $120.00 (user override or rounded down)."
+    "isRecomputedGuidance": true,
+    "note": "Computed: 180 × 0.80 × 0.87 = 125.28. User saved target as $120.00 (user override or rounded down). Max Buy recomputed from CURRENT preferences."
   },
   "formula": {
     "expression": "reference_price × (1 - target_margin_pct) × (1 - fees_buffer_pct) × condition_factor",
@@ -83,6 +84,8 @@
     "notAPhysicalCopy": true,
     "maxBuyIsReminder": true,
     "notCostBasis": true,
+    "recomputedFromCurrentPreferences": true,
+    "notSnapshotted": true,
     "neverUse": [
       "tcgdex_pricing",
       "cardsight_as_price_source",
@@ -91,7 +94,7 @@
   },
   "_meta": {
     "mocked": true,
-    "description": "MOCK EXAMPLE — Watchlist item for confirmed Base Set Charizard (base1-4) after manual picker choice. User entered reference $180.00; computed Max Buy guidance $125.28. User saved target reminder as $120.00 (override or rounded). Watchlist is interest, not a physical copy: no quantity, no all-in cost, no listing draft. No price-change alerts without a pricing provider. Amounts shown as decimal strings for readability; persist minor units later.",
+    "description": "MOCK EXAMPLE — Watchlist item for confirmed Base Set Charizard (base1-4) after manual picker choice. User entered reference $180.00; computed Max Buy guidance $125.28. User saved target reminder as $120.00 (override or rounded). CONFIRMED: Max Buy is recomputed from CURRENT crm_user_preferences; not snapshotted. Watchlist is interest, not a physical copy: no quantity, no all-in cost, no listing draft. No price-change alerts without a pricing provider. Amounts shown as decimal strings for readability; persist minor units later.",
     "relatedFixtures": [
       "crm-inventory-item-watchlist-example.json",
       "max-buy-with-reference-price-example.json"

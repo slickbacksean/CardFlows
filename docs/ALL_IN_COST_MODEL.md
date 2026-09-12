@@ -9,9 +9,7 @@
 
 | Label | Meaning |
 |-------|---------|
-| **Confirmed** | Already decided in CardFlow product / mapping docs on `main`. |
-| **Assumption** | Spike recommendation pending founder decision. |
-| **Founder decision** | Requires explicit product approval. |
+| **Confirmed** | Decided by founder or already in CardFlow product / mapping docs on `main`. |
 
 ---
 
@@ -37,7 +35,7 @@ It is **not**:
 
 ## 2. All-in formula
 
-**Assumption** (aligned with `CRM_DATA_MODEL.md` §8):
+**Confirmed** (aligned with `CRM_DATA_MODEL.md` §8):
 
 ```
 all_in_total = purchase_price + shipping + tax + fees + supplies
@@ -49,7 +47,7 @@ From `CRM_DATA_MODEL.md` §8 and `crm-inventory-item-purchased-example.json`:
 
 | Field | Required to save Purchased? | Default if omitted | Notes |
 |-------|-----------------------------|--------------------|-------|
-| `currency` | **Yes** | (user preferences) | ISO 4217. **Assumption:** `USD` for NA beta |
+| `currency` | **Yes** | (user preferences) | ISO 4217. **Confirmed:** `USD` for NA beta |
 | `purchase_price` | **Yes** | — | What the user paid for the card / lot line |
 | `shipping` | No | `0` | Inbound shipping allocated to this copy |
 | `tax` | No | `0` | Sales tax / VAT allocated to this copy |
@@ -58,9 +56,9 @@ From `CRM_DATA_MODEL.md` §8 and `crm-inventory-item-purchased-example.json`:
 | `all_in_total` | Derived | — | Persist the computed sum at save time |
 | `purchased_at` | **Yes** | — | User-entered or device timestamp |
 
-**Assumption:** Only `currency`, `purchase_price`, and `purchased_at` are **required** to save Purchased. Others default to `0` if the user skips them.
+**Confirmed:** Only `currency`, `purchase_price`, and `purchased_at` are **required** to save Purchased. Others default to `0` if the user skips them.
 
-**Founder decision:** Whether to make `shipping` or `supplies` required for private beta testers (flippers). This spike recommends optional to reduce friction, but the founder may require at least one all-in breakdown.
+**Confirmed:** Purchase-price-only is sufficient. Do not require `shipping` or other breakdown fields for private beta.
 
 ---
 
@@ -102,7 +100,7 @@ User tapped Purchased, entered purchase price only, and saved. CRM does not bloc
 
 **Confirmed:**
 - Currency: ISO 4217 (`CRM_DATA_MODEL.md` §8)  
-- Default: **`USD`** (Assumption for NA beta)  
+- Default: **`USD`** (for NA beta)  
 - Persist: **integer minor units** (cents)  
 - Display: **dollars** (decimal strings in fixtures for readability)  
 
@@ -196,8 +194,10 @@ From `CRM_DATA_MODEL.md` §14.6:
 | `all_in_total` | Integer minor units | Derived, persisted |
 | `source_note` | Text | Optional free text ("local shop") |
 | `notes` | Text | Optional |
+| `reference_price_amount` | Integer minor units | Nullable; what comparable the user used (input provenance) |
+| `reference_price_source` | Text | `user_entered` \| `later_provider` \| `none` |
 
-**Assumption:** Persist `all_in_total` at save rather than recompute on read. That locks the sum even if field semantics change later.
+**Confirmed:** Persist `all_in_total` at save rather than recompute on read. That locks the sum even if field semantics change later.
 
 ---
 
@@ -240,12 +240,12 @@ Mock examples in `packages/shared/fixtures/`:
 
 ---
 
-## 13. Founder decisions
+## 13. Founder decisions (Confirmed)
 
-1. Accept **five cost lines** (purchase, shipping, tax, fees, supplies) as the recommended breakdown (already aligned with `CRM_DATA_MODEL.md` §8).  
-2. Accept **purchase_price only required** (recommended) vs require at least one optional line for testers.  
-3. Whether to persist `all_in_total` (recommended) or recompute.  
-4. Whether sold/shipped later writes **outbound costs** (packaging, postage, eBay fees) — those are out of this spike; likely on a later `crm_sales` or `crm_shipments`.  
+1. **Five cost lines** (purchase, shipping, tax, fees, supplies) as the breakdown — **Confirmed** (aligned with `CRM_DATA_MODEL.md` §8)  
+2. **Purchase_price only required** — **Confirmed**. `shipping`, `tax`, `fees`, `supplies` are optional, default `0`  
+3. **Persist `all_in_total`** at save — **Confirmed**  
+4. **Outbound costs** (sold/shipped: packaging, postage, eBay fees) — Out of this spike; likely on a later `crm_sales` or `crm_shipments`  
 
 ---
 

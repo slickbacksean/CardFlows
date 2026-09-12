@@ -5,12 +5,13 @@
     "referencePriceAmount": "8.00",
     "referencePriceSource": "user_entered",
     "currency": "USD",
-    "targetMarginPct": 0.2,
-    "feesBufferPct": 0.13,
-    "conditionFactor": 1.0,
+    "currentTargetMarginPct": 0.2,
+    "currentFeesBufferPct": 0.13,
+    "currentConditionFactor": 1.0,
     "condition": "NM",
     "maxBuyAmount": "5.57",
-    "computedAt": "2026-09-12T16:05:50.000Z"
+    "isRecomputedGuidance": true,
+    "note": "Max Buy is recomputed from CURRENT user preferences + stored reference_price. Not a frozen snapshot."
   },
   "formula": {
     "expression": "reference_price × (1 - target_margin_pct) × (1 - fees_buffer_pct) × condition_factor",
@@ -46,7 +47,7 @@
       "DMG": 0.20
     },
     "defaultCurrency": "USD",
-    "note": "Condition adjustments are a Founder decision — optional map shown as example."
+    "note": "Confirmed: condition adjustments are optional map; default condition_factor = 1.0 when unspecified."
   },
   "rules": {
     "maxBuyIsGuidance": true,
@@ -54,6 +55,9 @@
     "notAMarketPrice": true,
     "cardFlowOwned": true,
     "worksWith": "no_live_pricing_provider",
+    "recomputedFromCurrentPreferences": true,
+    "notSnapshotted": true,
+    "laterPreferenceEditsChangeGuidance": true,
     "neverUse": [
       "tcgdex_pricing",
       "scraped_ebay_whatnot_tcgplayer",
@@ -67,7 +71,7 @@
   },
   "_meta": {
     "mocked": true,
-    "description": "MOCK EXAMPLE — Max Buy computed from user-entered reference price. Formula: reference × (1 - margin) × (1 - fees_buffer) × condition_factor. CardFlow-owned user math; works without a live pricing provider. Not a guaranteed price or profit. Amounts shown as decimal strings for readability; persist minor units later.",
+    "description": "MOCK EXAMPLE — Max Buy computed from user-entered reference price. Formula: reference × (1 - margin) × (1 - fees_buffer) × condition_factor. CardFlow-owned user math; works without a live pricing provider. CONFIRMED FOUNDER DECISION: Max Buy is recomputed from CURRENT crm_user_preferences + stored reference_price_amount. Not snapshotted. Later preference edits intentionally change Max Buy guidance on old purchases. Not a guaranteed price or profit. Amounts shown as decimal strings for readability; persist minor units later.",
     "relatedFixtures": [
       "crm-inventory-item-purchased-example.json",
       "all-in-cost-complete-example.json"

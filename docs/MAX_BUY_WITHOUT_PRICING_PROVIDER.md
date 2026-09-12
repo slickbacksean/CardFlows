@@ -9,9 +9,8 @@
 
 | Label | Meaning |
 |-------|---------|
-| **Confirmed** | Already decided in CardFlow product / mapping docs on `main`. |
+| **Confirmed** | Decided by founder or already in CardFlow product / mapping docs on `main`. |
 | **Unconfirmed** | Depends on a later provider, legal review, or missing product spec. Do not invent. |
-| **Assumption** | Spike recommendation pending founder decision. |
 
 ---
 
@@ -96,7 +95,7 @@ Watchlist is interest, not a purchase.
 
 ## 3. Where the reference price comes from
 
-**Assumption:**
+**Confirmed:**
 
 | Source | `reference_price_source` | MVP? | Notes |
 |--------|--------------------------|------|-------|
@@ -208,11 +207,22 @@ No vendor API call.
 
 ### 8.2 `crm_purchases`
 
-| Field | Value when Max Buy computed | Value when reference null |
-|-------|-----------------------------|-----------------------------|
-| `max_buy_amount` | Computed guidance | `null` |
-| `reference_price_amount` | User's reference | `null` |
+**Confirmed:** Max Buy is **recomputed** from current `crm_user_preferences` when displayed. Do not snapshot rule inputs as authoritative.
+
+| Field | Value when user-entered reference | Value when reference null |
+|-------|-----------------------------------|----------------------------|
+| `reference_price_amount` | User's typed value (input provenance) | `null` |
 | `reference_price_source` | `user_entered` | `none` |
+
+Max Buy guidance is computed live:
+
+```
+current crm_user_preferences (margin, fees_buffer, condition map)
++ stored reference_price_amount (or current snapshot)
+→ live Max Buy guidance
+```
+
+**Confirmed founder decision:** Later preference edits **intentionally** change Max Buy guidance on old purchases.
 
 All-in cost fields (`purchase_price`, shipping, tax, fees, supplies, `all_in_total`) are **independent** of Max Buy. They record actual spend, not guidance.
 
@@ -241,7 +251,7 @@ When a provider is chosen:
 
 ## 10. Private beta testing without a provider
 
-**Assumption:** Beta cohort must validate:
+**Confirmed:** Beta cohort must validate:
 
 1. Scan → Confirm → **user-entered reference** → Max Buy → Purchased → inventory save  
 2. Purchased save with **no reference** → Max Buy null → all-in cost recorded  
@@ -271,12 +281,12 @@ See also `crm-inventory-item-purchased-example.json` (Pikachu with user-entered 
 
 ---
 
-## 12. Founder decisions
+## 12. Founder decisions (Confirmed)
 
-1. Accept **user-entered reference only** for private beta (recommended) or block beta until a provider is chosen.  
-2. Whether to allow **reference override** when a provider is later added (recommended: yes).  
-3. Whether watchlist **alerts** on price changes are in private beta (recommended: **no**, requires provider).  
-4. Onboarding copy to educate testers that Max Buy is user math, not a live feed (recommended: yes, short tooltip).  
+1. **User-entered reference only** for private beta — **Confirmed**  
+2. **Reference override** when a provider is later added: allowed — **Confirmed**  
+3. **Watchlist alerts** on price changes: **not** in private beta (requires provider) — **Confirmed**  
+4. **Max Buy recompute:** Do not snapshot rule inputs on purchase. Later displays recompute from current `crm_user_preferences` + stored `reference_price_amount`. Later preference edits intentionally change Max Buy guidance on old purchases — **Confirmed**  
 
 ---
 

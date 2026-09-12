@@ -5,12 +5,13 @@
     "referencePriceAmount": null,
     "referencePriceSource": "none",
     "currency": "USD",
-    "targetMarginPct": 0.2,
-    "feesBufferPct": 0.13,
-    "conditionFactor": 1.0,
+    "currentTargetMarginPct": 0.2,
+    "currentFeesBufferPct": 0.13,
+    "currentConditionFactor": 1.0,
     "condition": null,
     "maxBuyAmount": null,
-    "computedAt": null
+    "isRecomputedGuidance": true,
+    "note": "Max Buy is recomputed from CURRENT user preferences. Cannot compute when reference_price is null."
   },
   "formula": {
     "expression": "reference_price × (1 - target_margin_pct) × (1 - fees_buffer_pct) × condition_factor",
@@ -67,6 +68,8 @@
   "rules": {
     "maxBuyIsOptional": true,
     "saveNotBlocked": true,
+    "recomputedFromCurrentPreferences": true,
+    "notSnapshotted": true,
     "neverBackfillFrom": [
       "tcgdex_pricing",
       "cardsight",
@@ -75,7 +78,7 @@
   },
   "_meta": {
     "mocked": true,
-    "description": "MOCK EXAMPLE — Max Buy when reference_price is null. User skipped entering a reference; Max Buy cannot be computed. CRM still allows Purchased or Watchlist save. All-in cost is recorded; Max Buy fields are null. UI shows 'Enter a reference price to compute Max Buy.' Not a live vendor recording.",
+    "description": "MOCK EXAMPLE — Max Buy when reference_price is null. User skipped entering a reference; Max Buy cannot be computed. CRM still allows Purchased or Watchlist save. All-in cost is recorded; Max Buy fields are null. UI shows 'Enter a reference price to compute Max Buy.' CONFIRMED: Max Buy is recomputed from current preferences; not snapshotted. Not a live vendor recording.",
     "relatedFixtures": [
       "max-buy-with-reference-price-example.json",
       "all-in-cost-purchase-price-only-example.json"

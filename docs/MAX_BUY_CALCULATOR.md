@@ -9,10 +9,8 @@
 
 | Label | Meaning |
 |-------|---------|
-| **Confirmed** | Already decided in CardFlow product / mapping docs on `main`. |
+| **Confirmed** | Decided by founder or already in CardFlow product / mapping docs on `main`. |
 | **Unconfirmed** | Depends on a later provider, legal review, or missing product spec. Do not invent. |
-| **Assumption** | Spike recommendation pending founder decision. |
-| **Founder decision** | Requires explicit product approval. |
 
 ---
 
@@ -46,14 +44,14 @@ It is **not**:
 
 ### 2.2 Stored on user preferences
 
-**Assumption:** Defaults pending founder confirmation.
+**Confirmed:** Founder decisions on defaults and optional map.
 
 | Preference field | Default | Unit | Notes |
 |-----------------|---------|------|-------|
-| `max_buy_target_margin_pct` | `0.20` | Decimal (20%) | **Assumption** |
-| `max_buy_fees_buffer_pct` | `0.13` | Decimal (13%) | **Assumption** |
-| `max_buy_condition_adjustments_json` | `null` or `{"NM": 1.0}` | Map | **Founder decision** — optional |
-| `default_currency` | `USD` | ISO 4217 | **Assumption** for NA beta |
+| `max_buy_target_margin_pct` | `0.20` | Decimal (20%) | **Confirmed** |
+| `max_buy_fees_buffer_pct` | `0.13` | Decimal (13%) | **Confirmed** |
+| `max_buy_condition_adjustments_json` | `null` or `{"NM": 1.0}` | Map | **Confirmed** — optional; default `condition_factor = 1.0` when unspecified |
+| `default_currency` | `USD` | ISO 4217 | **Confirmed** for NA beta |
 
 User may edit these in a Max Buy / Preferences screen.
 
@@ -67,7 +65,7 @@ When no provider: user types the reference, or Max Buy shows "enter a reference 
 
 ## 3. Formula
 
-**Assumption** (matches `crm-inventory-item-purchased-example.json` Pikachu math):
+**Confirmed** (matches `crm-inventory-item-purchased-example.json` Pikachu math):
 
 ```
 max_buy_amount = round_half_up_to_cent(
@@ -147,20 +145,26 @@ User must type it, or choose a previous snapshot, or leave it null.
 
 ## 5. Field storage
 
-### 5.1 On `crm_purchases` (snapshot at save)
+### 5.1 On `crm_purchases` (reference provenance only)
 
-From `CRM_DATA_MODEL.md` §14.6:
+**Confirmed:** Max Buy is **recomputed** from current `crm_user_preferences` when displayed. Do not snapshot rule inputs as the source of truth.
 
 | Field | Type | Purpose |
 |-------|------|---------|
-| `max_buy_amount` | Nullable decimal (minor units) | Computed guidance used at Purchased tap |
-| `reference_price_amount` | Nullable decimal | What Max Buy formula used |
+| `reference_price_amount` | Nullable decimal | What comparable the user used (input provenance) |
 | `reference_price_source` | `user_entered` \| `later_provider` \| `none` | Provenance |
-| `target_margin_pct` (optional) | Decimal | Snapshot of preference at save |
-| `fees_buffer_pct` (optional) | Decimal | Snapshot of preference at save |
-| `condition_factor` (optional) | Decimal | Condition adjustment if applied |
 
-**Assumption:** Snapshot the rule inputs so later preference edits do not rewrite history.
+**Confirmed founder decision:** Later preference edits **intentionally** change Max Buy guidance on old purchases. That is the desired behavior.
+
+If `CRM_DATA_MODEL.md` on `main` lists `max_buy_amount`, `target_margin_pct`, `fees_buffer_pct`, or `condition_factor` on `crm_purchases`, those columns are **not required** and **not authoritative** for this spike. UI recomputes Max Buy from:
+
+```
+current crm_user_preferences
++ stored reference_price_amount (or current snapshot)
+→ live Max Buy guidance
+```
+
+**Tradeoff:** User changes their margin from 20% to 25% → all purchase records now show different Max Buy guidance when recomputed. That is acceptable; Max Buy is guidance, not a frozen historical fact.
 
 ### 5.2 On `crm_inventory_items` (watchlist only)
 
@@ -185,11 +189,11 @@ From `CRM_DATA_MODEL.md` §14.10:
 
 ## 6. Condition adjustment
 
-**Assumption:** Default `condition_factor = 1.0` (NM / unspecified).
+**Confirmed:** Default `condition_factor = 1.0` (NM / unspecified / no map).
 
-**Founder decision:** Whether to provide a preferences map for LP / MP / HP / DMG. Do not invent a full PSA/BGS grade table as Confirmed.
+**Confirmed:** Condition adjustments are an **optional map** only. Do not require a full grade table for private beta.
 
-Example optional map (not Confirmed):
+Example optional map:
 
 ```json
 {
@@ -201,7 +205,7 @@ Example optional map (not Confirmed):
 }
 ```
 
-If the user enters condition and the map exists, use it. Otherwise default `1.0`.
+If the user enters condition and the map exists in their preferences, use it. Otherwise default `1.0`.
 
 ---
 
@@ -209,11 +213,10 @@ If the user enters condition and the map exists, use it. Otherwise default `1.0`
 
 **Confirmed:**
 - Currency: ISO 4217 (`CRM_DATA_MODEL.md` §8)  
-- Default: **`USD`** (Assumption for NA beta)  
+- Default: **`USD`** (for NA beta)  
 - Persist: **integer minor units** (cents)  
 - Display: **dollars** (decimal strings in fixtures for readability)  
-
-**Assumption:** Rounding is **round half up to cent** (banker's rounding is an alternative; this spike recommends half-up for simplicity).
+- Rounding: **round half up to cent** (not banker's rounding)
 
 Compute in integer minor units to avoid float precision errors:
 
@@ -299,13 +302,14 @@ See also `crm-inventory-item-purchased-example.json` (Pikachu with Max Buy), `cr
 
 ---
 
-## 13. Founder decisions
+## 13. Founder decisions (Confirmed)
 
-1. Accept default **`target_margin_pct = 0.20`** and **`fees_buffer_pct = 0.13`** (recommended) or revise.  
-2. Accept **round half up to cent** (recommended) or choose banker's rounding.  
-3. Whether condition adjustments are an optional map (recommended) or required full vocabulary for beta.  
-4. Whether to snapshot rule inputs on the purchase (recommended) or recompute on demand.  
-5. Confirm **`USD`** as default currency for NA beta.  
+1. **Max Buy defaults:** `target_margin_pct = 0.20`, `fees_buffer_pct = 0.13` — **Confirmed**  
+2. **Rounding:** round half up to cent (not banker's rounding) — **Confirmed**  
+3. **Condition adjustments:** optional map only; default `condition_factor = 1.0` when unspecified / NM / no map. Do not require a full grade table for beta — **Confirmed**  
+4. **All-in cost required fields:** `currency`, `purchase_price`, `purchased_at` required. `shipping`, `tax`, `fees`, `supplies` optional, default `0` — **Confirmed**  
+5. **Default currency:** `USD` for NA beta — **Confirmed**  
+6. **Max Buy recompute:** Do **not** snapshot rule inputs on purchase as the source of truth. Later displays recompute from current `crm_user_preferences` + stored `reference_price_amount`. Later preference edits intentionally change Max Buy guidance on old purchases — **Confirmed**  
 
 ---
 
