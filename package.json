@@ -1,0 +1,16 @@
+{
+  "name": "cardflows",
+  "private": true,
+  "version": "0.0.1",
+  "description": "CardFlow monorepo — Expo app, API/BFF, shared types and fixtures",
+  "scripts": {
+    "build": "pnpm -r run build",
+    "test": "pnpm -r run test",
+    "typecheck": "pnpm -r run typecheck",
+    "dev:api": "pnpm --filter @cardflows/api dev",
+    "dev:mobile": "pnpm --filter @cardflows/mobile start"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
