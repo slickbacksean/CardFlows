@@ -100,6 +100,20 @@ Shapes follow `docs/CRM_DATA_MODEL.md`, `docs/CRM_INVENTORY_GRAIN.md`, `docs/CRM
 | `crm-listing-draft-example.json` | Internal draft for the purchased Pikachu copy | Draft fields only; explicitly not published |
 | `crm-correction-audit-example.json` | Re-scan conflicts (`base1-14` vs `base1-58`); user keeps original | `provider_conflict` + `correction`; no silent inventory retarget |
 
+---
+
+## Max Buy / All-In Cost fixtures
+
+Shapes follow `docs/MAX_BUY_CALCULATOR.md`, `docs/ALL_IN_COST_MODEL.md`, and `docs/MAX_BUY_WITHOUT_PRICING_PROVIDER.md`. Max Buy is CardFlow-owned user math; works without a live pricing provider. All-in cost is user-entered cost basis.
+
+| File | Scenario | Use Case |
+|------|----------|----------|
+| `max-buy-with-reference-price-example.json` | User-entered reference; Max Buy computed | Formula: `reference × (1 - margin) × (1 - fees_buffer) × condition`. Pikachu: $8.00 ref → $5.57 Max Buy |
+| `max-buy-without-reference-price-example.json` | Reference null; Max Buy null | CRM still saves; UI: "Enter a reference price to compute Max Buy." |
+| `max-buy-watchlist-example.json` | Watchlist target Max Buy reminder | Charizard: $180 ref → $125.28 computed; $120 stored reminder. No cost basis. |
+| `all-in-cost-complete-example.json` | All five cost lines filled | Pikachu: purchase $3.50 + tax $0.29 + supplies $0.25 = $4.04 all-in. Compare to draft asking $9.00 (never "guaranteed profit"). |
+| `all-in-cost-purchase-price-only-example.json` | Minimal entry: purchase price only | Venusaur: $15.00 purchase; optional fields defaulted to $0. All-in total $15.00. |
+
 Shared mock ids (Pikachu path):
 
 - `cardflowCardId`: `7c2e1a90-4b3d-4f6a-9c11-2e8f0a1b3c58`

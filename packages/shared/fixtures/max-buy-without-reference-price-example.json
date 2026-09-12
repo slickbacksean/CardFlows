@@ -1,0 +1,88 @@
+{
+  "provider": "mock",
+  "ok": true,
+  "maxBuy": {
+    "referencePriceAmount": null,
+    "referencePriceSource": "none",
+    "currency": "USD",
+    "targetMarginPct": 0.2,
+    "feesBufferPct": 0.13,
+    "conditionFactor": 1.0,
+    "condition": null,
+    "maxBuyAmount": null,
+    "computedAt": null
+  },
+  "formula": {
+    "expression": "reference_price × (1 - target_margin_pct) × (1 - fees_buffer_pct) × condition_factor",
+    "calculation": "null × 0.80 × 0.87 × 1.0 = null",
+    "rounding": "round_half_up_to_cent",
+    "note": "Cannot compute Max Buy when reference_price is null."
+  },
+  "cardContext": {
+    "cardflowCardId": "9e3b5c7a-2d4f-4a8e-9b11-4f8e2a3c5d70",
+    "tcgdexId": "base1-25",
+    "name": "Machamp",
+    "setName": "Base Set",
+    "localId": "25",
+    "language": "en"
+  },
+  "priceSnapshot": null,
+  "userPreferences": {
+    "maxBuyTargetMarginPct": 0.2,
+    "maxBuyFeesBufferPct": 0.13,
+    "maxBuyConditionAdjustmentsJson": null,
+    "defaultCurrency": "USD"
+  },
+  "crmBehavior": {
+    "purchasedSaveAllowed": true,
+    "watchlistSaveAllowed": true,
+    "maxBuyStoredAsNull": true,
+    "allInCostStillRecorded": true,
+    "note": "CRM save is NOT blocked by missing reference price or null Max Buy."
+  },
+  "uiCopy": {
+    "display": "Enter a reference price to compute Max Buy.",
+    "placeholder": "Reference price (e.g., $15.00)",
+    "rulesShown": "Your rules: 20% margin, 13% fees buffer",
+    "noMaxBuyNumber": true
+  },
+  "purchaseExample": {
+    "purchaseId": "f6a7b8c9-d0e1-4234-5678-90abcdef1234",
+    "inventoryItemId": "a2b3c4d5-e6f7-4890-1234-56789abcdef1",
+    "purchasedAt": "2026-09-12T17:30:00.000Z",
+    "currency": "USD",
+    "costBasis": {
+      "purchasePrice": "12.00",
+      "shipping": "0.00",
+      "tax": "0.00",
+      "fees": "0.00",
+      "supplies": "0.00",
+      "allInTotal": "12.00"
+    },
+    "maxBuyAmount": null,
+    "referencePriceAmount": null,
+    "referencePriceSource": "none",
+    "note": "User bought without entering a reference; Max Buy null; all-in cost recorded."
+  },
+  "rules": {
+    "maxBuyIsOptional": true,
+    "saveNotBlocked": true,
+    "neverBackfillFrom": [
+      "tcgdex_pricing",
+      "cardsight",
+      "scraped_marketplaces"
+    ]
+  },
+  "_meta": {
+    "mocked": true,
+    "description": "MOCK EXAMPLE — Max Buy when reference_price is null. User skipped entering a reference; Max Buy cannot be computed. CRM still allows Purchased or Watchlist save. All-in cost is recorded; Max Buy fields are null. UI shows 'Enter a reference price to compute Max Buy.' Not a live vendor recording.",
+    "relatedFixtures": [
+      "max-buy-with-reference-price-example.json",
+      "all-in-cost-purchase-price-only-example.json"
+    ],
+    "relatedDocs": [
+      "docs/MAX_BUY_CALCULATOR.md",
+      "docs/MAX_BUY_WITHOUT_PRICING_PROVIDER.md"
+    ]
+  }
+}

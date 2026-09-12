@@ -1,0 +1,97 @@
+{
+  "provider": "mock",
+  "ok": true,
+  "purchase": {
+    "purchaseId": "e4f5a6b7-c8d9-4012-3456-789abcdef012",
+    "inventoryItemId": "c2d3e4f5-a6b7-4890-1234-56789abcdef0",
+    "purchasedAt": "2026-09-12T16:06:40.000Z",
+    "sourceNote": "Local shop binder",
+    "currency": "USD",
+    "notes": "Bought at card show; allocated shipping to this copy."
+  },
+  "costBasis": {
+    "purchasePrice": "3.50",
+    "shipping": "0.00",
+    "tax": "0.29",
+    "fees": "0.00",
+    "supplies": "0.25",
+    "allInTotal": "4.04"
+  },
+  "formula": {
+    "expression": "all_in_total = purchase_price + shipping + tax + fees + supplies",
+    "calculation": "4.04 = 3.50 + 0.00 + 0.29 + 0.00 + 0.25",
+    "persistedAtSave": true
+  },
+  "requiredFields": {
+    "currency": "USD",
+    "purchasePrice": "3.50",
+    "purchasedAt": "2026-09-12T16:06:40.000Z",
+    "note": "Only these three are REQUIRED to save Purchased. Others default to 0."
+  },
+  "optionalFieldsProvided": {
+    "shipping": "0.00",
+    "tax": "0.29",
+    "fees": "0.00",
+    "supplies": "0.25",
+    "note": "User entered tax and supplies; shipping and fees defaulted to 0 (in-person cash buy)."
+  },
+  "cardContext": {
+    "cardflowCardId": "7c2e1a90-4b3d-4f6a-9c11-2e8f0a1b3c58",
+    "tcgdexId": "base1-58",
+    "name": "Pikachu",
+    "setName": "Base Set",
+    "localId": "58",
+    "language": "en",
+    "selectedVariant": "normal",
+    "condition": "NM"
+  },
+  "inventoryItem": {
+    "inventoryItemId": "c2d3e4f5-a6b7-4890-1234-56789abcdef0",
+    "intent": "purchased",
+    "grain": "physical_copy",
+    "quantity": 1,
+    "tags": ["raw"],
+    "workflowState": "acquired"
+  },
+  "listingDraftContext": {
+    "draftId": "28394a5b-6c7d-4e8f-0a1b-2c3d4e5f6071",
+    "askingPrice": "9.00",
+    "potentialSpread": "4.96",
+    "spreadCalculation": "asking_price - all_in_total = 9.00 - 4.04 = 4.96",
+    "copyRule": "NEVER label as 'guaranteed profit'; show as 'potential margin (estimate only)'"
+  },
+  "rules": {
+    "allInIsUserEntered": true,
+    "notScraped": true,
+    "notVendorFeeSchedule": true,
+    "notReceiptOCR": true,
+    "independentOfMaxBuy": true,
+    "costBasisForInventory": true,
+    "neverUse": [
+      "tcgdex_pricing",
+      "scraped_receipts",
+      "max_buy_fees_buffer_as_actual_fees"
+    ]
+  },
+  "fieldDefinitions": {
+    "purchasePrice": "What the user paid for the card / lot line",
+    "shipping": "Inbound shipping allocated to this copy",
+    "tax": "Sales tax / VAT allocated to this copy",
+    "fees": "Buy-side platform or payment fees (NOT eBay/TCGplayer seller fees)",
+    "supplies": "Sleeves, toploaders, penny sleeves allocated to this copy",
+    "allInTotal": "Sum of the five money fields; persisted at save time"
+  },
+  "_meta": {
+    "mocked": true,
+    "description": "MOCK EXAMPLE — Complete all-in cost with all five breakdown lines: purchase_price, shipping, tax, fees, supplies. Pikachu purchased copy; user entered tax and supplies. All-in total is $4.04. Listing draft asking $9.00 shows potential spread $4.96 (never 'guaranteed profit'). Amounts shown as decimal strings for readability; persist minor units later.",
+    "relatedFixtures": [
+      "crm-inventory-item-purchased-example.json",
+      "max-buy-with-reference-price-example.json",
+      "crm-listing-draft-example.json"
+    ],
+    "relatedDocs": [
+      "docs/ALL_IN_COST_MODEL.md",
+      "docs/MAX_BUY_CALCULATOR.md"
+    ]
+  }
+}

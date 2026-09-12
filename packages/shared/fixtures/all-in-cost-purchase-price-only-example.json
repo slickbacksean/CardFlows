@@ -1,0 +1,87 @@
+{
+  "provider": "mock",
+  "ok": true,
+  "purchase": {
+    "purchaseId": "b7c8d9e0-f1a2-4345-6789-0abcdef12345",
+    "inventoryItemId": "d4e5f6a7-b8c9-4012-3456-789abcdef123",
+    "purchasedAt": "2026-09-12T18:45:00.000Z",
+    "sourceNote": "Online buy",
+    "currency": "USD",
+    "notes": "Minimal entry; user only filled purchase price."
+  },
+  "costBasis": {
+    "purchasePrice": "15.00",
+    "shipping": "0.00",
+    "tax": "0.00",
+    "fees": "0.00",
+    "supplies": "0.00",
+    "allInTotal": "15.00"
+  },
+  "formula": {
+    "expression": "all_in_total = purchase_price + shipping + tax + fees + supplies",
+    "calculation": "15.00 = 15.00 + 0.00 + 0.00 + 0.00 + 0.00",
+    "persistedAtSave": true,
+    "note": "Optional fields defaulted to 0; only purchase_price entered by user."
+  },
+  "requiredFields": {
+    "currency": "USD",
+    "purchasePrice": "15.00",
+    "purchasedAt": "2026-09-12T18:45:00.000Z",
+    "note": "These three are REQUIRED. User saved Purchased with purchase_price only."
+  },
+  "optionalFieldsOmitted": {
+    "shipping": "default 0",
+    "tax": "default 0",
+    "fees": "default 0",
+    "supplies": "default 0",
+    "note": "User skipped these; CRM did not block save."
+  },
+  "cardContext": {
+    "cardflowCardId": "5a6b7c8d-9e0f-4123-4567-89abcdef0123",
+    "tcgdexId": "base1-15",
+    "name": "Venusaur",
+    "setName": "Base Set",
+    "localId": "15",
+    "language": "en",
+    "selectedVariant": "holo",
+    "condition": "LP"
+  },
+  "inventoryItem": {
+    "inventoryItemId": "d4e5f6a7-b8c9-4012-3456-789abcdef123",
+    "intent": "purchased",
+    "grain": "physical_copy",
+    "quantity": 1,
+    "tags": ["raw"],
+    "workflowState": "acquired"
+  },
+  "crmBehavior": {
+    "saveAllowed": true,
+    "minimumFieldsFilled": true,
+    "optionalFieldsDefaultedToZero": true,
+    "allInTotalComputedAndPersisted": true,
+    "note": "Assumption: purchase_price is sufficient to save. Optional lines may be required later per founder decision."
+  },
+  "founderDecision": {
+    "question": "Require at least one optional cost line (shipping, tax, fees, or supplies) for private beta testers (flippers)?",
+    "spikeRecommendation": "Optional to reduce friction; founder may override.",
+    "impactIfRequired": "Users must enter or acknowledge $0 for at least one breakdown."
+  },
+  "rules": {
+    "purchasePriceOnlyIsValid": true,
+    "allInTotalNeverNull": true,
+    "userCanEditLater": "if edit feature is added",
+    "notBlockedByMissingBreakdown": true
+  },
+  "_meta": {
+    "mocked": true,
+    "description": "MOCK EXAMPLE — Minimal all-in cost entry: purchase_price only. User tapped Purchased, entered $15.00 purchase price, skipped optional fields. CRM saved with shipping/tax/fees/supplies defaulted to $0.00. All-in total is $15.00. User may later realize actual all-in was higher; they can note in draft or edit if enabled. Amounts shown as decimal strings for readability; persist minor units later.",
+    "relatedFixtures": [
+      "all-in-cost-complete-example.json",
+      "max-buy-without-reference-price-example.json"
+    ],
+    "relatedDocs": [
+      "docs/ALL_IN_COST_MODEL.md",
+      "docs/CRM_DATA_MODEL.md"
+    ]
+  }
+}
