@@ -1,0 +1,37 @@
+{
+  "provider": "mock",
+  "ok": true,
+  "vendorRequestId": "req_mock_pikachu_high_001",
+  "processingTimeMs": 342,
+  "detections": [
+    {
+      "confidence": "High",
+      "matchLevel": "exact",
+      "vendorCardId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+      "name": "Pikachu",
+      "setName": "Base Set",
+      "number": "58",
+      "language": "en",
+      "fields": [
+        {
+          "key": "CARD_LANGUAGE",
+          "value": "en"
+        },
+        {
+          "key": "RARITY",
+          "value": "Common"
+        },
+        {
+          "key": "SET_YEAR",
+          "value": "1999"
+        }
+      ],
+      "candidates": []
+    }
+  ],
+  "error": null,
+  "_meta": {
+    "mocked": true,
+    "description": "High confidence exact match - Pikachu Base Set #58"
+  }
+}

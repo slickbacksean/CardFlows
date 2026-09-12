@@ -1,0 +1,18 @@
+{
+  "provider": "mock",
+  "ok": false,
+  "vendorRequestId": null,
+  "processingTimeMs": null,
+  "detections": [],
+  "error": {
+    "code": "RATE_LIMITED",
+    "httpStatus": 429,
+    "message": "Rate limit exceeded. Please retry after 60 seconds.",
+    "retryable": true
+  },
+  "_meta": {
+    "mocked": true,
+    "description": "Rate limit error - HTTP 429",
+    "retryAfterSeconds": 60
+  }
+}

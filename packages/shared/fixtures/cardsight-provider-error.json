@@ -1,0 +1,17 @@
+{
+  "provider": "mock",
+  "ok": false,
+  "vendorRequestId": null,
+  "processingTimeMs": null,
+  "detections": [],
+  "error": {
+    "code": "PROVIDER_TIMEOUT",
+    "httpStatus": 408,
+    "message": "CardSight identify request timed out after 15000ms",
+    "retryable": true
+  },
+  "_meta": {
+    "mocked": true,
+    "description": "Provider timeout error - HTTP 408"
+  }
+}
