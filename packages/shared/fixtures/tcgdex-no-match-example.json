@@ -1,0 +1,41 @@
+{
+  "provider": "mock",
+  "ok": true,
+  "confidence": "Unresolved",
+  "status": "no_match",
+  "matchedOn": [],
+  "cardflowCardId": null,
+  "tcgdexId": null,
+  "cardsightCardId": "e5f6a7b8-c9d0-4123-89ab-cdef01234567",
+  "recognition": {
+    "sourceFixture": "synthetic-no-match",
+    "confidence": "Low",
+    "matchLevel": "none",
+    "vendorCardId": "e5f6a7b8-c9d0-4123-89ab-cdef01234567",
+    "name": "Pikachu",
+    "setName": "Unknown Promo Binder",
+    "number": "999",
+    "language": "en"
+  },
+  "lookup": {
+    "language": "en",
+    "setName": "Unknown Promo Binder",
+    "resolvedSetId": null,
+    "localId": "999",
+    "method": "set name eq: failed; no CardFlow alias; set+localId not attempted",
+    "nameVerified": false,
+    "nameOnlySearchForbiddenForAutoMap": true
+  },
+  "canonicalCard": null,
+  "candidates": [],
+  "error": null,
+  "userConfirmation": {
+    "required": true,
+    "crmWriteAllowedBeforeConfirm": false,
+    "recommendedUx": "No catalog match — offer manual search by English set + number. Do not invent a TCGdex id. Do not map on card name alone."
+  },
+  "_meta": {
+    "mocked": true,
+    "description": "MOCK EXAMPLE — Unresolved / no_match. Set name does not resolve to a TCGdex set; name-only fallback is forbidden for auto-map. Not a live API recording."
+  }
+}

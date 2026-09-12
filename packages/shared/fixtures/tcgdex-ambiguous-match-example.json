@@ -1,0 +1,141 @@
+{
+  "provider": "mock",
+  "ok": true,
+  "confidence": "Medium",
+  "status": "ambiguous",
+  "matchedOn": ["language", "name"],
+  "cardflowCardId": null,
+  "tcgdexId": null,
+  "cardsightCardId": null,
+  "recognition": {
+    "sourceFixture": "cardsight-ambiguous-match.json",
+    "confidence": "Medium",
+    "matchLevel": "set",
+    "vendorCardId": null,
+    "name": "Charizard",
+    "setName": null,
+    "number": null,
+    "language": "en"
+  },
+  "lookup": {
+    "language": "en",
+    "setName": null,
+    "resolvedSetId": null,
+    "localId": null,
+    "method": "CardSight suggestions each mapped with language + set + localId + name; primary detection has name only (insufficient to auto-map)",
+    "nameVerified": false,
+    "nameOnlySearchForbiddenForAutoMap": true
+  },
+  "canonicalCard": null,
+  "candidates": [
+    {
+      "cardflowCardId": null,
+      "language": "en",
+      "tcgdexId": "base1-4",
+      "tcgdexSetId": "base1",
+      "localId": "4",
+      "name": "Charizard",
+      "category": "Pokemon",
+      "rarity": "Rare",
+      "variants": {
+        "firstEdition": true,
+        "holo": true,
+        "normal": false,
+        "reverse": false,
+        "wPromo": false
+      },
+      "selectedVariant": null,
+      "set": {
+        "id": "base1",
+        "name": "Base Set"
+      },
+      "image": {
+        "baseUrl": "https://assets.tcgdex.net/en/base/base1/4",
+        "source": "tcgdex_assets",
+        "quality": "low",
+        "extension": "webp",
+        "constructedUrl": "https://assets.tcgdex.net/en/base/base1/4/low.webp",
+        "provenance": "tcgdex assets.tcgdex.net; card id base1-4; lang en; database not affiliated with Nintendo or The Pokémon Company"
+      },
+      "cardsightCardId": "b2c3d4e5-f6a7-8901-bcde-f12345678901",
+      "rank": 0,
+      "matchedOn": ["language", "set", "localId", "name"]
+    },
+    {
+      "cardflowCardId": null,
+      "language": "en",
+      "tcgdexId": "base4-4",
+      "tcgdexSetId": "base4",
+      "localId": "4",
+      "name": "Charizard",
+      "category": "Pokemon",
+      "rarity": "Rare",
+      "variants": {
+        "firstEdition": false,
+        "holo": true,
+        "normal": false,
+        "reverse": false,
+        "wPromo": false
+      },
+      "selectedVariant": null,
+      "set": {
+        "id": "base4",
+        "name": "Base Set 2"
+      },
+      "image": {
+        "baseUrl": "https://assets.tcgdex.net/en/base/base4/4",
+        "source": "tcgdex_assets",
+        "quality": "low",
+        "extension": "webp",
+        "constructedUrl": "https://assets.tcgdex.net/en/base/base4/4/low.webp",
+        "provenance": "tcgdex assets.tcgdex.net; card id base4-4; lang en; database not affiliated with Nintendo or The Pokémon Company"
+      },
+      "cardsightCardId": "c3d4e5f6-a7b8-9012-cdef-123456789012",
+      "rank": 1,
+      "matchedOn": ["language", "set", "localId", "name"]
+    },
+    {
+      "cardflowCardId": null,
+      "language": "en",
+      "tcgdexId": "lc-3",
+      "tcgdexSetId": "lc",
+      "localId": "3",
+      "name": "Charizard",
+      "category": "Pokemon",
+      "rarity": "Holo Rare",
+      "variants": {
+        "firstEdition": false,
+        "holo": true,
+        "normal": true,
+        "reverse": true,
+        "wPromo": false
+      },
+      "selectedVariant": null,
+      "set": {
+        "id": "lc",
+        "name": "Legendary Collection"
+      },
+      "image": {
+        "baseUrl": "https://assets.tcgdex.net/en/lc/lc/3",
+        "source": "tcgdex_assets",
+        "quality": "low",
+        "extension": "webp",
+        "constructedUrl": "https://assets.tcgdex.net/en/lc/lc/3/low.webp",
+        "provenance": "tcgdex assets.tcgdex.net; card id lc-3; lang en; database not affiliated with Nintendo or The Pokémon Company"
+      },
+      "cardsightCardId": "d4e5f6a7-b8c9-0123-def1-234567890123",
+      "rank": 2,
+      "matchedOn": ["language", "set", "localId", "name"]
+    }
+  ],
+  "error": null,
+  "userConfirmation": {
+    "required": true,
+    "crmWriteAllowedBeforeConfirm": false,
+    "recommendedUx": "Show picker with three TCGdex candidates plus Search manually. Same Pokémon name is not a unique catalog card."
+  },
+  "_meta": {
+    "mocked": true,
+    "description": "MOCK EXAMPLE — Ambiguous Charizard reprints (base1-4, base4-4, lc-3) aligned with cardsight-ambiguous-match.json. Name alone must not auto-map. Not a live API recording."
+  }
+}
