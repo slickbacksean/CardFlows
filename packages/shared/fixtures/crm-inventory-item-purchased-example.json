@@ -1,0 +1,102 @@
+{
+  "provider": "mock",
+  "ok": true,
+  "inventoryItem": {
+    "inventoryItemId": "c2d3e4f5-a6b7-4890-1234-56789abcdef0",
+    "userId": "9f1a2b3c-4d5e-6789-abcd-ef0123456789",
+    "cardflowCardId": "7c2e1a90-4b3d-4f6a-9c11-2e8f0a1b3c58",
+    "confirmationId": "b1c2d3e4-f5a6-4789-0123-456789abcdef",
+    "scanId": "a0b1c2d3-e4f5-4678-9012-3456789abcde",
+    "intent": "purchased",
+    "grain": "physical_copy",
+    "selectedVariant": "normal",
+    "condition": "NM",
+    "quantity": 1,
+    "tags": ["raw"],
+    "workflowState": "acquired",
+    "location": {
+      "locationId": "f5a6b7c8-d9e0-4123-4567-89abcdef0123",
+      "name": "Binder A / page 4",
+      "kind": "binder"
+    },
+    "createdAt": "2026-09-12T16:06:40.000Z"
+  },
+  "confirmation": {
+    "confirmationId": "b1c2d3e4-f5a6-4789-0123-456789abcdef",
+    "scanId": "a0b1c2d3-e4f5-4678-9012-3456789abcde",
+    "cardflowCardId": "7c2e1a90-4b3d-4f6a-9c11-2e8f0a1b3c58",
+    "tcgdexId": "base1-58",
+    "language": "en",
+    "selectedVariant": "normal",
+    "matchMethod": "identify",
+    "mappingConfidence": "High",
+    "confirmedAt": "2026-09-12T16:05:02.000Z",
+    "mintedCardflowCardId": true
+  },
+  "canonicalCard": {
+    "cardflowCardId": "7c2e1a90-4b3d-4f6a-9c11-2e8f0a1b3c58",
+    "language": "en",
+    "tcgdexId": "base1-58",
+    "name": "Pikachu",
+    "catalogFingerprint": "en:base1-58"
+  },
+  "purchase": {
+    "purchaseId": "e4f5a6b7-c8d9-4012-3456-789abcdef012",
+    "inventoryItemId": "c2d3e4f5-a6b7-4890-1234-56789abcdef0",
+    "purchasedAt": "2026-09-12T16:06:40.000Z",
+    "sourceNote": "Local shop binder",
+    "currency": "USD",
+    "costBasis": {
+      "purchasePrice": "3.50",
+      "shipping": "0.00",
+      "tax": "0.29",
+      "fees": "0.00",
+      "supplies": "0.25",
+      "allInTotal": "4.04",
+      "assumption": "All-in lines are user-entered. Exact field set pending founder/UX. Amounts shown as decimal strings for readability; persist minor units later."
+    },
+    "maxBuy": {
+      "referencePriceAmount": "8.00",
+      "referencePriceSource": "user_entered",
+      "targetMarginPct": 0.2,
+      "feesBufferPct": 0.13,
+      "conditionFactor": 1.0,
+      "maxBuyAmount": "5.57",
+      "assumption": "Max Buy math is CardFlow-owned. No live pricing provider. Never TCGdex pricing."
+    }
+  },
+  "priceSnapshot": {
+    "snapshotId": "06172839-4a5b-4c6d-8e9f-0a1b2c3d4e5f",
+    "cardflowCardId": "7c2e1a90-4b3d-4f6a-9c11-2e8f0a1b3c58",
+    "inventoryItemId": "c2d3e4f5-a6b7-4890-1234-56789abcdef0",
+    "source": "user_entered",
+    "amount": "8.00",
+    "currency": "USD",
+    "capturedAt": "2026-09-12T16:05:50.000Z",
+    "providerName": null,
+    "isEstimate": true
+  },
+  "externalRefs": [
+    {
+      "provider": "tcgdex",
+      "externalId": "base1-58",
+      "language": "en"
+    },
+    {
+      "provider": "cardsight",
+      "externalId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+      "language": "en"
+    }
+  ],
+  "crmRules": {
+    "createdOnlyAfterConfirm": true,
+    "keyedOn": "cardflowCardId",
+    "notKeyedOn": ["cardsightCardId", "tcgdexId_alone"],
+    "listingDraftAllowed": true,
+    "pricingOmitted": true
+  },
+  "_meta": {
+    "mocked": true,
+    "description": "MOCK EXAMPLE — Purchased raw English Pikachu single: one physical copy, quantity 1, workflow acquired, user-entered all-in cost and Max Buy reference. Not a live vendor recording. Not a production table row."
+  }
+}

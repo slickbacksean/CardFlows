@@ -1,0 +1,92 @@
+{
+  "provider": "mock",
+  "ok": true,
+  "scenario": "Later re-scan of an owned copy maps to a different TCGdex id than the confirmed inventory card. CardFlow records provider_conflict and does not retarget inventory until the user confirms a correction.",
+  "inventoryItemAtConflict": {
+    "inventoryItemId": "c2d3e4f5-a6b7-4890-1234-56789abcdef0",
+    "cardflowCardId": "7c2e1a90-4b3d-4f6a-9c11-2e8f0a1b3c58",
+    "intent": "purchased",
+    "workflowState": "acquired",
+    "confirmedTcgdexId": "base1-58",
+    "confirmedName": "Pikachu"
+  },
+  "newScan": {
+    "scanId": "d4e5f6a7-b8c9-4012-3456-7890abcdef34",
+    "userId": "9f1a2b3c-4d5e-6789-abcd-ef0123456789",
+    "capturedAt": "2026-09-12T18:41:03.000Z",
+    "captureMethod": "manual_scan",
+    "cardflowCardId": null,
+    "image": {
+      "storageRef": "users/9f1a2b3c-4d5e-6789-abcd-ef0123456789/scans/d4e5f6a7-b8c9-4012-3456-7890abcdef34.jpg",
+      "source": "user_capture",
+      "mimeType": "image/jpeg"
+    },
+    "recognition": {
+      "confidence": "High",
+      "matchLevel": "exact",
+      "cardsightCardId": "e6f7a8b9-c0d1-4234-9abc-def012345678",
+      "name": "Raichu",
+      "setName": "Base Set",
+      "number": "14",
+      "language": "en"
+    },
+    "mapping": {
+      "confidence": "High",
+      "status": "provider_conflict",
+      "matchedOn": ["language", "set", "localId", "name"],
+      "proposedTcgdexId": "base1-14",
+      "proposedName": "Raichu",
+      "existingTcgdexId": "base1-58",
+      "existingName": "Pikachu",
+      "canonicalWriteAllowed": false,
+      "inventoryRetargetAllowed": false
+    }
+  },
+  "auditEvents": [
+    {
+      "auditId": "e5f6a7b8-c9d0-4123-4567-890abcdef456",
+      "userId": "9f1a2b3c-4d5e-6789-abcd-ef0123456789",
+      "eventType": "provider_conflict",
+      "scanId": "d4e5f6a7-b8c9-4012-3456-7890abcdef34",
+      "confirmationId": null,
+      "inventoryItemId": "c2d3e4f5-a6b7-4890-1234-56789abcdef0",
+      "cardflowCardId": "7c2e1a90-4b3d-4f6a-9c11-2e8f0a1b3c58",
+      "previousTcgdexId": "base1-58",
+      "newTcgdexId": "base1-14",
+      "previousCardsightCardId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+      "newCardsightCardId": "e6f7a8b9-c0d1-4234-9abc-def012345678",
+      "matchMethod": null,
+      "mappingStatus": "provider_conflict",
+      "notes": "Show both sides. Do not auto-update card_external_ids or inventory.",
+      "createdAt": "2026-09-12T18:41:04.000Z"
+    },
+    {
+      "auditId": "f6a7b8c9-d0e1-4234-5678-90abcdef5678",
+      "userId": "9f1a2b3c-4d5e-6789-abcd-ef0123456789",
+      "eventType": "correction",
+      "scanId": "d4e5f6a7-b8c9-4012-3456-7890abcdef34",
+      "confirmationId": "d5e6f7a8-b9c0-4123-4567-89abcdef3456",
+      "inventoryItemId": "c2d3e4f5-a6b7-4890-1234-56789abcdef0",
+      "cardflowCardId": "7c2e1a90-4b3d-4f6a-9c11-2e8f0a1b3c58",
+      "previousTcgdexId": "base1-58",
+      "newTcgdexId": "base1-58",
+      "previousCardsightCardId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+      "newCardsightCardId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+      "matchMethod": "correction",
+      "mappingStatus": "matched",
+      "notes": "User kept the original confirmed Pikachu (base1-58) and discarded the Raichu proposal. Inventory cardflow_card_id unchanged. New CardSight UUID stored only on the new scan, not as a silent remap.",
+      "createdAt": "2026-09-12T18:42:10.000Z"
+    }
+  ],
+  "crmRules": {
+    "humanConfirmationRequired": true,
+    "silentInventoryRetarget": false,
+    "keepScanHistory": true,
+    "neverStore": ["API keys", "raw CardSight secrets", "tcgdex.pricing"],
+    "pricingOmitted": true
+  },
+  "_meta": {
+    "mocked": true,
+    "description": "MOCK EXAMPLE — provider_conflict then user correction that keeps the original confirmed catalog row. TCGdex ids base1-58 (Pikachu) and base1-14 (Raichu) follow the official {setId}-{localId} pattern. Not a live API recording. Not a production table row."
+  }
+}
