@@ -9,13 +9,29 @@ import { z } from 'zod';
 import { MockCardIdentityMapper } from './providers/mock-card-identity-mapper.js';
 import { MockCardRecognitionProvider } from './providers/mock-card-recognition-provider.js';
 import { MockTcgdexCatalogProvider } from './providers/mock-tcgdex-catalog-provider.js';
+import { ScanService, ScanServiceError } from './services/scan-service.js';
 import { LocalDevStore } from './store/local-dev-store.js';
+import type { CardSightMockScenario } from './providers/mock-card-recognition-provider.js';
+import type { MapperMockScenario } from './providers/mock-card-identity-mapper.js';
 
-export function createApp(options?: { store?: LocalDevStore }) {
+export interface CreateAppOptions {
+  store?: LocalDevStore;
+}
+
+export function createApp(options: CreateAppOptions = {}) {
   const recognitionProvider = new MockCardRecognitionProvider();
   const catalogProvider = new MockTcgdexCatalogProvider();
   const identityMapper = new MockCardIdentityMapper();
-  const store = options?.store ?? new LocalDevStore();
+  const store = options.store ?? new LocalDevStore();
+
+  const scanService = new ScanService({
+    store,
+    recognitionProvider,
+    identityMapper,
+    catalogProvider,
+    createRecognitionProvider: (scenario) => new MockCardRecognitionProvider(scenario),
+    createIdentityMapper: (scenario) => new MockCardIdentityMapper(scenario),
+  });
 
   const app = new Hono();
 
@@ -89,6 +105,151 @@ export function createApp(options?: { store?: LocalDevStore }) {
       return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Card not found' } }, 404);
     }
     return c.json({ ok: true, card });
+  });
+
+  const searchSchema = z.object({
+    setName: z.string().optional(),
+    localId: z.string().optional(),
+    name: z.string().optional(),
+    tcgdexId: z.string().optional(),
+    language: z.enum(['en']).optional(),
+  });
+
+  app.get('/v1/catalog/search', async (c) => {
+    const query = searchSchema.safeParse({
+      setName: c.req.query('setName'),
+      localId: c.req.query('localId'),
+      name: c.req.query('name'),
+      tcgdexId: c.req.query('tcgdexId'),
+      language: c.req.query('language') ?? 'en',
+    });
+
+    if (!query.success) {
+      return c.json({ ok: false, error: query.error.flatten() }, 400);
+    }
+
+    const { setName, localId, name, tcgdexId, language } = query.data;
+    const hasTcgdexId = Boolean(tcgdexId);
+    const hasSetAndNumber = Boolean(setName) && Boolean(localId);
+
+    if (!hasTcgdexId && !hasSetAndNumber) {
+      return c.json(
+        {
+          ok: false,
+          error: {
+            code: 'VALIDATION',
+            message: 'Search requires tcgdexId or set name + number. Name-only search is not allowed.',
+          },
+        },
+        400
+      );
+    }
+
+    const candidates = await scanService.searchCatalog({
+      setName,
+      localId,
+      name,
+      tcgdexId,
+      language,
+    });
+
+    return c.json({ ok: true, candidates });
+  });
+
+  const scanCreateSchema = z.object({
+    mimeType: z.enum(['image/jpeg', 'image/png', 'image/webp']),
+    captureMethod: z.enum(['camera_photo', 'photo_library']),
+    cardsightScenario: z
+      .enum(['high-confidence', 'ambiguous', 'no-card', 'error', 'rate-limit'])
+      .optional(),
+    mapperScenario: z.enum(['high-map', 'no-match', 'ambiguous']).optional(),
+  });
+
+  app.post('/v1/scans', async (c) => {
+    const body = await c.req.parseBody();
+    const imageField = body.image;
+    const mimeType =
+      typeof body.mimeType === 'string' ? body.mimeType : ('image/jpeg' as const);
+    const captureMethod =
+      typeof body.captureMethod === 'string' ? body.captureMethod : 'camera_photo';
+
+    const parsed = scanCreateSchema.safeParse({
+      mimeType,
+      captureMethod,
+      cardsightScenario: body.cardsightScenario,
+      mapperScenario: body.mapperScenario,
+    });
+
+    if (!parsed.success) {
+      return c.json({ ok: false, error: parsed.error.flatten() }, 400);
+    }
+
+    const imageBuffer =
+      imageField instanceof File
+        ? Buffer.from(await imageField.arrayBuffer())
+        : Buffer.from('mock-image');
+
+    const scan = await scanService.createScan({
+      image: imageBuffer,
+      mimeType: parsed.data.mimeType,
+      captureMethod: parsed.data.captureMethod,
+      cardsightScenario: parsed.data.cardsightScenario as CardSightMockScenario | undefined,
+      mapperScenario: parsed.data.mapperScenario as MapperMockScenario | undefined,
+    });
+
+    return c.json({ ok: true, scan });
+  });
+
+  app.get('/v1/scans/:scanId', (c) => {
+    const scan = scanService.getScan(c.req.param('scanId'));
+    if (!scan) {
+      return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Scan not found' } }, 404);
+    }
+    return c.json({ ok: true, scan });
+  });
+
+  const confirmSchema = z.object({
+    tcgdexId: z.string(),
+    language: z.enum(['en']),
+    matchMethod: z.enum(['identify', 'manual', 'correction']),
+    selectedVariant: z.enum(['normal', 'reverse', 'holo', 'firstEdition']).nullable().optional(),
+    cardsightCardId: z.string().nullable().optional(),
+    setName: z.string().nullable().optional(),
+    localId: z.string().nullable().optional(),
+  });
+
+  app.post('/v1/scans/:scanId/confirm', async (c) => {
+    const body = await c.req.json();
+    const parsed = confirmSchema.safeParse(body);
+    if (!parsed.success) {
+      return c.json({ ok: false, error: parsed.error.flatten() }, 400);
+    }
+
+    try {
+      const confirmation = await scanService.confirmScan(c.req.param('scanId'), parsed.data);
+      return c.json({ ok: true, confirmation });
+    } catch (error) {
+      if (error instanceof ScanServiceError) {
+        const status = error.code === 'NOT_FOUND' ? 404 : 400;
+        return c.json({ ok: false, error: { code: error.code, message: error.message } }, status);
+      }
+      throw error;
+    }
+  });
+
+  app.post('/v1/scans/:scanId/reject', (c) => {
+    try {
+      const scan = scanService.rejectScan(c.req.param('scanId'));
+      return c.json({ ok: true, scan });
+    } catch (error) {
+      if (error instanceof ScanServiceError) {
+        return c.json(
+          { ok: false, error: { code: error.code, message: error.message } },
+          error.code === 'NOT_FOUND' ? 404 : 400
+        );
+      }
+      throw error;
+    }
   });
 
   const maxBuySchema = z.object({
