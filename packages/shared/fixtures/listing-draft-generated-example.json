@@ -1,0 +1,101 @@
+{
+  "provider": "mock",
+  "ok": true,
+  "listingDraft": {
+    "draftId": "28394a5b-6c7d-4e8f-0a1b-2c3d4e5f6071",
+    "inventoryItemId": "c2d3e4f5-a6b7-4890-1234-56789abcdef0",
+    "userId": "9f1a2b3c-4d5e-6789-abcd-ef0123456789",
+    "cardflowCardId": "7c2e1a90-4b3d-4f6a-9c11-2e8f0a1b3c58",
+    "status": "ready_for_review",
+    "title": "Pikachu - Base Set #58 [normal] EN",
+    "description": "Pikachu — Base Set #58 — English — normal (Raw)\nCondition: NM\nCorners: sharp. Edges: clean. Surface: light sleeve scuffs. Centering: looks good.\nNo creases, writing, or bends noted. No smoke odor noted.\nRaw English Base Set Pikachu #58, NM. Pulled from my binder. Photos are mine (front scan + back photo).\nUser affirms this is a genuine Pokémon TCG card to the best of their knowledge — not a CardFlow authenticity guarantee.",
+    "condition": "NM",
+    "askingPrice": "9.00",
+    "currency": "USD",
+    "quantity": 1,
+    "intendedChannelNote": "Maybe list on eBay later — note only, CardFlow does not publish.",
+    "notes": "Private: all-in was $4.04. Keywords helper (optional, not a schema column): Pikachu, Base Set, 58, raw, English, normal. Do not auto-fill a marketplace fee schedule.",
+    "photos": [
+      {
+        "storageRef": "users/9f1a2b3c-4d5e-6789-abcd-ef0123456789/scans/a0b1c2d3-e4f5-4678-9012-3456789abcde.jpg",
+        "source": "user_capture",
+        "mimeType": "image/jpeg",
+        "role": "reused_scan"
+      },
+      {
+        "storageRef": "users/9f1a2b3c-4d5e-6789-abcd-ef0123456789/drafts/28394a5b-6c7d-4e8f-0a1b-2c3d4e5f6071/back.jpg",
+        "source": "user_listing_photo",
+        "mimeType": "image/jpeg",
+        "role": "back"
+      }
+    ],
+    "catalogDisplay": {
+      "name": "Pikachu",
+      "setName": "Base Set",
+      "localId": "58",
+      "language": "en",
+      "rarity": "Common",
+      "selectedVariant": "normal",
+      "image": {
+        "baseUrl": "https://assets.tcgdex.net/en/base/base1/58",
+        "source": "tcgdex_assets",
+        "quality": "high",
+        "extension": "webp",
+        "constructedUrl": "https://assets.tcgdex.net/en/base/base1/58/high.webp",
+        "provenance": "tcgdex assets.tcgdex.net; card id base1-58; lang en; database not affiliated with Nintendo or The Pokémon Company",
+        "notAUserListingPhoto": true
+      }
+    },
+    "createdAt": "2026-09-12T16:20:00.000Z",
+    "updatedAt": "2026-09-12T21:45:00.000Z"
+  },
+  "builderPrefill": {
+    "titleTemplateId": "default_en_raw_single",
+    "titlePattern": "{name} - {set.name} #{local_id} [{selected_variant or \"Raw\"}] EN",
+    "descriptionStarterFromCatalog": true,
+    "conditionFromInventory": "NM",
+    "askingPricePrefill": null,
+    "askingPriceFilledBy": "user"
+  },
+  "costToAsk": {
+    "allInTotal": "4.04",
+    "askingPrice": "9.00",
+    "currency": "USD",
+    "spread": "4.96",
+    "label": "spread / cost-to-ask gap",
+    "neverLabelAsProfit": true
+  },
+  "keywordsHelper": {
+    "assumption": "Optional CardFlow-owned helper list — NOT a CRM_LISTING_DRAFT_FIELDS column. Shown for UX; user may copy into description or keep in notes.",
+    "terms": ["Pikachu", "Base Set", "58", "raw", "English", "normal"],
+    "persistedAsSchemaColumn": false,
+    "mappedInto": ["notes"]
+  },
+  "inventoryWorkflowAfterDraft": "drafted",
+  "publication": {
+    "published": false,
+    "marketplace": null,
+    "forbiddenFieldsOmitted": [
+      "ebay_item_id",
+      "whatnot_show_id",
+      "tcgplayer_listing_id",
+      "shopify_product_id",
+      "published_at",
+      "auto_publish"
+    ]
+  },
+  "crmRules": {
+    "internalDocumentOnly": true,
+    "requiresPurchasedItem": true,
+    "oneActiveDraftPerCopy": true,
+    "keyedOn": "cardflowCardId",
+    "askingPriceIsEstimate": true,
+    "pricingOmitted": true,
+    "aiCopyEnabled": false,
+    "fieldSchema": "CRM_LISTING_DRAFT_FIELDS.md"
+  },
+  "_meta": {
+    "mocked": true,
+    "description": "MOCK EXAMPLE — Builder output after prefill + user edit for purchased Pikachu Base Set #58. Status ready_for_review. Includes spread vs all_in (never profit) and optional keywords helper mapped to notes (not a new schema column). Catalog art is tcgdex_assets display-only; listing photos are user_capture / user_listing_photo. No marketplace publication fields. Not a production table row."
+  }
+}

@@ -1,0 +1,53 @@
+{
+  "provider": "mock",
+  "ok": true,
+  "titleTemplate": {
+    "templateId": "default_en_raw_single",
+    "label": "Default English raw single",
+    "pattern": "{name} - {set.name} #{local_id} [{selected_variant or \"Raw\"}] EN",
+    "tokensAllowed": [
+      "name",
+      "set.name",
+      "local_id",
+      "selected_variant",
+      "language",
+      "condition"
+    ],
+    "conditionTokenOptional": true,
+    "conditionInDefaultPattern": false,
+    "languageRender": {
+      "en": "EN"
+    },
+    "variantFallback": "Raw",
+    "userMayEditTitle": true,
+    "doNotAutoGenerate": [
+      "marketplace_seo_spam",
+      "fake_grades",
+      "scraped_comps_in_title",
+      "venue_keyword_stuffing"
+    ]
+  },
+  "renderContext": {
+    "draftId": "28394a5b-6c7d-4e8f-0a1b-2c3d4e5f6071",
+    "inventoryItemId": "c2d3e4f5-a6b7-4890-1234-56789abcdef0",
+    "cardflowCardId": "7c2e1a90-4b3d-4f6a-9c11-2e8f0a1b3c58",
+    "name": "Pikachu",
+    "setName": "Base Set",
+    "localId": "58",
+    "selectedVariant": "normal",
+    "language": "en",
+    "condition": "NM"
+  },
+  "renderedTitle": "Pikachu - Base Set #58 [normal] EN",
+  "renderedTitleIfVariantMissing": "Pikachu - Base Set #58 [Raw] EN",
+  "crmRules": {
+    "internalDocumentOnly": true,
+    "templateIsDefaultOnly": true,
+    "notMarketplaceSeo": true,
+    "fieldWritten": "title"
+  },
+  "_meta": {
+    "mocked": true,
+    "description": "MOCK EXAMPLE — Default title template and rendered title for Pikachu Base Set #58 [normal] EN. Condition token is optional and omitted from the default pattern. Not a production config row."
+  }
+}
