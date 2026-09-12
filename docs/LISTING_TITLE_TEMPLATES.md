@@ -44,7 +44,7 @@ Pikachu - Base Set #58 [Raw] EN
 | `{local_id}` | Catalog cache | Collector number as shown in cache |
 | `{variant}` / `{selected_variant}` | Inventory / confirmation | Use `Raw` when absent |
 | `{language}` | Catalog / confirmation | MVP: English → render `EN` |
-| `{condition}` | Inventory / draft condition | **Assumption:** optional in title; default template omits it |
+| `{condition}` | Inventory / draft condition | **Confirmed:** optional second template only; default template omits it |
 
 Do not add tokens that invent grades (`{psa_grade}`), prices (`{asking_price}`), or marketplace SKUs.
 
@@ -54,12 +54,34 @@ Do not add tokens that invent grades (`{psa_grade}`), prices (`{asking_price}`),
 
 - Prefill is a starting point only.
 - Edits write to draft `title` (CardFlow-owned text).
-- Clearing the title leaves it empty until the user fills it; **Assumption:** title required for `ready_for_review`.
+- Clearing the title leaves it empty until the user fills it; **Confirmed:** title required for `ready_for_review`.
 - Re-running “Reset from template” should warn before overwriting user edits (**Assumption**).
 
 ---
 
-## 5. Examples
+## 5. Optional second template (condition-in-title)
+
+**Confirmed (founder 2026-09-12):** Offer a second template that appends `{condition}` for eBay-style titles. Do **not** make condition-in-title the default.
+
+Default (identity-only):
+
+```
+{name} - {set.name} #{local_id} [{selected_variant or "Raw"}] EN
+```
+
+Optional second:
+
+```
+{name} - {set.name} #{local_id} [{selected_variant or "Raw"}] EN {condition}
+```
+
+Example: `Pikachu - Base Set #58 [normal] EN NM`
+
+User picks the template (or edits freely). Reset-from-template should warn before overwriting edits (**Assumption:** warn UX).
+
+---
+
+## 6. Examples
 
 | Case | Pattern result |
 |------|----------------|
@@ -70,7 +92,7 @@ Do not add tokens that invent grades (`{psa_grade}`), prices (`{asking_price}`),
 
 ---
 
-## 6. What not to auto-generate
+## 7. What not to auto-generate
 
 | Forbidden auto-title behavior | Why |
 |-------------------------------|-----|
@@ -83,13 +105,16 @@ Do not add tokens that invent grades (`{psa_grade}`), prices (`{asking_price}`),
 
 ---
 
-## 7. Founder decisions
+## 8. Founder decisions (Confirmed 2026-09-12)
 
-1. Keep the CRM default pattern as the only shipped template vs allow user-saved patterns later.  
-2. Whether `{condition}` is offered as an optional token in a second template.  
-3. Whether “Reset from template” is in MVP UI.
+| Topic | Decision |
+|-------|----------|
+| Default template | Identity-only: `{name} - {set.name} #{local_id} [{selected_variant or "Raw"}] EN` |
+| Second template | **Yes, optional** — append `{condition}` (e.g. `... EN NM`). Not the default. |
+| User edit | Always allowed |
+| Reset from template | **Assumption:** warn before overwrite; MVP inclusion TBD |
 
 ---
 
-**Version:** 2026-09-12  
+**Version:** 2026-09-12 (founder decisions locked)  
 **Spike deliverable for review** — Title defaults only; no publish SEO tooling.

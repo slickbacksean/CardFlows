@@ -59,12 +59,12 @@ Human identity confirm already happened before the inventory row exists (`CRM_WO
 | `user_id` | Session owner | No |
 | `cardflow_card_id` | Copied from inventory item | No (locked) |
 | `status` | `draft` on create | User moves to `ready_for_review` |
-| `title` | Catalog: `{name} - {set.name} #{local_id} [{selected_variant or "Raw"}] EN` | Optional edit; **Assumption:** required for ready |
-| `description` | Partial catalog lines + empty user body (see §4) | User completes |
-| `condition` | Inventory `condition` if present | Optional edit; **Assumption:** required for ready |
-| `asking_price` | Empty (user estimate) | **Assumption:** required for ready |
+| `title` | Catalog: `{name} - {set.name} #{local_id} [{selected_variant or "Raw"}] EN` | Optional edit; **Confirmed:** required for `ready_for_review` |
+| `description` | Partial catalog lines + empty user body (see §4) | **Confirmed:** optional for `ready_for_review` |
+| `condition` | Inventory `condition` if present | Optional edit; **Confirmed:** required for `ready_for_review` |
+| `asking_price` | Empty (user estimate) | **Confirmed:** required for `ready_for_review` |
 | `currency` | Purchase / prefs (ISO 4217) | Rarely |
-| `photos` | Optional reuse of `user_capture` by ref; empty listing photos | User adds `user_listing_photo` as needed |
+| `photos` | Optional reuse of `user_capture` by ref; empty listing photos | User adds `user_listing_photo` as needed; **Confirmed:** optional for `ready_for_review` |
 | `intended_channel_note` | Empty | Optional free text |
 | `notes` | Empty (may seed private cost reminder — **Assumption**) | Optional |
 | `quantity` | `1` | Fixed for raw single MVP |
@@ -109,31 +109,30 @@ Condition: NM
 
 ## 5. Keywords / search terms (optional helper)
 
-**Assumption / optional helper — not in `CRM_LISTING_DRAFT_FIELDS`.**
+**Confirmed (founder 2026-09-12):** No new `keywords` column. Helper **chips** the user can copy into `description`. Schema later only if people actually use them.
 
-CardFlow may offer a **helper list** of search terms the user can copy into `description` or keep in `notes`. Examples for English raw singles: card name, set, number, “raw”, “English”, variant label.
+Examples for English raw singles: card name, set, number, "raw", "English", variant label.
 
-| Decision | Recommendation |
-|----------|----------------|
-| New required DB column `keywords` | **Do not** invent for MVP |
-| Store helper selections | Prefer copy-into-`description`, or private `notes`, or ephemeral UI-only clipboard |
-| Schema alignment | If persisted later, mark as founder decision and schema change — out of this spike’s authoritative field list |
+| Decision | Status |
+|----------|--------|
+| New required DB column `keywords` | **Confirmed: no** for MVP |
+| Helper UX | **Confirmed:** chips → copy into `description` |
+| Schema later | Only if usage justifies it |
 
 ---
 
 ## 6. Optional AI-assisted description
 
-**Recommendation: LATER / feature-flagged OFF for MVP** unless the founder explicitly turns it on.
+**Confirmed (founder 2026-09-12):** Keep AI copy **OFF**. Ship templates and the disclosure checklist first. Do **not** dogfood AI until the confirm → purchase → draft loop is in use.
 
 | | Rule |
 |---|------|
-| Inputs allowed | Catalog cache fields already on the draft screen; user-entered condition / disclosure checklist answers; user notes the user opts to send |
-| Outputs allowed | Draft prose suggestions the user must accept/edit before save |
+| MVP | `listing_ai_copy_enabled` default **OFF** — no dogfood |
+| Inputs allowed (later) | Catalog cache; user condition / disclosure answers; user notes they opt to send |
+| Outputs allowed (later) | Suggestions the user must accept/edit before save |
 | Must never invent | Prices, grades (PSA 10, BGS, CGC), authenticity guarantees, profit, marketplace fees, scraped comps, fake photo claims |
-| Flag | `listing_ai_copy_enabled` default **OFF** |
 
-**Validation:** Any AI path needs product + legal review before beta marketing claims.  
-**Confirmed:** AI copy is not required to ship drafts.
+**Validation:** Any future AI path needs product + legal review before marketing claims.
 
 ---
 
@@ -217,26 +216,31 @@ Scope reminder: English raw Pokémon singles only; CardSight recognition-only; T
 
 ---
 
-## 12. Founder decisions
+## 12. Founder decisions (Confirmed 2026-09-12)
 
-1. Purchased-only drafts (recommended) vs allow Watchlist drafts.  
-2. Required fields for `ready_for_review` (title / condition / asking_price recommended).  
-3. One active draft per copy (recommended) vs draft history.  
-4. Keywords helper: UI-only vs copy-into-description vs later schema.  
-5. AI-assisted description: stay OFF for MVP (recommended) vs limited dogfood.  
-6. Clipboard export timing relative to private beta.  
-7. Whether private notes may auto-seed with all-in cost reminder.
+| Topic | Decision |
+|-------|----------|
+| Draft source | **Purchased-only.** Watchlist → Purchased first, then draft. |
+| `ready_for_review` required | **`title`, `condition`, `asking_price`.** Description and photos optional. |
+| Draft cardinality | **One active draft per copy.** Edit in place. No history in MVP. |
+| Keywords | **No new column.** Helper chips copy into `description`. |
+| AI copy | **OFF.** Templates + checklist first. No AI dogfood until confirm → purchase → draft is in use. |
+| Clipboard | Tap **Copy** only; title / description / condition / asking; never private `notes`. See `LISTING_EXPORT_AND_COPY.md`. |
+| CSV | **Clipboard-only for beta.** Marketplace CSV formats later. |
+| Disclosure checklist | **Ship short optional checklist** — see `LISTING_CONDITION_DISCLOSURE.md`. |
+| Second title template | **Yes, optional** — identity default; optional `{condition}` append — see `LISTING_TITLE_TEMPLATES.md`. |
 
 ---
 
-## 13. Open questions
+## 13. Open questions (remaining)
 
-- Exact disclosure checklist UX vs plain `condition` text field (`LISTING_CONDITION_DISCLOSURE.md`).  
-- Whether spread UI shows on create, edit, and ready_for_review equally.  
-- Photo minimum for `ready_for_review` (recommended: none required).  
+- Whether spread UI shows on create, edit, and ready_for_review equally.
 - Abandoned draft behavior and inventory state revert.
+- Whether private `notes` may auto-seed with an all-in cost reminder (still never on clipboard).
+- Exact overall grade vocabulary (NM/LP/MP/HP/DMG chips vs free text).
+- Whether authenticity affirmation is prompted (optional) or omitted from the short checklist.
 
 ---
 
-**Version:** 2026-09-12  
+**Version:** 2026-09-12 (founder decisions locked)  
 **Spike deliverable for review** — Builder behavior only; no production screens, no publish APIs, no migrations.

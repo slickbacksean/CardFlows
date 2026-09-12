@@ -8,12 +8,12 @@
     "cardflowCardId": "7c2e1a90-4b3d-4f6a-9c11-2e8f0a1b3c58",
     "status": "ready_for_review",
     "title": "Pikachu - Base Set #58 [normal] EN",
-    "description": "Pikachu — Base Set #58 — English — normal (Raw)\nCondition: NM\nCorners: sharp. Edges: clean. Surface: light sleeve scuffs. Centering: looks good.\nNo creases, writing, or bends noted. No smoke odor noted.\nRaw English Base Set Pikachu #58, NM. Pulled from my binder. Photos are mine (front scan + back photo).\nUser affirms this is a genuine Pokémon TCG card to the best of their knowledge — not a CardFlow authenticity guarantee.",
+    "description": "Pikachu \u2014 Base Set #58 \u2014 English \u2014 normal (Raw)\nCondition: NM\nCorners: sharp. Edges: clean. Surface: light sleeve scuffs. Centering: looks good.\nNo creases, writing, or bends noted. No smoke odor noted.\nRaw English Base Set Pikachu #58, NM. Pulled from my binder. Photos are mine (front scan + back photo).\nUser affirms this is a genuine Pok\u00e9mon TCG card to the best of their knowledge \u2014 not a CardFlow authenticity guarantee.",
     "condition": "NM",
     "askingPrice": "9.00",
     "currency": "USD",
     "quantity": 1,
-    "intendedChannelNote": "Maybe list on eBay later — note only, CardFlow does not publish.",
+    "intendedChannelNote": "Maybe list on eBay later \u2014 note only, CardFlow does not publish.",
     "notes": "Private: all-in was $4.04. Keywords helper (optional, not a schema column): Pikachu, Base Set, 58, raw, English, normal. Do not auto-fill a marketplace fee schedule.",
     "photos": [
       {
@@ -42,7 +42,7 @@
         "quality": "high",
         "extension": "webp",
         "constructedUrl": "https://assets.tcgdex.net/en/base/base1/58/high.webp",
-        "provenance": "tcgdex assets.tcgdex.net; card id base1-58; lang en; database not affiliated with Nintendo or The Pokémon Company",
+        "provenance": "tcgdex assets.tcgdex.net; card id base1-58; lang en; database not affiliated with Nintendo or The Pok\u00e9mon Company",
         "notAUserListingPhoto": true
       }
     },
@@ -66,10 +66,17 @@
     "neverLabelAsProfit": true
   },
   "keywordsHelper": {
-    "assumption": "Optional CardFlow-owned helper list — NOT a CRM_LISTING_DRAFT_FIELDS column. Shown for UX; user may copy into description or keep in notes.",
-    "terms": ["Pikachu", "Base Set", "58", "raw", "English", "normal"],
-    "persistedAsSchemaColumn": false,
-    "mappedInto": ["notes"]
+    "newColumn": false,
+    "ux": "chips_copy_into_description",
+    "exampleChips": [
+      "Pikachu",
+      "Base Set",
+      "58",
+      "raw",
+      "English",
+      "normal"
+    ],
+    "copiedInto": "description"
   },
   "inventoryWorkflowAfterDraft": "drafted",
   "publication": {
@@ -92,10 +99,24 @@
     "askingPriceIsEstimate": true,
     "pricingOmitted": true,
     "aiCopyEnabled": false,
-    "fieldSchema": "CRM_LISTING_DRAFT_FIELDS.md"
+    "fieldSchema": "CRM_LISTING_DRAFT_FIELDS.md",
+    "purchasedOnly": true,
+    "keywordsColumn": false
   },
   "_meta": {
     "mocked": true,
-    "description": "MOCK EXAMPLE — Builder output after prefill + user edit for purchased Pikachu Base Set #58. Status ready_for_review. Includes spread vs all_in (never profit) and optional keywords helper mapped to notes (not a new schema column). Catalog art is tcgdex_assets display-only; listing photos are user_capture / user_listing_photo. No marketplace publication fields. Not a production table row."
+    "description": "MOCK EXAMPLE \u2014 Builder output after prefill + user edit for purchased Pikachu Base Set #58. Status ready_for_review. Includes spread vs all_in (never profit) and optional keywords helper mapped to notes (not a new schema column). Catalog art is tcgdex_assets display-only; listing photos are user_capture / user_listing_photo. No marketplace publication fields. Not a production table row."
+  },
+  "readyForReviewRequirements": {
+    "required": [
+      "title",
+      "condition",
+      "asking_price"
+    ],
+    "optional": [
+      "description",
+      "photos"
+    ],
+    "confirmedFounder": "2026-09-12"
   }
 }

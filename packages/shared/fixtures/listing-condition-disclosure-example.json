@@ -2,32 +2,36 @@
   "provider": "mock",
   "ok": true,
   "disclosureChecklist": {
-    "draftId": "28394a5b-6c7d-4e8f-0a1b-2c3d4e5f6071",
-    "inventoryItemId": "c2d3e4f5-a6b7-4890-1234-56789abcdef0",
-    "scope": "raw_english_pokemon_single",
-    "automaticGrading": false,
-    "answers": {
-      "overallSelfAssess": "NM",
-      "corners": "sharp",
-      "edges": "clean",
-      "surface": "light sleeve scuffs",
-      "centeringEyeball": "looks good",
-      "whitening": "none noted",
-      "creases": "none",
-      "scratches": "light sleeve scuffs only",
-      "writingOrStamps": "none",
-      "bends": "flat",
-      "odorOrSmoke": "none noted",
-      "authenticityAffirmation": "User affirms genuine Pokémon TCG card to the best of their knowledge — not a CardFlow authenticity guarantee.",
-      "photoDisclosure": "Photos are mine (front scan + back photo)."
-    }
+    "optional": true,
+    "shipInMvp": true,
+    "shortItems": [
+      {
+        "id": "corners",
+        "answer": "sharp"
+      },
+      {
+        "id": "edges",
+        "answer": "clean"
+      },
+      {
+        "id": "surface",
+        "answer": "light sleeve scuffs"
+      },
+      {
+        "id": "whitening",
+        "answer": "none noted"
+      },
+      {
+        "id": "centering",
+        "answer": "looks good"
+      }
+    ],
+    "overallConditionLabel": "NM",
+    "requireFullGradeTable": false
   },
   "mappedDraftFields": {
     "condition": "NM",
-    "descriptionSnippet": "Corners: sharp. Edges: clean. Surface: light sleeve scuffs. Centering: looks good.\nNo creases, writing, or bends noted. No smoke odor noted.\nPhotos are mine (front scan + back photo).\nUser affirms this is a genuine Pokémon TCG card to the best of their knowledge — not a CardFlow authenticity guarantee.",
-    "notesPrivate": null,
-    "schemaColumnsUsed": ["condition", "description"],
-    "newSchemaColumnInvented": false
+    "descriptionSnippet": "Corners: sharp. Edges: clean. Surface: light sleeve scuffs. Whitening: none noted. Centering: looks good."
   },
   "forbiddenClaims": {
     "psaOrBgsOrCgc": false,
@@ -38,10 +42,13 @@
     "internalDocumentOnly": true,
     "userEnteredOnly": true,
     "checklistIsUxNotRequiredColumn": true,
-    "fieldSchema": "CRM_LISTING_DRAFT_FIELDS.md"
+    "fieldSchema": "CRM_LISTING_DRAFT_FIELDS.md",
+    "checklistOptional": true,
+    "mapsToConditionAndDescriptionOnly": true,
+    "noNewSchemaColumn": true
   },
   "_meta": {
     "mocked": true,
-    "description": "MOCK EXAMPLE — User-entered raw English singles disclosure checklist for Pikachu draft, mapped into condition + description only. No automatic grading. No PSA/BGS/AI grade. Not a production table row."
+    "description": "MOCK EXAMPLE \u2014 Short optional disclosure checklist (corners, edges, surface, whitening, centering) mapping into condition + description only. No grade table required."
   }
 }

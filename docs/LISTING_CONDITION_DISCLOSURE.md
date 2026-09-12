@@ -15,7 +15,7 @@ A **user-entered checklist** helps sellers describe raw English singles honestly
 - **Do not** invent a new required schema column for checklist answers in MVP.
 
 **Confirmed:** Condition on the draft is user-owned text (or a later simple enum).  
-**Assumption:** Checklist answers map into `condition` (short label) and `description` (detail sentences).
+**Confirmed (founder 2026-09-12):** Ship a short **optional** checklist (corners, edges, surface, whitening, centering) that fills `condition` / `description`. Free-text condition alone is too easy to skip the disclosure that protects the seller. Do **not** require a full grade table.
 
 ---
 
@@ -23,23 +23,28 @@ A **user-entered checklist** helps sellers describe raw English singles honestly
 
 All answers are **user self-assess / eyeball**. CardFlow does not verify.
 
+### 2.1 Short optional checklist (ship in MVP) — Confirmed
+
 | Item | Example answers | Lands in |
 |------|-----------------|----------|
-| Overall grade (self-assess) | NM / LP / MP / HP / DMG (text) | `condition` (primary) |
+| Overall label (for `condition`) | NM / LP / MP / HP / DMG (text chips or free text) | `condition` (**required** for `ready_for_review`, but can be typed without opening checklist) |
 | Corners | Sharp / light whitening / soft / peels | `description` |
 | Edges | Clean / whitening / nicks | `description` |
 | Surface | Clean / light scratches / scuffs / holo swirl notes | `description` |
-| Centering (eyeball) | Looks good / slightly off / obviously off | `description` |
 | Whitening | None noted / corners / edges | `description` |
-| Creases | None / hairline / visible crease | `description` |
-| Scratches | None / light / deep | `description` |
-| Writing / stamps | None / pencil / stamp / marker | `description` |
-| Bends | Flat / slight / bent | `description` |
-| Odor / smoke | None noted / smoke odor / other | `description` (disclose if yes) |
-| Authenticity statement | User affirmation only | `description` or `notes` — **not** a CardFlow guarantee |
-| Photo disclosure | “Photos are mine” / “scan reused + back photo added” | `description` |
+| Centering (eyeball) | Looks good / slightly off / obviously off | `description` |
 
-Optional private reminder (all-in cost, binder location) stays in `notes`, not in listing body unless the user copies it.
+Checklist is **optional** as a UX — user can still type `condition` freely — but shipping the short checklist reduces skipped disclosure.
+
+### 2.2 Optional extras (not required gates)
+
+| Item | Lands in | Notes |
+|------|----------|-------|
+| Creases / scratches / writing / bends / odor | `description` | Useful prompts; not part of the short required-ship set |
+| Authenticity affirmation | `description` or `notes` | User statement only — **not** a CardFlow guarantee (**Assumption:** prompt optional) |
+| Photo disclosure | `description` | e.g. “Photos are mine” |
+
+Optional private reminder (all-in cost, binder location) stays in `notes`, not in listing body unless the user copies it. Never on clipboard.
 
 ---
 
@@ -80,18 +85,23 @@ User affirms this is a genuine Pokémon TCG card to the best of their knowledge 
 
 ## 5. Ready-for-review guidance
 
-**Assumption:** `condition` required for `ready_for_review`.  
-Full checklist completion is **recommended**, not a hard gate — details may live only in `description`.
+**Confirmed:** `condition` is required for `ready_for_review` (with `title` and `asking_price`).  
+Completing every checklist row is **not** a hard gate — the short checklist is optional UX that helps fill `condition` / `description`. Description and photos remain optional.
 
 ---
 
-## 6. Founder decisions
+## 6. Founder decisions (Confirmed 2026-09-12)
 
-1. Ship checklist UI in MVP vs plain condition text only.  
-2. Whether authenticity affirmation is prompted, optional, or omitted.  
-3. Exact overall grade vocabulary (NM/LP/MP/HP/DMG vs free text only).
+| Topic | Decision |
+|-------|----------|
+| Checklist | **Ship** short optional checklist: corners, edges, surface, whitening, centering |
+| Grade table | **Do not** require a full grade table |
+| Free-text only | Too easy to skip protective disclosure — checklist ships anyway |
+| Mapping | Writes into existing `condition` + `description` only |
+| Authenticity prompt | **Assumption / open:** optional vs omitted |
+| Grade vocabulary | **Assumption / open:** NM/LP/MP/HP/DMG chips vs free text |
 
 ---
 
-**Version:** 2026-09-12  
+**Version:** 2026-09-12 (founder decisions locked)  
 **Spike deliverable for review** — Disclosure UX mapping only; no grading service.

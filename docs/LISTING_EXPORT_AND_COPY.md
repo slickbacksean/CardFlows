@@ -14,26 +14,32 @@ It is **explicitly not publication**.
 - No eBay / Whatnot / TCGplayer / Shopify API calls.
 - No creation of marketplace listing ids.
 - No `published_at`, no `auto_publish`, no system-owned marketplace URLs.
-- Feature posture: clipboard copy can ship with drafts; CSV is a **later** checklist item.
+- Feature posture: **Confirmed** — clipboard when user taps Copy; **CSV deferred** past beta (marketplace CSV formats later).
 
 **Confirmed:** Clipboard export is not a marketplace integration (`CRM_LISTING_DRAFT_FIELDS.md` §5, §8).
 
 ---
 
-## 2. Copy-to-clipboard (MVP-friendly)
+## 2. Copy-to-clipboard (MVP / beta) — Confirmed
 
-Copy selected fields as plain text (and optionally a structured JSON payload for power users / debugging — still mocked / client-side).
+**Confirmed (founder 2026-09-12):**
 
-| Field | Include by default? |
-|-------|---------------------|
+- Copy **only when the user taps Copy** — never auto-copy on save.
+- Include: `title`, `description`, `condition`, `asking_price` (+ `currency`).
+- **Never** include private `notes`.
+- Do **not** include `intended_channel_note` in the default clipboard payload (channel note stays in-app).
+- Clipboard-only for beta — no marketplace CSV formats yet.
+
+| Field | On Copy? |
+|-------|----------|
 | `title` | Yes |
 | `description` | Yes |
 | `condition` | Yes |
 | `asking_price` + `currency` | Yes |
-| `intended_channel_note` | Yes (labeled as note only) |
-| `notes` | **Assumption:** off by default (private) |
-| Photo binary bytes | No — optional list of local filenames / refs only if founder wants later |
-| Catalog TCGdex image URL | No as “your photo”; display provenance stays in-app |
+| `intended_channel_note` | **No** (default) |
+| `notes` | **Never** |
+| Photo binary bytes | No |
+| Catalog TCGdex image URL | No as “your photo” |
 
 Example plain-text block:
 
@@ -41,7 +47,6 @@ Example plain-text block:
 Title: Pikachu - Base Set #58 [normal] EN
 Condition: NM
 Asking: 9.00 USD
-Channel note: Maybe list on eBay later — note only, CardFlow does not publish.
 
 Description:
 Raw English Base Set Pikachu #58, NM. ...
@@ -51,13 +56,15 @@ Payload metadata must include `published: false`.
 
 ---
 
-## 3. Later CSV / export checklist
+## 3. CSV / export checklist (later — Confirmed deferred for beta)
 
-Not required to validate the draft builder spike. When considered:
+**Confirmed (founder 2026-09-12):** Clipboard-only for beta. Marketplace CSV formats come later.
+
+When CSV is considered after beta:
 
 | Item | Notes |
 |------|-------|
-| Columns | Align to draft fields only (`title`, `description`, `condition`, `asking_price`, `currency`, `quantity`, `intended_channel_note`, optional `notes`) |
+| Columns | Align to draft fields only (`title`, `description`, `condition`, `asking_price`, `currency`, `quantity`; channel/notes only if founder expands) |
 | One row per draft | Purchased copy grain |
 | No marketplace id columns | Never add `ebay_item_id` etc. “for convenience” |
 | Cost fields | **Assumption:** all-in / spread export is optional and labeled cost/spread — never “profit” |
@@ -99,14 +106,19 @@ Allowed clarity fields in the export wrapper:
 
 ---
 
-## 6. Founder decisions
+## 6. Founder decisions (Confirmed 2026-09-12)
 
-1. Clipboard in private beta day-one vs after draft UX stabilizes.  
-2. Whether private `notes` are ever included in copy (default no).  
-3. CSV priority vs stay clipboard-only through beta.  
-4. Whether spread / all-in appear in export (labeling rules if yes).
+| Topic | Decision |
+|-------|----------|
+| Trigger | **Only on tap Copy** — never auto-copy on save |
+| Fields | `title`, `description`, `condition`, `asking_price` (+ currency) |
+| Private `notes` | **Never** on clipboard |
+| Channel note | Not in default clipboard |
+| Beta export | **Clipboard-only** |
+| Marketplace CSV | **Later** |
+| Spread / all-in in export | **Open / Assumption:** optional later; cost/spread labels only — never “profit” |
 
 ---
 
-**Version:** 2026-09-12  
+**Version:** 2026-09-12 (founder decisions locked)  
 **Spike deliverable for review** — Export/copy rules only; no marketplace connectors.
