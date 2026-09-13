@@ -24,7 +24,11 @@
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.cardflows.mobile"
+      "bundleIdentifier": "com.cardflows.mobile",
+      "infoPlist": {
+        "NSCameraUsageDescription": "CardFlow uses the camera to capture still photos of Pokémon cards for identification.",
+        "NSPhotoLibraryUsageDescription": "CardFlow uses your photo library to pick card images for identification."
+      }
     },
     "android": {
       "package": "com.cardflows.mobile",
