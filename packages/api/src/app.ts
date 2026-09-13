@@ -9,17 +9,19 @@ import { z } from 'zod';
 import { MockCardIdentityMapper } from './providers/mock-card-identity-mapper.js';
 import { MockCardRecognitionProvider } from './providers/mock-card-recognition-provider.js';
 import { MockTcgdexCatalogProvider } from './providers/mock-tcgdex-catalog-provider.js';
+import { LocalDevStore } from './store/local-dev-store.js';
 
-export function createApp() {
+export function createApp(options?: { store?: LocalDevStore }) {
   const recognitionProvider = new MockCardRecognitionProvider();
   const catalogProvider = new MockTcgdexCatalogProvider();
   const identityMapper = new MockCardIdentityMapper();
+  const store = options?.store ?? new LocalDevStore();
 
   const app = new Hono();
 
   app.use('*', cors());
 
-  app.get('/health', (c) => c.json({ ok: true, provider: 'mock' }));
+  app.get('/health', (c) => c.json({ ok: true, provider: 'mock', store: store.instanceId }));
 
   const identifySchema = z.object({
     mimeType: z.enum(['image/jpeg', 'image/png', 'image/webp']),

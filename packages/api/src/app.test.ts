@@ -7,7 +7,9 @@ describe('CardFlow API routes', () => {
   it('GET /health returns mock provider', async () => {
     const response = await app.request('/health');
     const body = await response.json();
-    expect(body).toEqual({ ok: true, provider: 'mock' });
+    expect(body.ok).toBe(true);
+    expect(body.provider).toBe('mock');
+    expect(body.store).toBeDefined();
   });
 
   it('POST /v1/max-buy/compute matches fixture $8.00 → $5.57', async () => {
