@@ -218,9 +218,9 @@ export function PurchasedScreen() {
               • Missing Max Buy reference does not block save
             </Text>
             <Text style={styles.infoText}>
-              • Asking vs all-in is &ldquo;spread&rdquo; or &ldquo;cost-to-ask gap&rdquo;
+              • Asking vs all-in is "spread" or "cost-to-ask gap"
             </Text>
-            <Text style={styles.infoText}>• Never labeled as &ldquo;profit&rdquo;</Text>
+            <Text style={styles.infoText}>• Never labeled as "profit"</Text>
           </View>
         </View>
       </ScrollView>
