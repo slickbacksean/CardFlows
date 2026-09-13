@@ -39,8 +39,16 @@ export function ConfirmedScreen({ navigation, route }: Props) {
         </Text>
       </View>
 
-      <Pressable style={styles.primaryButton} onPress={() => navigation.popToTop()}>
-        <Text style={styles.primaryButtonText}>Scan another card</Text>
+      <Pressable
+        style={styles.primaryButton}
+        onPress={() => navigation.navigate('Purchased')}
+        accessibilityRole="button"
+        accessibilityLabel="Record purchase costs"
+      >
+        <Text style={styles.primaryButtonText}>Record purchase costs</Text>
+      </Pressable>
+      <Pressable style={styles.secondaryButton} onPress={() => navigation.popToTop()}>
+        <Text style={styles.secondaryButtonText}>Scan another card</Text>
       </Pressable>
     </ScrollView>
   );
@@ -102,6 +110,19 @@ const styles = StyleSheet.create({
   },
   primaryButtonText: {
     color: '#0f172a',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  secondaryButton: {
+    backgroundColor: '#1e293b',
+    borderRadius: 10,
+    paddingVertical: 14,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#334155',
+  },
+  secondaryButtonText: {
+    color: '#e2e8f0',
     fontSize: 16,
     fontWeight: '600',
   },

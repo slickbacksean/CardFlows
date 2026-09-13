@@ -6,6 +6,7 @@ import type { RootStackParamList } from './src/navigation/types';
 import { ConfirmScreen } from './src/screens/ConfirmScreen';
 import { ConfirmedScreen } from './src/screens/ConfirmedScreen';
 import { ManualSearchScreen } from './src/screens/ManualSearchScreen';
+import { PurchasedScreen } from './src/screens/PurchasedScreen';
 import { ScanScreen } from './src/screens/ScanScreen';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -45,6 +46,11 @@ export default function App() {
             name="Confirmed"
             component={ConfirmedScreen}
             options={{ title: 'Confirmed', headerBackVisible: false }}
+          />
+          <Stack.Screen
+            name="Purchased"
+            component={PurchasedScreen}
+            options={{ title: 'Purchased' }}
           />
         </Stack.Navigator>
       </NavigationContainer>

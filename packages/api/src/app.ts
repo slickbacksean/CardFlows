@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import {
   calculateMaxBuy,
+  calculateAllInCost,
   DEFAULT_MAX_BUY_PREFERENCES,
   MISSING_REFERENCE_UI_COPY,
 } from '@cardflows/shared';
@@ -288,6 +289,32 @@ export function createApp(options: CreateAppOptions = {}) {
           };
 
     return c.json({ ok: true, maxBuy: result, uiCopy });
+  });
+
+  const purchaseCostSchema = z.object({
+    currency: z.string().min(3).max(3),
+    purchasePrice: z.string(),
+    purchasedAt: z.string(),
+    shipping: z.string().optional(),
+    tax: z.string().optional(),
+    fees: z.string().optional(),
+    supplies: z.string().optional(),
+  });
+
+  app.post('/v1/purchase/calculate-cost', async (c) => {
+    const body = await c.req.json();
+    const parsed = purchaseCostSchema.safeParse(body);
+    if (!parsed.success) {
+      return c.json({ ok: false, error: parsed.error.flatten() }, 400);
+    }
+
+    try {
+      const result = calculateAllInCost(parsed.data);
+      return c.json({ ok: true, cost: result });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Invalid input';
+      return c.json({ ok: false, error: { message } }, 400);
+    }
   });
 
   return app;
