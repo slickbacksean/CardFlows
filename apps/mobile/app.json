@@ -7,6 +7,21 @@
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
     "scheme": "cardflow",
+    "plugins": [
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow CardFlow to access your camera to scan cards"
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow CardFlow to access your photos to select card images",
+          "cameraPermission": "Allow CardFlow to access your camera to capture card images"
+        }
+      ]
+    ],
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.cardflows.mobile"

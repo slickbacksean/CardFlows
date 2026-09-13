@@ -25,6 +25,7 @@ export function createApp(options?: { store?: LocalDevStore }) {
 
   const identifySchema = z.object({
     mimeType: z.enum(['image/jpeg', 'image/png', 'image/webp']),
+    provenance: z.enum(['user_capture', 'catalog_art']).optional(),
     segment: z.string().optional(),
     clientRequestId: z.string().optional(),
   });
@@ -33,9 +34,11 @@ export function createApp(options?: { store?: LocalDevStore }) {
     const body = await c.req.parseBody();
     const imageField = body.image;
     const mimeType = typeof body.mimeType === 'string' ? body.mimeType : 'image/jpeg';
+    const provenance = typeof body.provenance === 'string' ? body.provenance : undefined;
 
     const parsed = identifySchema.safeParse({
       mimeType,
+      provenance,
       segment: body.segment,
       clientRequestId: body.clientRequestId,
     });
