@@ -19,6 +19,7 @@ export type RootStackParamList = {
     setName: string;
     localId: string;
   };
+  Purchased: undefined;
 };
 
 export interface SelectedCard {

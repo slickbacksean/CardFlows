@@ -53,4 +53,77 @@ describe('CardFlow API routes', () => {
     expect(body.tcgdexId).toBe('base1-58');
     expect(body.cardsightCardId).toBe('a1b2c3d4-e5f6-7890-abcd-ef1234567890');
   });
+
+  it('POST /v1/purchase/calculate-cost returns all-in cost with all fields', async () => {
+    const response = await app.request('/v1/purchase/calculate-cost', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        currency: 'USD',
+        purchasePrice: '3.50',
+        purchasedAt: '2026-09-12T16:06:40.000Z',
+        shipping: '0.00',
+        tax: '0.29',
+        fees: '0.00',
+        supplies: '0.25',
+      }),
+    });
+
+    const body = await response.json();
+    expect(body.ok).toBe(true);
+    expect(body.cost.allInTotal).toBe('4.04');
+    expect(body.cost.allInTotalCents).toBe(404);
+  });
+
+  it('POST /v1/purchase/calculate-cost defaults optional fields to zero', async () => {
+    const response = await app.request('/v1/purchase/calculate-cost', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        currency: 'USD',
+        purchasePrice: '15.00',
+        purchasedAt: '2026-09-12T18:45:00.000Z',
+      }),
+    });
+
+    const body = await response.json();
+    expect(body.ok).toBe(true);
+    expect(body.cost.allInTotal).toBe('15.00');
+    expect(body.cost.allInTotalCents).toBe(1500);
+    expect(body.cost.shipping).toBe('0.00');
+    expect(body.cost.tax).toBe('0.00');
+    expect(body.cost.fees).toBe('0.00');
+    expect(body.cost.supplies).toBe('0.00');
+  });
+
+  it('POST /v1/purchase/calculate-cost returns 400 for missing required fields', async () => {
+    const response = await app.request('/v1/purchase/calculate-cost', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        currency: 'USD',
+      }),
+    });
+
+    expect(response.status).toBe(400);
+    const body = await response.json();
+    expect(body.ok).toBe(false);
+  });
+
+  it('POST /v1/purchase/calculate-cost returns 400 for invalid dollar amounts', async () => {
+    const response = await app.request('/v1/purchase/calculate-cost', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        currency: 'USD',
+        purchasePrice: 'invalid',
+        purchasedAt: '2026-09-12T12:00:00.000Z',
+      }),
+    });
+
+    expect(response.status).toBe(400);
+    const body = await response.json();
+    expect(body.ok).toBe(false);
+    expect(body.error.message).toContain('Invalid dollar amount');
+  });
 });
