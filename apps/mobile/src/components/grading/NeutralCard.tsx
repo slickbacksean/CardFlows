@@ -9,29 +9,43 @@ interface NeutralCardProps {
 export function NeutralCard({ variant, border = 'light', width = 118 }: NeutralCardProps) {
   const height = Math.round(width * (88 / 63));
   const isLightBorder = border === 'light';
+  const body = variant === 'front' ? '#2b3444' : '#1a2230';
+  const rim = isLightBorder ? '#e8eef6' : '#0b1220';
 
   return (
     <View
-      accessibilityLabel={variant === 'front' ? 'Neutral front card placeholder' : 'Neutral back card placeholder'}
+      accessibilityLabel={
+        variant === 'front' ? 'Neutral front card placeholder' : 'Neutral back card placeholder'
+      }
       style={[
         styles.card,
         {
           width,
           height,
-          borderColor: isLightBorder ? '#e2e8f0' : '#0f172a',
-          backgroundColor: variant === 'front' ? '#1f2937' : '#111827',
+          borderColor: rim,
+          backgroundColor: body,
         },
       ]}
     >
       {variant === 'front' ? (
-        <>
-          <View style={styles.art} />
-          <View style={styles.lineWide} />
-          <View style={styles.lineNarrow} />
-        </>
+        <View style={styles.frontInner}>
+          <View style={styles.artWindow}>
+            <View style={styles.horizon} />
+            <View style={styles.portrait} />
+          </View>
+          <View style={styles.meta}>
+            <View style={styles.lineWide} />
+            <View style={styles.lineNarrow} />
+            <View style={styles.lineTiny} />
+          </View>
+        </View>
       ) : (
-        <View style={styles.emblem}>
-          <View style={styles.emblemInner} />
+        <View style={styles.backInner}>
+          <View style={styles.ringOuter}>
+            <View style={styles.ringInner}>
+              <View style={styles.diamond} />
+            </View>
+          </View>
         </View>
       )}
     </View>
@@ -40,50 +54,88 @@ export function NeutralCard({ variant, border = 'light', width = 118 }: NeutralC
 
 const styles = StyleSheet.create({
   card: {
-    borderRadius: 10,
-    borderWidth: 3,
-    padding: 10,
-    justifyContent: 'flex-start',
+    borderRadius: 8,
+    borderWidth: 4,
+    overflow: 'hidden',
+  },
+  frontInner: {
+    flex: 1,
+    padding: 8,
+    gap: 8,
+  },
+  artWindow: {
+    flex: 1,
+    borderRadius: 5,
+    backgroundColor: '#5b6b7c',
+    overflow: 'hidden',
+    justifyContent: 'flex-end',
     alignItems: 'center',
   },
-  art: {
-    width: '100%',
-    flex: 1,
-    borderRadius: 6,
-    backgroundColor: '#334155',
-    marginBottom: 8,
+  horizon: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: '38%',
+    backgroundColor: '#3f4b59',
+  },
+  portrait: {
+    width: '36%',
+    aspectRatio: 1,
+    borderRadius: 999,
+    backgroundColor: '#cbd5e1',
+    marginBottom: '18%',
+  },
+  meta: {
+    gap: 5,
   },
   lineWide: {
-    width: '88%',
-    height: 7,
-    borderRadius: 3,
-    backgroundColor: '#475569',
-    marginBottom: 5,
-  },
-  lineNarrow: {
-    width: '62%',
+    width: '92%',
     height: 6,
     borderRadius: 3,
-    backgroundColor: '#334155',
+    backgroundColor: '#8b9aab',
   },
-  emblem: {
+  lineNarrow: {
+    width: '70%',
+    height: 5,
+    borderRadius: 3,
+    backgroundColor: '#6b7a8b',
+  },
+  lineTiny: {
+    width: '48%',
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#556272',
+  },
+  backInner: {
     flex: 1,
-    width: '62%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#141b26',
+  },
+  ringOuter: {
+    width: '58%',
     aspectRatio: 1,
-    maxHeight: '55%',
     borderRadius: 999,
     borderWidth: 3,
+    borderColor: '#93a3b8',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  ringInner: {
+    width: '72%',
+    aspectRatio: 1,
+    borderRadius: 999,
+    borderWidth: 2,
     borderColor: '#64748b',
     alignItems: 'center',
     justifyContent: 'center',
-    alignSelf: 'center',
-    marginTop: '22%',
   },
-  emblemInner: {
-    width: '42%',
-    height: '42%',
+  diamond: {
+    width: '34%',
+    aspectRatio: 1,
+    backgroundColor: '#94a3b8',
     transform: [{ rotate: '45deg' }],
-    backgroundColor: '#475569',
-    borderRadius: 3,
+    borderRadius: 2,
   },
 });

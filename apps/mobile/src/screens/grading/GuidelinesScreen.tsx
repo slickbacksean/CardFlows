@@ -52,13 +52,13 @@ export function GuidelinesScreen({ navigation }: Props) {
           <View style={styles.exampleRow}>
             <View style={styles.example}>
               <View style={[styles.surface, styles.darkSurface]}>
-                <NeutralCard variant="front" border="light" width={108} />
+                <NeutralCard variant="front" border="light" width={92} />
               </View>
               <Text style={styles.caption}>{MOST_IMPORTANT.lightCaption}</Text>
             </View>
             <View style={styles.example}>
               <View style={[styles.surface, styles.lightSurface]}>
-                <NeutralCard variant="back" border="dark" width={108} />
+                <NeutralCard variant="back" border="dark" width={92} />
               </View>
               <Text style={styles.caption}>{MOST_IMPORTANT.darkCaption}</Text>
             </View>
@@ -72,11 +72,11 @@ export function GuidelinesScreen({ navigation }: Props) {
           <Text style={styles.body}>{TARGET.body}</Text>
           <View style={styles.exampleRow}>
             <View style={styles.example}>
-              <NeutralCard variant="front" width={118} />
+              <NeutralCard variant="front" width={112} />
               <Text style={styles.caption}>{TARGET.frontLabel}</Text>
             </View>
             <View style={styles.example}>
-              <NeutralCard variant="back" width={118} />
+              <NeutralCard variant="back" width={112} />
               <Text style={styles.caption}>{TARGET.backLabel}</Text>
             </View>
           </View>
@@ -181,10 +181,11 @@ const styles = StyleSheet.create({
   },
   surface: {
     width: '100%',
-    aspectRatio: 1,
     borderRadius: radii.md,
     alignItems: 'center',
     justifyContent: 'center',
+    paddingVertical: 18,
+    paddingHorizontal: 10,
   },
   darkSurface: {
     backgroundColor: '#020617',

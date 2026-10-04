@@ -4,7 +4,7 @@ import { Image, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Atmosphere, Card, PrimaryButton } from '../../components/grading/ui';
 import { RESULT_COPY } from '../../grading/copy';
 import { formatDeductionMeta, formatPoints } from '../../grading/defects';
-import { formatEstimate, shouldShowFinalPoints } from '../../grading/result-display';
+import { formatEstimate, formatServerPoints, shouldShowFinalPoints } from '../../grading/result-display';
 import { useGradingSession } from '../../grading/session';
 import type { GradingStackParamList } from '../../navigation/types';
 import { colors, radii } from '../../theme';
@@ -60,24 +60,9 @@ export function GradingResultScreen({ navigation }: Props) {
 
       {showFinalPoints ? (
         <Text style={styles.finalPoints}>
-          {RESULT_COPY.finalPoints} {estimate.finalPoints}
+          {RESULT_COPY.finalPoints} {formatServerPoints(estimate.finalPoints)}
         </Text>
       ) : null}
-
-      <View style={styles.photos}>
-        {session.front ? (
-          <View style={styles.photoCol}>
-            <Image source={{ uri: session.front.uri }} style={styles.photo} accessibilityIgnoresInvertColors />
-            <Text style={styles.photoCaption}>{RESULT_COPY.front}</Text>
-          </View>
-        ) : null}
-        {session.back ? (
-          <View style={styles.photoCol}>
-            <Image source={{ uri: session.back.uri }} style={styles.photo} accessibilityIgnoresInvertColors />
-            <Text style={styles.photoCaption}>{RESULT_COPY.back}</Text>
-          </View>
-        ) : null}
-      </View>
 
       <Card>
         <Text style={styles.section}>Subgrades</Text>
@@ -88,11 +73,12 @@ export function GradingResultScreen({ navigation }: Props) {
               <View style={styles.subCopy}>
                 <Text style={styles.subTitle}>{criterion.label}</Text>
                 <Text style={styles.subMeta}>
-                  {RESULT_COPY.front} {sub.front} · {RESULT_COPY.back} {sub.back}
+                  {RESULT_COPY.front} {formatServerPoints(sub.front)} · {RESULT_COPY.back}{' '}
+                  {formatServerPoints(sub.back)}
                 </Text>
               </View>
               <Text style={styles.subPoints}>
-                {sub.points} {RESULT_COPY.points}
+                {formatServerPoints(sub.points)} {RESULT_COPY.points}
               </Text>
             </View>
           );
@@ -115,6 +101,21 @@ export function GradingResultScreen({ navigation }: Props) {
           ))
         )}
       </Card>
+
+      <View style={styles.photos}>
+        {session.front ? (
+          <View style={styles.photoCol}>
+            <Image source={{ uri: session.front.uri }} style={styles.photo} accessibilityIgnoresInvertColors />
+            <Text style={styles.photoCaption}>{RESULT_COPY.front}</Text>
+          </View>
+        ) : null}
+        {session.back ? (
+          <View style={styles.photoCol}>
+            <Image source={{ uri: session.back.uri }} style={styles.photo} accessibilityIgnoresInvertColors />
+            <Text style={styles.photoCaption}>{RESULT_COPY.back}</Text>
+          </View>
+        ) : null}
+      </View>
 
       <PrimaryButton label={RESULT_COPY.gradeAnother} onPress={handleAgain} />
     </ScrollView>
@@ -193,6 +194,7 @@ const styles = StyleSheet.create({
   photo: {
     width: '100%',
     aspectRatio: 63 / 88,
+    maxHeight: 180,
     borderRadius: radii.md,
     backgroundColor: colors.card,
   },

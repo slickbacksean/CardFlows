@@ -96,7 +96,7 @@ function GradingStackNavigator() {
         <GradingStack.Screen
           name="GradingResult"
           component={GradingResultScreen}
-          options={{ title: 'Estimate', headerBackVisible: false }}
+          options={{ title: 'Estimate', headerBackVisible: false, gestureEnabled: false }}
         />
       </GradingStack.Navigator>
     </GradingSessionProvider>

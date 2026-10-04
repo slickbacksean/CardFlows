@@ -4,7 +4,7 @@ import { colors, radii } from '../../theme';
 
 export function Atmosphere() {
   return (
-    <View pointerEvents="none" style={styles.atmosphere}>
+    <View style={styles.atmosphere}>
       <View style={[styles.orb, styles.orbTeal]} />
       <View style={[styles.orb, styles.orbViolet]} />
       <View style={[styles.orb, styles.orbLime]} />
@@ -109,6 +109,7 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     overflow: 'hidden',
+    pointerEvents: 'none',
   },
   orb: {
     position: 'absolute',

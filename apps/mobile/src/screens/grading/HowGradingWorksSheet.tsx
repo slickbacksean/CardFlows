@@ -66,7 +66,7 @@ export function HowGradingWorksSheet({ visible, onClose }: HowGradingWorksSheetP
     <Modal
       visible={visible}
       animationType="slide"
-      presentationStyle="pageSheet"
+      presentationStyle="fullScreen"
       onRequestClose={onClose}
     >
       <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>

@@ -9,7 +9,7 @@ import {
   upsertDraft,
   type DefectDraft,
 } from './defects.ts';
-import { shouldShowFinalPoints } from './result-display.ts';
+import { formatServerPoints, shouldShowFinalPoints } from './result-display.ts';
 
 describe('toDefectsPayload', () => {
   it('always returns an array and drops quantity 0', () => {
@@ -77,6 +77,11 @@ describe('result display', () => {
     assert.equal(shouldShowFinalPoints(10, 100), false);
     assert.equal(shouldShowFinalPoints(8.5, 85), false);
     assert.equal(shouldShowFinalPoints(8.5, 84.7), true);
+  });
+
+  it('formats server points without recomputing them', () => {
+    assert.equal(formatServerPoints(100), '100');
+    assert.equal(formatServerPoints(91.17647058823529), '91.2');
   });
 
   it('includes deviation percent on centering rows', () => {

@@ -101,7 +101,7 @@ const styles = StyleSheet.create({
   photo: {
     width: '100%',
     aspectRatio: 63 / 88,
-    maxHeight: 420,
+    maxHeight: 280,
     alignSelf: 'center',
     borderRadius: radii.md,
     backgroundColor: '#020617',
@@ -109,7 +109,7 @@ const styles = StyleSheet.create({
   missing: {
     width: '100%',
     aspectRatio: 63 / 88,
-    maxHeight: 420,
+    maxHeight: 280,
     borderRadius: radii.md,
     backgroundColor: '#020617',
     alignItems: 'center',
