@@ -5,7 +5,7 @@ import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from
 import { submitPregrade } from '../../api/client';
 import { Atmosphere, Card, ErrorBanner, PrimaryButton } from '../../components/grading/ui';
 import { QuantityStepper } from '../../components/grading/QuantityStepper';
-import { DEFECTS_COPY } from '../../grading/copy';
+import { DEFECTS_COPY, HOW_GRADING_WORKS_TITLE } from '../../grading/copy';
 import {
   CORNER_CONTROLS,
   CORNER_LABELS,
@@ -23,6 +23,7 @@ import {
 import { useGradingSession } from '../../grading/session';
 import type { GradingStackParamList } from '../../navigation/types';
 import { colors, radii } from '../../theme';
+import { HowGradingWorksSheet } from './HowGradingWorksSheet';
 
 type Props = NativeStackScreenProps<GradingStackParamList, 'MarkDefects'>;
 
@@ -31,6 +32,7 @@ export function MarkDefectsScreen({ navigation }: Props) {
   const [side, setSide] = useState<CardSide>('front');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorReasons, setErrorReasons] = useState<string[]>([]);
+  const [sheetOpen, setSheetOpen] = useState(false);
   const count = markedCount(session.drafts);
 
   function setQuantity(
@@ -94,6 +96,16 @@ export function MarkDefectsScreen({ navigation }: Props) {
       <ScrollView contentContainerStyle={styles.content}>
         <Text style={styles.title}>{DEFECTS_COPY.title}</Text>
         <Text style={styles.hint}>{DEFECTS_COPY.subtitle}</Text>
+
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={HOW_GRADING_WORKS_TITLE}
+          onPress={() => setSheetOpen(true)}
+          style={styles.linkRow}
+        >
+          <Text style={styles.linkText}>{HOW_GRADING_WORKS_TITLE}</Text>
+          <Text style={styles.chevron}>›</Text>
+        </Pressable>
 
         <View style={styles.switcher}>
           {(['front', 'back'] as const).map((value) => (
@@ -223,6 +235,8 @@ export function MarkDefectsScreen({ navigation }: Props) {
           />
         )}
       </View>
+
+      <HowGradingWorksSheet visible={sheetOpen} onClose={() => setSheetOpen(false)} />
     </View>
   );
 }
@@ -277,6 +291,26 @@ const styles = StyleSheet.create({
     color: colors.muted,
     fontSize: 15,
     lineHeight: 22,
+  },
+  linkRow: {
+    backgroundColor: colors.card,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: 18,
+    paddingVertical: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  linkText: {
+    color: colors.text,
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  chevron: {
+    color: colors.muted,
+    fontSize: 22,
   },
   switcher: {
     flexDirection: 'row',

@@ -1,9 +1,15 @@
-import type { PregradeCriterion } from '@cardflows/shared';
+import type { PregradeCriterion, PregradeEstimate } from '@cardflows/shared';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Image, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { Atmosphere, Card, PrimaryButton } from '../../components/grading/ui';
+import { Atmosphere, Card, PrimaryButton, WarningBanner } from '../../components/grading/ui';
 import { RESULT_COPY } from '../../grading/copy';
 import { formatDeductionMeta, formatPoints } from '../../grading/defects';
+import {
+  PHOTO_GRADE_DISCLAIMER,
+  PHOTO_GRADE_LABEL,
+  SURFACE_EXCLUDED_NOTE,
+  type PhotoPregradeSuccess,
+} from '../../grading/photo-grade';
 import { formatEstimate, formatServerPoints, shouldShowFinalPoints } from '../../grading/result-display';
 import { useGradingSession } from '../../grading/session';
 import type { GradingStackParamList } from '../../navigation/types';
@@ -18,8 +24,16 @@ const CRITERIA: { key: PregradeCriterion; label: string }[] = [
   { key: 'centering', label: 'Centering' },
 ];
 
+const PHOTO_CRITERIA: { key: 'centering' | 'corners' | 'edges' | 'surface'; label: string }[] = [
+  { key: 'centering', label: RESULT_COPY.centering },
+  { key: 'corners', label: RESULT_COPY.corners },
+  { key: 'edges', label: RESULT_COPY.edges },
+  { key: 'surface', label: RESULT_COPY.surface },
+];
+
 export function GradingResultScreen({ navigation }: Props) {
   const session = useGradingSession();
+  const photoGrade = session.photoGrade;
   const estimate = session.estimate;
 
   function handleAgain() {
@@ -28,6 +42,15 @@ export function GradingResultScreen({ navigation }: Props) {
       index: 0,
       routes: [{ name: 'GradingEntry' }],
     });
+  }
+
+  if (photoGrade) {
+    return (
+      <ScrollView contentContainerStyle={styles.content}>
+        <Atmosphere />
+        <PhotoGradeResult grade={photoGrade} onAgain={handleAgain} />
+      </ScrollView>
+    );
   }
 
   if (!estimate) {
@@ -39,11 +62,65 @@ export function GradingResultScreen({ navigation }: Props) {
     );
   }
 
-  const showFinalPoints = shouldShowFinalPoints(estimate.estimate, estimate.finalPoints);
-
   return (
     <ScrollView contentContainerStyle={styles.content}>
       <Atmosphere />
+      <ManualEstimateResult estimate={estimate} onAgain={handleAgain} />
+    </ScrollView>
+  );
+}
+
+function PhotoGradeResult({
+  grade,
+  onAgain,
+}: {
+  grade: PhotoPregradeSuccess;
+  onAgain: () => void;
+}) {
+  const session = useGradingSession();
+
+  return (
+    <>
+      <Text style={styles.label}>{PHOTO_GRADE_LABEL}</Text>
+      <Text style={styles.estimate}>{formatEstimate(grade.estimate)}</Text>
+      <Text style={styles.disclaimer}>{PHOTO_GRADE_DISCLAIMER}</Text>
+      <Text style={styles.note}>{SURFACE_EXCLUDED_NOTE}</Text>
+
+      <WarningBanner warnings={grade.warnings} />
+
+      <Card>
+        <Text style={styles.section}>Subgrades</Text>
+        {PHOTO_CRITERIA.map((criterion) => {
+          const value = grade[criterion.key];
+          return (
+            <View key={criterion.key} style={styles.subRow}>
+              <Text style={styles.subTitle}>{criterion.label}</Text>
+              <Text style={styles.subPoints}>
+                {value === null ? RESULT_COPY.notAvailable : formatServerPoints(value)}
+              </Text>
+            </View>
+          );
+        })}
+      </Card>
+
+      <ResultPhotos frontUri={session.front?.uri} backUri={session.back?.uri} />
+      <PrimaryButton label={RESULT_COPY.gradeAnother} onPress={onAgain} />
+    </>
+  );
+}
+
+function ManualEstimateResult({
+  estimate,
+  onAgain,
+}: {
+  estimate: PregradeEstimate;
+  onAgain: () => void;
+}) {
+  const session = useGradingSession();
+  const showFinalPoints = shouldShowFinalPoints(estimate.estimate, estimate.finalPoints);
+
+  return (
+    <>
       <Text style={styles.label}>{estimate.label}</Text>
       <Text style={styles.estimate}>{formatEstimate(estimate.estimate)}</Text>
       <Text style={styles.disclaimer}>{estimate.disclaimer}</Text>
@@ -102,23 +179,29 @@ export function GradingResultScreen({ navigation }: Props) {
         )}
       </Card>
 
-      <View style={styles.photos}>
-        {session.front ? (
-          <View style={styles.photoCol}>
-            <Image source={{ uri: session.front.uri }} style={styles.photo} accessibilityIgnoresInvertColors />
-            <Text style={styles.photoCaption}>{RESULT_COPY.front}</Text>
-          </View>
-        ) : null}
-        {session.back ? (
-          <View style={styles.photoCol}>
-            <Image source={{ uri: session.back.uri }} style={styles.photo} accessibilityIgnoresInvertColors />
-            <Text style={styles.photoCaption}>{RESULT_COPY.back}</Text>
-          </View>
-        ) : null}
-      </View>
+      <ResultPhotos frontUri={session.front?.uri} backUri={session.back?.uri} />
+      <PrimaryButton label={RESULT_COPY.gradeAnother} onPress={onAgain} />
+    </>
+  );
+}
 
-      <PrimaryButton label={RESULT_COPY.gradeAnother} onPress={handleAgain} />
-    </ScrollView>
+function ResultPhotos({ frontUri, backUri }: { frontUri?: string; backUri?: string }) {
+  if (!frontUri && !backUri) return null;
+  return (
+    <View style={styles.photos}>
+      {frontUri ? (
+        <View style={styles.photoCol}>
+          <Image source={{ uri: frontUri }} style={styles.photo} accessibilityIgnoresInvertColors />
+          <Text style={styles.photoCaption}>{RESULT_COPY.front}</Text>
+        </View>
+      ) : null}
+      {backUri ? (
+        <View style={styles.photoCol}>
+          <Image source={{ uri: backUri }} style={styles.photo} accessibilityIgnoresInvertColors />
+          <Text style={styles.photoCaption}>{RESULT_COPY.back}</Text>
+        </View>
+      ) : null}
+    </View>
   );
 }
 
@@ -158,6 +241,12 @@ const styles = StyleSheet.create({
   disclaimer: {
     textAlign: 'center',
     color: colors.muted,
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  note: {
+    textAlign: 'center',
+    color: colors.textSecondary,
     fontSize: 14,
     lineHeight: 20,
   },

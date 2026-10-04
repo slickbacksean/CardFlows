@@ -1,5 +1,7 @@
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { Image, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useState } from 'react';
+import { ActivityIndicator, Image, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { submitPregradeFromPhotos } from '../../api/client';
 import {
   Atmosphere,
   Card,
@@ -18,31 +20,73 @@ type Props = NativeStackScreenProps<GradingStackParamList, 'CropConfirm'>;
 export function CropConfirmScreen({ navigation, route }: Props) {
   const { side } = route.params;
   const session = useGradingSession();
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitErrors, setSubmitErrors] = useState<string[]>([]);
   const photo = side === 'front' ? session.front : session.back;
+  const bothReady = Boolean(session.front && session.back);
   const localReasons = photo ? validatePhoto(photo) : ['Add a photo first.'];
   const apiReasons = session.photoRetake?.side === side ? session.photoRetake.reasons : [];
-  const reasons = apiReasons.length > 0 ? apiReasons : localReasons;
-  const canConfirm = Boolean(photo) && reasons.length === 0;
+  const reasons = [...(apiReasons.length > 0 ? apiReasons : localReasons), ...submitErrors];
+  const canConfirm = Boolean(photo) && localReasons.length === 0 && apiReasons.length === 0;
 
   function handleRetake() {
     session.setPhoto(side, null);
+    setSubmitErrors([]);
     navigation.navigate('GradingPhoto', { side });
   }
 
-  function handleConfirm() {
+  function handleNextCrop() {
     if (!canConfirm || !photo) return;
     session.setPhotoRetake(null);
-    const other = side === 'front' ? session.back : session.front;
-    if (other) {
-      navigation.navigate('MarkDefects');
-      return;
-    }
-    if (side === 'front') {
+    setSubmitErrors([]);
+    if (side === 'front' && !session.back) {
       navigation.navigate('GradingPhoto', { side: 'back' });
-      return;
     }
+  }
+
+  function handleMarkDefects() {
+    if (!bothReady) return;
+    session.setPhotoRetake(null);
     navigation.navigate('MarkDefects');
   }
+
+  async function handleGradePhotos() {
+    if (!session.front || !session.back || isSubmitting || !canConfirm) return;
+    setIsSubmitting(true);
+    setSubmitErrors([]);
+    try {
+      const response = await submitPregradeFromPhotos({
+        front: session.front,
+        back: session.back,
+      });
+
+      if (response.ok) {
+        session.setPhotoGrade(response);
+        session.setPhotoRetake(null);
+        navigation.navigate('GradingResult');
+        return;
+      }
+
+      if (response.code === 'PHOTO_RETAKE') {
+        session.setPhotoGrade(null);
+        session.setPhotoRetake({ side: response.side, reasons: response.reasons });
+        if (response.side !== side) {
+          navigation.navigate('CropConfirm', { side: response.side });
+        }
+        return;
+      }
+
+      session.setPhotoGrade(null);
+      setSubmitErrors([response.message]);
+    } catch {
+      session.setPhotoGrade(null);
+      setSubmitErrors(['Could not reach the CardFlow API. Is the BFF running?']);
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  const primaryLabel = bothReady ? PHOTO_COPY.gradePhotos : PHOTO_COPY.confirm;
 
   return (
     <ScrollView contentContainerStyle={styles.content}>
@@ -68,8 +112,24 @@ export function CropConfirmScreen({ navigation, route }: Props) {
 
       <ErrorBanner reasons={reasons} />
 
-      <PrimaryButton label={PHOTO_COPY.confirm} onPress={handleConfirm} disabled={!canConfirm} />
-      <SecondaryButton label={PHOTO_COPY.retake} onPress={handleRetake} />
+      {isSubmitting ? (
+        <View style={styles.loading}>
+          <ActivityIndicator color={colors.primary} />
+          <Text style={styles.loadingText}>{PHOTO_COPY.grading}</Text>
+        </View>
+      ) : (
+        <>
+          <PrimaryButton
+            label={primaryLabel}
+            onPress={bothReady ? handleGradePhotos : handleNextCrop}
+            disabled={!canConfirm}
+          />
+          {bothReady ? (
+            <SecondaryButton label={PHOTO_COPY.markDefects} onPress={handleMarkDefects} />
+          ) : null}
+          <SecondaryButton label={PHOTO_COPY.retake} onPress={handleRetake} />
+        </>
+      )}
     </ScrollView>
   );
 }
@@ -117,5 +177,16 @@ const styles = StyleSheet.create({
   },
   missingText: {
     color: colors.faint,
+  },
+  loading: {
+    minHeight: 56,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+  },
+  loadingText: {
+    color: colors.muted,
+    fontSize: 15,
   },
 });

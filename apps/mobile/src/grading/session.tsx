@@ -3,6 +3,7 @@ import { createContext, useCallback, useContext, useMemo, useState, type ReactNo
 import type { CardSide } from '@cardflows/shared';
 import type { DefectDraft } from './defects';
 import { upsertDraft } from './defects';
+import type { PhotoPregradeSuccess } from './photo-grade';
 import type { GradingPhoto } from './photos';
 
 export interface PhotoRetakeState {
@@ -16,10 +17,12 @@ interface GradingSessionValue {
   drafts: DefectDraft[];
   photoRetake: PhotoRetakeState | null;
   estimate: PregradeEstimate | null;
+  photoGrade: PhotoPregradeSuccess | null;
   setPhoto: (side: CardSide, photo: GradingPhoto | null) => void;
   setDraft: (draft: DefectDraft) => void;
   setPhotoRetake: (value: PhotoRetakeState | null) => void;
   setEstimate: (value: PregradeEstimate | null) => void;
+  setPhotoGrade: (value: PhotoPregradeSuccess | null) => void;
   reset: () => void;
 }
 
@@ -31,6 +34,17 @@ export function GradingSessionProvider({ children }: { children: ReactNode }) {
   const [drafts, setDrafts] = useState<DefectDraft[]>([]);
   const [photoRetake, setPhotoRetake] = useState<PhotoRetakeState | null>(null);
   const [estimate, setEstimate] = useState<PregradeEstimate | null>(null);
+  const [photoGrade, setPhotoGradeState] = useState<PhotoPregradeSuccess | null>(null);
+
+  const setPhotoGrade = useCallback((value: PhotoPregradeSuccess | null) => {
+    setPhotoGradeState(value);
+    if (value) setEstimate(null);
+  }, []);
+
+  const setManualEstimate = useCallback((value: PregradeEstimate | null) => {
+    setEstimate(value);
+    if (value) setPhotoGradeState(null);
+  }, []);
 
   const setPhoto = useCallback((side: CardSide, photo: GradingPhoto | null) => {
     if (side === 'front') setFront(photo);
@@ -48,6 +62,7 @@ export function GradingSessionProvider({ children }: { children: ReactNode }) {
     setDrafts([]);
     setPhotoRetake(null);
     setEstimate(null);
+    setPhotoGradeState(null);
   }, []);
 
   const value = useMemo(
@@ -57,13 +72,15 @@ export function GradingSessionProvider({ children }: { children: ReactNode }) {
       drafts,
       photoRetake,
       estimate,
+      photoGrade,
       setPhoto,
       setDraft,
       setPhotoRetake,
-      setEstimate,
+      setEstimate: setManualEstimate,
+      setPhotoGrade,
       reset,
     }),
-    [front, back, drafts, photoRetake, estimate, setPhoto, setDraft, reset]
+    [front, back, drafts, photoRetake, estimate, photoGrade, setPhoto, setDraft, setManualEstimate, setPhotoGrade, reset]
   );
 
   return <GradingSessionContext.Provider value={value}>{children}</GradingSessionContext.Provider>;

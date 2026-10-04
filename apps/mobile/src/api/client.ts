@@ -11,6 +11,11 @@ import type {
 } from '@cardflows/shared';
 import { Platform } from 'react-native';
 import { API_BASE_URL } from '../config';
+import {
+  parsePhotoPregradeRetake,
+  parsePhotoPregradeSuccess,
+  type PhotoPregradeResponse,
+} from '../grading/photo-grade';
 import type { GradingPhoto } from '../grading/photos';
 
 export async function fetchHealth(): Promise<{ ok: boolean; provider: string }> {
@@ -217,4 +222,45 @@ export async function submitPregrade(input: {
 
   const body = (await response.json()) as PregradeResponse;
   return body;
+}
+
+const PHOTO_GRADE_UNAVAILABLE =
+  'Photo pre-grade is not available yet. Mark defects still works.';
+
+export async function submitPregradeFromPhotos(input: {
+  front: GradingPhoto;
+  back: GradingPhoto;
+}): Promise<PhotoPregradeResponse> {
+  const form = new FormData();
+  await appendPhoto(form, 'front', input.front);
+  await appendPhoto(form, 'back', input.back);
+
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE_URL}/api/v1/grading/pregrade-from-photos`, {
+      method: 'POST',
+      body: form,
+    });
+  } catch {
+    return { ok: false, code: 'UNAVAILABLE', message: PHOTO_GRADE_UNAVAILABLE };
+  }
+
+  if (response.status === 404 || response.status === 501 || response.status === 503) {
+    return { ok: false, code: 'UNAVAILABLE', message: PHOTO_GRADE_UNAVAILABLE };
+  }
+
+  let body: unknown;
+  try {
+    body = await response.json();
+  } catch {
+    return { ok: false, code: 'UNAVAILABLE', message: PHOTO_GRADE_UNAVAILABLE };
+  }
+
+  const retake = parsePhotoPregradeRetake(body);
+  if (retake) return retake;
+
+  const parsed = parsePhotoPregradeSuccess(body);
+  if (parsed) return { ok: true, ...parsed };
+
+  return { ok: false, code: 'UNAVAILABLE', message: PHOTO_GRADE_UNAVAILABLE };
 }

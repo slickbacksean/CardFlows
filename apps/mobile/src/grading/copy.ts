@@ -203,6 +203,9 @@ export const PHOTO_COPY = {
   confirmHint: 'Only the card should remain — cropped right to its edge, straight, with no background left around it.',
   confirm: 'Use this crop',
   retake: 'Retake',
+  gradePhotos: 'Get AI pre-grade',
+  markDefects: 'Mark defects',
+  grading: 'Grading photos…',
 } as const;
 
 export const DEFECTS_COPY = {
@@ -224,4 +227,10 @@ export const RESULT_COPY = {
   front: 'Front',
   back: 'Back',
   points: 'pts',
+  notAvailable: 'n/a',
+  surface: 'Surface',
+  centering: 'Centering',
+  corners: 'Corners',
+  edges: 'Edges',
+  surfaceExcluded: 'Overall estimate excludes surface — a single photo is not graded for surface.',
 } as const;

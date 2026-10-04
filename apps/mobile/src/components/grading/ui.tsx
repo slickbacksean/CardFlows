@@ -101,6 +101,19 @@ export function ErrorBanner({ reasons }: { reasons: string[] }) {
   );
 }
 
+export function WarningBanner({ warnings }: { warnings: string[] }) {
+  if (warnings.length === 0) return null;
+  return (
+    <View style={styles.warningBanner} accessibilityRole="alert">
+      {warnings.map((warning) => (
+        <Text key={warning} style={styles.warningText}>
+          {warning}
+        </Text>
+      ))}
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   atmosphere: {
     position: 'absolute',
@@ -225,6 +238,17 @@ const styles = StyleSheet.create({
   },
   errorText: {
     color: '#fecaca',
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  warningBanner: {
+    backgroundColor: '#422006',
+    borderRadius: radii.md,
+    padding: 12,
+    gap: 4,
+  },
+  warningText: {
+    color: '#fde68a',
     fontSize: 14,
     lineHeight: 20,
   },
