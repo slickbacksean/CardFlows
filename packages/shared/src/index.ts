@@ -9,3 +9,5 @@ export * from './crm/catalog-fingerprint.js';
 export * from './crm/mint-cardflow-card-id.js';
 export * from './crm/build-scan.js';
 export * from './purchase/calculate-all-in-cost.js';
+export * from './types/pregrade.js';
+export * from './pregrade/calculate-pregrade.js';
