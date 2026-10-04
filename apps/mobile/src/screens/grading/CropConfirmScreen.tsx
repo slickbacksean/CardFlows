@@ -263,9 +263,8 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   photo: {
-    width: '100%',
+    width: 168,
     aspectRatio: 63 / 88,
-    maxHeight: 280,
     alignSelf: 'center',
     borderRadius: radii.md,
     backgroundColor: '#020617',
