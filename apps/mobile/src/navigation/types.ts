@@ -1,4 +1,4 @@
-import type { CardFlowCanonicalCard, CrmScan } from '@cardflows/shared';
+import type { CardFlowCanonicalCard, CardSide, CrmScan } from '@cardflows/shared';
 
 export type RootStackParamList = {
   Scan: undefined;
@@ -20,6 +20,20 @@ export type RootStackParamList = {
     localId: string;
   };
   Purchased: undefined;
+};
+
+export type GradingStackParamList = {
+  GradingEntry: undefined;
+  Guidelines: undefined;
+  GradingPhoto: { side: CardSide };
+  CropConfirm: { side: CardSide };
+  MarkDefects: undefined;
+  GradingResult: undefined;
+};
+
+export type RootTabParamList = {
+  ScanTab: undefined;
+  GradeTab: undefined;
 };
 
 export interface SelectedCard {

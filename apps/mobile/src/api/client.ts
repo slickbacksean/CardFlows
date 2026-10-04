@@ -6,8 +6,12 @@ import type {
   CrmConfirmation,
   CrmScan,
   MaxBuyResult,
+  PregradeDefectInput,
+  PregradeEstimate,
 } from '@cardflows/shared';
+import { Platform } from 'react-native';
 import { API_BASE_URL } from '../config';
+import type { GradingPhoto } from '../grading/photos';
 
 export async function fetchHealth(): Promise<{ ok: boolean; provider: string }> {
   const response = await fetch(`${API_BASE_URL}/health`);
@@ -161,4 +165,56 @@ export async function searchCatalog(input: {
 
   const response = await fetch(`${API_BASE_URL}/v1/catalog/search?${params.toString()}`);
   return response.json() as Promise<{ ok: boolean; candidates: CardFlowCanonicalCard[] }>;
+}
+
+export type PregradeSuccess = { ok: true } & PregradeEstimate;
+
+export interface PregradeNeedsDefects {
+  ok: false;
+  code: 'NEEDS_DEFECTS';
+  message: string;
+}
+
+export interface PregradePhotoRetake {
+  ok: false;
+  code: 'PHOTO_RETAKE';
+  side: 'front' | 'back';
+  reasons: string[];
+}
+
+export type PregradeResponse = PregradeSuccess | PregradeNeedsDefects | PregradePhotoRetake;
+
+async function appendPhoto(form: FormData, field: 'front' | 'back', photo: GradingPhoto) {
+  if (Platform.OS === 'web') {
+    const response = await fetch(photo.uri);
+    const blob = await response.blob();
+    const file = new File([blob], photo.fileName, { type: photo.mimeType });
+    form.append(field, file);
+    return;
+  }
+
+  form.append(field, {
+    uri: photo.uri,
+    name: photo.fileName,
+    type: photo.mimeType,
+  } as unknown as Blob);
+}
+
+export async function submitPregrade(input: {
+  front: GradingPhoto;
+  back: GradingPhoto;
+  defects: PregradeDefectInput[];
+}): Promise<PregradeResponse> {
+  const form = new FormData();
+  await appendPhoto(form, 'front', input.front);
+  await appendPhoto(form, 'back', input.back);
+  form.append('defects', JSON.stringify(input.defects));
+
+  const response = await fetch(`${API_BASE_URL}/api/v1/grading/pregrade`, {
+    method: 'POST',
+    body: form,
+  });
+
+  const body = (await response.json()) as PregradeResponse;
+  return body;
 }
