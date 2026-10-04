@@ -10,3 +10,6 @@ coverage/
 *.tsbuildinfo
 .env
 .env.local
+__pycache__/
+*.pyc
+.venv/
