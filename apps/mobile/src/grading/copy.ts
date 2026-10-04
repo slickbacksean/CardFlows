@@ -195,16 +195,23 @@ export const HOW_IT_WORKS = {
 export const PHOTO_COPY = {
   frontTitle: 'Front photo',
   backTitle: 'Back photo',
-  frontHint: 'JPEG, PNG, or WebP · max 10 MB. Crop to the card edge.',
-  backHint: 'Same rules as the front. Crop to the card edge.',
+  frontHint: 'JPEG, PNG, or WebP · max 10 MB. Photograph the whole card on a plain background.',
+  backHint: 'Same rules as the front. Photograph the whole card on a plain background.',
   takePhoto: 'Take photo',
   chooseLibrary: 'Choose from library',
   confirmTitle: 'Confirm crop',
-  confirmHint: 'Only the card should remain — cropped right to its edge, straight, with no background left around it.',
+  confirmHint:
+    'Computer vision finds the card and crops to its edge. Confirm the crop, or retake if the card is missing or skewed.',
   confirm: 'Use this crop',
   retake: 'Retake',
+  detecting: 'Finding the card…',
+  detectedCrop: 'Detected crop',
+  noCardFound: 'No card found in this photo.',
+  originalPhoto: 'Photo taken',
+  tryDetectAgain: 'Find card again',
+  unavailable: 'Card detection is not available.',
   gradePhotos: 'Get AI pre-grade',
-  markDefects: 'Mark defects',
+  markDefects: 'Mark defects instead',
   grading: 'Grading photos…',
 } as const;
 

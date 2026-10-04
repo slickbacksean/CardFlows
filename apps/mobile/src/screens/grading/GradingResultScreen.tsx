@@ -84,7 +84,7 @@ function PhotoGradeResult({
       <Text style={styles.label}>{PHOTO_GRADE_LABEL}</Text>
       <Text style={styles.estimate}>{formatEstimate(grade.estimate)}</Text>
       <Text style={styles.disclaimer}>{PHOTO_GRADE_DISCLAIMER}</Text>
-      <Text style={styles.note}>{SURFACE_EXCLUDED_NOTE}</Text>
+      <Text style={styles.note}>{grade.note || SURFACE_EXCLUDED_NOTE}</Text>
 
       <WarningBanner warnings={grade.warnings} />
 

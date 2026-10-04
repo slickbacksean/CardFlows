@@ -7,6 +7,10 @@ export interface GradingPhoto {
   mimeType: PhotoMime;
   fileName: string;
   fileSize?: number;
+  /** Computer-vision crop preview. Never treat the raw snapshot as the crop. */
+  cropUri?: string;
+  detected?: boolean;
+  warnings?: string[];
 }
 
 const ALLOWED: readonly PhotoMime[] = ['image/jpeg', 'image/png', 'image/webp'];

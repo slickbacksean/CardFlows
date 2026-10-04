@@ -12,6 +12,12 @@ import type {
 import { Platform } from 'react-native';
 import { API_BASE_URL } from '../config';
 import {
+  parseDetectCropRetake,
+  parseDetectCropSuccess,
+  parseDetectCropUnavailable,
+  type DetectCropResponse,
+} from '../grading/detect-crop';
+import {
   parsePhotoPregradeRetake,
   parsePhotoPregradeSuccess,
   type PhotoPregradeResponse,
@@ -189,7 +195,7 @@ export interface PregradePhotoRetake {
 
 export type PregradeResponse = PregradeSuccess | PregradeNeedsDefects | PregradePhotoRetake;
 
-async function appendPhoto(form: FormData, field: 'front' | 'back', photo: GradingPhoto) {
+async function appendPhoto(form: FormData, field: 'front' | 'back' | 'photo', photo: GradingPhoto) {
   if (Platform.OS === 'web') {
     const response = await fetch(photo.uri);
     const blob = await response.blob();
@@ -225,7 +231,8 @@ export async function submitPregrade(input: {
 }
 
 const PHOTO_GRADE_UNAVAILABLE =
-  'Photo pre-grade is not available yet. Mark defects still works.';
+  'Photo pre-grade is not available. Retake or try again — no local score is shown.';
+const DETECT_UNAVAILABLE = 'Card detection is not available.';
 
 export async function submitPregradeFromPhotos(input: {
   front: GradingPhoto;
@@ -263,4 +270,45 @@ export async function submitPregradeFromPhotos(input: {
   if (parsed) return { ok: true, ...parsed };
 
   return { ok: false, code: 'UNAVAILABLE', message: PHOTO_GRADE_UNAVAILABLE };
+}
+
+export async function submitDetectCrop(input: {
+  photo: GradingPhoto;
+  side: 'front' | 'back';
+}): Promise<DetectCropResponse> {
+  const form = new FormData();
+  await appendPhoto(form, 'photo', input.photo);
+  form.append('side', input.side);
+
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE_URL}/api/v1/grading/detect-crop`, {
+      method: 'POST',
+      body: form,
+    });
+  } catch {
+    return { ok: false, code: 'UNAVAILABLE', message: DETECT_UNAVAILABLE };
+  }
+
+  if (response.status === 404 || response.status === 501 || response.status === 503) {
+    return { ok: false, code: 'UNAVAILABLE', message: DETECT_UNAVAILABLE };
+  }
+
+  let body: unknown;
+  try {
+    body = await response.json();
+  } catch {
+    return { ok: false, code: 'UNAVAILABLE', message: DETECT_UNAVAILABLE };
+  }
+
+  const unavailable = parseDetectCropUnavailable(body);
+  if (unavailable) return unavailable;
+
+  const retake = parseDetectCropRetake(body);
+  if (retake) return retake;
+
+  const parsed = parseDetectCropSuccess(body);
+  if (parsed) return parsed;
+
+  return { ok: false, code: 'UNAVAILABLE', message: DETECT_UNAVAILABLE };
 }
