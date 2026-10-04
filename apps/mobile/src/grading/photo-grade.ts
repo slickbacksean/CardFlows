@@ -58,6 +58,32 @@ function nestedEstimate(body: Record<string, unknown>): Record<string, unknown> 
   return isRecord(body.grade_estimate) ? body.grade_estimate : null;
 }
 
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return isRecord(value) ? value : null;
+}
+
+function subgradeNumber(body: Record<string, unknown>, key: string): number | null {
+  const flat = asNumber(body[key]);
+  if (flat !== null) return flat;
+
+  const block = asRecord(asRecord(body.subgrades)?.[key]);
+  if (!block) return null;
+
+  const front = asNumber(block.front);
+  const back = asNumber(block.back);
+  const sides = [front, back].filter((value): value is number => value !== null);
+  if (sides.length > 0) return sides.reduce((sum, value) => sum + value, 0) / sides.length;
+
+  const points = asNumber(block.points);
+  if (points === null) return null;
+  return points > 10 ? points / 10 : points;
+}
+
+function warningList(body: Record<string, unknown>): string[] {
+  const extra = typeof body.warning === 'string' && body.warning.trim() !== '' ? [body.warning] : [];
+  return collectPhotoWarnings(body.warnings, body.reasons, extra, nestedEstimate(body)?.warnings);
+}
+
 export function isHardGateReason(reason: string): boolean {
   return HARD_GATE.test(reason);
 }
@@ -87,19 +113,22 @@ export function parsePhotoPregradeSuccess(body: unknown): PhotoPregradeSuccess |
     asNumber(body.corners) ??
     asNumber(body.corners_edges) ??
     asNumber(nested?.corners_edges_grade) ??
-    asNumber(nested?.corners_grade);
-  const edges = asNumber(body.edges) ?? asNumber(nested?.edges_grade) ?? corners;
+    asNumber(nested?.corners_grade) ??
+    subgradeNumber(body, 'corners');
+  const edges =
+    asNumber(body.edges) ?? asNumber(nested?.edges_grade) ?? subgradeNumber(body, 'edges') ?? corners;
 
   return {
     estimate,
     label: PHOTO_GRADE_LABEL,
     disclaimer: PHOTO_GRADE_DISCLAIMER,
-    note: SURFACE_EXCLUDED_NOTE,
-    warnings: collectPhotoWarnings(body.warnings, body.reasons, nested?.warnings),
-    centering: asNumber(body.centering) ?? asNumber(nested?.centering_grade),
+    note: typeof body.note === 'string' && body.note.trim() !== '' ? body.note : SURFACE_EXCLUDED_NOTE,
+    warnings: warningList(body),
+    centering:
+      asNumber(body.centering) ?? asNumber(nested?.centering_grade) ?? subgradeNumber(body, 'centering'),
     corners,
     edges,
-    surface: asNumber(body.surface) ?? asNumber(nested?.surface_grade),
+    surface: asNumber(body.surface) ?? asNumber(nested?.surface_grade) ?? subgradeNumber(body, 'surface'),
   };
 }
 

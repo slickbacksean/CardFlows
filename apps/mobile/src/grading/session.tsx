@@ -16,11 +16,13 @@ interface GradingSessionValue {
   back: GradingPhoto | null;
   drafts: DefectDraft[];
   photoRetake: PhotoRetakeState | null;
+  detectUnavailable: string | null;
   estimate: PregradeEstimate | null;
   photoGrade: PhotoPregradeSuccess | null;
   setPhoto: (side: CardSide, photo: GradingPhoto | null) => void;
   setDraft: (draft: DefectDraft) => void;
   setPhotoRetake: (value: PhotoRetakeState | null) => void;
+  setDetectUnavailable: (value: string | null) => void;
   setEstimate: (value: PregradeEstimate | null) => void;
   setPhotoGrade: (value: PhotoPregradeSuccess | null) => void;
   reset: () => void;
@@ -33,6 +35,7 @@ export function GradingSessionProvider({ children }: { children: ReactNode }) {
   const [back, setBack] = useState<GradingPhoto | null>(null);
   const [drafts, setDrafts] = useState<DefectDraft[]>([]);
   const [photoRetake, setPhotoRetake] = useState<PhotoRetakeState | null>(null);
+  const [detectUnavailable, setDetectUnavailable] = useState<string | null>(null);
   const [estimate, setEstimate] = useState<PregradeEstimate | null>(null);
   const [photoGrade, setPhotoGradeState] = useState<PhotoPregradeSuccess | null>(null);
 
@@ -50,6 +53,7 @@ export function GradingSessionProvider({ children }: { children: ReactNode }) {
     if (side === 'front') setFront(photo);
     else setBack(photo);
     setPhotoRetake((current) => (current?.side === side ? null : current));
+    setDetectUnavailable(null);
   }, []);
 
   const setDraft = useCallback((draft: DefectDraft) => {
@@ -61,6 +65,7 @@ export function GradingSessionProvider({ children }: { children: ReactNode }) {
     setBack(null);
     setDrafts([]);
     setPhotoRetake(null);
+    setDetectUnavailable(null);
     setEstimate(null);
     setPhotoGradeState(null);
   }, []);
@@ -71,16 +76,31 @@ export function GradingSessionProvider({ children }: { children: ReactNode }) {
       back,
       drafts,
       photoRetake,
+      detectUnavailable,
       estimate,
       photoGrade,
       setPhoto,
       setDraft,
       setPhotoRetake,
+      setDetectUnavailable,
       setEstimate: setManualEstimate,
       setPhotoGrade,
       reset,
     }),
-    [front, back, drafts, photoRetake, estimate, photoGrade, setPhoto, setDraft, setManualEstimate, setPhotoGrade, reset]
+    [
+      front,
+      back,
+      drafts,
+      photoRetake,
+      detectUnavailable,
+      estimate,
+      photoGrade,
+      setPhoto,
+      setDraft,
+      setManualEstimate,
+      setPhotoGrade,
+      reset,
+    ]
   );
 
   return <GradingSessionContext.Provider value={value}>{children}</GradingSessionContext.Provider>;

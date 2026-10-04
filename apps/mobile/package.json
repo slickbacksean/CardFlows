@@ -9,7 +9,7 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "typecheck": "tsc --noEmit",
-    "test": "node --experimental-strip-types --test src/grading/defects.test.ts src/grading/photo-grade.test.ts"
+    "test": "node --experimental-strip-types --test src/grading/defects.test.ts src/grading/photo-grade.test.ts src/grading/detect-crop.test.ts"
   },
   "dependencies": {
     "@cardflows/shared": "workspace:*",

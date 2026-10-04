@@ -58,6 +58,29 @@ describe('parsePhotoPregradeSuccess', () => {
     assert.doesNotMatch(parsed.disclaimer, /modeled after PSA/i);
   });
 
+  it('reads the hosted pregrade-from-photos subgrade shape', () => {
+    const parsed = parsePhotoPregradeSuccess({
+      ok: true,
+      estimate: 8.4,
+      warning: 'Front: Glare detected',
+      note: 'overall estimate excludes surface',
+      subgrades: {
+        centering: { points: 90, front: 9, back: 10 },
+        corners: { points: 80, front: 8, back: 8 },
+        edges: { points: 95, front: 10, back: 9 },
+        surface: { points: null, front: null, back: null },
+      },
+    });
+    assert.ok(parsed);
+    assert.equal(parsed.estimate, 8.4);
+    assert.equal(parsed.centering, 9.5);
+    assert.equal(parsed.corners, 8);
+    assert.equal(parsed.edges, 9.5);
+    assert.equal(parsed.surface, null);
+    assert.deepEqual(parsed.warnings, ['Front: Glare detected']);
+    assert.match(parsed.note, /surface/i);
+  });
+
   it('does not invent a grade when the estimate is missing', () => {
     assert.equal(
       parsePhotoPregradeSuccess({

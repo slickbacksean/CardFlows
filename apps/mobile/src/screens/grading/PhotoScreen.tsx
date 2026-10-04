@@ -36,14 +36,12 @@ export function PhotoScreen({ navigation, route }: Props) {
         ? await ImagePicker.launchCameraAsync({
             mediaTypes: ['images'],
             quality: 0.9,
-            allowsEditing: true,
-            aspect: [63, 88],
+            allowsEditing: false,
           })
         : await ImagePicker.launchImageLibraryAsync({
             mediaTypes: ['images'],
             quality: 0.9,
-            allowsEditing: true,
-            aspect: [63, 88],
+            allowsEditing: false,
           });
 
     if (result.canceled || !result.assets[0]) return;
@@ -56,6 +54,7 @@ export function PhotoScreen({ navigation, route }: Props) {
         mimeType: 'image/jpeg',
         fileName: fileNameFor(side, 'image/jpeg'),
         fileSize: asset.fileSize,
+        detected: false,
       });
       session.setPhotoRetake({
         side,
@@ -71,6 +70,7 @@ export function PhotoScreen({ navigation, route }: Props) {
       mimeType,
       fileName: asset.fileName ?? fileNameFor(side, mimeType),
       fileSize,
+      detected: false,
     };
     session.setPhoto(side, photo);
     navigation.navigate('CropConfirm', { side });

@@ -10,6 +10,8 @@ import { z } from 'zod';
 import { MockCardIdentityMapper } from './providers/mock-card-identity-mapper.js';
 import { MockCardRecognitionProvider } from './providers/mock-card-recognition-provider.js';
 import { MockTcgdexCatalogProvider } from './providers/mock-tcgdex-catalog-provider.js';
+import type { DetectCropRunner } from './grading/run-detect-card.js';
+import { registerDetectCropRoute } from './grading/register-detect-crop-route.js';
 import { registerPregradeFromPhotosRoute } from './grading/register-pregrade-from-photos-route.js';
 import { registerPregradeRoute } from './grading/register-pregrade-route.js';
 import { ScanService, ScanServiceError } from './services/scan-service.js';
@@ -21,6 +23,7 @@ import type { GradeCardRunner } from './grading/run-grade-card.js';
 export interface CreateAppOptions {
   store?: LocalDevStore;
   gradeCardFromPhotos?: GradeCardRunner;
+  detectCrop?: DetectCropRunner;
 }
 
 export function createApp(options: CreateAppOptions = {}) {
@@ -323,6 +326,7 @@ export function createApp(options: CreateAppOptions = {}) {
 
   registerPregradeRoute(app);
   registerPregradeFromPhotosRoute(app, { gradeCardFromPhotos: options.gradeCardFromPhotos });
+  registerDetectCropRoute(app, { detectCrop: options.detectCrop });
 
   return app;
 }
