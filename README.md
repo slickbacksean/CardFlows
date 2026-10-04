@@ -40,6 +40,13 @@ pnpm dev:mobile
 
 Set `EXPO_PUBLIC_API_URL` to point the mobile app at the BFF (default `http://localhost:3001`).
 
+Photo pre-grade (`POST /api/v1/grading/pregrade-from-photos`) scores front/back
+photos on the server with a vendored copy of
+[stolemynikes/cardgrading](https://github.com/stolemynikes/cardgrading)
+(`gemini-vision`). That tree is not original CardFlow code; see
+`packages/api/vendor/cardgrading/NOTICE.md`. The Expo app does not bundle it.
+`POST /api/v1/grading/pregrade` is unchanged and still requires structured defects.
+
 ### Mock scenarios
 
 | Env var | Values |

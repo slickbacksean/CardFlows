@@ -10,14 +10,17 @@ import { z } from 'zod';
 import { MockCardIdentityMapper } from './providers/mock-card-identity-mapper.js';
 import { MockCardRecognitionProvider } from './providers/mock-card-recognition-provider.js';
 import { MockTcgdexCatalogProvider } from './providers/mock-tcgdex-catalog-provider.js';
+import { registerPregradeFromPhotosRoute } from './grading/register-pregrade-from-photos-route.js';
 import { registerPregradeRoute } from './grading/register-pregrade-route.js';
 import { ScanService, ScanServiceError } from './services/scan-service.js';
 import { LocalDevStore } from './store/local-dev-store.js';
 import type { CardSightMockScenario } from './providers/mock-card-recognition-provider.js';
 import type { MapperMockScenario } from './providers/mock-card-identity-mapper.js';
+import type { GradeCardRunner } from './grading/run-grade-card.js';
 
 export interface CreateAppOptions {
   store?: LocalDevStore;
+  gradeCardFromPhotos?: GradeCardRunner;
 }
 
 export function createApp(options: CreateAppOptions = {}) {
@@ -319,6 +322,7 @@ export function createApp(options: CreateAppOptions = {}) {
   });
 
   registerPregradeRoute(app);
+  registerPregradeFromPhotosRoute(app, { gradeCardFromPhotos: options.gradeCardFromPhotos });
 
   return app;
 }
