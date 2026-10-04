@@ -10,6 +10,7 @@ import { z } from 'zod';
 import { MockCardIdentityMapper } from './providers/mock-card-identity-mapper.js';
 import { MockCardRecognitionProvider } from './providers/mock-card-recognition-provider.js';
 import { MockTcgdexCatalogProvider } from './providers/mock-tcgdex-catalog-provider.js';
+import { registerPregradeRoute } from './grading/register-pregrade-route.js';
 import { ScanService, ScanServiceError } from './services/scan-service.js';
 import { LocalDevStore } from './store/local-dev-store.js';
 import type { CardSightMockScenario } from './providers/mock-card-recognition-provider.js';
@@ -316,6 +317,8 @@ export function createApp(options: CreateAppOptions = {}) {
       return c.json({ ok: false, error: { message } }, 400);
     }
   });
+
+  registerPregradeRoute(app);
 
   return app;
 }
