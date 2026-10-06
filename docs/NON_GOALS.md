@@ -42,7 +42,9 @@ This document explicitly **defers** the following. They are not MVP deliverables
 
 ## Automatic condition grading
 
-**Deferred.** CardFlow does not automatically grade condition (PSA/BGS-style or AI surface grading as a product promise). Condition, if used, is user-entered or guided manually. Automatic grading is a non-goal.
+**Deferred as an official grade.** CardFlow does not issue PSA/BGS/CGC/TAG certs and must not promise accuracy.
+
+**Founder exception (Grading → Prepare only):** a photo **estimate** (rough grade if submitted) may show on Prepare. It is labeled an estimate, never listing `condition`, never the Returned cert grade. [PokeTrace](https://poketrace.com/) slab market comps stay a **later** reference — not in the app yet. See [TAB_LAYOUT_PLAN.md](./TAB_LAYOUT_PLAN.md) §4a and [GRADING_PREPARE_TASKS.md](./GRADING_PREPARE_TASKS.md). Do not vendor casecomp or tcg-oracle-app.
 
 ## Guaranteed prices / profits
 

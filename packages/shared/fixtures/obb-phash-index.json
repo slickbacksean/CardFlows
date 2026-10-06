@@ -1,0 +1,11 @@
+{
+  "_meta": {
+    "mocked": true,
+    "description": "Tiny CI English TCGdex pHash index. Hashes are of synthetic stills, not official art and not TCG Pocket images. Runtime CI uses ciPhashIndex()."
+  },
+  "language": "en",
+  "entries": [
+    { "tcgdexId": "base1-58" },
+    { "tcgdexId": "base1-4" }
+  ]
+}

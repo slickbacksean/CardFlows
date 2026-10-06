@@ -1,0 +1,9 @@
+{
+  "platforms": ["apple", "android"],
+  "apple": {
+    "modules": ["CardFlowLiveVideoModule"]
+  },
+  "android": {
+    "modules": ["expo.modules.cardflowlivevideo.CardFlowLiveVideoModule"]
+  }
+}

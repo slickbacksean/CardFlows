@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>CardFlow overlay</title>
+    <script src="huds"></script>
+    <link rel="stylesheet" href="overlay.css" />
+  </head>
+  <body>
+    <div
+      class="band"
+      id="band"
+      aria-label="CardFlow overlay, no card confirmed"
+    >
+      <div class="row">
+        <div class="thumb" id="thumb" aria-label="No catalog art"></div>
+        <div class="copy">
+          <p class="name" id="name">Scanner off</p>
+          <p class="body" id="body">
+            Turn the scanner on to identify from live video.
+          </p>
+          <div class="figures" id="figures">
+            <div class="figure">
+              <p class="figure-label">Estimate</p>
+              <p class="figure-value" id="estimate">No estimate</p>
+              <p class="figure-meta">not a market</p>
+            </div>
+            <div class="figure">
+              <p class="figure-label">Max Buy</p>
+              <p class="figure-value" id="maxbuy">—</p>
+              <p class="figure-meta">guidance</p>
+            </div>
+            <div class="figure">
+              <p class="figure-label">Grade</p>
+              <p class="figure-value" id="grade">—</p>
+              <p class="figure-meta">not a cert</p>
+            </div>
+          </div>
+        </div>
+      </div>
+      <p class="caption">CardFlow overlay · not a market</p>
+    </div>
+    <script src="overlay.js"></script>
+  </body>
+</html>

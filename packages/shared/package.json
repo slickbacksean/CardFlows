@@ -1,25 +1,23 @@
 {
-  "name": "@cardflows/shared",
-  "version": "0.0.1",
+  "name": "@cardflow/shared",
+  "version": "0.0.0",
   "private": true,
   "type": "module",
-  "main": "./dist/index.js",
-  "types": "./dist/index.d.ts",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
   "exports": {
-    ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
-    },
+    ".": "./src/index.ts",
+    "./mock": "./src/mock-recognition.ts",
     "./fixtures/*": "./fixtures/*"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
     "test": "vitest run",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
-    "@types/node": "^22.10.0",
-    "typescript": "^5.7.2",
-    "vitest": "^2.1.8"
+    "@types/node": "^24.3.1",
+    "typescript": "^5.9.2",
+    "vitest": "^3.2.4"
   }
 }

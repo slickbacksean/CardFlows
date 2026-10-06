@@ -1,74 +1,57 @@
 # CardFlow
 
-Private-beta monorepo for Pokémon card flipping: scan → confirm → Max Buy → inventory.
+Private-beta monorepo for Pokémon card flipping: scan → confirm → Max Buy →
+inventory → grade (AI pre-grade estimate) → collection.
 
-## Packages
+## What the phone runs
 
 | Package | Path | Description |
 |---------|------|-------------|
-| `@cardflows/mobile` | `apps/mobile` | Expo app (iOS/Android) |
-| `@cardflows/api` | `packages/api` | API/BFF with mock CardSight + TCGdex providers |
-| `@cardflows/shared` | `packages/shared` | Types, Max Buy calculator, JSON fixtures |
+| `@cardflow/mobile` | `apps/mobile` | Expo Router app (iOS/Android). This is the app on the phone. |
+| `@cardflow/api` | `apps/api` | Hono API on :3001 (SQLite locally). Photo pre-grade uses the vendored, offline cardgrading library (`apps/api/vendor/cardgrading`, see `NOTICE.md`). No model call on the grade path. |
+| `@cardflow/shared` | `packages/shared` | Types, Max Buy, grade-estimate contract, health, fixtures. |
 
-## Prerequisites
+Optional local services: `services/live-identity-openclip` (live-video identity
+sidecar), `services/psa-grade-predictor` (experiment, not on the grade path),
+`infra/pokecollector` (catalog/pricing via pinned GHCR images), `infra/huds`.
 
-- Node.js ≥ 20
-- pnpm ≥ 9
+## Kept from the earlier GitHub layout (not used by the phone)
+
+| Package | Path | Why it is still here |
+|---------|------|----------------------|
+| `@cardflows/api` | `legacy/api` | Holds the structured-defect pre-grade (`POST /api/v1/grading/pregrade`, `calculate-pregrade`), which `apps/api` does not have yet. Its photo routes are superseded by `apps/api` `/v1/grade/detect` and `/v1/grade/pregrade`. |
+| `@cardflows/shared` | `legacy/cardflows-shared` | Dependency of `legacy/api` (CRM ids, pre-grade deduction math). Fixtures stay in `packages/shared/fixtures`. |
+| — | `legacy/mobile-react-navigation` | The earlier react-navigation Expo app, including the "mark defects" manual pre-grade screens. Archived source, not in the pnpm workspace and not built. |
 
 ## Setup
 
-```bash
+```sh
 pnpm install
-pnpm build
+pnpm test          # shared + API tests (mocks; no Docker / PokéCollector)
+pnpm test:legacy   # legacy/cardflows-shared + legacy/api
+pnpm typecheck
+pnpm dev:api       # CardFlow API on :3001
+pnpm dev:mobile    # Expo (Metro on :8081)
 ```
 
-## Run tests
+Photo pre-grade needs Python 3.10+ with OpenCV, NumPy, and Pillow for the API:
 
-```bash
-pnpm test
+```sh
+cd apps/api
+python3 -m venv .venv
+.venv/bin/pip install --only-binary=:all: -r vendor/cardgrading/requirements.txt
 ```
 
-## Development
+`CARDFLOW_GRADE_CARD_PYTHON` overrides the interpreter. Missing Python means the
+grader reports "unavailable", never a made-up number. Results are labeled
+"AI pre-grade estimate. Not an official PSA, BGS, or CGC grade."
 
-```bash
-# API (mock providers, port 3001)
-pnpm dev:api
+`pnpm test` and `pnpm dev:api` do **not** require Docker. PokéCollector is
+unmodified GHCR images pinned in
+[infra/pokecollector/docker-compose.yml](infra/pokecollector/docker-compose.yml).
+Copy [infra/pokecollector/.env.example](infra/pokecollector/.env.example) and
+[apps/api/.env.example](apps/api/.env.example) locally if you want named
+values — leave secrets empty and never commit `.env`.
 
-# Expo app
-pnpm dev:mobile
-```
-
-Set `EXPO_PUBLIC_API_URL` to point the mobile app at the BFF (default `http://localhost:3001`).
-
-Photo pre-grade (`POST /api/v1/grading/pregrade-from-photos`) scores front/back
-photos on the server with a vendored copy of
-[stolemynikes/cardgrading](https://github.com/stolemynikes/cardgrading)
-(`gemini-vision`). That tree is not original CardFlow code; see
-`packages/api/vendor/cardgrading/NOTICE.md`. The Expo app does not bundle it.
-`POST /api/v1/grading/pregrade` is unchanged and still requires structured defects.
-
-### Mock scenarios
-
-| Env var | Values |
-|---------|--------|
-| `CARDSIGHT_MOCK_SCENARIO` | `high-confidence`, `ambiguous`, `no-card`, `error`, `rate-limit` |
-| `TCGDEX_MOCK_SCENARIO` | `card`, `high-map`, `no-match`, `ambiguous` |
-
-## Build slices
-
-### Slice 1 (merged)
-
-- Mock recognition (`cardsight-*.json` fixtures)
-- Mock catalog/mapper (`tcgdex-*.json` fixtures)
-- Max Buy: `reference × 0.80 × 0.87 × condition_factor` → round half up to cent
-- No live CardSight or TCGdex HTTP
-
-### Slice 2 — scan → confirm
-
-- Mobile: still-image capture or photo library pick → BFF `/v1/scans` (mock identify + map)
-- Confirm screen: High (one proposal), ambiguous (picker + manual search), no-match/error (manual search)
-- On Confirm only: mint/reuse `cardflow_card_id` for `{language, tcgdex_id}`
-- Local persistence: SQLite API dev store at `packages/api/.cardflows-dev/store.db` (scan + confirmation rows)
-- Reject keeps the scan; does not mint an id
-
-See `docs/IMPLEMENTATION_BRIEF.md` for product rules.
+What’s next: [docs/ROADMAP.md](docs/ROADMAP.md). Product rules:
+[docs/IMPLEMENTATION_BRIEF.md](docs/IMPLEMENTATION_BRIEF.md).

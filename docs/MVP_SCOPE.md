@@ -92,7 +92,7 @@ No marketplace login, bidding, scraping, or listing-publication APIs in MVP.
 | `manual_scan_enabled` | ON | Mandatory MVP path. |
 | `camera_photo_enabled` | ON | Mandatory MVP path. |
 | `cardsight_recognition` | ON (subject to validation) | Recognition calls; can disable if provider fails validation. |
-| `pricing_provider_enabled` | OFF until provider chosen | Pricing is TBD / Validation item. |
+| `pricing_provider_enabled` | ON by default (Sean's decision, Oct 2026) | Server flag `CARD_FLOW_PRICING_ENABLED`; `false` turns pricing off. Values are estimates from PokéCollector. |
 | `max_buy_rules_enabled` | ON | User-configured Max Buy owned by CardFlow. |
 | `listing_drafts_enabled` | ON | Reviewed drafts only; no publish. |
 | `live_browser_research` | OFF | Research-only; must not block MVP. |

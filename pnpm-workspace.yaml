@@ -1,3 +1,6 @@
 packages:
   - "apps/*"
   - "packages/*"
+  # Retired GitHub-layout packages, kept buildable via the *:legacy scripts.
+  - "legacy/api"
+  - "legacy/cardflows-shared"

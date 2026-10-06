@@ -1,0 +1,48 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "6",
+      "when": 1789576972162,
+      "tag": "0000_mvp_crm_schema",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1789596669568,
+      "tag": "0001_crm_sessions",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1789665912815,
+      "tag": "0002_pokecollector_user_map",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1789770000000,
+      "tag": "0003_grading_copies",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1789880000000,
+      "tag": "0004_grade_estimate_cache",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1789990000000,
+      "tag": "0005_portfolio_value_snapshots",
+      "breakpoints": true
+    }
+  ]
+}
