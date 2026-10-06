@@ -38,6 +38,9 @@ importers:
       pngjs:
         specifier: ^7.0.0
         version: 7.0.0
+      tsx:
+        specifier: ^4.20.5
+        version: 4.23.13
       zod:
         specifier: ^4.6.5
         version: 4.6.5
@@ -58,9 +61,6 @@ importers:
       drizzle-kit:
         specifier: ^0.31.10
         version: 0.31.10
-      tsx:
-        specifier: ^4.20.5
-        version: 4.23.13
       typescript:
         specifier: ^5.9.2
         version: 5.9.3
@@ -7496,9 +7496,7 @@ snapshots:
       metro-runtime: 0.84.5
     transitivePeerDependencies:
       - '@babel/core'
-      - bufferutil
       - supports-color
-      - utf-8-validate
 
   '@react-native/normalize-colors@0.74.89': {}
 

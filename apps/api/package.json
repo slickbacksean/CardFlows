@@ -5,8 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "start": "tsx src/index.ts",
+    "start": "node --import tsx src/index.ts",
     "test": "vitest run",
+    "test:grade-e2e": "vitest run --config vitest.e2e.config.ts",
     "typecheck": "tsc --noEmit",
     "db:generate": "drizzle-kit generate --name mvp_crm_schema",
     "db:migrate": "tsx src/db/apply-migration.ts",
@@ -21,6 +22,7 @@
     "hono": "^4.9.8",
     "jpeg-js": "^0.4.4",
     "pngjs": "^7.0.0",
+    "tsx": "^4.20.5",
     "zod": "^4.6.5"
   },
   "optionalDependencies": {
@@ -31,7 +33,6 @@
     "@types/node": "^24.3.1",
     "@types/pngjs": "^6.0.5",
     "drizzle-kit": "^0.31.10",
-    "tsx": "^4.20.5",
     "typescript": "^5.9.2",
     "vitest": "^3.2.4"
   }

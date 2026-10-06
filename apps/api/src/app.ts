@@ -75,10 +75,13 @@ import {
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { bodyLimit } from "hono/body-limit";
+import { clientIp, gradeRateLimitFromEnv, rateLimitMiddleware, type RateLimitConfig } from "./rate-limit";
+import type { CardgradingEngineStatus } from "./cardgrading-run";
 import { corsOriginsFromEnv } from "./cors-env";
 import {
   JSON_BODY_MAX_BYTES,
   LIVESTREAM_IDENTIFY_BODY_MAX_BYTES,
+  GRADE_ROUTE_BODY_MAX_BYTES,
 } from "./request-limits";
 import { createMemoryStore, type InventoryItemRecord, type StorePort } from "./store";
 import {
@@ -240,6 +243,10 @@ export interface CreateAppOptions {
    * for the Grade tab. Null/omitted → the photo routes answer "unavailable".
    */
   cardgrading?: CardgradingRunner | null;
+  /** Real OpenCV import check for /health (cached). Omitted → `gradeEngine: null`. */
+  gradeEngineProbe?: (() => Promise<CardgradingEngineStatus>) | null;
+  /** Grading route rate limit. Defaults to env (`CARD_FLOW_GRADE_RATE_*`); off in tests. */
+  gradeRateLimit?: RateLimitConfig | null;
   /** Prepare slab comps. Tests default to off. */
   slabPricing?: SlabPricingProvider;
   /** Server-side PokéCollector user directory. Tests default to off. */
@@ -300,6 +307,12 @@ export function createApp(
   const recognitionProvider = options.recognition ?? mockCardRecognitionProvider;
   const gradingProvider = options.grading ?? mockCardGradingProvider;
   const cardgrading = options.cardgrading ?? null;
+  const gradeEngineProbe = options.gradeEngineProbe ?? null;
+  // One limiter shared by every grading route: per signed-in user and per client IP.
+  const gradeRateLimit = rateLimitMiddleware(
+    options.gradeRateLimit === undefined ? gradeRateLimitFromEnv() : options.gradeRateLimit,
+    (c) => [`user:${String(c.get("userId") ?? "anon")}`, `ip:${clientIp(c)}`],
+  );
   const slabPricing = options.slabPricing ?? offSlabPricingProvider;
   const liveIdentifyEnabled = options.liveIdentifyEnabled ?? false;
   const allowDevScenario =
@@ -545,7 +558,7 @@ export function createApp(
     return c.json({ ok: false, error: "Unauthorized" }, 401);
   });
 
-  app.get("/health", (c) => {
+  app.get("/health", async (c) => {
     const catalogStatus = catalogHealth(catalog.name);
     const recognitionStatus = recognitionHealth(recognitionProvider.name);
     const gradeEstimateStatus = gradeEstimateHealth(gradingProvider.name);
@@ -571,6 +584,8 @@ export function createApp(
         phashIndexLoaded: livestreamIdentityIndex != null,
       }),
       gradeEstimate: gradeEstimateStatus,
+      // Real `import cv2, numpy` in the grader Python (cached 5 min). null = no grader runner.
+      gradeEngine: gradeEngineProbe ? await gradeEngineProbe() : null,
       slabPricing: slabPricingStatus,
     });
   });
@@ -1294,8 +1309,9 @@ export function createApp(
 
   app.post(
     "/v1/grade/detect",
+    gradeRateLimit,
     bodyLimit({
-      maxSize: GRADE_IMAGE_MAX_BYTES,
+      maxSize: GRADE_ROUTE_BODY_MAX_BYTES,
       onError: (c) => c.json({ ok: false, error: "Image must be 20 MB or smaller" }, 413),
     }),
     async (c) => {
@@ -1315,8 +1331,9 @@ export function createApp(
 
   app.post(
     "/v1/grade/pregrade",
+    gradeRateLimit,
     bodyLimit({
-      maxSize: GRADE_IMAGE_MAX_BYTES * 2,
+      maxSize: GRADE_ROUTE_BODY_MAX_BYTES,
       onError: (c) => c.json({ ok: false, error: "Image must be 20 MB or smaller" }, 413),
     }),
     async (c) => {
@@ -1338,8 +1355,9 @@ export function createApp(
 
   app.post(
     "/v1/inventory/:inventoryItemId/grade-estimate",
+    gradeRateLimit,
     bodyLimit({
-      maxSize: GRADE_IMAGE_MAX_BYTES * 2,
+      maxSize: GRADE_ROUTE_BODY_MAX_BYTES,
       onError: (c) => c.json({ ok: false, error: "Image must be 20 MB or smaller" }, 413),
     }),
     async (c) => {

@@ -28,6 +28,21 @@ import sys
 from datetime import datetime
 from pathlib import Path
 from typing import Callable
+import os
+
+
+# CardFlow local change: debug overlays (~29 MB of PNGs per grade) are written only
+# when CARDFLOW_GRADE_DEBUG_IMAGES=1. The aligned front/back PNGs and report.json are
+# always written because later stages read them.
+_DEBUG_IMAGES = os.environ.get("CARDFLOW_GRADE_DEBUG_IMAGES", "").strip() == "1"
+
+
+def _debug_imwrite(path, image) -> bool:
+    if not _DEBUG_IMAGES:
+        return False
+    import cv2 as _cv2
+
+    return bool(_cv2.imwrite(path, image))
 
 import cv2
 import numpy as np
@@ -88,7 +103,9 @@ def load_image(path: Path):
     image = cv2.imread(str(path))
     if image is None:
         raise ValueError(f"could not decode image: {path}")
-    return image
+    from pixel_cap import cap_pixels  # CardFlow local change: 16 MP cap
+
+    return cap_pixels(image)
 
 
 def _log(verbose: bool, message: str = "") -> None:
@@ -124,7 +141,7 @@ def save_region_overlays(card_dir: Path, side_label: str, overlays: dict) -> Non
     side_dir = card_dir / "corners_edges" / side_label
     side_dir.mkdir(parents=True, exist_ok=True)
     for region_name, overlay_img in overlays.items():
-        cv2.imwrite(str(side_dir / f"{region_name}.png"), overlay_img)
+        _debug_imwrite(str(side_dir / f"{region_name}.png"), overlay_img)
 
 
 def surface_grade_for_side(vision, thresholds: dict) -> surface.SurfaceGrade:
@@ -417,17 +434,17 @@ def build_card_vision(
         vision.fallback_reason = fallback_reason
         vision.dropped_scans = dropped or None
 
-    cv2.imwrite(str(output_dir / f"{side_label}_card_vision.png"), vision.relief)
+    _debug_imwrite(str(output_dir / f"{side_label}_card_vision.png"), vision.relief)
     # The normalised rotation scans, kept so the solve can be re-run later
     # without the card going back on the glass. They are the only inputs the
     # photometric path has, and discarding them meant every change to the
     # solve cost a rescan — four times, over one evening.
     for index, warp in enumerate(warps):
-        cv2.imwrite(str(output_dir / f"{side_label}_rotation_{index}.png"), warp)
+        _debug_imwrite(str(output_dir / f"{side_label}_rotation_{index}.png"), warp)
     if vision.normal_map is not None:
-        cv2.imwrite(str(output_dir / f"{side_label}_card_vision_normals.png"), vision.normal_map)
+        _debug_imwrite(str(output_dir / f"{side_label}_card_vision_normals.png"), vision.normal_map)
     if vision.albedo is not None:
-        cv2.imwrite(str(output_dir / f"{side_label}_card_vision_albedo.png"), vision.albedo)
+        _debug_imwrite(str(output_dir / f"{side_label}_card_vision_albedo.png"), vision.albedo)
 
     _log(
         verbose,
@@ -509,7 +526,7 @@ def grade_card(
     for label, image, result in (("front", front_img, front_result), ("back", back_img, back_result)):
         detail = detect.detail_warp(image, result.contour, thresholds)
         if detail is not None:
-            cv2.imwrite(str(output_dir / f"{label}_detail.png"), detail)
+            _debug_imwrite(str(output_dir / f"{label}_detail.png"), detail)
 
     front_blocked = front_result.warped is None or front_result.hard_failures
     back_blocked = back_result.warped is None or back_result.hard_failures
@@ -637,8 +654,8 @@ def grade_card(
 
     front_overlay = centering.draw_overlay(front_result.warped, result.front_horizontal, result.front_vertical)
     back_overlay = centering.draw_overlay(back_result.warped, result.back_horizontal, result.back_vertical)
-    cv2.imwrite(str(output_dir / "front_centering_overlay.png"), front_overlay)
-    cv2.imwrite(str(output_dir / "back_centering_overlay.png"), back_overlay)
+    _debug_imwrite(str(output_dir / "front_centering_overlay.png"), front_overlay)
+    _debug_imwrite(str(output_dir / "back_centering_overlay.png"), back_overlay)
 
     def side_borders(axis_h, axis_v, image) -> corners_edges.BorderWidths:
         # Border widths from an unmeasurable axis are argmax-of-noise —

@@ -8,6 +8,8 @@ import {
   cardgradingVendorPresent,
   createVendoredCardgradingRunner,
   resolveCardgradingPython,
+  createCardgradingEngineProbe,
+  type CardgradingEngineStatus,
   type CardgradingRunner,
 } from "./cardgrading-run";
 import { createCardgradingProvider } from "./grade-photo-flow";
@@ -85,4 +87,14 @@ export function createGradeEstimateFromEnv(
   }
   const runner = createVendoredCardgradingRunner(python);
   return { grading: createCardgradingProvider(runner), cardgrading: runner, selection };
+}
+
+/** OpenCV import probe for /health, only when the real grader runner is active. */
+export function gradeEngineProbeFromEnv(
+  runner: CardgradingRunner | null,
+  env: Env = process.env,
+): (() => Promise<CardgradingEngineStatus>) | null {
+  if (!runner) return null;
+  const python = resolveCardgradingPython(env);
+  return python ? createCardgradingEngineProbe(python) : null;
 }
