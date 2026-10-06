@@ -140,7 +140,7 @@ Spatial mapping from the screenshot:
 | In-app browser (X, site icon, URL, ON) | Same. Site icon follows the switch (W or eBay). |
 | Brickify thumb + name | Catalog thumb + confirmed name (empty until Confirm). |
 | Raw $ live | **Reference (you typed)** or `Enter a reference`. |
-| PSA 9 / PSA 10 live | **One stacked pair only:** Max Buy (guidance). Do **not** add PSA 9 / PSA 10 comps. Pricing provider stays OFF. |
+| PSA 9 / PSA 10 live | **One stacked pair only:** Max Buy (guidance). Do **not** add PSA 9 / PSA 10 comps. Pricing provider is ON by default (server flag `CARD_FLOW_PRICING_ENABLED`), but no PSA comps here. |
 | Giveaway, chat, “Say something”, listing, Custom / Bid | Stay **inside the WebView**. CardFlow does not draw bid buttons and does not place bids. |
 
 ### 2b. eBay live

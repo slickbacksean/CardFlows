@@ -241,7 +241,7 @@ Phase A–D is [ROADMAP.md](./ROADMAP.md) step 2. Do **not** start these until A
 | Real `camera_photo` / library still hitting **mock** identify | Step 3 — [STILL_IMAGE_CAPTURE_TASKS.md](./STILL_IMAGE_CAPTURE_TASKS.md) |
 | Durable DB, **real** IdP / live CardSight / TCGdex | Step 5 |
 | Private-beta identity / Settings close-out | Step 4 — [PREFERENCES_SETTINGS_TASKS.md](./PREFERENCES_SETTINGS_TASKS.md) |
-| Pricing provider | Flag stays OFF |
+| Pricing provider | ON by default (server `CARD_FLOW_PRICING_ENABLED`, Sean's decision Oct 2026) |
 | `listed` / `sold` / publish / scrape / auto-grade | Do not build |
 
 ---

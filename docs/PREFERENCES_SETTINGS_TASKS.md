@@ -297,7 +297,7 @@ Do **not** start these in this file:
 | Real IdP, invite codes, durable sessions | [ROADMAP.md](./ROADMAP.md) step 5 |
 | Durable DB for preferences / inventory | Step 5; mock store is enough here |
 | Live CardSight / TCGdex HTTP | Step 5 |
-| Pricing provider ON | Flag stays OFF |
+| Pricing provider toggle in Settings | Not a user setting; server flag `CARD_FLOW_PRICING_ENABLED` (default ON, Sean's decision Oct 2026) |
 | Marketplace login / cookies / auto-bid | [NON_GOALS.md](./NON_GOALS.md) |
 | Paid subscription, Pro, AI grading | Do not build |
 | Extra currencies, bid UI, fee schedules | Do not build |

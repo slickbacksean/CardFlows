@@ -7,6 +7,7 @@ import { createRecognitionFromEnv } from "./recognition-env";
 import { createGradeEstimateFromEnv } from "./grade-estimate-env";
 import { createSlabPricingFromEnv } from "./poketrace-env";
 import { resolveDevAutoSession } from "./session";
+import { invitedTesters } from "./invited-testers";
 import { createStoreFromEnv } from "./store-env";
 import { loadOptionalPhashIndex } from "./obb-phash-provider";
 import { resolveLiveIdentityOpenclipFromEnv } from "./live-identity-openclip";
@@ -54,6 +55,9 @@ serve({ fetch: app.fetch, port }, (info) => {
   console.log(`Grade estimate: ${gradeEstimateSelection.kind} (${gradeEstimateSelection.reason})`);
   console.log(`Slab pricing: ${slabPricingSelection.kind} (${slabPricingSelection.reason})`);
   console.log(`Pricing: ${pricingSelection.kind} (${pricingSelection.reason})`);
+  if (invitedTesters().length === 0) {
+    console.warn("Invites: none configured. Set CARD_FLOW_INVITE_ALEX / CARD_FLOW_INVITE_JORDAN; invite login is closed.");
+  }
   console.log(`PokéCollector accounts: ${accountsSelection.kind} (${accountsSelection.reason})`);
   console.log(
     `Live identity OpenCLIP: ${liveIdentityOpenclip ? "on" : "off"} (${openclipReason})`,

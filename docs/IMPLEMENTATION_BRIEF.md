@@ -66,7 +66,7 @@ Required to save Purchased: `currency`, `purchase_price`, `purchased_at`. Option
 - CardSight: still-image identify only. Server-side. Mock first (`packages/shared/fixtures/cardsight-*.json`).
 - TCGdex: public API/SDK later. Mock first (`tcgdex-*.json`). Strip any `pricing`.
 - Mapper: language + set + localId + name + variant. Never name-only. High still needs Confirm.
-- Pricing provider: **OFF**.
+- Pricing provider: **ON by default** when PokéCollector is configured (Sean's decision, Oct 2026). Server kill switch: `CARD_FLOW_PRICING_ENABLED=false` (gates `/v1/pricing` and portfolio values).
 
 ## Must never
 

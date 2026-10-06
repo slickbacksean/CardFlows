@@ -110,11 +110,29 @@ export function createPokecollectorCatalogFromEnv(
   return createPokecollectorCatalogProvider(options);
 }
 
+/**
+ * Server gate for market pricing (`/v1/pricing/*` and `/v1/portfolio` values).
+ * Default ON (Sean's call, Oct 2026): pricing runs whenever PokéCollector is
+ * configured. CARD_FLOW_PRICING_ENABLED=false turns pricing off even when
+ * CARD_FLOW_POKECOLLECTOR_URL is set (catalog and accounts keep working).
+ */
+export function pricingEnabledFromEnv(env: Env = process.env): boolean {
+  const flag = envValue(env, "CARD_FLOW_PRICING_ENABLED")?.toLowerCase();
+  if (flag === undefined) return true;
+  return !(flag === "false" || flag === "0" || flag === "off" || flag === "no");
+}
+
 export function createPricingFromEnv(env: Env = process.env): {
   pricing: CardPricingProvider;
   selection: PokecollectorSelection;
 } {
   const selection = resolvePokecollectorSelection(env);
+  if (!pricingEnabledFromEnv(env)) {
+    return {
+      pricing: offPricingProvider,
+      selection: { ...selection, kind: "off", enabled: false, reason: "CARD_FLOW_PRICING_ENABLED=false" },
+    };
+  }
   const options = pokecollectorHttpFromEnv(env);
   if (!options) {
     return { pricing: offPricingProvider, selection };
