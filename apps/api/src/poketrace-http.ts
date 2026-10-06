@@ -193,13 +193,15 @@ export function createPoketraceSlabProvider(options: PoketraceHttpOptions): Slab
       if (!name || !localId) return empty;
 
       const wanted = { ...req, name, localId };
+      // Narrowed above; captured as a plain string so the closure below keeps the type.
+      const searchName: string = name;
 
       async function searchCards(setSlug?: string): Promise<{
         match: Record<string, unknown> | null;
         failed: boolean;
       }> {
         const params = new URLSearchParams({
-          search: name,
+          search: searchName,
           market: "US",
           game: "pokemon",
           limit: "20",

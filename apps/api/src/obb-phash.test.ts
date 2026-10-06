@@ -29,7 +29,11 @@ async function json<T>(
   return { status: response.status, body: (await response.json()) as T };
 }
 
-describe("YOLO OBB + RGB pHash adapter", () => {
+// Pure-JS decode + OBB crop + pHash over full stills is CPU-bound and can pass the
+// default 5 s timeout on slow or busy machines. It is not hung.
+const IMAGE_TEST_TIMEOUT_MS = 30_000;
+
+describe("YOLO OBB + RGB pHash adapter", { timeout: IMAGE_TEST_TIMEOUT_MS }, () => {
   it("returns base1-58 from a fixture still without CardSight or Pocket blobs", async () => {
     const png = encodePngStill(ciStillBitmap("base1-58"));
     const decoded = await decodeScanStill(png, "image/png");

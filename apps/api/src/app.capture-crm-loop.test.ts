@@ -198,7 +198,8 @@ describe("Task 5 Capture CRM loop", () => {
     await completePurchasedDraftCopy(app, scan.body.scan.scanId, "base1-58");
   });
 
-  it("completes OBB + pHash still loop, survives API reopen, Copy omits notes, USD only", async () => {
+  // CPU-bound pHash over a full still; the default 5 s timeout is too tight on slow runners.
+  it("completes OBB + pHash still loop, survives API reopen, Copy omits notes, USD only", { timeout: 30_000 }, async () => {
     const messy = composeMessyCiCardStill("base1-58");
     const png = encodePngStill(messy.bitmap);
     const recognition = createObbPhashRecognitionProvider({

@@ -430,7 +430,8 @@ describe("POST /v1/inventory/:id/grade-estimate", () => {
     expect(prepare).toContain("getConfirmPictureUri");
     expect(prepare).toContain("gradePhotoUri");
     expect(prepare).toContain("pickGradeStill");
-    expect(prepare).toContain("if (!hasFront)");
+    // Missing front photo must block the estimate request (guard may be combined with other checks).
+    expect(prepare).toMatch(/if \([^)]*!hasFront\) return;/);
     expect(prepare).toContain(".catch(() => {");
     expect(prepare).toContain("disabled={!canSubmit}");
     expect(prepare).not.toMatch(/disabled=\{!canSubmit \|\|/);

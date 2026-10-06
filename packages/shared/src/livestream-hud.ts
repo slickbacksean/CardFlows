@@ -42,5 +42,5 @@ export function defaultLivestreamHudOrigin(platformOs: string): string {
 /** WebView allow-list for the HUD page. One origin, matching the page URL. */
 export function livestreamHudOriginWhitelist(pageUrl: string): string[] {
   const match = /^(https?:\/\/[^/?#]+)/i.exec(pageUrl.trim());
-  return match ? [match[1]] : [];
+  return match?.[1] ? [match[1]] : [];
 }
