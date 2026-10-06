@@ -5,10 +5,10 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ADAPTER_PATH = fileURLToPath(
-  new URL('../../vendor/cardgrading/cardflow_adapter.py', import.meta.url)
+  new URL('../../../../apps/api/vendor/cardgrading/cardflow_adapter.py', import.meta.url)
 );
 const THRESHOLDS_PATH = fileURLToPath(
-  new URL('../../vendor/cardgrading/calibration/thresholds.json', import.meta.url)
+  new URL('../../../../apps/api/vendor/cardgrading/calibration/thresholds.json', import.meta.url)
 );
 
 const GRADE_CARD_TIMEOUT_MS = 120_000;

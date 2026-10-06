@@ -14,6 +14,17 @@ if ! command -v docker >/dev/null 2>&1; then
   exit 1
 fi
 
+if [ -f "$root/.env" ]; then
+  set -a
+  # shellcheck disable=SC1091
+  . "$root/.env"
+  set +a
+fi
+if [ -z "${ADMIN_PASSWORD:-}" ]; then
+  echo "ADMIN_PASSWORD is empty. Set it in infra/pokecollector/.env (gitignored) before starting PokéCollector." >&2
+  exit 1
+fi
+
 mkdir -p "$root/data/auth" "$root/data/backups"
 
 docker compose -f "$compose_file" --project-directory "$root" up -d

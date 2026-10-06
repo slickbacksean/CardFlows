@@ -19,8 +19,8 @@ sidecar), `services/psa-grade-predictor` (experiment, not on the grade path),
 
 | Package | Path | Why it is still here |
 |---------|------|----------------------|
-| `@cardflows/api` | `packages/api` | Holds the structured-defect pre-grade (`POST /api/v1/grading/pregrade`, `calculate-pregrade`), which `apps/api` does not have yet. Its photo routes are superseded by `apps/api` `/v1/grade/detect` and `/v1/grade/pregrade`. |
-| `@cardflows/shared` | `packages/cardflows-shared` | Dependency of `packages/api` (CRM ids, pre-grade deduction math). Fixtures stay in `packages/shared/fixtures`. |
+| `@cardflows/api` | `legacy/api` | Holds the structured-defect pre-grade (`POST /api/v1/grading/pregrade`, `calculate-pregrade`), which `apps/api` does not have yet. Its photo routes are superseded by `apps/api` `/v1/grade/detect` and `/v1/grade/pregrade`. |
+| `@cardflows/shared` | `legacy/cardflows-shared` | Dependency of `legacy/api` (CRM ids, pre-grade deduction math). Fixtures stay in `packages/shared/fixtures`. |
 | — | `legacy/mobile-react-navigation` | The earlier react-navigation Expo app, including the "mark defects" manual pre-grade screens. Archived source, not in the pnpm workspace and not built. |
 
 ## Setup
@@ -28,7 +28,7 @@ sidecar), `services/psa-grade-predictor` (experiment, not on the grade path),
 ```sh
 pnpm install
 pnpm test          # shared + API tests (mocks; no Docker / PokéCollector)
-pnpm test:legacy   # packages/cardflows-shared + packages/api
+pnpm test:legacy   # legacy/cardflows-shared + legacy/api
 pnpm typecheck
 pnpm dev:api       # CardFlow API on :3001
 pnpm dev:mobile    # Expo (Metro on :8081)

@@ -11,8 +11,6 @@
     "lint": "expo lint"
   },
   "dependencies": {
-    "@capacitor/core": "^8.5.2",
-    "@capgo/capacitor-inappbrowser": "^8.17.2",
     "@cardflow/shared": "workspace:*",
     "@expo/metro-runtime": "~57.0.16",
     "@expo/vector-icons": "^15.0.3",

@@ -32,11 +32,14 @@ services:
       DATABASE_URL: postgresql://pokemon:${POSTGRES_PASSWORD:-changeme}@postgres:5432/pokemon_tcg
       TCGDEX_SYNC_LANGUAGES: en
       ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
-      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      # Required, from infra/pokecollector/.env (gitignored). Never commit a value.
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Set ADMIN_PASSWORD in infra/pokecollector/.env}
       JWT_SECRET_KEY: ${JWT_SECRET_KEY:-}
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
       TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
-      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      # Photo scanner (Gemini/OpenAI) is hard-off: no key is ever passed in, and CardFlow
+      # never calls a PokéCollector scanner endpoint.
+      GEMINI_API_KEY: ""
       OPENAI_SCANNER_ENABLED: "false"
       PUBLIC_MODE: "false"
       CORS_ORIGINS: ${CORS_ORIGINS:-}
@@ -46,7 +49,8 @@ services:
       - ./data/auth:/app/data/auth
       - ./data/backups:/app/backups
     ports:
-      - "${BACKEND_PORT:-8000}:8000"
+      # Loopback only: the admin API must not be reachable from the LAN.
+      - "127.0.0.1:${BACKEND_PORT:-8000}:8000"
     healthcheck:
       test:
         [

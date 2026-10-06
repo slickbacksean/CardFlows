@@ -65,20 +65,15 @@ describe("Livestream HUD (HUDS) + Cap-go in-app browser", () => {
     expect(`${html}\n${js}`).not.toMatch(/whatnot|ebay|inject|scrape|screenshot/i);
   });
 
-  it("uses Cap-go InAppBrowser for the live page without page scripts or stills", () => {
+  it("uses the react-native-webview live page (no Capacitor) without page scripts or stills", () => {
     const mobilePackage = readRepoFile("apps/mobile/package.json");
     const browser = readRepoFile("apps/mobile/lib/in-app-browser.ts");
     const scanTab = readRepoFile("apps/mobile/app/(tabs)/scan-tab.tsx");
-    expect(mobilePackage).toContain("@capgo/capacitor-inappbrowser");
-    expect(browser).toContain("@capgo/capacitor-inappbrowser");
+    expect(mobilePackage).not.toMatch(/capacitor|capgo/i);
+    expect(browser).not.toMatch(/from "@capacitor|from "@capgo/);
     expect(browser).toContain("LIVESTREAM_INAPP_BROWSER");
-    expect(browser).toContain("InAppBrowser.openWebView");
-    expect(browser).toContain("isExpoGoRuntime");
-    expect(browser).toContain("isNativePlatform");
-    expect(browser).toContain("ToolBarType.BLANK");
-    expect(browser).toContain("allowScreenshotsFromWebPage: false");
+    expect(browser).toContain('return "unavailable";');
     expect(browser).not.toContain("executeScript");
-    expect(browser).toContain("preShowScript: LIVE_HLS_REPORT_SCRIPT");
     expect(browser).not.toContain("screenshotOnHide");
     expect(scanTab).toContain("LivestreamBrowser");
     expect(scanTab).toContain("url={chrome.pageUrl}");

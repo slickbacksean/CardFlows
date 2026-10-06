@@ -70,12 +70,6 @@ importers:
 
   apps/mobile:
     dependencies:
-      '@capacitor/core':
-        specifier: ^8.5.2
-        version: 8.5.2
-      '@capgo/capacitor-inappbrowser':
-        specifier: ^8.17.2
-        version: 8.17.2(@capacitor/core@8.5.2)
       '@cardflow/shared':
         specifier: workspace:*
         version: link:../../packages/shared
@@ -183,7 +177,7 @@ importers:
         specifier: ~6.0.3
         version: 6.0.3
 
-  packages/api:
+  legacy/api:
     dependencies:
       '@cardflows/shared':
         specifier: workspace:*
@@ -214,7 +208,7 @@ importers:
         specifier: ^2.1.8
         version: 2.1.9(@types/node@22.14.1)(lightningcss@1.33.0)(terser@5.51.2)
 
-  packages/cardflows-shared:
+  legacy/cardflows-shared:
     devDependencies:
       '@types/node':
         specifier: ^22.10.0
@@ -637,14 +631,6 @@ packages:
 
   '@cachex/web-storage@1.0.1':
     resolution: {integrity: sha512-E8Xa9qDZgNgr+lcj3eixowg7PH2CVZbp3huuoc5xVVTtwYrZi5YqbHBG12yG3r6C6Fts/2Yoq6cbVBSm6c8VRA==}
-
-  '@capacitor/core@8.5.2':
-    resolution: {integrity: sha512-agnQbGdhGw/KZFuLf7H9SY2o+oE7upkr/WPQsYaokXP6f9chaE8iVmbKkfN6SVl4w3pmz7oZ3Ur1hbkmy1hx+w==}
-
-  '@capgo/capacitor-inappbrowser@8.17.2':
-    resolution: {integrity: sha512-Ln1b4h351TdZjqv+1iQx8i5MH0Fy39pXV/usVDGBKeyevYjjXSTZCT50qTyiscsGgXEjY8p9YduFowng4Tqqvg==}
-    peerDependencies:
-      '@capacitor/core': '>=8.0.0'
 
   '@drizzle-team/brocli@0.10.2':
     resolution: {integrity: sha512-z33Il7l5dKjUgGULTqBsQBQwckHh5AbIuxhdsIxDDiZAzBOrZO6q9ogcWC65kU382AfynTfgNumVcNIjuIua6w==}
@@ -6180,14 +6166,6 @@ snapshots:
     dependencies:
       '@cachex/core': 1.0.1
 
-  '@capacitor/core@8.5.2':
-    dependencies:
-      tslib: 2.8.1
-
-  '@capgo/capacitor-inappbrowser@8.17.2(@capacitor/core@8.5.2)':
-    dependencies:
-      '@capacitor/core': 8.5.2
-
   '@drizzle-team/brocli@0.10.2': {}
 
   '@dzeio/object-util@1.9.2': {}
@@ -7518,7 +7496,9 @@ snapshots:
       metro-runtime: 0.84.5
     transitivePeerDependencies:
       - '@babel/core'
+      - bufferutil
       - supports-color
+      - utf-8-validate
 
   '@react-native/normalize-colors@0.74.89': {}
 

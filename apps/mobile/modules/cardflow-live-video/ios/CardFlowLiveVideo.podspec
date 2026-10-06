@@ -12,7 +12,9 @@ Pod::Spec.new do |s|
   s.homepage       = package["homepage"]
   s.platforms      = { :ios => "15.1" }
   s.swift_version  = "5.9"
-  s.source         = { :git => "https://github.com/placeholder/cardflow.git" }
+  # Local Expo module, autolinked from apps/mobile/modules; CocoaPods uses the local path,
+  # so this source is metadata only. It points at the real repo instead of a placeholder.
+  s.source         = { :git => "https://github.com/slickbacksean/CardFlows.git" }
   s.static_framework = true
   s.dependency "ExpoModulesCore"
   s.frameworks     = "AVFoundation", "CoreMedia", "Vision", "WebKit"

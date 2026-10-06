@@ -37,7 +37,10 @@ describe("PokéCollector local compose", () => {
     expect(compose).not.toMatch(/image:.*tcgdex\/server|image:.*cards-database/);
     expect(compose).not.toContain("build:");
     expect(compose).toContain("TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}");
-    expect(compose).toContain("GEMINI_API_KEY: ${GEMINI_API_KEY:-}");
+    expect(compose).toContain('GEMINI_API_KEY: ""');
+    expect(compose).toContain('"127.0.0.1:${BACKEND_PORT:-8000}:8000"');
+    expect(compose).toContain("ADMIN_PASSWORD: ${ADMIN_PASSWORD:?");
+    expect(compose).not.toMatch(/ADMIN_PASSWORD: \$\{ADMIN_PASSWORD:-/);
   });
 
   it("does not copy PokéCollector AGPL source into apps/ or packages/", () => {

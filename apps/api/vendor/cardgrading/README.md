@@ -17,7 +17,7 @@ do **not** load model weights or call a network. To exercise the real
 OpenCV pipeline on your machine:
 
 ```bash
-cd packages/api/vendor/cardgrading
+cd apps/api/vendor/cardgrading
 python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt
 

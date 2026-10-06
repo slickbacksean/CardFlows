@@ -167,7 +167,7 @@ describe("Task 9 livestream device QA", () => {
     expect(browser).toContain("reloadKey");
     expect(browser).toContain("url");
     expect(browser).not.toMatch(SCREENSHOT_APIS);
-    expect(inApp).toContain("allowScreenshotsFromWebPage: false");
+    expect(inApp).not.toMatch(SCREENSHOT_APIS);
     expect(inApp).not.toContain("executeScript");
     expect(scanTab).not.toContain("injectedJavaScript");
     expect(scanTab).not.toMatch(/bid|placeBid|scrape/i);

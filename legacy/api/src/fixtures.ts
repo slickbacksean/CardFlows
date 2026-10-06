@@ -5,7 +5,7 @@ import type { CardFlowNormalizedMappingResult } from '@cardflows/shared';
 import type { CardFlowNormalizedRecognitionResult } from '@cardflows/shared';
 import type { TcgdexCard } from '@cardflows/shared';
 
-const fixturesDir = join(dirname(fileURLToPath(import.meta.url)), '../../shared/fixtures');
+const fixturesDir = join(dirname(fileURLToPath(import.meta.url)), '../../../packages/shared/fixtures');
 
 export function loadFixture<T>(filename: string): T {
   const raw = JSON.parse(readFileSync(join(fixturesDir, filename), 'utf-8')) as T & {

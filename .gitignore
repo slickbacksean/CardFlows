@@ -40,7 +40,7 @@ apps/api/data/phash-index.json
 # Offline cardgrading Python env (P1 photo pre-grade)
 apps/api/.venv/
 
-# From the GitHub layout (packages/api, packages/cardflows-shared)
+# From the GitHub layout (now legacy/api, legacy/cardflows-shared)
 .cardflows-dev/
 .expo-shared/
 .venv/
