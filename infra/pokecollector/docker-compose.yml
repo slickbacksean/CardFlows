@@ -1,0 +1,64 @@
+# Unmodified PokéCollector GHCR images + Postgres, next to CardFlow API.
+# Pin a release tag. Do not use `latest`. Do not run tcgdex/server.
+# English catalog sync only. Telegram, Gemini, public trainer social, and
+# OpenAI scanner stay off. CardFlow does not copy AGPL source.
+name: cardflow-pokecollector
+
+services:
+  postgres:
+    image: postgres:18-alpine
+    container_name: cardflow-pokecollector-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: pokemon
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+      POSTGRES_DB: pokemon_tcg
+    volumes:
+      - postgres_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pokemon -d pokemon_tcg"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    image: ghcr.io/git-romer/pokecollector-backend:1.51.0
+    container_name: cardflow-pokecollector-backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://pokemon:${POSTGRES_PASSWORD:-changeme}@postgres:5432/pokemon_tcg
+      TCGDEX_SYNC_LANGUAGES: en
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      OPENAI_SCANNER_ENABLED: "false"
+      PUBLIC_MODE: "false"
+      CORS_ORIGINS: ${CORS_ORIGINS:-}
+      POKEDEX_IMAGE_CACHE_DIR: /app/data/pokedex-images
+      SCAN_UPLOAD_DIR: /app/data/scan-uploads
+    volumes:
+      - ./data/auth:/app/data/auth
+      - ./data/backups:/app/backups
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health')",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 40s
+
+volumes:
+  postgres_data:

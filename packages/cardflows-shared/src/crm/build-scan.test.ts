@@ -8,7 +8,7 @@ import { buildCrmScan, stripPreviewCardflowId } from './build-scan.js';
 import { catalogFingerprint } from './catalog-fingerprint.js';
 import { mintCardflowCardId } from './mint-cardflow-card-id.js';
 
-const fixturesDir = join(dirname(fileURLToPath(import.meta.url)), '../../fixtures');
+const fixturesDir = join(dirname(fileURLToPath(import.meta.url)), '../../../shared/fixtures');
 
 function loadFixture<T>(filename: string): T {
   return JSON.parse(readFileSync(join(fixturesDir, filename), 'utf-8')) as T;

@@ -1,0 +1,9 @@
+export const TAB_ROW_HEIGHT = 48;
+export const TAB_CENTER_WIDTH = 76;
+export const TAB_CIRCLE_SIZE = 52;
+export const TAB_CIRCLE_RADIUS = TAB_CIRCLE_SIZE / 2;
+export const TAB_CURVE_GAP = 5;
+export const TAB_CURVE_RADIUS = TAB_CIRCLE_RADIUS + TAB_CURVE_GAP;
+export const TAB_ICON_SIZE = 24;
+export const TAB_GLYPH_SIZE = 14;
+export const TAB_LABEL_SIZE = 9;

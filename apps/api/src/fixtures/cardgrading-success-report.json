@@ -1,0 +1,84 @@
+{
+  "front_image": "/tmp/front.png",
+  "back_image": "/tmp/back.png",
+  "capture_dpi": null,
+  "capture_quality": {
+    "front": {
+      "ok": true,
+      "gates": [
+        { "name": "resolution", "passed": true, "detail": "shortest side=1800px", "value": 1800, "hard": false },
+        { "name": "card_detection", "passed": true, "detail": "card contour found", "value": null, "hard": true },
+        { "name": "tilt", "passed": true, "detail": "max corner angle deviation=0.40 deg", "value": 0.4, "hard": true },
+        { "name": "aspect_ratio", "passed": true, "detail": "actual=0.7159 expected=0.7159 deviation=0.00%", "value": 0, "hard": true },
+        { "name": "glare", "passed": true, "detail": "largest blown-out cluster=0px, total blown area=0.00%", "value": 0, "hard": false },
+        { "name": "uneven_lighting", "passed": true, "detail": "border-ring brightness gradient=8.0", "value": 8, "hard": false }
+      ]
+    },
+    "back": {
+      "ok": true,
+      "gates": [
+        { "name": "resolution", "passed": true, "detail": "shortest side=1800px", "value": 1800, "hard": false },
+        { "name": "card_detection", "passed": true, "detail": "card contour found", "value": null, "hard": true },
+        { "name": "tilt", "passed": true, "detail": "max corner angle deviation=0.20 deg", "value": 0.2, "hard": true },
+        { "name": "aspect_ratio", "passed": true, "detail": "actual=0.7159 expected=0.7159 deviation=0.00%", "value": 0, "hard": true },
+        { "name": "glare", "passed": true, "detail": "largest blown-out cluster=0px, total blown area=0.00%", "value": 0, "hard": false },
+        { "name": "uneven_lighting", "passed": true, "detail": "border-ring brightness gradient=6.0", "value": 6, "hard": false }
+      ]
+    }
+  },
+  "capture_pair": {
+    "identical_files": false,
+    "similarity": 0.31,
+    "same_side_suspected": false,
+    "note": null
+  },
+  "dimensions": {
+    "measurable": false,
+    "width_mm": null,
+    "height_mm": null,
+    "within_tolerance": null,
+    "note": "physical size is unmeasurable without a known capture DPI"
+  },
+  "centering": {
+    "front": { "grade": 9, "measurable": true },
+    "back": { "grade": 10, "measurable": true },
+    "overall_grade": 9,
+    "by_grader": {
+      "psa": { "label": "PSA", "front": 9, "back": 10, "overall": 9 },
+      "tag": { "label": "TAG", "front": 9, "back": 10, "overall": 9 },
+      "cgc": { "label": "CGC", "front": 9, "back": 10, "overall": 9 }
+    }
+  },
+  "corners_edges": {
+    "front": { "corners_grade": 8, "edges_grade": 10, "grade": 8 },
+    "back": { "corners_grade": 8, "edges_grade": 9, "grade": 8 },
+    "overall_grade": 8
+  },
+  "surface": {
+    "front": {
+      "grade": null,
+      "reason": "single-capture approximation — print leaks into this signal, so it is reported but not graded",
+      "source": "single_image_relief",
+      "by_grader": { "psa": { "grade": 7 }, "tag": { "grade": 8 }, "cgc": { "grade": 6 } }
+    },
+    "back": {
+      "grade": null,
+      "reason": "single-capture approximation — print leaks into this signal, so it is reported but not graded",
+      "source": "single_image_relief",
+      "by_grader": { "psa": { "grade": 8 }, "tag": { "grade": 9 }, "cgc": { "grade": 7 } }
+    }
+  },
+  "grade_estimate": {
+    "centering_grade": 9,
+    "corners_edges_grade": 8,
+    "surface_grade": null,
+    "overall_grade": 8.4,
+    "overall_grade_rounded": 8,
+    "score": 840,
+    "note": "overall estimate excludes surface (no vision review) — less reliable"
+  },
+  "subgrades": {
+    "front": { "centering": 9, "corners": 8, "edges": 10, "surface": null },
+    "back": { "centering": 10, "corners": 8, "edges": 9, "surface": null }
+  }
+}

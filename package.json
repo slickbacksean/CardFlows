@@ -1,16 +1,29 @@
 {
-  "name": "cardflows",
+  "name": "cardflow",
   "private": true,
-  "version": "0.0.1",
-  "description": "CardFlow monorepo — Expo app, API/BFF, shared types and fixtures",
-  "scripts": {
-    "build": "pnpm -r run build",
-    "test": "pnpm -r run test",
-    "typecheck": "pnpm -r run typecheck",
-    "dev:api": "pnpm --filter @cardflows/api dev",
-    "dev:mobile": "pnpm --filter @cardflows/mobile start"
-  },
+  "packageManager": "pnpm@9.15.9",
   "engines": {
     "node": ">=20"
+  },
+  "scripts": {
+    "dev:api": "pnpm --filter @cardflow/api dev",
+    "dev:stack": "pnpm pokecollector:up && pnpm dev:api",
+    "dev:mobile": "pnpm --filter @cardflow/mobile start",
+    "pokecollector:up": "sh infra/pokecollector/up.sh",
+    "pokecollector:down": "docker compose -f infra/pokecollector/docker-compose.yml --project-directory infra/pokecollector down",
+    "pokecollector:health": "sh infra/pokecollector/health.sh",
+    "huds:up": "sh infra/huds/up.sh",
+    "huds:down": "sh infra/huds/down.sh",
+    "huds:health": "sh infra/huds/health.sh",
+    "live-identity:up": "sh services/live-identity-openclip/up.sh",
+    "live-identity:health": "sh services/live-identity-openclip/health.sh",
+    "test": "pnpm --filter @cardflow/shared test && pnpm --filter @cardflow/api test",
+    "typecheck": "pnpm --filter @cardflow/shared typecheck && pnpm --filter @cardflow/api typecheck && pnpm --filter @cardflow/mobile exec tsc --noEmit",
+    "build:legacy": "pnpm --filter @cardflows/shared build",
+    "test:legacy": "pnpm build:legacy && pnpm --filter @cardflows/shared test && pnpm --filter @cardflows/api test",
+    "typecheck:legacy": "pnpm build:legacy && pnpm --filter @cardflows/api typecheck"
+  },
+  "dependencies": {
+    "huds": "2.2.2"
   }
 }

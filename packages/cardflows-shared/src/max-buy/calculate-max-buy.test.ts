@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { calculateMaxBuy } from './calculate-max-buy.js';
 import type { MaxBuyUserPreferences } from '../types/max-buy.js';
 
-const fixturesDir = join(dirname(fileURLToPath(import.meta.url)), '../../fixtures');
+const fixturesDir = join(dirname(fileURLToPath(import.meta.url)), '../../../shared/fixtures');
 
 function loadFixture<T>(filename: string): T {
   const raw = JSON.parse(readFileSync(join(fixturesDir, filename), 'utf-8')) as T & {

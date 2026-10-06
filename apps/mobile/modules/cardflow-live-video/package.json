@@ -1,0 +1,11 @@
+{
+  "name": "cardflow-live-video",
+  "version": "0.0.0",
+  "private": true,
+  "description": "In-stream sample buffers from the in-app live page video (Capgo / WKWebView / Android WebView media).",
+  "main": "index.ts",
+  "keywords": ["react-native", "expo", "cardflow", "live-video"],
+  "license": "UNLICENSED",
+  "homepage": "https://github.com",
+  "author": "CardFlow"
+}

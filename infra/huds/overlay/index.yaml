@@ -1,0 +1,4 @@
+# CardFlow livestream HUD (HUDS). Scanner off until the app posts an event.
+overlay:
+  title: CardFlow overlay
+  caption: CardFlow overlay · not a market
