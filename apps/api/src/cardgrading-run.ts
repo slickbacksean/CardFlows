@@ -88,10 +88,87 @@ export function cardgradingChildEnv(env: Env = process.env): Record<string, stri
     PYTHONDONTWRITEBYTECODE: "1",
     PYTHONUNBUFFERED: "1",
   };
-  if (env.HOME) child.HOME = env.HOME;
-  if (env.TMPDIR) child.TMPDIR = env.TMPDIR;
+  // Allowlist only: no DB URLs, tokens, or other secrets reach the vendored code.
+  for (const key of CARDGRADING_CHILD_ENV_PASSTHROUGH) {
+    const value = env[key];
+    if (value !== undefined && value !== "") child[key] = value;
+  }
   for (const key of CARDGRADING_BLANKED_KEYS) child[key] = "";
   return child;
+}
+
+/** Parent env vars the grader child may see (plus PATH and LANG). */
+export const CARDGRADING_CHILD_ENV_PASSTHROUGH = [
+  "HOME",
+  "TMPDIR",
+  "TMP",
+  "TEMP",
+  "OMP_NUM_THREADS",
+  "OPENBLAS_NUM_THREADS",
+  // Debug overlay PNGs (~29 MB per grade) are written only when this is "1".
+  "CARDFLOW_GRADE_DEBUG_IMAGES",
+  // Decoded photos above this many pixels are downscaled (default 16 MP).
+  "CARDFLOW_GRADE_MAX_PIXELS",
+] as const;
+
+export interface CardgradingEngineStatus {
+  ok: boolean;
+  opencv: string | null;
+  numpy: string | null;
+  error: string | null;
+  checkedAt: string;
+}
+
+const ENGINE_PROBE_TTL_MS = 5 * 60_000;
+const ENGINE_PROBE_TIMEOUT_MS = 5_000;
+const ENGINE_PROBE_SCRIPT =
+  "import json, cv2, numpy; print(json.dumps({'opencv': cv2.__version__, 'numpy': numpy.__version__}))";
+
+/**
+ * Health probe that really imports cv2 and numpy in the grader's Python, so
+ * /health can't say the grader is ready when OpenCV is missing or broken.
+ * Cached for 5 minutes; concurrent callers share one in-flight probe.
+ */
+export function createCardgradingEngineProbe(
+  python: string,
+  now: () => number = Date.now,
+): () => Promise<CardgradingEngineStatus> {
+  let cached: { at: number; status: CardgradingEngineStatus } | null = null;
+  let inFlight: Promise<CardgradingEngineStatus> | null = null;
+  return async () => {
+    if (cached && now() - cached.at < ENGINE_PROBE_TTL_MS) return cached.status;
+    if (inFlight) return inFlight;
+    inFlight = (async () => {
+      let status: CardgradingEngineStatus;
+      try {
+        const out = (await runAdapter(
+          python,
+          ["-c", ENGINE_PROBE_SCRIPT],
+          ENGINE_PROBE_TIMEOUT_MS,
+          "cardgrading engine probe",
+        )) as { opencv?: unknown; numpy?: unknown };
+        status = {
+          ok: typeof out.opencv === "string",
+          opencv: typeof out.opencv === "string" ? out.opencv : null,
+          numpy: typeof out.numpy === "string" ? out.numpy : null,
+          error: typeof out.opencv === "string" ? null : "cv2 version missing",
+          checkedAt: new Date(now()).toISOString(),
+        };
+      } catch (error) {
+        status = {
+          ok: false,
+          opencv: null,
+          numpy: null,
+          error: error instanceof Error ? error.message.slice(0, 200) : "probe failed",
+          checkedAt: new Date(now()).toISOString(),
+        };
+      }
+      cached = { at: now(), status };
+      inFlight = null;
+      return status;
+    })();
+    return inFlight;
+  };
 }
 
 function runAdapter(
@@ -146,7 +223,85 @@ function runAdapter(
   });
 }
 
-export function createVendoredCardgradingRunner(python: string): CardgradingRunner {
+export class GradeBusyError extends Error {
+  constructor(message = "cardgrading busy: no free grader slot") {
+    super(message);
+    this.name = "GradeBusyError";
+  }
+}
+
+export interface ConcurrencyGate {
+  <T>(task: () => Promise<T>): Promise<T>;
+  /** True when every slot is busy and the wait queue is full: callers should get 503. */
+  isFull(): boolean;
+}
+
+/**
+ * Caps concurrent grader processes (each ~1 GB RSS). Up to `maxQueue` callers wait
+ * up to `waitMs` for a slot; a full queue or a timed-out wait throws GradeBusyError.
+ */
+export function createConcurrencyGate(max: number, waitMs = 30_000, maxQueue = 3): ConcurrencyGate {
+  let active = 0;
+  const queue: Array<() => void> = [];
+  const run = async function run<T>(task: () => Promise<T>): Promise<T> {
+    if (active >= max) {
+      if (queue.length >= maxQueue) throw new GradeBusyError("cardgrading busy: grade queue is full");
+      await new Promise<void>((resolve, reject) => {
+        const timer = setTimeout(() => {
+          const index = queue.indexOf(grant);
+          if (index >= 0) queue.splice(index, 1);
+          reject(new GradeBusyError());
+        }, waitMs);
+        const grant = () => {
+          clearTimeout(timer);
+          resolve();
+        };
+        queue.push(grant);
+      });
+    } else {
+      active += 1;
+    }
+    try {
+      return await task();
+    } finally {
+      const next = queue.shift();
+      if (next) next();
+      else active -= 1;
+    }
+  } as ConcurrencyGate;
+  run.isFull = () => active >= max && queue.length >= maxQueue;
+  return run;
+}
+
+function positiveIntEnv(raw: string | undefined, fallback: number): number {
+  const value = Number.parseInt(raw?.trim() ?? "", 10);
+  return Number.isFinite(value) && value > 0 ? value : fallback;
+}
+
+/**
+ * MAX_CONCURRENT_GRADES (default 1: one ~1 GB grade per 2 GB instance), detect included.
+ * MAX_QUEUED_GRADES (default 3) callers may wait up to 30 s; beyond that the API answers 503.
+ */
+export function gradeGateFromEnv(env: Env = process.env): ConcurrencyGate {
+  return createConcurrencyGate(
+    positiveIntEnv(env.MAX_CONCURRENT_GRADES, 1),
+    30_000,
+    positiveIntEnv(env.MAX_QUEUED_GRADES, 3),
+  );
+}
+
+export function createVendoredCardgradingRunner(
+  python: string,
+  gate: <T>(task: () => Promise<T>) => Promise<T> = gradeGateFromEnv(),
+): CardgradingRunner {
+  const inner = createUngatedRunner(python);
+  return {
+    gradeCard: (input) => gate(() => inner.gradeCard(input)),
+    detectCrop: (input) => gate(() => inner.detectCrop(input)),
+  };
+}
+
+function createUngatedRunner(python: string): CardgradingRunner {
   return {
     async gradeCard(input) {
       const root = await mkdtemp(path.join(tmpdir(), "cardflow-pregrade-"));

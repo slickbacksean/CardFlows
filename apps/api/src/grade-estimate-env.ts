@@ -8,6 +8,10 @@ import {
   cardgradingVendorPresent,
   createVendoredCardgradingRunner,
   resolveCardgradingPython,
+  createCardgradingEngineProbe,
+  gradeGateFromEnv,
+  type ConcurrencyGate,
+  type CardgradingEngineStatus,
   type CardgradingRunner,
 } from "./cardgrading-run";
 import { createCardgradingProvider } from "./grade-photo-flow";
@@ -73,16 +77,28 @@ export function createGradeEstimateFromEnv(
 ): {
   grading: CardGradingProvider;
   cardgrading: CardgradingRunner | null;
+  gradeGate: ConcurrencyGate | null;
   selection: GradeEstimateSelection;
 } {
   const selection = resolveGradeEstimateSelection(env, deps);
   if (selection.kind === "mock") {
-    return { grading: mockCardGradingProvider, cardgrading: null, selection };
+    return { grading: mockCardGradingProvider, cardgrading: null, gradeGate: null, selection };
   }
   const python = (deps.python ?? resolveCardgradingPython)(env);
   if (selection.kind !== "cardgrading" || !python) {
-    return { grading: createOffCardGradingProvider(), cardgrading: null, selection };
+    return { grading: createOffCardGradingProvider(), cardgrading: null, gradeGate: null, selection };
   }
-  const runner = createVendoredCardgradingRunner(python);
-  return { grading: createCardgradingProvider(runner), cardgrading: runner, selection };
+  const gradeGate = gradeGateFromEnv(env);
+  const runner = createVendoredCardgradingRunner(python, gradeGate);
+  return { grading: createCardgradingProvider(runner), cardgrading: runner, gradeGate, selection };
+}
+
+/** OpenCV import probe for /health, only when the real grader runner is active. */
+export function gradeEngineProbeFromEnv(
+  runner: CardgradingRunner | null,
+  env: Env = process.env,
+): (() => Promise<CardgradingEngineStatus>) | null {
+  if (!runner) return null;
+  const python = resolveCardgradingPython(env);
+  return python ? createCardgradingEngineProbe(python) : null;
 }

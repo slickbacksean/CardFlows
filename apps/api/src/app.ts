@@ -72,13 +72,26 @@ import {
   type TcgdexCard,
   type TitleTemplateId,
 } from "@cardflow/shared";
-import { Hono } from "hono";
+import { Hono, type Context as HonoContext } from "hono";
 import { cors } from "hono/cors";
 import { bodyLimit } from "hono/body-limit";
+import { getConnInfo } from "@hono/node-server/conninfo";
+import {
+  clientIp,
+  detectRateLimitFromEnv,
+  globalDailyCapMiddleware,
+  globalGradeDailyCapFromEnv,
+  gradeRateLimitFromEnv,
+  rateLimitMiddleware,
+  trustProxyHopsFromEnv,
+  type RateLimitConfig,
+} from "./rate-limit";
+import type { CardgradingEngineStatus, ConcurrencyGate } from "./cardgrading-run";
 import { corsOriginsFromEnv } from "./cors-env";
 import {
   JSON_BODY_MAX_BYTES,
   LIVESTREAM_IDENTIFY_BODY_MAX_BYTES,
+  GRADE_ROUTE_BODY_MAX_BYTES,
 } from "./request-limits";
 import { createMemoryStore, type InventoryItemRecord, type StorePort } from "./store";
 import {
@@ -127,6 +140,31 @@ type AppEnv = {
     identity: InvitedIdentity;
   };
 };
+
+/** /health never waits more than 3 s on the OpenCV probe (which itself times out at 5 s). */
+async function boundedProbe(
+  probe: () => Promise<CardgradingEngineStatus>,
+): Promise<CardgradingEngineStatus> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const pending = new Promise<CardgradingEngineStatus>((resolve) => {
+    timer = setTimeout(
+      () =>
+        resolve({
+          ok: false,
+          opencv: null,
+          numpy: null,
+          error: "grader check still running",
+          checkedAt: new Date().toISOString(),
+        }),
+      3_000,
+    );
+  });
+  try {
+    return await Promise.race([probe(), pending]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
 
 function isPublicV1Path(method: string, pathName: string): boolean {
   return method === "POST" && pathName === "/v1/sessions";
@@ -240,6 +278,18 @@ export interface CreateAppOptions {
    * for the Grade tab. Null/omitted → the photo routes answer "unavailable".
    */
   cardgrading?: CardgradingRunner | null;
+  /** Real OpenCV import check for /health (cached). Omitted → `gradeEngine: null`. */
+  gradeEngineProbe?: (() => Promise<CardgradingEngineStatus>) | null;
+  /** Grading route rate limit. Defaults to env (`CARD_FLOW_GRADE_RATE_*`); off in tests. */
+  gradeRateLimit?: RateLimitConfig | null;
+  /** Detect route rate limit (separate bucket). Defaults to env; off in tests. */
+  detectRateLimit?: RateLimitConfig | null;
+  /** Whole-instance grades per day. Defaults to `CARD_FLOW_GRADE_DAILY_CAP`; off in tests. */
+  gradeDailyCap?: number | null;
+  /** Grader slot gate; when full, grading routes answer 503 + Retry-After. */
+  gradeGate?: Pick<ConcurrencyGate, "isFull"> | null;
+  /** Trusted reverse-proxy hops for X-Forwarded-For. Defaults to `CARD_FLOW_TRUST_PROXY_HOPS` (0). */
+  trustProxyHops?: number;
   /** Prepare slab comps. Tests default to off. */
   slabPricing?: SlabPricingProvider;
   /** Server-side PokéCollector user directory. Tests default to off. */
@@ -300,6 +350,45 @@ export function createApp(
   const recognitionProvider = options.recognition ?? mockCardRecognitionProvider;
   const gradingProvider = options.grading ?? mockCardGradingProvider;
   const cardgrading = options.cardgrading ?? null;
+  const gradeEngineProbe = options.gradeEngineProbe ?? null;
+  // One limiter shared by every grading route: per signed-in user and per client IP.
+  const trustProxyHops = options.trustProxyHops ?? trustProxyHopsFromEnv();
+  type Context = HonoContext<AppEnv>;
+  const socketAddress = (c: Context) => {
+    try {
+      return getConnInfo(c).remote.address ?? undefined;
+    } catch {
+      return undefined; // app.request() in tests has no socket
+    }
+  };
+  const rateKeys = (c: Context) => {
+    const ip = clientIp(c, trustProxyHops, socketAddress);
+    return [`user:${String(c.get("userId") ?? "anon")}`, ip ? `ip:${ip}` : null];
+  };
+  const gradeRateLimit = rateLimitMiddleware(
+    options.gradeRateLimit === undefined ? gradeRateLimitFromEnv() : options.gradeRateLimit,
+    rateKeys,
+  );
+  const detectRateLimit = rateLimitMiddleware(
+    options.detectRateLimit === undefined ? detectRateLimitFromEnv() : options.detectRateLimit,
+    rateKeys,
+  );
+  const gradeDailyCap = globalDailyCapMiddleware(
+    options.gradeDailyCap === undefined ? globalGradeDailyCapFromEnv() : options.gradeDailyCap,
+  );
+  const gradeGate = options.gradeGate ?? null;
+  const gradeCapacity = async (c: Context, next: () => Promise<void>) => {
+    if (gradeGate?.isFull()) {
+      c.header("Retry-After", "15");
+      return c.json({ ok: false, error: "CardFlow is busy. Try again in a moment." }, 503);
+    }
+    return next();
+  };
+  const gradeBodyTooLarge = (c: Context) =>
+    c.json(
+      { ok: false, error: `Upload must be ${Math.floor(GRADE_ROUTE_BODY_MAX_BYTES / (1024 * 1024))} MB or smaller` },
+      413,
+    );
   const slabPricing = options.slabPricing ?? offSlabPricingProvider;
   const liveIdentifyEnabled = options.liveIdentifyEnabled ?? false;
   const allowDevScenario =
@@ -545,7 +634,7 @@ export function createApp(
     return c.json({ ok: false, error: "Unauthorized" }, 401);
   });
 
-  app.get("/health", (c) => {
+  app.get("/health", async (c) => {
     const catalogStatus = catalogHealth(catalog.name);
     const recognitionStatus = recognitionHealth(recognitionProvider.name);
     const gradeEstimateStatus = gradeEstimateHealth(gradingProvider.name);
@@ -571,6 +660,8 @@ export function createApp(
         phashIndexLoaded: livestreamIdentityIndex != null,
       }),
       gradeEstimate: gradeEstimateStatus,
+      // Real `import cv2, numpy` in the grader Python (cached 5 min). null = no grader runner.
+      gradeEngine: gradeEngineProbe ? await boundedProbe(gradeEngineProbe) : null,
       slabPricing: slabPricingStatus,
     });
   });
@@ -1294,9 +1385,11 @@ export function createApp(
 
   app.post(
     "/v1/grade/detect",
+    detectRateLimit,
+    gradeCapacity,
     bodyLimit({
-      maxSize: GRADE_IMAGE_MAX_BYTES,
-      onError: (c) => c.json({ ok: false, error: "Image must be 20 MB or smaller" }, 413),
+      maxSize: GRADE_ROUTE_BODY_MAX_BYTES,
+      onError: gradeBodyTooLarge,
     }),
     async (c) => {
       const parsed = await parseGradeDetectRequest(c);
@@ -1315,9 +1408,12 @@ export function createApp(
 
   app.post(
     "/v1/grade/pregrade",
+    gradeRateLimit,
+    gradeCapacity,
+    gradeDailyCap,
     bodyLimit({
-      maxSize: GRADE_IMAGE_MAX_BYTES * 2,
-      onError: (c) => c.json({ ok: false, error: "Image must be 20 MB or smaller" }, 413),
+      maxSize: GRADE_ROUTE_BODY_MAX_BYTES,
+      onError: gradeBodyTooLarge,
     }),
     async (c) => {
       const parsed = await parseGradeEstimateRequest(c);
@@ -1338,9 +1434,12 @@ export function createApp(
 
   app.post(
     "/v1/inventory/:inventoryItemId/grade-estimate",
+    gradeRateLimit,
+    gradeCapacity,
+    gradeDailyCap,
     bodyLimit({
-      maxSize: GRADE_IMAGE_MAX_BYTES * 2,
-      onError: (c) => c.json({ ok: false, error: "Image must be 20 MB or smaller" }, 413),
+      maxSize: GRADE_ROUTE_BODY_MAX_BYTES,
+      onError: gradeBodyTooLarge,
     }),
     async (c) => {
       const userId = c.get("userId");
