@@ -12,7 +12,13 @@ ARG PYTHON_VERSION=3.12
 ############################
 FROM node:${NODE_VERSION}-bookworm-slim AS node-build
 WORKDIR /repo
-RUN corepack enable
+# better-sqlite3 compiles with node-gyp on install (no prebuilt binary is fetched), so the
+# build stage needs Python, make and a C++ compiler. They don't reach the runtime image;
+# both stages are Debian bookworm, so the compiled addon matches the runtime glibc.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends python3 make g++ \
+ && rm -rf /var/lib/apt/lists/* \
+ && corepack enable
 # Manifests first for layer caching. Every workspace package.json is copied so
 # --frozen-lockfile sees the same importers as the lockfile.
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc tsconfig.base.json tsconfig.node-next.json ./
