@@ -23,6 +23,8 @@ describe("CI workflow", () => {
     expect(workflow).toContain("pnpm --filter @cardflow/api test:grade-e2e");
     expect(workflow).toContain("vendor/cardgrading/requirements.txt");
     expect(workflow).not.toMatch(/uses: [^@\s]+@v\d/);
+    expect(workflow).toContain("docker build -f apps/api/Dockerfile");
+    expect(workflow).toContain("cancel-in-progress: ${{ github.event_name == 'pull_request' }}");
     expect(workflow).not.toMatch(/secrets\./);
     expect(workflow).not.toMatch(/\.onnx|\.pth/i);
     expect(workflow).not.toMatch(/API_KEY|TOKEN|PASSWORD/i);

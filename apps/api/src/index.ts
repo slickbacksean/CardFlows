@@ -21,7 +21,7 @@ const { pricing, selection: pricingSelection } = createPricingFromEnv();
 const { accounts: pokecollectorAccounts, selection: accountsSelection } =
   createPokecollectorAccountsFromEnv();
 const { recognition, selection: recognitionSelection } = createRecognitionFromEnv();
-const { grading, cardgrading, selection: gradeEstimateSelection } = createGradeEstimateFromEnv();
+const { grading, cardgrading, gradeGate, selection: gradeEstimateSelection } = createGradeEstimateFromEnv();
 const gradeEngineProbe = gradeEngineProbeFromEnv(cardgrading);
 const { slabPricing, selection: slabPricingSelection } = createSlabPricingFromEnv();
 const { client: liveIdentityOpenclip, reason: openclipReason } =
@@ -35,6 +35,7 @@ const app = createApp(store, {
   grading,
   cardgrading,
   gradeEngineProbe,
+  gradeGate,
   slabPricing,
   livestreamIdentify: "yolo_identity",
   livestreamIdentityIndex: loadOptionalPhashIndex(),

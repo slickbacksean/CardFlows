@@ -120,7 +120,7 @@ export interface CardgradingEngineStatus {
 }
 
 const ENGINE_PROBE_TTL_MS = 5 * 60_000;
-const ENGINE_PROBE_TIMEOUT_MS = 20_000;
+const ENGINE_PROBE_TIMEOUT_MS = 5_000;
 const ENGINE_PROBE_SCRIPT =
   "import json, cv2, numpy; print(json.dumps({'opencv': cv2.__version__, 'numpy': numpy.__version__}))";
 
@@ -223,20 +223,34 @@ function runAdapter(
   });
 }
 
+export class GradeBusyError extends Error {
+  constructor(message = "cardgrading busy: no free grader slot") {
+    super(message);
+    this.name = "GradeBusyError";
+  }
+}
+
+export interface ConcurrencyGate {
+  <T>(task: () => Promise<T>): Promise<T>;
+  /** True when every slot is busy and the wait queue is full: callers should get 503. */
+  isFull(): boolean;
+}
+
 /**
- * Caps concurrent grader processes (each ~1 GB RSS). Waits up to `waitMs` for a slot,
- * then throws, which the routes report as "unavailable" (photos are kept on the phone).
+ * Caps concurrent grader processes (each ~1 GB RSS). Up to `maxQueue` callers wait
+ * up to `waitMs` for a slot; a full queue or a timed-out wait throws GradeBusyError.
  */
-export function createConcurrencyGate(max: number, waitMs = 30_000) {
+export function createConcurrencyGate(max: number, waitMs = 30_000, maxQueue = 3): ConcurrencyGate {
   let active = 0;
   const queue: Array<() => void> = [];
-  return async function run<T>(task: () => Promise<T>): Promise<T> {
+  const run = async function run<T>(task: () => Promise<T>): Promise<T> {
     if (active >= max) {
+      if (queue.length >= maxQueue) throw new GradeBusyError("cardgrading busy: grade queue is full");
       await new Promise<void>((resolve, reject) => {
         const timer = setTimeout(() => {
           const index = queue.indexOf(grant);
           if (index >= 0) queue.splice(index, 1);
-          reject(new Error("cardgrading busy: no free grader slot"));
+          reject(new GradeBusyError());
         }, waitMs);
         const grant = () => {
           clearTimeout(timer);
@@ -254,18 +268,31 @@ export function createConcurrencyGate(max: number, waitMs = 30_000) {
       if (next) next();
       else active -= 1;
     }
-  };
+  } as ConcurrencyGate;
+  run.isFull = () => active >= max && queue.length >= maxQueue;
+  return run;
 }
 
-/** MAX_CONCURRENT_GRADES (default 2): grader processes allowed at once, detect included. */
-export function maxConcurrentGradesFromEnv(env: Env = process.env): number {
-  const value = Number.parseInt(env.MAX_CONCURRENT_GRADES?.trim() ?? "", 10);
-  return Number.isFinite(value) && value > 0 ? value : 2;
+function positiveIntEnv(raw: string | undefined, fallback: number): number {
+  const value = Number.parseInt(raw?.trim() ?? "", 10);
+  return Number.isFinite(value) && value > 0 ? value : fallback;
+}
+
+/**
+ * MAX_CONCURRENT_GRADES (default 1: one ~1 GB grade per 2 GB instance), detect included.
+ * MAX_QUEUED_GRADES (default 3) callers may wait up to 30 s; beyond that the API answers 503.
+ */
+export function gradeGateFromEnv(env: Env = process.env): ConcurrencyGate {
+  return createConcurrencyGate(
+    positiveIntEnv(env.MAX_CONCURRENT_GRADES, 1),
+    30_000,
+    positiveIntEnv(env.MAX_QUEUED_GRADES, 3),
+  );
 }
 
 export function createVendoredCardgradingRunner(
   python: string,
-  gate: <T>(task: () => Promise<T>) => Promise<T> = createConcurrencyGate(maxConcurrentGradesFromEnv()),
+  gate: <T>(task: () => Promise<T>) => Promise<T> = gradeGateFromEnv(),
 ): CardgradingRunner {
   const inner = createUngatedRunner(python);
   return {

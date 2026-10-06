@@ -28,6 +28,8 @@ let privateTmp = "";
 const originalTmpdir = process.env.TMPDIR;
 let front: Uint8Array;
 let back: Uint8Array;
+// Shared so /health can serve the cached result after the first (cold) probe.
+const engineProbe = createCardgradingEngineProbe(python);
 
 beforeAll(() => {
   dir = mkdtempSync(path.join(tmpdir(), "cardflow-grade-e2e-"));
@@ -56,7 +58,7 @@ function app() {
     devAutoSession: true,
     cardgrading: runner,
     grading: createCardgradingProvider(runner),
-    gradeEngineProbe: createCardgradingEngineProbe(python!),
+    gradeEngineProbe: engineProbe,
     gradeRateLimit: null,
   });
 }
@@ -71,6 +73,10 @@ function tempGradeDirs(): string[] {
 
 describe("vendored cardgrading end to end", { timeout: 180_000 }, () => {
   it("health imports OpenCV in the grader Python", async () => {
+    // A cold cv2 import can take longer than the 3 s /health waits, so let the
+    // probe finish first; /health must then report the cached result.
+    const direct = await engineProbe();
+    expect(direct.error).toBeNull();
     const response = await app().request("/health");
     const body = (await response.json()) as { gradeEngine: { ok: boolean; opencv: string | null } };
     expect(body.gradeEngine.ok).toBe(true);

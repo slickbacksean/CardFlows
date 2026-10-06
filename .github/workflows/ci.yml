@@ -10,7 +10,8 @@ permissions:
 
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  # Cancel superseded runs on PR branches only; every push to main runs to completion.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   check:
@@ -83,3 +84,34 @@ jobs:
 
       - name: Real end-to-end photo grade
         run: pnpm --filter @cardflow/api test:grade-e2e
+
+  api-image:
+    # Build the API container and check that /health sees OpenCV inside it. Nothing is pushed.
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Build image
+        env:
+          DOCKER_BUILDKIT: "1"
+        run: docker build -f apps/api/Dockerfile -t cardflow-api:ci .
+
+      - name: Smoke test /health
+        run: |
+          docker run -d --name cardflow-api -p 8080:8080 --memory=2g --cpus=1 cardflow-api:ci
+          ready=0
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8080/health -o health.json \
+              && node -e "const h=require('./health.json'); process.exit(h.ok && h.gradeEngine && h.gradeEngine.ok ? 0 : 1)"; then
+              ready=1; break
+            fi
+            sleep 2
+          done
+          cat health.json || true
+          if [ "$ready" != 1 ]; then echo "grader not ready in image"; exit 1; fi
+
+      - name: Container logs
+        if: ${{ always() }}
+        run: docker logs cardflow-api || true

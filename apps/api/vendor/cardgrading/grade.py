@@ -100,12 +100,12 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
 def load_image(path: Path):
     if not path.exists():
         raise FileNotFoundError(f"image not found: {path}")
-    image = cv2.imread(str(path))
+    from pixel_cap import imread_capped  # CardFlow local change: header-checked 16 MP cap
+
+    image = imread_capped(path)
     if image is None:
         raise ValueError(f"could not decode image: {path}")
-    from pixel_cap import cap_pixels  # CardFlow local change: 16 MP cap
-
-    return cap_pixels(image)
+    return image
 
 
 def _log(verbose: bool, message: str = "") -> None:

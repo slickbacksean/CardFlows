@@ -25,9 +25,9 @@ function isTestEnv(env: Env): boolean {
 }
 
 /**
- * Grading routes are CPU-heavy (~1 GB, ~10 s per grade). Defaults: 6 per minute and
- * 100 per day, per user and per client IP. Off under tests unless configured.
- * CARD_FLOW_GRADE_RATE_LIMIT=false turns it off (local debugging only).
+ * Per-user and per-client-IP limits. Grades (pregrade + estimate) default to 6/min and
+ * 100/day; detect (crop check, called on every retake) has its own 20/min and 300/day.
+ * Off under tests unless configured. CARD_FLOW_GRADE_RATE_LIMIT=false turns all off.
  */
 export function gradeRateLimitFromEnv(env: Env = process.env): RateLimitConfig | null {
   if (env.CARD_FLOW_GRADE_RATE_LIMIT?.trim().toLowerCase() === "false") return null;
@@ -40,10 +40,53 @@ export function gradeRateLimitFromEnv(env: Env = process.env): RateLimitConfig |
   };
 }
 
-/** Best-effort client IP: first X-Forwarded-For hop (behind a proxy), else X-Real-IP. */
-export function clientIp(c: Context): string {
-  const forwarded = c.req.header("x-forwarded-for")?.split(",")[0]?.trim();
-  return forwarded || c.req.header("x-real-ip")?.trim() || "unknown";
+export function detectRateLimitFromEnv(env: Env = process.env): RateLimitConfig | null {
+  if (env.CARD_FLOW_GRADE_RATE_LIMIT?.trim().toLowerCase() === "false") return null;
+  if (isTestEnv(env) && !env.CARD_FLOW_DETECT_RATE_PER_MIN && !env.CARD_FLOW_DETECT_RATE_PER_DAY) {
+    return null;
+  }
+  return {
+    perMinute: positiveInt(env.CARD_FLOW_DETECT_RATE_PER_MIN, 20),
+    perDay: positiveInt(env.CARD_FLOW_DETECT_RATE_PER_DAY, 300),
+  };
+}
+
+/** Whole-instance cap on grades per day (CARD_FLOW_GRADE_DAILY_CAP, default 1000). Null in tests. */
+export function globalGradeDailyCapFromEnv(env: Env = process.env): number | null {
+  if (env.CARD_FLOW_GRADE_RATE_LIMIT?.trim().toLowerCase() === "false") return null;
+  if (isTestEnv(env) && !env.CARD_FLOW_GRADE_DAILY_CAP) return null;
+  return positiveInt(env.CARD_FLOW_GRADE_DAILY_CAP, 1000);
+}
+
+/**
+ * Number of reverse proxies in front of the API whose X-Forwarded-For entries are
+ * trusted (CARD_FLOW_TRUST_PROXY_HOPS, default 0 = trust none, use the socket address).
+ */
+export function trustProxyHopsFromEnv(env: Env = process.env): number {
+  const value = Number.parseInt(env.CARD_FLOW_TRUST_PROXY_HOPS?.trim() ?? "", 10);
+  return Number.isFinite(value) && value > 0 ? value : 0;
+}
+
+/**
+ * Client IP for rate limiting. With 0 trusted hops, the TCP peer address (the header
+ * is ignored, so a client can't spoof it). With N hops, the Nth address from the right
+ * of X-Forwarded-For, which our own proxies appended. Null when unknown: callers then
+ * skip the IP bucket instead of putting every client into one shared bucket.
+ */
+export function clientIp(
+  c: Context,
+  trustedHops: number,
+  socketAddress: (c: Context) => string | undefined,
+): string | null {
+  if (trustedHops > 0) {
+    const hops = (c.req.header("x-forwarded-for") ?? "")
+      .split(",")
+      .map((part) => part.trim())
+      .filter(Boolean);
+    const candidate = hops[hops.length - trustedHops];
+    if (candidate) return candidate;
+  }
+  return socketAddress(c) ?? null;
 }
 
 /**
@@ -86,7 +129,7 @@ export function createRateLimiter(
 /** Middleware: limits by each key returned (e.g. user id and client IP). 429 + Retry-After. */
 export function rateLimitMiddleware(
   config: RateLimitConfig | null,
-  keys: (c: Context) => string[],
+  keys: (c: Context) => Array<string | null>,
   now: () => number = Date.now,
 ): MiddlewareHandler {
   if (!config) return async (_c, next) => next();
@@ -99,11 +142,26 @@ export function rateLimitMiddleware(
   );
   return async (c, next) => {
     for (const key of keys(c)) {
+      if (!key) continue;
       const result = limiter(key);
       if (!result.allowed) {
         c.header("Retry-After", String(result.retryAfterSeconds));
         return c.json({ ok: false, error: "Too many requests. Try again in a moment." }, 429);
       }
+    }
+    return next();
+  };
+}
+
+/** Middleware: one shared daily bucket for the whole instance. 429 + Retry-After. */
+export function globalDailyCapMiddleware(cap: number | null, now: () => number = Date.now): MiddlewareHandler {
+  if (!cap) return async (_c, next) => next();
+  const limiter = createRateLimiter([{ windowMs: DAY, max: cap }], now);
+  return async (c, next) => {
+    const result = limiter("global");
+    if (!result.allowed) {
+      c.header("Retry-After", String(result.retryAfterSeconds));
+      return c.json({ ok: false, error: "CardFlow is busy today. Try again later." }, 429);
     }
     return next();
   };
