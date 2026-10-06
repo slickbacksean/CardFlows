@@ -21,8 +21,15 @@ COPY apps/api/package.json apps/api/
 COPY apps/mobile/package.json apps/mobile/
 COPY legacy/api/package.json legacy/api/
 COPY legacy/cardflows-shared/package.json legacy/cardflows-shared/
+# The repo uses node-linker=hoisted for React Native, which ignores --filter and would pull
+# in Expo. The isolated linker installs only the API's production tree (same lockfile).
+# Optional deps stay on: tsx needs esbuild's platform binary. onnxruntime-node (optional,
+# used only when an OBB model is mounted) keeps its bundled CPU build; no CUDA download.
+ENV ONNXRUNTIME_NODE_INSTALL_CUDA=skip
 RUN --mount=type=cache,id=pnpm,target=/root/.local/share/pnpm/store \
-    pnpm install --frozen-lockfile --prod --no-optional --filter "@cardflow/api..."
+    pnpm install --frozen-lockfile --prod --filter "@cardflow/api..." --config.node-linker=isolated \
+ && rm -rf node_modules/.pnpm/onnxruntime-node@*/node_modules/onnxruntime-node/bin/napi-v3/darwin \
+           node_modules/.pnpm/onnxruntime-node@*/node_modules/onnxruntime-node/bin/napi-v3/win32
 COPY packages/shared packages/shared
 COPY apps/api apps/api
 # Runs from TypeScript source with tsx (a production dependency). @cardflow/shared

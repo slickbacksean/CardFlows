@@ -7,7 +7,7 @@ Checked against `apps/api` (the hosting plan was written for the old `packages/a
 | Runtime | Node 22 (`engines.node >=22`; `better-sqlite3@13` needs it). CI uses Node 22. |
 | Start command | `node --import tsx src/index.ts` from `apps/api` (`pnpm --filter @cardflow/api start`). The API and `@cardflow/shared` run from TypeScript source through tsx, which is a production dependency. There is no separate compile step. `@types/better-sqlite3` is installed and `pnpm typecheck` is clean. |
 | CI | The `api-image` job builds this image on every PR and push to main and checks that `/health` reports OpenCV ready inside it (nothing is pushed). |
-| Container | `apps/api/Dockerfile` + root `.dockerignore`: Node 22 binary on `python:3.12-slim`, pinned `opencv-python-headless`, non-root user, tini, `HEALTHCHECK` on `/health`. **Not built yet** (no Docker on the dev Mac; disk is nearly full). |
+| Container | `apps/api/Dockerfile` + root `.dockerignore`: Node 22 binary on `python:3.12-slim`, pinned `opencv-python-headless`, non-root user, tini, `HEALTHCHECK` on `/health`. Node deps are installed with pnpm's isolated linker so only the API's production tree goes in (the repo's hoisted linker would pull in Expo). Built and smoke-tested in CI (`api-image`); not built on the dev Mac (no Docker). |
 | Platform config | Use the platform dashboard or its current IaC. Don't add `railway.toml`; Railway's config-as-code is deprecated. |
 | Port | `PORT` (image default 8080, local 3001). |
 | Database | `CARD_FLOW_SQLITE_PATH` (image default `/data/cardflow.sqlite`, ephemeral unless a volume is mounted). Hosted DB choice is Sean's decision. |
