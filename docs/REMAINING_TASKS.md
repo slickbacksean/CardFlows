@@ -28,7 +28,7 @@ The “Done” blurb at the top of [ROADMAP.md](./ROADMAP.md) is stale. Capture 
 
 **Already closed (do not redo):** money parser (`parseDollarsToCents` rejects `1.2.`, `$5`, `12,50`, `abc`, and negatives with 400, nothing stored); invite sessions (`POST /v1/sessions` and `PATCH /v1/identity` require an invite code; auto-session only when `CARD_FLOW_DEV_AUTO_SESSION=true`); OpenCLIP phases A–B, including accept threshold B2 (the unchecked B2 line in [LIVE_IDENTITY_OPENCLIP_STEPS.md](./LIVE_IDENTITY_OPENCLIP_STEPS.md) is stale).
 
-**Already on this machine (not new work):** gitignored YOLO weights, English pHash index, SQLite, OpenCLIP URL and visual index, PokéCollector URL, Claude grade key and workspace id, PokeTrace key and URL, mobile `EXPO_PUBLIC_API_URL`. Leave empty on purpose: CardSight key, live-identity ONNX path, PSA sidecar URL (Claude is the grade path while that URL is unset), invite codes are now required in env (`CARD_FLOW_INVITE_ALEX`, `CARD_FLOW_INVITE_JORDAN`; no built-in defaults, invites fail closed).
+**Already on this machine (not new work):** gitignored YOLO weights, English pHash index, SQLite, OpenCLIP URL and visual index, PokéCollector URL, Claude grade key and workspace id, PokeTrace key and URL, mobile `EXPO_PUBLIC_API_URL`. Leave empty on purpose: CardSight key, live-identity ONNX path, PSA sidecar URL (Claude is the grade path while that URL is unset), custom invite codes (defaults stay `alex-beta` and `jordan-beta`).
 
 ---
 

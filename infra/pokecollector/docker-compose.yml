@@ -37,9 +37,7 @@ services:
       JWT_SECRET_KEY: ${JWT_SECRET_KEY:-}
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
       TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
-      # Photo scanner (Gemini/OpenAI) is hard-off: no key is ever passed in, and CardFlow
-      # never calls a PokéCollector scanner endpoint.
-      GEMINI_API_KEY: ""
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       OPENAI_SCANNER_ENABLED: "false"
       PUBLIC_MODE: "false"
       CORS_ORIGINS: ${CORS_ORIGINS:-}
