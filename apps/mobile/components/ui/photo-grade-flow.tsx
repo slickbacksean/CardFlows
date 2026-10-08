@@ -7,12 +7,13 @@ import {
 import { Image } from "expo-image";
 import { useRef, useState } from "react";
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { GradeCardFinder } from "@/components/ui/grade-card-finder";
 import { PrimaryButton } from "@/components/ui/primary-button";
 import { detectGradePhoto, requestPhotoPregrade } from "@/lib/api";
-import { pickGradeStill, type PickedGradeStill } from "@/lib/grade-photos";
+import { CARD_ASPECT_RATIO, pickGradeStill, type PickedGradeStill } from "@/lib/grade-photos";
 import { colors, space } from "@/lib/theme";
 
-type Step = "guidelines" | "capture" | "crop" | "scoring" | "result";
+type Step = "guidelines" | "finder" | "capture" | "crop" | "scoring" | "result";
 type Side = "front" | "back";
 
 interface SideStill {
@@ -62,6 +63,7 @@ export function PhotoGradeFlow({ onOpenPipeline }: PhotoGradeFlowProps) {
   const [resultKind, setResultKind] = useState<"score" | "unavailable">("unavailable");
   const [unavailableMessage, setUnavailableMessage] = useState<string | null>(null);
   const [checking, setChecking] = useState(false);
+  const [freezeUri, setFreezeUri] = useState<string | null>(null);
   const requestId = useRef(0);
 
   const current = side === "front" ? front : back;
@@ -79,9 +81,52 @@ export function PhotoGradeFlow({ onOpenPipeline }: PhotoGradeFlowProps) {
     setResultKind("unavailable");
     setUnavailableMessage(null);
     setChecking(false);
+    setFreezeUri(null);
+  }
+
+  function openFinder(nextSide: Side) {
+    setSide(nextSide);
+    setNotice(null);
+    setDetected(false);
+    setFreezeUri(null);
+    setStep("finder");
+  }
+
+  function handleFinderBack() {
+    if (checking) return;
+    if (side === "back" && front?.cropUri) {
+      setSide("front");
+      setDetected(true);
+      setStep("crop");
+      return;
+    }
+    setStep("guidelines");
+  }
+
+  async function ingestStill(nextSide: Side, picked: PickedGradeStill, fromFinder: boolean) {
+    const still: SideStill = {
+      uri: picked.uri,
+      mimeType: picked.mimeType,
+      cropUri: null,
+    };
+    if (nextSide === "front") setFront(still);
+    else setBack(still);
+    setSide(nextSide);
+    setDetected(false);
+    if (fromFinder) setFreezeUri(picked.uri);
+    else setStep("crop");
+    await runDetect(nextSide, still);
+    if (fromFinder) {
+      setFreezeUri(null);
+      setStep("crop");
+    }
   }
 
   async function takePhoto(nextSide: Side, source: "camera" | "library") {
+    if (source === "camera") {
+      openFinder(nextSide);
+      return;
+    }
     setNotice(null);
     let picked: { still: PickedGradeStill } | { error: string } | null;
     try {
@@ -93,6 +138,7 @@ export function PhotoGradeFlow({ onOpenPipeline }: PhotoGradeFlowProps) {
       return;
     }
     if (!picked) {
+      if (step === "finder") return;
       const kept = nextSide === "front" ? front : back;
       setSide(nextSide);
       if (kept) setStep("crop");
@@ -101,21 +147,11 @@ export function PhotoGradeFlow({ onOpenPipeline }: PhotoGradeFlowProps) {
     }
     if ("error" in picked) {
       setSide(nextSide);
-      setStep("capture");
       setNotice(picked.error);
+      if (step !== "finder") setStep("capture");
       return;
     }
-    const still: SideStill = {
-      uri: picked.still.uri,
-      mimeType: picked.still.mimeType,
-      cropUri: null,
-    };
-    if (nextSide === "front") setFront(still);
-    else setBack(still);
-    setSide(nextSide);
-    setDetected(false);
-    setStep("crop");
-    await runDetect(nextSide, still);
+    await ingestStill(nextSide, picked.still, false);
   }
 
   async function runDetect(nextSide: Side, still: SideStill) {
@@ -155,10 +191,7 @@ export function PhotoGradeFlow({ onOpenPipeline }: PhotoGradeFlowProps) {
   function confirmCrop() {
     if (!detected || !current?.cropUri) return;
     if (side === "front") {
-      setSide("back");
-      setDetected(false);
-      setNotice(null);
-      void takePhoto("back", "camera");
+      openFinder("back");
       return;
     }
     void scorePhotos();
@@ -183,9 +216,9 @@ export function PhotoGradeFlow({ onOpenPipeline }: PhotoGradeFlowProps) {
       setWarnings([]);
       if (missed === "front") setFront((value) => (value ? { ...value, cropUri: null } : value));
       else setBack((value) => (value ? { ...value, cropUri: null } : value));
-      setNotice(`Retake the ${missed} photo: ${graded.reasons.join(", ")}.`);
       setResult(null);
-      setStep("crop");
+      openFinder(missed);
+      setNotice(`Retake the ${missed} photo: ${graded.reasons.join(", ")}.`);
       return;
     }
     if (!graded.ok) {
@@ -202,6 +235,20 @@ export function PhotoGradeFlow({ onOpenPipeline }: PhotoGradeFlowProps) {
 
   const sideLabel = side === "front" ? "Front" : "Back";
 
+  if (step === "finder") {
+    return (
+      <GradeCardFinder
+        detecting={checking}
+        freezeUri={freezeUri}
+        notice={notice}
+        onBack={handleFinderBack}
+        onCaptured={(still) => void ingestStill(side, still, true)}
+        onLibrary={() => void takePhoto(side, "library")}
+        side={side}
+      />
+    );
+  }
+
   return (
     <ScrollView contentContainerStyle={styles.content} style={styles.flex}>
       <Text style={styles.title}>Grading</Text>
@@ -214,7 +261,7 @@ export function PhotoGradeFlow({ onOpenPipeline }: PhotoGradeFlowProps) {
               {line}
             </Text>
           ))}
-          <PrimaryButton label="Take front photo" onPress={() => void takePhoto("front", "camera")} />
+          <PrimaryButton label="Take front photo" onPress={() => openFinder("front")} />
           <PrimaryButton
             label="Choose a photo"
             onPress={() => void takePhoto("front", "library")}
@@ -235,7 +282,7 @@ export function PhotoGradeFlow({ onOpenPipeline }: PhotoGradeFlowProps) {
           {notice ? <Text style={styles.error}>{notice}</Text> : null}
           <PrimaryButton
             label={`Take ${sideLabel.toLowerCase()} photo`}
-            onPress={() => void takePhoto(side, "camera")}
+            onPress={() => openFinder(side)}
           />
           <PrimaryButton
             label="Choose a photo"
@@ -288,7 +335,7 @@ export function PhotoGradeFlow({ onOpenPipeline }: PhotoGradeFlowProps) {
           {!checking ? (
             <PrimaryButton
               label="Retake"
-              onPress={() => void takePhoto(side, "camera")}
+              onPress={() => openFinder(side)}
               tone={detected ? "muted" : "cta"}
             />
           ) : null}
@@ -369,7 +416,13 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     minHeight: 280,
   },
-  frameImage: { width: "100%", height: 360, backgroundColor: colors.chip },
+  frameImage: {
+    width: "70%",
+    aspectRatio: CARD_ASPECT_RATIO,
+    maxHeight: 360,
+    alignSelf: "center",
+    backgroundColor: colors.chip,
+  },
   finding: {
     position: "absolute",
     left: 0,
