@@ -19,6 +19,7 @@ import {
   stillFromCameraCapture,
   type PickedGradeStill,
 } from "@/lib/grade-photos";
+import { TAB_CURVE_RADIUS } from "@/components/ui/tab-bar-metrics";
 import { colors, space } from "@/lib/theme";
 
 const DIM = "rgba(0,0,0,0.55)";
@@ -346,7 +347,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: space.lg,
-    paddingVertical: space.md,
+    paddingTop: space.md,
+    paddingBottom: space.md + TAB_CURVE_RADIUS,
   },
   toolbarSide: { width: 56, height: 56, alignItems: "center", justifyContent: "center" },
   disabled: { opacity: 0.5 },
