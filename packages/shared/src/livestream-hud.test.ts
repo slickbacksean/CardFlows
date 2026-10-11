@@ -62,6 +62,7 @@ describe("Livestream HUD (HUDS) + Cap-go in-app browser", () => {
     expect(html).toContain("Max Buy");
     expect(html).toContain("Grade");
     expect(html).toContain("not a cert");
+    expect(html).toContain('class="bubble"');
     expect(`${html}\n${js}`).not.toMatch(/whatnot|ebay|inject|scrape|screenshot/i);
   });
 

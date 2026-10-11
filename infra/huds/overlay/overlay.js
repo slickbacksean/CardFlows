@@ -27,6 +27,7 @@
           : "";
       const estimateValue = dollar(guess && guess.estimateAmount) || "No estimate";
       const maxBuyValue = dollar(guess && guess.maxBuyAmount) || "—";
+      bandEl.setAttribute("data-kind", "live_guess");
       bandEl.setAttribute(
         "aria-label",
         name + " live guess, Estimate " + estimateValue + ", Max Buy " + maxBuyValue + ", Grade —, not confirmed",
@@ -59,11 +60,13 @@
       thumbEl.setAttribute("aria-label", "No catalog art");
     }
     if (scannerOn) {
+      bandEl.setAttribute("data-kind", "looking");
       bandEl.setAttribute("aria-label", "CardFlow overlay, looking for a card");
       nameEl.textContent = "Looking for a card…";
       bodyEl.textContent = "Live-video identify is on.";
       return;
     }
+    bandEl.setAttribute("data-kind", "scanner_off");
     bandEl.setAttribute("aria-label", "CardFlow overlay, no card confirmed");
     nameEl.textContent = "Scanner off";
     bodyEl.textContent = "Turn the scanner on to identify from live video.";

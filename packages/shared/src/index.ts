@@ -482,17 +482,25 @@ export type { LiveOverlayGuess, LiveOverlayGuessInput } from "./live-overlay-gue
 export { livestreamOverlayKind, livestreamOverlayUsesHud } from "./livestream-overlay";
 export type { LivestreamOverlayKind, LivestreamOverlayKindInput } from "./livestream-overlay";
 export {
+  LIVESTREAM_HUD_BUBBLE_COLLAPSED_SIZE,
+  LIVESTREAM_HUD_BUBBLE_EXPANDED_HEIGHT,
+  LIVESTREAM_HUD_BUBBLE_EXPANDED_WIDTH,
+  LIVESTREAM_HUD_BUBBLE_INSET,
   LIVESTREAM_HUD_DEFAULT_PORT,
   LIVESTREAM_HUD_ID,
   LIVESTREAM_HUD_IDENTITY_EVENT,
   LIVESTREAM_HUD_SCANNER_EVENT,
   LIVESTREAM_INAPP_BROWSER,
+  clampLivestreamHudBubbleOffset,
   defaultLivestreamHudOrigin,
+  livestreamHudBubbleSize,
   livestreamHudEventPath,
   livestreamHudOriginWhitelist,
   livestreamHudPagePath,
 } from "./livestream-hud";
 export type {
+  ClampLivestreamHudBubbleOffsetInput,
+  LivestreamHudBubbleOffset,
   LivestreamHudIdentityPayload,
   LivestreamHudScannerPayload,
 } from "./livestream-hud";
