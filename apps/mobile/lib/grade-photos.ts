@@ -1,17 +1,31 @@
-import { GRADE_IMAGE_MAX_BYTES, isGradeImageMime } from "@cardflow/shared";
+import {
+  CARD_ASPECT_RATIO,
+  GRADE_IMAGE_MAX_BYTES,
+  GRADE_STILL_QUALITY,
+  GRADE_STILL_MIN_SHORT_SIDE_PX,
+  GRADE_STILL_TOO_SMALL_COPY,
+  isGradeImageMime,
+  largestPictureSize,
+  stillFromCameraCapture,
+  type PickedGradeStill,
+} from "@cardflow/shared";
 import * as ImagePicker from "expo-image-picker";
 import { Alert, Platform } from "react-native";
 
-export interface PickedGradeStill {
-  uri: string;
-  mimeType: string | null;
-}
+export type { PickedGradeStill };
+export {
+  CARD_ASPECT_RATIO,
+  GRADE_STILL_MIN_SHORT_SIDE_PX,
+  GRADE_STILL_QUALITY,
+  largestPictureSize,
+  stillFromCameraCapture,
+};
 
 const STILL_PICKER: ImagePicker.ImagePickerOptions = {
   mediaTypes: ["images"],
   allowsEditing: false,
   allowsMultipleSelection: false,
-  quality: 0.8,
+  quality: GRADE_STILL_QUALITY,
   // iOS library photos are often HEIC. The offline grader (OpenCV) reads
   // JPEG/PNG/WebP only, so ask iOS for a compatible JPEG instead.
   preferredAssetRepresentationMode:
@@ -36,6 +50,15 @@ export function validatePickedGradeStill(
   if (!asset?.uri) return { error: "Could not read that photo. Try another." };
   if (typeof asset.fileSize === "number" && asset.fileSize > GRADE_IMAGE_MAX_BYTES) {
     return { error: "Image must be 20 MB or smaller" };
+  }
+  if (
+    typeof asset.width === "number" &&
+    typeof asset.height === "number" &&
+    asset.width > 0 &&
+    asset.height > 0 &&
+    Math.min(asset.width, asset.height) < GRADE_STILL_MIN_SHORT_SIDE_PX
+  ) {
+    return { error: GRADE_STILL_TOO_SMALL_COPY };
   }
   const mimeType = mimeFromPickerAsset(asset);
   if (mimeType && !isGradeImageMime(mimeType)) {
