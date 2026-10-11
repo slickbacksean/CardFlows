@@ -307,8 +307,11 @@ describe("Livestream HUD bubble chrome", () => {
     expect(bubble).toContain("LIVE_HUD_PRICE_UNAVAILABLE");
     expect(bubble).not.toMatch(/powered by|brickify|poketrace/i);
     expect(bubble).toContain("Purchased");
-    expect(bubble).toContain("Add details");
-    expect(bubble).toContain("liveHudQuickSavePayload");
+    expect(bubble).toContain("shouldAcceptLiveHudPurchaseTap");
+    expect(bubble).toContain("details needed");
+    expect(bubble).not.toContain("Add details");
+    expect(bubble).not.toContain("liveHudQuickSavePayload");
+    expect(bubble).not.toContain("Purchase price");
     expect(bubble).not.toContain("I bought this");
     expect(bubble).not.toMatch(/>Buy</);
     expect(bubble).not.toContain("placeBid");
@@ -317,7 +320,9 @@ describe("Livestream HUD bubble chrome", () => {
     expect(scanTab.indexOf("<LivestreamBrowser")).toBeLessThan(scanTab.indexOf("<ScreenerOverlay"));
     expect(scanTab).toContain('pointerEvents="box-none"');
     expect(scanTab).toContain("saveLivestreamPurchase");
-    expect(scanTab).toContain("PurchaseSheet");
+    expect(scanTab).toContain("streamUrl: chrome.pageUrl");
+    expect(scanTab).not.toContain("PurchaseSheet");
+    expect(scanTab).not.toContain("onAddDetails");
     expect(browser).toContain('return "unavailable"');
     expect(browser).toContain("draws over React Native siblings");
     expect(liveBrowser).toContain("isCapgoLivestreamBrowserAvailable");

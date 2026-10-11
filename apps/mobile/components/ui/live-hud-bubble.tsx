@@ -4,7 +4,6 @@ import {
   Pressable,
   StyleSheet,
   Text,
-  TextInput,
   View,
   type LayoutChangeEvent,
 } from "react-native";
@@ -28,12 +27,11 @@ import {
   LIVESTREAM_HUD_BUBBLE_INSET,
   LIVESTREAM_SCANNER_UNAVAILABLE_MESSAGE,
   liveHudPricesFromMatch,
-  liveHudQuickSavePayload,
   livestreamHudBubbleSize,
+  shouldAcceptLiveHudPurchaseTap,
   livestreamHudBubbleWidth,
   livestreamHudOffsetFromSaved,
   snapLivestreamHudBubbleOffset,
-  type LiveHudQuickSavePayload,
   type LiveOverlayGuess,
   type LivestreamHudSavedPosition,
   type LivestreamOverlayKind,
@@ -42,34 +40,27 @@ import {
 export interface LiveHudBubbleProps {
   kind: LivestreamOverlayKind;
   liveGuess?: LiveOverlayGuess | null;
-  onPurchased?: (guess: LiveOverlayGuess, payload: LiveHudQuickSavePayload) => void | Promise<void>;
-  onAddDetails?: (guess: LiveOverlayGuess) => void;
+  onPurchased?: (guess: LiveOverlayGuess) => void | Promise<void>;
 }
 
 export function LiveHudBubble({
   kind,
   liveGuess = null,
   onPurchased,
-  onAddDetails,
 }: LiveHudBubbleProps) {
   const insets = useSafeAreaInsets();
   const [expanded, setExpanded] = useState(false);
   const [dismissedKey, setDismissedKey] = useState("");
   const [barWidth, setBarWidth] = useState(0);
-  const [priceDraft, setPriceDraft] = useState("");
-  const [promptOpen, setPromptOpen] = useState(false);
   const [savingKey, setSavingKey] = useState("");
-  const [toast, setToast] = useState<{ key: string; name: string; guess: LiveOverlayGuess } | null>(
-    null,
-  );
+  const [savedKeys, setSavedKeys] = useState<string[]>([]);
+  const [toast, setToast] = useState<{ key: string; name: string } | null>(null);
   const matchKey =
     kind === "live_guess" && liveGuess?.tcgdexId ? liveGuess.tcgdexId : kind;
   const [matchKeySeen, setMatchKeySeen] = useState(matchKey);
   if (matchKeySeen !== matchKey) {
     setMatchKeySeen(matchKey);
     setExpanded(false);
-    setPromptOpen(false);
-    setPriceDraft("");
     if (dismissedKey && dismissedKey !== matchKey) setDismissedKey("");
   }
 
@@ -164,13 +155,11 @@ export function LiveHudBubble({
   function toggleExpanded() {
     const next = !expanded;
     setExpanded(next);
-    if (!next) setPromptOpen(false);
     snapCurrent(next);
   }
 
   function dismiss() {
     setExpanded(false);
-    setPromptOpen(false);
     setDismissedKey(matchKey);
   }
 
@@ -182,27 +171,26 @@ export function LiveHudBubble({
     snapCurrent(expanded);
   }
 
-  async function savePurchase(typedPrice?: string) {
-    if (!liveGuess?.tcgdexId || !onPurchased || savingKey === matchKey) return;
-    const built = liveHudQuickSavePayload({
-      match: liveGuess,
-      purchasePrice: typedPrice ?? priceDraft,
-    });
-    if (!built.ok) {
-      setExpanded(true);
-      setPromptOpen(true);
-      snapCurrent(true);
+  async function savePurchase() {
+    if (!liveGuess?.tcgdexId || !onPurchased) return;
+    if (
+      !shouldAcceptLiveHudPurchaseTap({
+        matchKey,
+        inFlightKey: savingKey,
+        savedKeys,
+      })
+    ) {
       return;
     }
     setSavingKey(matchKey);
     try {
-      await onPurchased(liveGuess, built.payload);
-      setPromptOpen(false);
-      setPriceDraft("");
+      await onPurchased(liveGuess);
+      setSavedKeys((current) =>
+        current.includes(matchKey) ? current : [...current, matchKey],
+      );
       setToast({
         key: `${liveGuess.tcgdexId}:${Date.now()}`,
         name: liveGuess.name ?? liveGuess.tcgdexId,
-        guess: liveGuess,
       });
     } finally {
       setSavingKey("");
@@ -291,19 +279,8 @@ export function LiveHudBubble({
           </GestureDetector>
           {expanded && canPurchase ? (
             <View style={styles.actions}>
-              {promptOpen ? (
-                <TextInput
-                  accessibilityLabel="Purchase price"
-                  keyboardType="decimal-pad"
-                  onChangeText={setPriceDraft}
-                  placeholder="0.00"
-                  placeholderTextColor={colors.muted}
-                  style={styles.priceInput}
-                  value={priceDraft}
-                />
-              ) : null}
               <Pressable
-                accessibilityHint="Saves this card as purchased with USD defaults. Does not read the live page."
+                accessibilityHint="Saves this card as purchased. Cost details can be added later. Does not read the live page."
                 accessibilityLabel="Purchased"
                 accessibilityRole="button"
                 disabled={savingKey === matchKey}
@@ -319,21 +296,10 @@ export function LiveHudBubble({
         </Animated.View>
       </GestureDetector>
       {toast ? (
-        <View pointerEvents="box-none" style={styles.toast}>
+        <View pointerEvents="none" style={styles.toast}>
           <Text numberOfLines={1} style={styles.toastCopy}>
-            Saved {toast.name}
+            Saved {toast.name} — details needed
           </Text>
-          {onAddDetails ? (
-            <Pressable
-              accessibilityHint="Opens the purchase sheet to edit details."
-              accessibilityLabel="Add details"
-              accessibilityRole="button"
-              onPress={() => onAddDetails(toast.guess)}
-              style={styles.toastAction}
-            >
-              <Text style={styles.toastActionLabel}>Add details</Text>
-            </Pressable>
-          ) : null}
         </View>
       ) : null}
     </GestureHandlerRootView>
@@ -420,18 +386,6 @@ const styles = StyleSheet.create({
     justifyContent: "flex-end",
     gap: 8,
   },
-  priceInput: {
-    flex: 1,
-    backgroundColor: colors.card,
-    borderColor: colors.cardBorder,
-    borderWidth: 1,
-    borderRadius: 10,
-    color: colors.text,
-    paddingHorizontal: space.sm,
-    paddingVertical: 6,
-    fontSize: 15,
-    fontWeight: "700",
-  },
   purchased: {
     backgroundColor: colors.success,
     borderRadius: 999,
@@ -456,6 +410,4 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   toastCopy: { flex: 1, color: "#FFFFFF", fontSize: 14, fontWeight: "700" },
-  toastAction: { paddingHorizontal: 8, paddingVertical: 4 },
-  toastActionLabel: { color: colors.accent, fontSize: 13, fontWeight: "800" },
 });

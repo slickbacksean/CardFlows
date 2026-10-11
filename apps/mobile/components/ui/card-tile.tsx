@@ -13,6 +13,7 @@ export interface CardTileProps {
   targetMaxBuyDisplay?: string | null;
   hasDraft?: boolean;
   showDraftCta?: boolean;
+  detailsNeeded?: boolean;
   onPress?: () => void;
 }
 
@@ -27,6 +28,7 @@ export function CardTile({
   targetMaxBuyDisplay,
   hasDraft = false,
   showDraftCta = false,
+  detailsNeeded = false,
   onPress,
 }: CardTileProps) {
   if (placeholder) {
@@ -55,7 +57,14 @@ export function CardTile({
 
   return (
     <Pressable
-      accessibilityLabel={[name, numberLine, statusLabel, valueLabel, showDraft ? "Draft" : null]
+      accessibilityLabel={[
+        name,
+        numberLine,
+        statusLabel,
+        valueLabel,
+        detailsNeeded ? "Details needed" : null,
+        showDraft ? "Draft" : null,
+      ]
         .filter(Boolean)
         .join(", ")}
       accessibilityRole={onPress ? "button" : undefined}
@@ -79,6 +88,7 @@ export function CardTile({
         </Text>
         <Text style={styles.line}>{numberLine}</Text>
         <Text style={styles.line}>{statusLabel}</Text>
+        {detailsNeeded ? <Text style={styles.detailsNeeded}>Details needed</Text> : null}
         {valueLabel ? <Text style={styles.line}>{valueLabel}</Text> : null}
         {showDraft ? <Text style={styles.draft}>Draft</Text> : null}
         {intent === "watchlist" ? (
@@ -129,6 +139,12 @@ const styles = StyleSheet.create({
     color: colors.accent,
     fontSize: 12,
     fontWeight: "700",
+    marginTop: 2,
+  },
+  detailsNeeded: {
+    color: colors.accent,
+    fontSize: 12,
+    fontWeight: "800",
     marginTop: 2,
   },
 });

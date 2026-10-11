@@ -154,9 +154,9 @@ describe("live overlay guess from catalog + estimate", () => {
     expect(client).toContain("emptySlabEstimate");
     expect(client).not.toContain("POKETRACE_API_KEY");
     expect(scanTab).toContain("saveLivestreamPurchase");
-    expect(scanTab).toContain("PurchaseSheet");
+    expect(scanTab).not.toContain("PurchaseSheet");
     const bubble = readRepoFile("apps/mobile/components/ui/live-hud-bubble.tsx");
     expect(bubble).toContain("Purchased");
-    expect(bubble).toContain("liveHudQuickSavePayload");
+    expect(bubble).toContain("shouldAcceptLiveHudPurchaseTap");
   });
 });

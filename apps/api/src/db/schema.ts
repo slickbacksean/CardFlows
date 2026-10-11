@@ -125,7 +125,7 @@ export const crmInventoryItems = sqliteTable(
     check("crm_inventory_items_intent_chk", sql`${table.intent} in ('purchased', 'watchlist')`),
     check(
       "crm_inventory_items_workflow_state_chk",
-      sql`${table.workflowState} in ('watching', 'watchlist_closed', 'acquired', 'drafted', 'archived')`,
+      sql`${table.workflowState} in ('watching', 'watchlist_closed', 'acquired', 'drafted', 'archived', 'details_needed')`,
     ),
     uniqueIndex("crm_inventory_items_watchlist_open_uidx")
       .on(table.userId, table.cardflowCardId, table.selectedVariant)

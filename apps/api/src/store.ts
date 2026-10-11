@@ -90,7 +90,7 @@ export interface InventoryItemRecord {
   condition: string | null;
   quantity: number | null;
   tags: string[];
-  workflowState: "acquired" | "watching" | "drafted";
+  workflowState: "acquired" | "watching" | "drafted" | "details_needed";
   referencePriceAmount: string | null;
   targetMaxBuyAmount: string | null;
   createdAt: string;

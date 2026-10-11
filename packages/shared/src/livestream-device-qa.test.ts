@@ -119,11 +119,11 @@ describe("Task 9 livestream device QA", () => {
     expect(bubble).toContain("Looking for a card…");
     expect(overlay).not.toContain("savePurchased");
     expect(bubble).toContain("Purchased");
-    expect(bubble).toContain("liveHudQuickSavePayload");
+    expect(bubble).toContain("shouldAcceptLiveHudPurchaseTap");
     expect(listing).toContain("openBrowserAsync");
     expect(listing).not.toMatch(/placeBid|executeScript/);
     expect(scanTab).toContain("saveLivestreamPurchase");
-    expect(scanTab).toContain("PurchaseSheet");
+    expect(scanTab).not.toContain("PurchaseSheet");
     expect(client).toContain("/v1/livestream/identify");
     expect(client).not.toMatch(/saveInventoryItem|addPurchased/);
   });

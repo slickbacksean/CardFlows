@@ -303,6 +303,29 @@ describe("SQLite store adapter", () => {
         maxBuy,
       },
     });
+    const incomplete = store.saveInventoryItem({
+      inventoryItemId: crypto.randomUUID(),
+      userId,
+      cardflowCardId: canonicalCard.cardflowCardId as string,
+      confirmationId: confirmation.confirmationId,
+      scanId: confirmation.scanId,
+      intent: "purchased",
+      grain: "physical_copy",
+      selectedVariant: null,
+      condition: null,
+      quantity: 1,
+      tags: ["raw", "livestream", "livestream:whatnot"],
+      workflowState: "details_needed",
+      referencePriceAmount: null,
+      targetMaxBuyAmount: null,
+      createdAt: new Date().toISOString(),
+      purchase: null,
+    });
+    expect(store.getInventoryItem(userId, incomplete.inventoryItemId)?.workflowState).toBe(
+      "details_needed",
+    );
+    expect(store.getInventoryItem(userId, incomplete.inventoryItemId)?.purchase).toBeNull();
+
     const loaded = store.getInventoryItem(userId, item.inventoryItemId);
     expect(loaded?.purchase?.costBasis.allInTotal).toBe("11.75");
     expect(loaded?.referencePriceAmount).toBe("20.00");

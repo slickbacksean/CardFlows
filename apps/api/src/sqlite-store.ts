@@ -899,7 +899,9 @@ export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStor
           ? "drafted"
           : item.workflowState === "watching"
             ? "watching"
-            : "acquired",
+            : item.workflowState === "details_needed"
+              ? "details_needed"
+              : "acquired",
       referencePriceAmount: dollarsFromCents(item.referencePriceAmount),
       targetMaxBuyAmount: dollarsFromCents(item.targetMaxBuyAmount),
       createdAt: item.createdAt,

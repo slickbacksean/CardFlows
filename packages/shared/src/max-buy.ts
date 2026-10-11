@@ -1,3 +1,4 @@
+import { purchasedAllInAmount } from "./details-needed";
 import {
   centsToDollarString,
   optionalDollarsToCents,
@@ -155,10 +156,12 @@ export function recomputeCopyMaxBuy(
 export function collectionTileValue(
   copy: {
     intent: "purchased" | "watchlist";
+    workflowState?: string | null;
     allInTotal?: string | null;
     referencePriceAmount?: string | number | null;
     condition?: string | null;
     purchase?: {
+      costBasis?: { allInTotal?: string | null };
       maxBuy?: { referencePriceAmount?: string | number | null };
     } | null;
   },
@@ -166,7 +169,7 @@ export function collectionTileValue(
 ): { allInAmount: string | null; targetMaxBuyDisplay: string | null } {
   if (copy.intent === "purchased") {
     return {
-      allInAmount: copy.allInTotal ?? null,
+      allInAmount: purchasedAllInAmount(copy),
       targetMaxBuyDisplay: null,
     };
   }

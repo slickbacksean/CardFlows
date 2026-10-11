@@ -8,7 +8,6 @@ import {
   isStableLiveIdentity,
   livestreamOverlayKind,
   livestreamOverlayUsesHud,
-  type LiveHudQuickSavePayload,
   type LiveOverlayGuess,
   type LiveVideoIdentityResult,
 } from "@cardflow/shared";
@@ -18,8 +17,7 @@ export interface ScreenerOverlayProps {
   tabFocused?: boolean;
   unavailable?: boolean;
   liveIdentity?: LiveVideoIdentityResult | null;
-  onPurchased?: (guess: LiveOverlayGuess, payload: LiveHudQuickSavePayload) => void | Promise<void>;
-  onAddDetails?: (guess: LiveOverlayGuess) => void;
+  onPurchased?: (guess: LiveOverlayGuess) => void | Promise<void>;
 }
 
 export function ScreenerOverlay({
@@ -28,7 +26,6 @@ export function ScreenerOverlay({
   unavailable = false,
   liveIdentity = null,
   onPurchased,
-  onAddDetails,
 }: ScreenerOverlayProps) {
   const [hudReady, setHudReady] = useState(false);
   const [liveGuess, setLiveGuess] = useState<LiveOverlayGuess | null>(null);
@@ -106,7 +103,6 @@ export function ScreenerOverlay({
     <LiveHudBubble
       kind={overlayKind}
       liveGuess={liveGuess}
-      onAddDetails={onAddDetails}
       onPurchased={onPurchased}
     />
   );

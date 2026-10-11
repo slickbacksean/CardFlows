@@ -1,10 +1,8 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import {
   LIVESTREAM_SCANNER_UNAVAILABLE_MESSAGE,
-  type LiveHudQuickSavePayload,
   type LiveOverlayGuess,
   type LiveVideoIdentityResult,
-  type TcgdexVariants,
 } from "@cardflow/shared";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -12,7 +10,6 @@ import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { LivestreamBrowser, type LivestreamBrowserHandle } from "@/components/ui/livestream-browser";
 import { PrimaryButton } from "@/components/ui/primary-button";
-import { PurchaseSheet, type PurchaseSavePayload } from "@/components/ui/purchase-sheet";
 import { ScreenerOverlay } from "@/components/ui/screener-overlay";
 import { saveLivestreamPurchase } from "@/lib/api";
 import {
@@ -42,10 +39,6 @@ export default function ScanTabScreen() {
   const [browserEpoch, setBrowserEpoch] = useState(0);
   const [tabFocused, setTabFocused] = useState(true);
   const [liveIdentity, setLiveIdentity] = useState<LiveVideoIdentityResult | null>(null);
-  const [detailGuess, setDetailGuess] = useState<LiveOverlayGuess | null>(null);
-  const [detailPayload, setDetailPayload] = useState<LiveHudQuickSavePayload | null>(null);
-  const [buyError, setBuyError] = useState<string | null>(null);
-  const [isSavingBuy, setIsSavingBuy] = useState(false);
   const browserRef = useRef<LivestreamBrowserHandle>(null);
   const chrome = LIVESTREAM_PLATFORMS[platform];
   const scannerUnavailable = Platform.OS === "web";
@@ -82,29 +75,12 @@ export default function ScanTabScreen() {
     }
   }
 
-  async function onQuickPurchase(guess: LiveOverlayGuess, payload: LiveHudQuickSavePayload) {
+  async function onPurchased(guess: LiveOverlayGuess) {
     await saveLivestreamPurchase({
       tcgdexId: guess.tcgdexId,
-      ...payload,
+      platform,
+      streamUrl: chrome.pageUrl,
     });
-    setDetailPayload(payload);
-  }
-
-  async function onSaveLivePurchase(payload: PurchaseSavePayload) {
-    if (!detailGuess) return;
-    setIsSavingBuy(true);
-    setBuyError(null);
-    try {
-      await saveLivestreamPurchase({
-        tcgdexId: detailGuess.tcgdexId,
-        ...payload,
-      });
-      setDetailGuess(null);
-    } catch (caught) {
-      setBuyError(caught instanceof Error ? caught.message : "Could not save that purchase");
-    } finally {
-      setIsSavingBuy(false);
-    }
   }
 
   function toggleScanner() {
@@ -255,11 +231,7 @@ export default function ScanTabScreen() {
         <View pointerEvents="box-none" style={styles.hudLayer}>
           <ScreenerOverlay
             liveIdentity={liveIdentity}
-            onAddDetails={(guess) => {
-              setBuyError(null);
-              setDetailGuess(guess);
-            }}
-            onPurchased={(guess, payload) => onQuickPurchase(guess, payload)}
+            onPurchased={(guess) => onPurchased(guess)}
             scannerOn={scannerOn}
             tabFocused={tabFocused}
             unavailable={scannerUnavailable}
@@ -286,32 +258,9 @@ export default function ScanTabScreen() {
           </Pressable>
         ) : null}
       </View>
-      <PurchaseSheet
-        error={buyError}
-        initialPurchasePrice={detailPayload?.purchasePrice ?? ""}
-        isSaving={isSavingBuy}
-        localId={detailGuess?.number ?? ""}
-        name={detailGuess?.name ?? detailGuess?.tcgdexId ?? "Card"}
-        onClose={() => {
-          if (!isSavingBuy) setDetailGuess(null);
-        }}
-        onSave={(payload) => void onSaveLivePurchase(payload)}
-        selectedVariant="normal"
-        setName={detailGuess?.setName ?? ""}
-        variants={LIVE_PURCHASE_VARIANTS}
-        visible={detailGuess !== null}
-      />
     </SafeAreaView>
   );
 }
-
-const LIVE_PURCHASE_VARIANTS: TcgdexVariants = {
-  normal: true,
-  holo: true,
-  reverse: true,
-  firstEdition: false,
-  wPromo: false,
-};
 
 interface SegmentButtonProps {
   label: string;

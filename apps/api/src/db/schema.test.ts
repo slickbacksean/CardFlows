@@ -123,5 +123,8 @@ describe("MVP CRM schema", () => {
     expect(migrationSql).not.toContain("crm_storage_locations");
     expect(migrationSql).not.toContain("crm_price_snapshots");
     expect(migrationSql).not.toContain("crm_audit_events");
+    expect(readFileSync(path.join(apiRoot, "drizzle/0006_details_needed_workflow.sql"), "utf8")).toContain(
+      "details_needed",
+    );
   });
 });

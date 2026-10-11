@@ -1,5 +1,12 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
-import { collectionTileValue, type CardFlowPortfolioSummary, type MaxBuyPreferences } from "@cardflow/shared";
+import {
+  collectionTileValue,
+  DETAILS_NEEDED_LABEL,
+  isDetailsNeededPurchase,
+  type CardFlowPortfolioSummary,
+  type MaxBuyPreferences,
+  type TcgdexVariants,
+} from "@cardflow/shared";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useMemo, useState } from "react";
 import {
@@ -14,12 +21,14 @@ import {
 } from "react-native";
 import { CardTile } from "@/components/ui/card-tile";
 import { PrimaryButton } from "@/components/ui/primary-button";
+import { PurchaseSheet, type PurchaseSavePayload } from "@/components/ui/purchase-sheet";
 import { ValueHistoryChart } from "@/components/ui/value-history-chart";
 import {
   isWatchlistDraftBlockedError,
   getPortfolio,
   getPortfolioHistory,
   type PortfolioHistoryPoint,
+  completePurchasedDetails,
   listInventory,
   openOrCreateDraft,
   type InventoryItem,
@@ -73,6 +82,10 @@ export default function CollectionScreen() {
   );
   const [query, setQuery] = useState("");
   const [actionError, setActionError] = useState<string | null>(null);
+  const [detailsNeededOnly, setDetailsNeededOnly] = useState(false);
+  const [detailItem, setDetailItem] = useState<InventoryItem | null>(null);
+  const [detailError, setDetailError] = useState<string | null>(null);
+  const [isSavingDetails, setIsSavingDetails] = useState(false);
   const [preferences, setPreferences] = useState<MaxBuyPreferences>(peekMaxBuyPreferences);
 
   const refreshInventory = useCallback(async () => {
@@ -118,6 +131,10 @@ export default function CollectionScreen() {
     () => items.filter((item) => item.intent === "purchased").length,
     [items],
   );
+  const detailsNeededCount = useMemo(
+    () => items.filter((item) => isDetailsNeededPurchase(item)).length,
+    [items],
+  );
   const watchingCount = useMemo(
     () => items.filter((item) => item.intent === "watchlist").length,
     [items],
@@ -127,8 +144,15 @@ export default function CollectionScreen() {
     [items, segment],
   );
   const visibleItems = useMemo(
-    () => segmentedItems.filter((item) => matchesSearch(item, normalizedQuery)),
-    [normalizedQuery, segmentedItems],
+    () =>
+      segmentedItems.filter((item) => {
+        if (!matchesSearch(item, normalizedQuery)) return false;
+        if (segment === "purchased" && detailsNeededOnly) {
+          return isDetailsNeededPurchase(item);
+        }
+        return true;
+      }),
+    [detailsNeededOnly, normalizedQuery, segment, segmentedItems],
   );
 
   function openWatchlistDetail(item: InventoryItem) {
@@ -142,6 +166,39 @@ export default function CollectionScreen() {
           : {}),
       },
     });
+  }
+
+  function openPurchasedItem(item: InventoryItem) {
+    if (isDetailsNeededPurchase(item)) {
+      setDetailError(null);
+      setDetailItem(item);
+      return;
+    }
+    void openDraft(item);
+  }
+
+  async function savePurchaseDetails(payload: PurchaseSavePayload) {
+    if (!detailItem) return;
+    setIsSavingDetails(true);
+    setDetailError(null);
+    try {
+      await completePurchasedDetails(detailItem.inventoryItemId, {
+        purchasePrice: payload.purchasePrice,
+        purchasedAt: payload.purchasedAt,
+        shipping: payload.shipping ?? "0.00",
+        tax: payload.tax ?? "0.00",
+        fees: payload.fees ?? "0.00",
+        supplies: payload.supplies ?? "0.00",
+        condition: payload.condition,
+        selectedVariant: payload.selectedVariant,
+      });
+      setDetailItem(null);
+      await refreshInventory();
+    } catch (caught) {
+      setDetailError(caught instanceof Error ? caught.message : "Could not save purchase details");
+    } finally {
+      setIsSavingDetails(false);
+    }
   }
 
   async function openDraft(item: InventoryItem) {
@@ -185,10 +242,13 @@ export default function CollectionScreen() {
 
         {loadState === "ready" ? (
           <Text
-            accessibilityLabel={`${purchasedCount} purchased, ${watchingCount} watching`}
+            accessibilityLabel={`${purchasedCount} purchased, ${detailsNeededCount} details needed, ${watchingCount} watching`}
             style={styles.counts}
           >
-            {purchasedCount} purchased · {watchingCount} watching
+            {purchasedCount} purchased
+            {detailsNeededCount > 0 ? ` · ${detailsNeededCount} details needed` : ""}
+            {" · "}
+            {watchingCount} watching
           </Text>
         ) : null}
 
@@ -222,6 +282,20 @@ export default function CollectionScreen() {
             selected={segment === "watchlist"}
           />
         </View>
+        {segment === "purchased" && detailsNeededCount > 0 ? (
+          <Pressable
+            accessibilityLabel={DETAILS_NEEDED_LABEL}
+            accessibilityRole="button"
+            accessibilityState={{ selected: detailsNeededOnly }}
+            onPress={() => setDetailsNeededOnly((current) => !current)}
+            style={[styles.filterChip, detailsNeededOnly && styles.filterChipSelected]}
+          >
+            <Text style={[styles.filterChipLabel, detailsNeededOnly && styles.filterChipLabelSelected]}>
+              {DETAILS_NEEDED_LABEL}
+              {detailsNeededCount > 0 ? ` ${detailsNeededCount}` : ""}
+            </Text>
+          </Pressable>
+        ) : null}
       </View>
 
       {loadState === "error" ? (
@@ -265,9 +339,11 @@ export default function CollectionScreen() {
           ) : (
             <View style={styles.grid}>
               {visibleItems.map((item) => {
+                const detailsNeeded = isDetailsNeededPurchase(item);
                 const tileValue = collectionTileValue(
                   {
                     intent: item.intent,
+                    workflowState: item.workflowState,
                     allInTotal: item.purchase?.costBasis.allInTotal ?? null,
                     referencePriceAmount: item.referencePriceAmount,
                     condition: item.condition,
@@ -278,6 +354,7 @@ export default function CollectionScreen() {
                   <View key={item.inventoryItemId} style={[styles.gridItem, { width: gridItemWidth }]}>
                     <CardTile
                       allInAmount={tileValue.allInAmount}
+                      detailsNeeded={detailsNeeded}
                       hasDraft={Boolean(item.draft)}
                       imageUrl={item.card?.imageUrl ?? null}
                       intent={item.intent}
@@ -288,10 +365,10 @@ export default function CollectionScreen() {
                         item.readOnly
                           ? undefined
                           : item.intent === "purchased"
-                            ? () => void openDraft(item)
+                            ? () => openPurchasedItem(item)
                             : () => openWatchlistDetail(item)
                       }
-                      showDraftCta={item.intent === "purchased" && !item.readOnly}
+                      showDraftCta={item.intent === "purchased" && !item.readOnly && !detailsNeeded}
                       targetMaxBuyDisplay={tileValue.targetMaxBuyDisplay}
                     />
                   </View>
@@ -301,9 +378,32 @@ export default function CollectionScreen() {
           )}
         </ScrollView>
       )}
+      <PurchaseSheet
+        error={detailError}
+        initialPurchasePrice=""
+        isSaving={isSavingDetails}
+        localId={detailItem?.card?.localId ?? ""}
+        name={detailItem?.card?.name ?? "Card"}
+        onClose={() => {
+          if (!isSavingDetails) setDetailItem(null);
+        }}
+        onSave={(payload) => void savePurchaseDetails(payload)}
+        selectedVariant={detailItem?.selectedVariant ?? "normal"}
+        setName={detailItem?.card?.setName ?? ""}
+        variants={COLLECTION_PURCHASE_VARIANTS}
+        visible={detailItem !== null}
+      />
     </View>
   );
 }
+
+const COLLECTION_PURCHASE_VARIANTS: TcgdexVariants = {
+  normal: true,
+  holo: true,
+  reverse: true,
+  firstEdition: false,
+  wPromo: false,
+};
 
 interface SegmentButtonProps {
   label: string;
@@ -423,6 +523,27 @@ const styles = StyleSheet.create({
     borderRadius: 1,
   },
   segmentSpacer: { height: 2, marginTop: 6 },
+  filterChip: {
+    alignSelf: "flex-start",
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+    backgroundColor: colors.chip,
+  },
+  filterChipSelected: {
+    borderColor: colors.accent,
+    backgroundColor: colors.card,
+  },
+  filterChipLabel: {
+    color: colors.muted,
+    fontSize: 13,
+    fontWeight: "800",
+  },
+  filterChipLabelSelected: {
+    color: colors.accent,
+  },
   title: { color: colors.text, fontSize: 22, fontWeight: "800" },
   body: { color: colors.muted, fontSize: 15, lineHeight: 22 },
   empty: { gap: space.sm },
