@@ -99,12 +99,12 @@ export interface InventoryItemRecord {
     purchasedAt: string;
     currency: string;
     costBasis: {
-      purchasePrice: string;
+      purchasePrice: string | null;
       shipping: string;
       tax: string;
       fees: string;
       supplies: string;
-      allInTotal: string;
+      allInTotal: string | null;
     };
     maxBuy: MaxBuyComputation;
   } | null;

@@ -319,12 +319,33 @@ describe("SQLite store adapter", () => {
       referencePriceAmount: null,
       targetMaxBuyAmount: null,
       createdAt: new Date().toISOString(),
-      purchase: null,
+      purchase: {
+        purchaseId: crypto.randomUUID(),
+        purchasedAt: "2026-10-11T23:00:00.000Z",
+        currency: "USD",
+        costBasis: {
+          purchasePrice: null,
+          shipping: "0.00",
+          tax: "0.00",
+          fees: "0.00",
+          supplies: "0.00",
+          allInTotal: null,
+        },
+        maxBuy: computeMaxBuy({
+          referencePriceAmount: null,
+          preferences: store.getPreferences(userId),
+        }),
+      },
     });
     expect(store.getInventoryItem(userId, incomplete.inventoryItemId)?.workflowState).toBe(
       "details_needed",
     );
-    expect(store.getInventoryItem(userId, incomplete.inventoryItemId)?.purchase).toBeNull();
+    expect(
+      store.getInventoryItem(userId, incomplete.inventoryItemId)?.purchase?.costBasis.purchasePrice,
+    ).toBeNull();
+    expect(
+      store.getInventoryItem(userId, incomplete.inventoryItemId)?.purchase?.costBasis.allInTotal,
+    ).toBeNull();
 
     const loaded = store.getInventoryItem(userId, item.inventoryItemId);
     expect(loaded?.purchase?.costBasis.allInTotal).toBe("11.75");

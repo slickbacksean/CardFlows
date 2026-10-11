@@ -10,6 +10,7 @@ import {
   computeAllInCost,
   computeMaxBuy,
   DETAILS_NEEDED_WORKFLOW_STATE,
+  detailsNeededCostBasis,
   isDetailsNeededPurchase,
   isRecentDetailsNeededDuplicate,
   livestreamContextTags,
@@ -1645,7 +1646,16 @@ export function createApp(
         referencePriceAmount: null,
         targetMaxBuyAmount: null,
         createdAt,
-        purchase: null,
+        purchase: {
+          purchaseId: crypto.randomUUID(),
+          purchasedAt: createdAt,
+          currency: LOCKED_DISPLAY_CURRENCY,
+          costBasis: detailsNeededCostBasis(),
+          maxBuy: computeMaxBuy({
+            referencePriceAmount: null,
+            preferences: getPreferences(userId),
+          }),
+        },
       });
       return c.json({ ok: true, item }, 201);
     }
@@ -1858,7 +1868,7 @@ export function createApp(
       selectedVariant: body.selectedVariant ?? item.selectedVariant,
       referencePriceAmount: maxBuy.referencePriceAmount,
       purchase: {
-        purchaseId: crypto.randomUUID(),
+        purchaseId: item.purchase?.purchaseId ?? crypto.randomUUID(),
         purchasedAt: body.purchasedAt,
         currency: LOCKED_DISPLAY_CURRENCY,
         costBasis,

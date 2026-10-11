@@ -15,13 +15,41 @@ export interface DetailsNeededInventoryCopy {
   allInTotal?: string | null;
 }
 
-export function isDetailsNeededPurchase(copy: DetailsNeededInventoryCopy): boolean {
-  return copy.intent === "purchased" && copy.workflowState === DETAILS_NEEDED_WORKFLOW_STATE;
+export function detailsNeededCostBasis(): {
+  purchasePrice: null;
+  shipping: "0.00";
+  tax: "0.00";
+  fees: "0.00";
+  supplies: "0.00";
+  allInTotal: null;
+} {
+  return {
+    purchasePrice: null,
+    shipping: "0.00",
+    tax: "0.00",
+    fees: "0.00",
+    supplies: "0.00",
+    allInTotal: null,
+  };
 }
 
-/** All-in used by tiles, totals, and spread. Incomplete Purchased copies contribute nothing. */
+function storedPurchasePrice(purchase: unknown): string | null | undefined {
+  if (!purchase || typeof purchase !== "object") return undefined;
+  return (purchase as { costBasis?: { purchasePrice?: string | null } }).costBasis?.purchasePrice;
+}
+
+export function isDetailsNeededPurchase(copy: DetailsNeededInventoryCopy): boolean {
+  if (copy.intent !== "purchased") return false;
+  if (copy.workflowState === DETAILS_NEEDED_WORKFLOW_STATE) return true;
+  const price = storedPurchasePrice(copy.purchase);
+  return copy.purchase != null && (price === null || price === "");
+}
+
+/** All-in used by tiles, totals, and spread. Null purchase_price is not a $0 cost basis. */
 export function purchasedAllInAmount(copy: DetailsNeededInventoryCopy): string | null {
   if (isDetailsNeededPurchase(copy)) return null;
+  const price = storedPurchasePrice(copy.purchase);
+  if (price === null || price === "") return null;
   if (copy.purchase && typeof copy.purchase === "object") {
     const costBasis = (copy.purchase as { costBasis?: { allInTotal?: string | null } }).costBasis;
     if (costBasis?.allInTotal) return costBasis.allInTotal;

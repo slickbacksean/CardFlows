@@ -167,7 +167,7 @@ export interface InventoryItem {
   referencePriceAmount: string | null;
   targetMaxBuyAmount: string | null;
   purchase: {
-    costBasis: { allInTotal: string; purchasePrice: string };
+    costBasis: { allInTotal: string | null; purchasePrice: string | null };
     maxBuy: { maxBuyAmount: string | null; display: string };
   } | null;
   card?: {

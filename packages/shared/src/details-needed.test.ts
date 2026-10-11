@@ -8,6 +8,7 @@ import {
   DETAILS_NEEDED_DEBOUNCE_MS,
   DETAILS_NEEDED_LABEL,
   DETAILS_NEEDED_WORKFLOW_STATE,
+  detailsNeededCostBasis,
   isDetailsNeededPurchase,
   isRecentDetailsNeededDuplicate,
   livestreamContextTags,
@@ -24,14 +25,20 @@ function readRepoFile(relativePath: string): string {
 
 describe("details-needed Purchased state", () => {
   it("treats purchased + details_needed as incomplete with empty cost fields", () => {
+    const cost = detailsNeededCostBasis();
+    expect(cost.purchasePrice).toBeNull();
+    expect(cost.allInTotal).toBeNull();
+    expect(cost.purchasePrice).not.toBe("0.00");
+
     const incomplete = {
       intent: "purchased" as const,
       workflowState: DETAILS_NEEDED_WORKFLOW_STATE,
-      purchase: null,
+      purchase: { costBasis: cost },
       allInTotal: null,
     };
     expect(isDetailsNeededPurchase(incomplete)).toBe(true);
     expect(purchasedAllInAmount(incomplete)).toBeNull();
+    expect(incomplete.purchase.costBasis.purchasePrice).toBeNull();
     expect(DETAILS_NEEDED_LABEL).toBe("Details needed");
     expect(
       collectionTileValue(
@@ -140,6 +147,9 @@ describe("details-needed Purchased state", () => {
     expect(collection).toContain("DETAILS_NEEDED_LABEL");
     expect(collection).toContain("completePurchasedDetails");
     expect(tile).toContain("detailsNeeded");
+    expect(collection).toContain("PurchaseSheet");
+    expect(readRepoFile("apps/mobile/app/(tabs)/_layout.tsx")).not.toMatch(/myDEX|mydex/i);
+    expect(api).toContain("detailsNeededCostBasis");
     expect(api).toContain("detailsNeeded");
     expect(api).toContain('app.post("/v1/inventory/:inventoryItemId/purchase"');
     expect(client).toContain("detailsNeeded: true");

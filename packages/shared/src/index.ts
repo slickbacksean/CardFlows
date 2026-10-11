@@ -270,6 +270,7 @@ export {
   DETAILS_NEEDED_LABEL,
   DETAILS_NEEDED_WORKFLOW_STATE,
   LIVESTREAM_SOURCE_TAG,
+  detailsNeededCostBasis,
   isDetailsNeededPurchase,
   isRecentDetailsNeededDuplicate,
   livestreamContextTags,

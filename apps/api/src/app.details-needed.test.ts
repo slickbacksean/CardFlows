@@ -65,7 +65,7 @@ describe("details-needed livestream Purchased", () => {
         workflowState: string;
         tags: string[];
         createdAt: string;
-        purchase: unknown;
+        purchase: { costBasis: { purchasePrice: string | null; allInTotal: string | null } } | null;
         cardflowCardId: string;
       };
     }>(app, "/v1/inventory/purchased", {
@@ -81,7 +81,9 @@ describe("details-needed livestream Purchased", () => {
     expect(saved.status).toBe(201);
     expect(saved.body.item.intent).toBe("purchased");
     expect(saved.body.item.workflowState).toBe(DETAILS_NEEDED_WORKFLOW_STATE);
-    expect(saved.body.item.purchase).toBeNull();
+    expect(saved.body.item.purchase?.costBasis.purchasePrice).toBeNull();
+    expect(saved.body.item.purchase?.costBasis.allInTotal).toBeNull();
+    expect(saved.body.item.purchase?.costBasis.purchasePrice).not.toBe("0.00");
     expect(saved.body.item.createdAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
     expect(saved.body.item.tags).toEqual(
       livestreamContextTags({
@@ -95,12 +97,12 @@ describe("details-needed livestream Purchased", () => {
     const listed = await json<{
       items: Array<{
         workflowState: string;
-        purchase: { costBasis: { allInTotal: string } } | null;
+        purchase: { costBasis: { purchasePrice: string | null; allInTotal: string | null } } | null;
       }>;
     }>(app, "/v1/inventory");
     expect(listed.body.items).toHaveLength(1);
     expect(listed.body.items[0]?.workflowState).toBe(DETAILS_NEEDED_WORKFLOW_STATE);
-    expect(listed.body.items[0]?.purchase).toBeNull();
+    expect(listed.body.items[0]?.purchase?.costBasis.purchasePrice).toBeNull();
   });
 
   it("excludes details-needed copies from all-in totals and cost-to-ask spread until completed", async () => {
@@ -111,7 +113,7 @@ describe("details-needed livestream Purchased", () => {
         inventoryItemId: string;
         intent: "purchased";
         workflowState: string;
-        purchase: null;
+        purchase: { costBasis: { purchasePrice: string | null } };
       };
     }>(app, "/v1/inventory/purchased", {
       method: "POST",
@@ -172,7 +174,11 @@ describe("details-needed livestream Purchased", () => {
     const app = mockPortsApp();
     const confirmed = await confirmPikachu(app);
     const saved = await json<{
-      item: { inventoryItemId: string; workflowState: string; purchase: null };
+      item: {
+        inventoryItemId: string;
+        workflowState: string;
+        purchase: { costBasis: { purchasePrice: string | null } };
+      };
     }>(app, "/v1/inventory/purchased", {
       method: "POST",
       body: JSON.stringify({

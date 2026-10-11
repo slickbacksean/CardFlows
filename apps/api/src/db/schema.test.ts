@@ -113,7 +113,8 @@ describe("MVP CRM schema", () => {
     expect(readFileSync(path.join(apiRoot, "drizzle/0003_grading_copies.sql"), "utf8")).not.toMatch(
       /`listed`|`sold`|psa_http|cert_lookup/i,
     );
-    expect(migrationSql).toContain("`purchase_price` integer");
+    expect(migrationSql).toContain("`purchase_price` integer NOT NULL");
+    expect(migrationSql).toContain("`all_in_total` integer NOT NULL");
     expect(migrationSql).toContain("`asking_price` integer");
     expect(migrationSql).toContain("in ('user_entered', 'none')");
     expect(migrationSql).not.toContain("tcgdex_pricing");
@@ -125,6 +126,12 @@ describe("MVP CRM schema", () => {
     expect(migrationSql).not.toContain("crm_audit_events");
     expect(readFileSync(path.join(apiRoot, "drizzle/0006_details_needed_workflow.sql"), "utf8")).toContain(
       "details_needed",
+    );
+    expect(readFileSync(path.join(apiRoot, "drizzle/0007_nullable_purchase_price.sql"), "utf8")).toContain(
+      "`purchase_price` integer",
+    );
+    expect(readFileSync(path.join(apiRoot, "drizzle/0007_nullable_purchase_price.sql"), "utf8")).not.toContain(
+      "`purchase_price` integer NOT NULL",
     );
   });
 });
