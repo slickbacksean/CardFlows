@@ -16,6 +16,7 @@ export interface ScreenerOverlayProps {
   tabFocused?: boolean;
   unavailable?: boolean;
   liveIdentity?: LiveVideoIdentityResult | null;
+  onBought?: (guess: LiveOverlayGuess) => void;
 }
 
 export function ScreenerOverlay({
@@ -23,6 +24,7 @@ export function ScreenerOverlay({
   tabFocused = false,
   unavailable = false,
   liveIdentity = null,
+  onBought,
 }: ScreenerOverlayProps) {
   const [hudReady, setHudReady] = useState(false);
   const [liveGuess, setLiveGuess] = useState<LiveOverlayGuess | null>(null);
@@ -97,5 +99,5 @@ export function ScreenerOverlay({
     });
   }, [hudReady, liveGuess, liveIdentity, overlayKind, scannerOn, unavailable]);
 
-  return <LiveHudBubble kind={overlayKind} liveGuess={liveGuess} />;
+  return <LiveHudBubble kind={overlayKind} liveGuess={liveGuess} onBought={onBought} />;
 }

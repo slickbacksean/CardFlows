@@ -2,7 +2,7 @@ import { PRICE_ESTIMATE_REFERENCE_SOURCE } from "./pricing";
 
 export const LIVESTREAM_HUD_BUBBLE_WIDTH = 288;
 export const LIVESTREAM_HUD_BUBBLE_HEIGHT = 84;
-export const LIVESTREAM_HUD_BUBBLE_EXPANDED_HEIGHT = 128;
+export const LIVESTREAM_HUD_BUBBLE_EXPANDED_HEIGHT = 148;
 export const LIVESTREAM_HUD_BUBBLE_INSET = 12;
 export const LIVESTREAM_HUD_POSITION_KEY = "cardflow.livestream.hud.position";
 

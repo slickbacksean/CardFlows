@@ -33,9 +33,10 @@ import {
 export interface LiveHudBubbleProps {
   kind: LivestreamOverlayKind;
   liveGuess?: LiveOverlayGuess | null;
+  onBought?: (guess: LiveOverlayGuess) => void;
 }
 
-export function LiveHudBubble({ kind, liveGuess = null }: LiveHudBubbleProps) {
+export function LiveHudBubble({ kind, liveGuess = null, onBought }: LiveHudBubbleProps) {
   const insets = useSafeAreaInsets();
   const [expanded, setExpanded] = useState(false);
   const [dismissedKey, setDismissedKey] = useState("");
@@ -165,7 +166,7 @@ export function LiveHudBubble({ kind, liveGuess = null }: LiveHudBubbleProps) {
 
   return (
     <GestureHandlerRootView onLayout={onHostLayout} pointerEvents="box-none" style={styles.host}>
-      <GestureDetector gesture={Gesture.Exclusive(pan, tap)}>
+      <GestureDetector gesture={pan}>
         <Animated.View
           accessibilityLabel="CardFlow overlay bubble"
           entering={FadeInDown.springify().duration(280)}
@@ -173,41 +174,56 @@ export function LiveHudBubble({ kind, liveGuess = null }: LiveHudBubbleProps) {
           pointerEvents="auto"
           style={[styles.card, animatedStyle, { width: size.width }]}
         >
-          <View style={styles.row}>
-            {kind === "live_guess" && liveGuess?.imageUrl ? (
-              <Image
-                accessibilityIgnoresInvertColors
-                accessibilityLabel={`${name} catalog art`}
-                contentFit="cover"
-                source={{ uri: liveGuess.imageUrl }}
-                style={styles.thumb}
-              />
-            ) : (
-              <View accessibilityLabel="No catalog art" style={styles.thumb} />
-            )}
-            <View style={styles.copy}>
-              <Text numberOfLines={1} style={styles.name}>
-                {title}
-              </Text>
-              <Text style={styles.rawLabel}>Raw</Text>
-              {prices.rawAmount ? <Text style={styles.rawValue}>{prices.rawAmount}</Text> : null}
+          <GestureDetector gesture={tap}>
+            <View style={styles.row}>
+              {kind === "live_guess" && liveGuess?.imageUrl ? (
+                <Image
+                  accessibilityIgnoresInvertColors
+                  accessibilityLabel={`${name} catalog art`}
+                  contentFit="cover"
+                  source={{ uri: liveGuess.imageUrl }}
+                  style={styles.thumb}
+                />
+              ) : (
+                <View accessibilityLabel="No catalog art" style={styles.thumb} />
+              )}
+              <View style={styles.copy}>
+                <Text numberOfLines={1} style={styles.name}>
+                  {title}
+                </Text>
+                <Text style={styles.rawLabel}>Raw</Text>
+                {prices.rawAmount ? <Text style={styles.rawValue}>{prices.rawAmount}</Text> : null}
+              </View>
+              <View style={styles.slabs}>
+                <SlabSlot label="PSA 9" value={prices.psa9Amount} />
+                <SlabSlot label="PSA 10" value={prices.psa10Amount} />
+              </View>
             </View>
-            <View style={styles.slabs}>
-              <SlabSlot label="PSA 9" value={prices.psa9Amount} />
-              <SlabSlot label="PSA 10" value={prices.psa10Amount} />
-            </View>
-          </View>
+          </GestureDetector>
           {expanded ? (
-            <Pressable
-              accessibilityHint="Opens the catalog listing. Does not bid or buy."
-              accessibilityLabel="Buy"
-              accessibilityRole="button"
-              disabled={!listingUrl}
-              onPress={() => void openLiveHudListing(liveGuess)}
-              style={[styles.buy, !listingUrl && styles.buyDisabled]}
-            >
-              <Text style={styles.buyLabel}>Buy</Text>
-            </Pressable>
+            <View style={styles.actions}>
+              <Pressable
+                accessibilityHint="Opens the catalog listing. Does not bid or buy."
+                accessibilityLabel="Buy"
+                accessibilityRole="button"
+                disabled={!listingUrl}
+                onPress={() => void openLiveHudListing(liveGuess)}
+                style={[styles.buy, !listingUrl && styles.buyDisabled]}
+              >
+                <Text style={styles.buyLabel}>Buy</Text>
+              </Pressable>
+              {kind === "live_guess" && liveGuess?.tcgdexId && onBought ? (
+                <Pressable
+                  accessibilityHint="Opens the purchase sheet to save this card. Does not open the listing."
+                  accessibilityLabel="I bought this"
+                  accessibilityRole="button"
+                  onPress={() => onBought(liveGuess)}
+                  style={styles.bought}
+                >
+                  <Text style={styles.boughtLabel}>I bought this</Text>
+                </Pressable>
+              ) : null}
+            </View>
           ) : null}
         </Animated.View>
       </GestureDetector>
@@ -265,7 +281,12 @@ const styles = StyleSheet.create({
   slab: { alignItems: "flex-end", gap: 1 },
   slabLabel: { color: colors.muted, fontSize: 11, fontWeight: "700" },
   slabValue: { color: colors.text, fontSize: 13, fontWeight: "800" },
+  actions: {
+    flexDirection: "row",
+    gap: 8,
+  },
   buy: {
+    flex: 1,
     backgroundColor: colors.success,
     borderRadius: 10,
     paddingVertical: 8,
@@ -273,4 +294,14 @@ const styles = StyleSheet.create({
   },
   buyDisabled: { opacity: 0.4 },
   buyLabel: { color: colors.bg, fontSize: 15, fontWeight: "800" },
+  bought: {
+    flex: 1,
+    backgroundColor: "transparent",
+    borderColor: "rgba(244, 241, 234, 0.28)",
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingVertical: 8,
+    alignItems: "center",
+  },
+  boughtLabel: { color: "#FFFFFF", fontSize: 14, fontWeight: "800" },
 });
