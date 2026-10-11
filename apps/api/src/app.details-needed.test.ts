@@ -113,7 +113,7 @@ describe("details-needed livestream Purchased", () => {
         inventoryItemId: string;
         intent: "purchased";
         workflowState: string;
-        purchase: { costBasis: { purchasePrice: string | null } };
+        purchase: { costBasis: { purchasePrice: string | null; allInTotal?: string | null } };
       };
     }>(app, "/v1/inventory/purchased", {
       method: "POST",
@@ -177,7 +177,7 @@ describe("details-needed livestream Purchased", () => {
       item: {
         inventoryItemId: string;
         workflowState: string;
-        purchase: { costBasis: { purchasePrice: string | null } };
+        purchase: { costBasis: { purchasePrice: string | null; allInTotal?: string | null } };
       };
     }>(app, "/v1/inventory/purchased", {
       method: "POST",
