@@ -68,6 +68,12 @@ export function ScreenerOverlay({
     scannerOn,
     liveGuessTcgdexId: liveGuess?.tcgdexId,
   });
+  const [kindSeen, setKindSeen] = useState(overlayKind);
+  if (kindSeen !== overlayKind) {
+    setKindSeen(overlayKind);
+    if (overlayKind === "live_guess") setExpanded(true);
+    if (overlayKind === "scanner_off" || overlayKind === "unavailable") setExpanded(false);
+  }
 
   useEffect(() => {
     if (!tabFocused || !scannerOn) return;
@@ -119,11 +125,6 @@ export function ScreenerOverlay({
       guess: liveGuess,
     });
   }, [hudReady, liveGuess, liveIdentity, scannerOn, unavailable]);
-
-  useEffect(() => {
-    if (overlayKind === "live_guess") setExpanded(true);
-    if (overlayKind === "scanner_off" || overlayKind === "unavailable") setExpanded(false);
-  }, [overlayKind]);
 
   const buyGuess = liveGuess?.tcgdexId ? liveGuess : null;
   const useHud = livestreamOverlayUsesHud(overlayKind, hudReady);
@@ -209,10 +210,6 @@ function HudBubble({ expanded, kind, liveGuess, onToggle, children }: HudBubbleP
     clampToParent(expanded);
   }
 
-  useEffect(() => {
-    clampToParent(expanded);
-  }, [expanded]);
-
   const pan = Gesture.Pan()
     .minDistance(8)
     .onUpdate((event) => {
@@ -254,7 +251,14 @@ function HudBubble({ expanded, kind, liveGuess, onToggle, children }: HudBubbleP
               {children}
             </View>
           ) : (
-            <CollapsedBubble kind={kind} liveGuess={liveGuess} onPress={onToggle} />
+            <CollapsedBubble
+              kind={kind}
+              liveGuess={liveGuess}
+              onPress={() => {
+                onToggle();
+                clampToParent(true);
+              }}
+            />
           )}
         </Animated.View>
       </GestureDetector>
