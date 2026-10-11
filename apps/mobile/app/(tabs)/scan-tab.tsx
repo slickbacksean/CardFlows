@@ -1,6 +1,7 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import {
   LIVESTREAM_SCANNER_UNAVAILABLE_MESSAGE,
+  type LiveHudQuickSavePayload,
   type LiveOverlayGuess,
   type LiveVideoIdentityResult,
   type TcgdexVariants,
@@ -41,7 +42,8 @@ export default function ScanTabScreen() {
   const [browserEpoch, setBrowserEpoch] = useState(0);
   const [tabFocused, setTabFocused] = useState(true);
   const [liveIdentity, setLiveIdentity] = useState<LiveVideoIdentityResult | null>(null);
-  const [buyGuess, setBuyGuess] = useState<LiveOverlayGuess | null>(null);
+  const [detailGuess, setDetailGuess] = useState<LiveOverlayGuess | null>(null);
+  const [detailPayload, setDetailPayload] = useState<LiveHudQuickSavePayload | null>(null);
   const [buyError, setBuyError] = useState<string | null>(null);
   const [isSavingBuy, setIsSavingBuy] = useState(false);
   const browserRef = useRef<LivestreamBrowserHandle>(null);
@@ -80,16 +82,24 @@ export default function ScanTabScreen() {
     }
   }
 
+  async function onQuickPurchase(guess: LiveOverlayGuess, payload: LiveHudQuickSavePayload) {
+    await saveLivestreamPurchase({
+      tcgdexId: guess.tcgdexId,
+      ...payload,
+    });
+    setDetailPayload(payload);
+  }
+
   async function onSaveLivePurchase(payload: PurchaseSavePayload) {
-    if (!buyGuess) return;
+    if (!detailGuess) return;
     setIsSavingBuy(true);
     setBuyError(null);
     try {
       await saveLivestreamPurchase({
-        tcgdexId: buyGuess.tcgdexId,
+        tcgdexId: detailGuess.tcgdexId,
         ...payload,
       });
-      setBuyGuess(null);
+      setDetailGuess(null);
     } catch (caught) {
       setBuyError(caught instanceof Error ? caught.message : "Could not save that purchase");
     } finally {
@@ -245,10 +255,11 @@ export default function ScanTabScreen() {
         <View pointerEvents="box-none" style={styles.hudLayer}>
           <ScreenerOverlay
             liveIdentity={liveIdentity}
-            onBought={(guess) => {
+            onAddDetails={(guess) => {
               setBuyError(null);
-              setBuyGuess(guess);
+              setDetailGuess(guess);
             }}
+            onPurchased={(guess, payload) => onQuickPurchase(guess, payload)}
             scannerOn={scannerOn}
             tabFocused={tabFocused}
             unavailable={scannerUnavailable}
@@ -277,17 +288,18 @@ export default function ScanTabScreen() {
       </View>
       <PurchaseSheet
         error={buyError}
+        initialPurchasePrice={detailPayload?.purchasePrice ?? ""}
         isSaving={isSavingBuy}
-        localId={buyGuess?.number ?? ""}
-        name={buyGuess?.name ?? buyGuess?.tcgdexId ?? "Card"}
+        localId={detailGuess?.number ?? ""}
+        name={detailGuess?.name ?? detailGuess?.tcgdexId ?? "Card"}
         onClose={() => {
-          if (!isSavingBuy) setBuyGuess(null);
+          if (!isSavingBuy) setDetailGuess(null);
         }}
         onSave={(payload) => void onSaveLivePurchase(payload)}
         selectedVariant="normal"
-        setName={buyGuess?.setName ?? ""}
+        setName={detailGuess?.setName ?? ""}
         variants={LIVE_PURCHASE_VARIANTS}
-        visible={buyGuess !== null}
+        visible={detailGuess !== null}
       />
     </SafeAreaView>
   );

@@ -123,7 +123,7 @@ describe("live overlay guess from catalog + estimate", () => {
     expect(scanTab).toContain("saveLivestreamPurchase");
     expect(scanTab).toContain("PurchaseSheet");
     const bubble = readRepoFile("apps/mobile/components/ui/live-hud-bubble.tsx");
-    expect(bubble).toContain("I bought this");
-    expect(bubble).toContain("openLiveHudListing");
+    expect(bubble).toContain("Purchased");
+    expect(bubble).toContain("liveHudQuickSavePayload");
   });
 });

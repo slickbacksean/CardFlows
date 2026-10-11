@@ -483,6 +483,7 @@ export { livestreamOverlayKind, livestreamOverlayUsesHud } from "./livestream-ov
 export type { LivestreamOverlayKind, LivestreamOverlayKindInput } from "./livestream-overlay";
 export {
   LIVE_HUD_ALLOWED_PRICE_SOURCES,
+  LIVE_HUD_QUICK_SAVE_ZERO,
   LIVESTREAM_HUD_BUBBLE_COLLAPSED_SIZE,
   LIVESTREAM_HUD_BUBBLE_EXPANDED_HEIGHT,
   LIVESTREAM_HUD_BUBBLE_EXPANDED_WIDTH,
@@ -500,7 +501,10 @@ export {
   defaultLivestreamHudSavedPosition,
   liveHudListingUrl,
   liveHudPricesFromMatch,
+  liveHudPurchasePriceFromMatch,
+  liveHudQuickSavePayload,
   livestreamHudBubbleSize,
+  livestreamHudBubbleWidth,
   livestreamHudEventPath,
   livestreamHudOffsetFromSaved,
   livestreamHudOriginWhitelist,
@@ -514,6 +518,7 @@ export type {
   LiveHudListingMatch,
   LiveHudPriceMatch,
   LiveHudPriceSlots,
+  LiveHudQuickSavePayload,
   LivestreamHudBubbleOffset,
   LivestreamHudIdentityPayload,
   LivestreamHudSavedPosition,

@@ -2,18 +2,22 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { LOCKED_DISPLAY_CURRENCY } from "./max-buy";
 import { PRICE_ESTIMATE_REFERENCE_SOURCE } from "./pricing";
 import {
+  LIVE_HUD_QUICK_SAVE_ZERO,
   LIVESTREAM_HUD_BUBBLE_EXPANDED_HEIGHT,
   LIVESTREAM_HUD_BUBBLE_HEIGHT,
   LIVESTREAM_HUD_BUBBLE_INSET,
-  LIVESTREAM_HUD_BUBBLE_WIDTH,
   LIVESTREAM_HUD_POSITION_KEY,
   clampLivestreamHudBubbleOffset,
   defaultLivestreamHudSavedPosition,
   liveHudListingUrl,
   liveHudPricesFromMatch,
+  liveHudPurchasePriceFromMatch,
+  liveHudQuickSavePayload,
   livestreamHudBubbleSize,
+  livestreamHudBubbleWidth,
   livestreamHudOffsetFromSaved,
   parseLivestreamHudPosition,
   serializeLivestreamHudPosition,
@@ -21,22 +25,25 @@ import {
 } from "./livestream-hud-bubble";
 
 const repoRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), "../../..");
+const PAGE_SCRAPE = /whatnot|querySelector|innerHTML|executeScript|injectJavaScript|scrape/i;
 
 function readRepoFile(relativePath: string): string {
   return readFileSync(path.join(repoRoot, relativePath), "utf8");
 }
 
+const FULL_WIDTH = livestreamHudBubbleWidth({ parentWidth: 390 });
+
 describe("Livestream HUD snap and clamp", () => {
-  it("sizes a rounded card, not a circle", () => {
-    expect(livestreamHudBubbleSize(false)).toEqual({
-      width: LIVESTREAM_HUD_BUBBLE_WIDTH,
+  it("sizes a full-width bar inside the safe area", () => {
+    expect(livestreamHudBubbleSize(false, { parentWidth: 390 })).toEqual({
+      width: 390 - LIVESTREAM_HUD_BUBBLE_INSET * 2,
       height: LIVESTREAM_HUD_BUBBLE_HEIGHT,
     });
-    expect(livestreamHudBubbleSize(true)).toEqual({
-      width: LIVESTREAM_HUD_BUBBLE_WIDTH,
+    expect(livestreamHudBubbleSize(true, { parentWidth: 390, safeLeft: 4, safeRight: 6 })).toEqual({
+      width: 390 - LIVESTREAM_HUD_BUBBLE_INSET * 2 - 4 - 6,
       height: LIVESTREAM_HUD_BUBBLE_EXPANDED_HEIGHT,
     });
-    expect(LIVESTREAM_HUD_BUBBLE_WIDTH).toBeGreaterThan(LIVESTREAM_HUD_BUBBLE_HEIGHT);
+    expect(FULL_WIDTH).toBeGreaterThan(LIVESTREAM_HUD_BUBBLE_HEIGHT);
   });
 
   it("clamps inside the live region and safe-area insets", () => {
@@ -46,7 +53,7 @@ describe("Livestream HUD snap and clamp", () => {
         y: -12,
         parentWidth: 390,
         parentHeight: 700,
-        bubbleWidth: LIVESTREAM_HUD_BUBBLE_WIDTH,
+        bubbleWidth: FULL_WIDTH,
         bubbleHeight: LIVESTREAM_HUD_BUBBLE_HEIGHT,
         safeTop: 8,
         safeLeft: 4,
@@ -56,61 +63,66 @@ describe("Livestream HUD snap and clamp", () => {
       y: LIVESTREAM_HUD_BUBBLE_INSET + 8,
     });
 
+    const fittedWidth = livestreamHudBubbleWidth({ parentWidth: 390, safeRight: 6 });
     expect(
       clampLivestreamHudBubbleOffset({
         x: 800,
         y: 800,
         parentWidth: 390,
         parentHeight: 700,
-        bubbleWidth: LIVESTREAM_HUD_BUBBLE_WIDTH,
+        bubbleWidth: fittedWidth,
         bubbleHeight: LIVESTREAM_HUD_BUBBLE_EXPANDED_HEIGHT,
         safeBottom: 20,
         safeRight: 6,
       }),
     ).toEqual({
-      x: 390 - LIVESTREAM_HUD_BUBBLE_WIDTH - LIVESTREAM_HUD_BUBBLE_INSET - 6,
+      x: LIVESTREAM_HUD_BUBBLE_INSET,
       y: 700 - LIVESTREAM_HUD_BUBBLE_EXPANDED_HEIGHT - LIVESTREAM_HUD_BUBBLE_INSET - 20,
     });
   });
 
-  it("snaps a released drag to the nearest left or right edge", () => {
-    const left = snapLivestreamHudBubbleOffset({
+  it("snaps a released vertical drag to the nearest top or bottom edge", () => {
+    const top = snapLivestreamHudBubbleOffset({
       x: 40,
-      y: 180,
+      y: 80,
       parentWidth: 390,
       parentHeight: 700,
-      bubbleWidth: LIVESTREAM_HUD_BUBBLE_WIDTH,
+      bubbleWidth: FULL_WIDTH,
       bubbleHeight: LIVESTREAM_HUD_BUBBLE_HEIGHT,
     });
-    expect(left.edge).toBe("left");
-    expect(left.x).toBe(LIVESTREAM_HUD_BUBBLE_INSET);
-    expect(left.y).toBe(180);
+    expect(top.edge).toBe("top");
+    expect(top.x).toBe(LIVESTREAM_HUD_BUBBLE_INSET);
+    expect(top.y).toBe(LIVESTREAM_HUD_BUBBLE_INSET);
 
-    const right = snapLivestreamHudBubbleOffset({
-      x: 200,
-      y: 20,
+    const bottom = snapLivestreamHudBubbleOffset({
+      x: 20,
+      y: 500,
       parentWidth: 390,
       parentHeight: 700,
-      bubbleWidth: LIVESTREAM_HUD_BUBBLE_WIDTH,
+      bubbleWidth: FULL_WIDTH,
       bubbleHeight: LIVESTREAM_HUD_BUBBLE_HEIGHT,
     });
-    expect(right.edge).toBe("right");
-    expect(right.x).toBe(390 - LIVESTREAM_HUD_BUBBLE_WIDTH - LIVESTREAM_HUD_BUBBLE_INSET);
-    expect(right.y).toBe(20);
+    expect(bottom.edge).toBe("bottom");
+    expect(bottom.x).toBe(LIVESTREAM_HUD_BUBBLE_INSET);
+    expect(bottom.y).toBe(700 - LIVESTREAM_HUD_BUBBLE_HEIGHT - LIVESTREAM_HUD_BUBBLE_INSET);
   });
 
-  it("restores a saved edge and clamps Y into the safe area", () => {
+  it("restores a saved top or bottom edge and ignores leftover left/right saves", () => {
     const restored = livestreamHudOffsetFromSaved({
-      position: { edge: "right", y: 900 },
+      position: { edge: "bottom" },
       parentWidth: 390,
       parentHeight: 700,
-      bubbleWidth: LIVESTREAM_HUD_BUBBLE_WIDTH,
+      bubbleWidth: FULL_WIDTH,
       bubbleHeight: LIVESTREAM_HUD_BUBBLE_HEIGHT,
       safeBottom: 10,
     });
-    expect(restored.edge).toBe("right");
-    expect(restored.x).toBe(390 - LIVESTREAM_HUD_BUBBLE_WIDTH - LIVESTREAM_HUD_BUBBLE_INSET);
+    expect(restored.edge).toBe("bottom");
+    expect(restored.x).toBe(LIVESTREAM_HUD_BUBBLE_INSET);
     expect(restored.y).toBe(700 - LIVESTREAM_HUD_BUBBLE_HEIGHT - LIVESTREAM_HUD_BUBBLE_INSET - 10);
+
+    expect(parseLivestreamHudPosition(JSON.stringify({ edge: "right", y: 64 }))).toEqual({
+      edge: "top",
+    });
   });
 });
 
@@ -159,16 +171,74 @@ describe("Livestream HUD match prices and listing", () => {
   });
 });
 
+describe("Livestream HUD quick-save defaults", () => {
+  it("saves USD now with zero add-ons and a local purchase_price only", () => {
+    expect(liveHudPurchasePriceFromMatch(null)).toBeNull();
+    expect(
+      liveHudPurchasePriceFromMatch({
+        estimateAmount: "8.25",
+        referenceSource: "none",
+      }),
+    ).toBeNull();
+    expect(
+      liveHudPurchasePriceFromMatch({
+        estimateAmount: "8.25",
+        referenceSource: PRICE_ESTIMATE_REFERENCE_SOURCE,
+      }),
+    ).toBe("8.25");
+
+    const missing = liveHudQuickSavePayload({ match: { estimateAmount: "8.25", referenceSource: "none" } });
+    expect(missing).toEqual({ ok: false, reason: "purchase_price_required" });
+
+    const saved = liveHudQuickSavePayload({
+      match: { estimateAmount: "$8.25", referenceSource: PRICE_ESTIMATE_REFERENCE_SOURCE },
+      now: () => "2026-10-11T22:30:00.000Z",
+    });
+    expect(saved).toEqual({
+      ok: true,
+      payload: {
+        purchasePrice: "8.25",
+        purchasedAt: "2026-10-11T22:30:00.000Z",
+        currency: LOCKED_DISPLAY_CURRENCY,
+        shipping: LIVE_HUD_QUICK_SAVE_ZERO,
+        tax: LIVE_HUD_QUICK_SAVE_ZERO,
+        fees: LIVE_HUD_QUICK_SAVE_ZERO,
+        supplies: LIVE_HUD_QUICK_SAVE_ZERO,
+      },
+    });
+    expect(LOCKED_DISPLAY_CURRENCY).toBe("USD");
+    expect(LIVE_HUD_QUICK_SAVE_ZERO).toBe("0.00");
+
+    const typed = liveHudQuickSavePayload({
+      purchasePrice: "12.50",
+      now: () => "2026-10-11T22:31:00.000Z",
+    });
+    expect(typed).toMatchObject({
+      ok: true,
+      payload: { purchasePrice: "12.50", shipping: "0.00", fees: "0.00" },
+    });
+  });
+
+  it("never reads or scrapes the live page for fees, shipping, or prices", () => {
+    const helper = readRepoFile("packages/shared/src/livestream-hud-bubble.ts");
+    const bubble = readRepoFile("apps/mobile/components/ui/live-hud-bubble.tsx");
+    const overlay = readRepoFile("apps/mobile/components/ui/screener-overlay.tsx");
+    const scanTab = readRepoFile("apps/mobile/app/(tabs)/scan-tab.tsx");
+    const listing = readRepoFile("apps/mobile/lib/live-hud-listing.ts");
+    for (const source of [helper, bubble, overlay, scanTab, listing]) {
+      expect(source).not.toMatch(PAGE_SCRAPE);
+    }
+  });
+});
+
 describe("Livestream HUD saved position", () => {
-  it("round-trips a snapped edge through the existing local-storage key", () => {
+  it("round-trips a snapped top or bottom edge through the existing local-storage key", () => {
     expect(defaultLivestreamHudSavedPosition()).toEqual({
-      edge: "right",
-      y: LIVESTREAM_HUD_BUBBLE_INSET,
+      edge: "top",
     });
     expect(parseLivestreamHudPosition("not-json")).toBeNull();
-    expect(parseLivestreamHudPosition(serializeLivestreamHudPosition({ edge: "left", y: 64 }))).toEqual({
-      edge: "left",
-      y: 64,
+    expect(parseLivestreamHudPosition(serializeLivestreamHudPosition({ edge: "bottom" }))).toEqual({
+      edge: "bottom",
     });
 
     const positionLib = readRepoFile("apps/mobile/lib/live-hud-position.ts");
@@ -180,7 +250,7 @@ describe("Livestream HUD saved position", () => {
 });
 
 describe("Livestream HUD bubble chrome", () => {
-  it("is a dedicated card above the RN live page, never a Capgo overlay or bid script", () => {
+  it("is a dedicated full-width card above the RN live page, never a Capgo overlay or bid script", () => {
     const bubble = readRepoFile("apps/mobile/components/ui/live-hud-bubble.tsx");
     const overlay = readRepoFile("apps/mobile/components/ui/screener-overlay.tsx");
     const scanTab = readRepoFile("apps/mobile/app/(tabs)/scan-tab.tsx");
@@ -194,14 +264,17 @@ describe("Livestream HUD bubble chrome", () => {
     expect(bubble).toContain("react-native-reanimated");
     expect(bubble).toContain("FadeInDown");
     expect(bubble).toContain("snapLivestreamHudBubbleOffset");
+    expect(bubble).toContain("livestreamHudBubbleWidth");
     expect(bubble).toContain("pointerEvents=\"box-none\"");
-    expect(bubble).toContain(">Raw<");
+    expect(bubble).toContain('label="Raw"');
     expect(bubble).toContain("PSA 9");
     expect(bubble).toContain("PSA 10");
     expect(bubble).not.toMatch(/powered by|brickify|poketrace/i);
-    expect(bubble).toContain("Buy");
-    expect(bubble).toContain("I bought this");
-    expect(bubble).toContain("onBought");
+    expect(bubble).toContain("Purchased");
+    expect(bubble).toContain("Add details");
+    expect(bubble).toContain("liveHudQuickSavePayload");
+    expect(bubble).not.toContain("I bought this");
+    expect(bubble).not.toMatch(/>Buy</);
     expect(bubble).not.toContain("placeBid");
     expect(scanTab).toContain("LivestreamBrowser");
     expect(scanTab).toContain("<ScreenerOverlay");

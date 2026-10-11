@@ -1,6 +1,13 @@
 import { Image } from "expo-image";
-import { useState } from "react";
-import { Pressable, StyleSheet, Text, View, type LayoutChangeEvent } from "react-native";
+import { useEffect, useState } from "react";
+import {
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+  type LayoutChangeEvent,
+} from "react-native";
 import { Gesture, GestureDetector, GestureHandlerRootView } from "react-native-gesture-handler";
 import Animated, {
   FadeInDown,
@@ -10,7 +17,6 @@ import Animated, {
   withSpring,
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { openLiveHudListing } from "@/lib/live-hud-listing";
 import {
   loadLivestreamHudPosition,
   peekLivestreamHudPosition,
@@ -20,11 +26,13 @@ import { colors, space } from "@/lib/theme";
 import {
   LIVESTREAM_HUD_BUBBLE_INSET,
   LIVESTREAM_SCANNER_UNAVAILABLE_MESSAGE,
-  liveHudListingUrl,
   liveHudPricesFromMatch,
+  liveHudQuickSavePayload,
   livestreamHudBubbleSize,
+  livestreamHudBubbleWidth,
   livestreamHudOffsetFromSaved,
   snapLivestreamHudBubbleOffset,
+  type LiveHudQuickSavePayload,
   type LiveOverlayGuess,
   type LivestreamHudSavedPosition,
   type LivestreamOverlayKind,
@@ -33,43 +41,71 @@ import {
 export interface LiveHudBubbleProps {
   kind: LivestreamOverlayKind;
   liveGuess?: LiveOverlayGuess | null;
-  onBought?: (guess: LiveOverlayGuess) => void;
+  onPurchased?: (guess: LiveOverlayGuess, payload: LiveHudQuickSavePayload) => void | Promise<void>;
+  onAddDetails?: (guess: LiveOverlayGuess) => void;
 }
 
-export function LiveHudBubble({ kind, liveGuess = null, onBought }: LiveHudBubbleProps) {
+export function LiveHudBubble({
+  kind,
+  liveGuess = null,
+  onPurchased,
+  onAddDetails,
+}: LiveHudBubbleProps) {
   const insets = useSafeAreaInsets();
   const [expanded, setExpanded] = useState(false);
   const [dismissedKey, setDismissedKey] = useState("");
+  const [barWidth, setBarWidth] = useState(0);
+  const [priceDraft, setPriceDraft] = useState("");
+  const [promptOpen, setPromptOpen] = useState(false);
+  const [savingKey, setSavingKey] = useState("");
+  const [toast, setToast] = useState<{ key: string; name: string; guess: LiveOverlayGuess } | null>(
+    null,
+  );
   const matchKey =
     kind === "live_guess" && liveGuess?.tcgdexId ? liveGuess.tcgdexId : kind;
   const [matchKeySeen, setMatchKeySeen] = useState(matchKey);
   if (matchKeySeen !== matchKey) {
     setMatchKeySeen(matchKey);
     setExpanded(false);
+    setPromptOpen(false);
+    setPriceDraft("");
     if (dismissedKey && dismissedKey !== matchKey) setDismissedKey("");
   }
 
   const parentWidth = useSharedValue(0);
   const parentHeight = useSharedValue(0);
-  const originX = useSharedValue(LIVESTREAM_HUD_BUBBLE_INSET);
   const originY = useSharedValue(LIVESTREAM_HUD_BUBBLE_INSET);
   const translateX = useSharedValue(LIVESTREAM_HUD_BUBBLE_INSET);
   const translateY = useSharedValue(LIVESTREAM_HUD_BUBBLE_INSET);
-  const size = livestreamHudBubbleSize(expanded);
+  const size = livestreamHudBubbleSize(expanded, {
+    parentWidth: barWidth > 0 ? barWidth + LIVESTREAM_HUD_BUBBLE_INSET * 2 + insets.left + insets.right : 0,
+    safeLeft: insets.left,
+    safeRight: insets.right,
+  });
+  const width = barWidth || size.width;
   const prices = liveHudPricesFromMatch(liveGuess);
-  const listingUrl = liveHudListingUrl(liveGuess);
   const dismissed = dismissedKey === matchKey;
+  const canPurchase = kind === "live_guess" && Boolean(liveGuess?.tcgdexId && onPurchased);
+
+  useEffect(() => {
+    if (!toast) return;
+    const timer = setTimeout(() => setToast(null), 4000);
+    return () => clearTimeout(timer);
+  }, [toast]);
 
   function applySnap(next: ReturnType<typeof snapLivestreamHudBubbleOffset>) {
-    translateX.value = withSpring(next.x);
+    translateX.value = next.x;
     translateY.value = withSpring(next.y);
-    originX.value = next.x;
     originY.value = next.y;
-    void persistLivestreamHudPosition({ edge: next.edge, y: next.y });
+    void persistLivestreamHudPosition({ edge: next.edge });
   }
 
   function snapCurrent(nextExpanded: boolean) {
-    const bubble = livestreamHudBubbleSize(nextExpanded);
+    const bubble = livestreamHudBubbleSize(nextExpanded, {
+      parentWidth: parentWidth.value,
+      safeLeft: insets.left,
+      safeRight: insets.right,
+    });
     applySnap(
       snapLivestreamHudBubbleOffset({
         x: translateX.value,
@@ -89,22 +125,31 @@ export function LiveHudBubble({ kind, liveGuess = null, onBought }: LiveHudBubbl
       position,
       parentWidth: parentWidth.value,
       parentHeight: parentHeight.value,
-      bubbleWidth: size.width,
+      bubbleWidth: size.width || livestreamHudBubbleWidth({
+        parentWidth: parentWidth.value,
+        safeLeft: insets.left,
+        safeRight: insets.right,
+      }),
       bubbleHeight: size.height,
       safeLeft: insets.left,
       safeRight: insets.right,
     });
     translateX.value = next.x;
     translateY.value = next.y;
-    originX.value = next.x;
     originY.value = next.y;
   }
 
   function onHostLayout(event: LayoutChangeEvent) {
-    const { width, height } = event.nativeEvent.layout;
+    const { width: nextWidth, height } = event.nativeEvent.layout;
     const firstLayout = parentWidth.value <= 0 || parentHeight.value <= 0;
-    parentWidth.value = width;
+    parentWidth.value = nextWidth;
     parentHeight.value = height;
+    const nextBar = livestreamHudBubbleWidth({
+      parentWidth: nextWidth,
+      safeLeft: insets.left,
+      safeRight: insets.right,
+    });
+    if (barWidth !== nextBar) setBarWidth(nextBar);
     if (!firstLayout) {
       snapCurrent(expanded);
       return;
@@ -118,15 +163,17 @@ export function LiveHudBubble({ kind, liveGuess = null, onBought }: LiveHudBubbl
   function toggleExpanded() {
     const next = !expanded;
     setExpanded(next);
+    if (!next) setPromptOpen(false);
     snapCurrent(next);
   }
 
   function dismiss() {
     setExpanded(false);
+    setPromptOpen(false);
     setDismissedKey(matchKey);
   }
 
-  function finishPan(translationX: number, translationY: number, velocityY: number) {
+  function finishPan(translationY: number, velocityY: number) {
     if (Math.abs(translationY) > 72 && Math.abs(velocityY) > 400) {
       dismiss();
       return;
@@ -134,14 +181,40 @@ export function LiveHudBubble({ kind, liveGuess = null, onBought }: LiveHudBubbl
     snapCurrent(expanded);
   }
 
+  async function savePurchase(typedPrice?: string) {
+    if (!liveGuess?.tcgdexId || !onPurchased || savingKey === matchKey) return;
+    const built = liveHudQuickSavePayload({
+      match: liveGuess,
+      purchasePrice: typedPrice ?? priceDraft,
+    });
+    if (!built.ok) {
+      setExpanded(true);
+      setPromptOpen(true);
+      snapCurrent(true);
+      return;
+    }
+    setSavingKey(matchKey);
+    try {
+      await onPurchased(liveGuess, built.payload);
+      setPromptOpen(false);
+      setPriceDraft("");
+      setToast({
+        key: `${liveGuess.tcgdexId}:${Date.now()}`,
+        name: liveGuess.name ?? liveGuess.tcgdexId,
+        guess: liveGuess,
+      });
+    } finally {
+      setSavingKey("");
+    }
+  }
+
   const pan = Gesture.Pan()
     .minDistance(8)
     .onUpdate((event) => {
-      translateX.value = originX.value + event.translationX;
       translateY.value = originY.value + event.translationY;
     })
     .onEnd((event) => {
-      runOnJS(finishPan)(event.translationX, event.translationY, event.velocityY);
+      runOnJS(finishPan)(event.translationY, event.velocityY);
     });
 
   const tap = Gesture.Tap().onEnd(() => {
@@ -172,70 +245,103 @@ export function LiveHudBubble({ kind, liveGuess = null, onBought }: LiveHudBubbl
           entering={FadeInDown.springify().duration(280)}
           key={matchKey}
           pointerEvents="auto"
-          style={[styles.card, animatedStyle, { width: size.width }]}
+          style={[styles.card, animatedStyle, width ? { width } : null]}
         >
           <GestureDetector gesture={tap}>
-            <View style={styles.row}>
-              {kind === "live_guess" && liveGuess?.imageUrl ? (
-                <Image
-                  accessibilityIgnoresInvertColors
-                  accessibilityLabel={`${name} catalog art`}
-                  contentFit="cover"
-                  source={{ uri: liveGuess.imageUrl }}
-                  style={styles.thumb}
-                />
-              ) : (
-                <View accessibilityLabel="No catalog art" style={styles.thumb} />
-              )}
-              <View style={styles.copy}>
+            <View style={styles.body}>
+              <View style={styles.prices}>
+                <PriceSlot label="Raw" large tone="raw" value={prices.rawAmount} />
+                <PriceSlot label="PSA 9" large value={prices.psa9Amount} />
+                <PriceSlot label="PSA 10" large value={prices.psa10Amount} />
+              </View>
+              <View style={styles.identity}>
+                {kind === "live_guess" && liveGuess?.imageUrl ? (
+                  <Image
+                    accessibilityIgnoresInvertColors
+                    accessibilityLabel={`${name} catalog art`}
+                    contentFit="cover"
+                    source={{ uri: liveGuess.imageUrl }}
+                    style={styles.thumb}
+                  />
+                ) : (
+                  <View accessibilityLabel="No catalog art" style={styles.thumb} />
+                )}
                 <Text numberOfLines={1} style={styles.name}>
                   {title}
                 </Text>
-                <Text style={styles.rawLabel}>Raw</Text>
-                {prices.rawAmount ? <Text style={styles.rawValue}>{prices.rawAmount}</Text> : null}
-              </View>
-              <View style={styles.slabs}>
-                <SlabSlot label="PSA 9" value={prices.psa9Amount} />
-                <SlabSlot label="PSA 10" value={prices.psa10Amount} />
               </View>
             </View>
           </GestureDetector>
-          {expanded ? (
+          {expanded && canPurchase ? (
             <View style={styles.actions}>
-              <Pressable
-                accessibilityHint="Opens the catalog listing. Does not bid or buy."
-                accessibilityLabel="Buy"
-                accessibilityRole="button"
-                disabled={!listingUrl}
-                onPress={() => void openLiveHudListing(liveGuess)}
-                style={[styles.buy, !listingUrl && styles.buyDisabled]}
-              >
-                <Text style={styles.buyLabel}>Buy</Text>
-              </Pressable>
-              {kind === "live_guess" && liveGuess?.tcgdexId && onBought ? (
-                <Pressable
-                  accessibilityHint="Opens the purchase sheet to save this card. Does not open the listing."
-                  accessibilityLabel="I bought this"
-                  accessibilityRole="button"
-                  onPress={() => onBought(liveGuess)}
-                  style={styles.bought}
-                >
-                  <Text style={styles.boughtLabel}>I bought this</Text>
-                </Pressable>
+              {promptOpen ? (
+                <TextInput
+                  accessibilityLabel="Purchase price"
+                  keyboardType="decimal-pad"
+                  onChangeText={setPriceDraft}
+                  placeholder="0.00"
+                  placeholderTextColor={colors.muted}
+                  style={styles.priceInput}
+                  value={priceDraft}
+                />
               ) : null}
+              <Pressable
+                accessibilityHint="Saves this card as purchased with USD defaults. Does not read the live page."
+                accessibilityLabel="Purchased"
+                accessibilityRole="button"
+                disabled={savingKey === matchKey}
+                onPress={() => void savePurchase()}
+                style={[styles.purchased, savingKey === matchKey && styles.purchasedDisabled]}
+              >
+                <Text style={styles.purchasedLabel}>
+                  {savingKey === matchKey ? "Saving…" : "Purchased"}
+                </Text>
+              </Pressable>
             </View>
           ) : null}
         </Animated.View>
       </GestureDetector>
+      {toast ? (
+        <View pointerEvents="box-none" style={styles.toast}>
+          <Text numberOfLines={1} style={styles.toastCopy}>
+            Saved {toast.name}
+          </Text>
+          {onAddDetails ? (
+            <Pressable
+              accessibilityHint="Opens the purchase sheet to edit details."
+              accessibilityLabel="Add details"
+              accessibilityRole="button"
+              onPress={() => onAddDetails(toast.guess)}
+              style={styles.toastAction}
+            >
+              <Text style={styles.toastActionLabel}>Add details</Text>
+            </Pressable>
+          ) : null}
+        </View>
+      ) : null}
     </GestureHandlerRootView>
   );
 }
 
-function SlabSlot({ label, value }: { label: string; value: string | null }) {
+function PriceSlot({
+  label,
+  value,
+  large,
+  tone,
+}: {
+  label: string;
+  value: string | null;
+  large?: boolean;
+  tone?: "raw";
+}) {
   return (
-    <View style={styles.slab}>
-      <Text style={styles.slabLabel}>{label}</Text>
-      {value ? <Text style={styles.slabValue}>{value}</Text> : null}
+    <View style={styles.priceSlot}>
+      <Text style={styles.priceLabel}>{label}</Text>
+      {value ? (
+        <Text style={[styles.priceValue, large && styles.priceValueLarge, tone === "raw" && styles.rawValue]}>
+          {value}
+        </Text>
+      ) : null}
     </View>
   );
 }
@@ -254,7 +360,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderRadius: 18,
     paddingHorizontal: space.sm,
-    paddingVertical: 8,
+    paddingVertical: 10,
     shadowColor: "#000",
     shadowOpacity: 0.4,
     shadowRadius: 16,
@@ -262,46 +368,72 @@ const styles = StyleSheet.create({
     elevation: 8,
     gap: 8,
   },
-  row: {
+  body: { gap: 8 },
+  prices: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    justifyContent: "space-between",
+    gap: space.sm,
+  },
+  priceSlot: { flex: 1, minWidth: 0, gap: 2 },
+  priceLabel: { color: colors.muted, fontSize: 11, fontWeight: "700" },
+  priceValue: { color: colors.text, fontSize: 18, fontWeight: "800" },
+  priceValueLarge: { fontSize: 26, letterSpacing: -0.4 },
+  rawValue: { color: colors.success },
+  identity: {
     flexDirection: "row",
     alignItems: "center",
     gap: space.sm,
   },
   thumb: {
-    width: 44,
+    width: 28,
     aspectRatio: 0.715,
-    borderRadius: 8,
+    borderRadius: 6,
     backgroundColor: colors.chip,
   },
-  copy: { flex: 1, minWidth: 0, gap: 1 },
-  name: { color: "#FFFFFF", fontSize: 16, fontWeight: "800" },
-  rawLabel: { color: colors.muted, fontSize: 11, fontWeight: "700" },
-  rawValue: { color: colors.success, fontSize: 22, fontWeight: "800" },
-  slabs: { minWidth: 72, gap: 6, alignItems: "flex-end" },
-  slab: { alignItems: "flex-end", gap: 1 },
-  slabLabel: { color: colors.muted, fontSize: 11, fontWeight: "700" },
-  slabValue: { color: colors.text, fontSize: 13, fontWeight: "800" },
+  name: { flex: 1, color: colors.muted, fontSize: 13, fontWeight: "600" },
   actions: {
     flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "flex-end",
     gap: 8,
   },
-  buy: {
+  priceInput: {
     flex: 1,
-    backgroundColor: colors.success,
-    borderRadius: 10,
-    paddingVertical: 8,
-    alignItems: "center",
-  },
-  buyDisabled: { opacity: 0.4 },
-  buyLabel: { color: colors.bg, fontSize: 15, fontWeight: "800" },
-  bought: {
-    flex: 1,
-    backgroundColor: "transparent",
-    borderColor: "rgba(244, 241, 234, 0.28)",
+    backgroundColor: colors.card,
+    borderColor: colors.cardBorder,
     borderWidth: 1,
     borderRadius: 10,
-    paddingVertical: 8,
-    alignItems: "center",
+    color: colors.text,
+    paddingHorizontal: space.sm,
+    paddingVertical: 6,
+    fontSize: 15,
+    fontWeight: "700",
   },
-  boughtLabel: { color: "#FFFFFF", fontSize: 14, fontWeight: "800" },
+  purchased: {
+    backgroundColor: colors.success,
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  purchasedDisabled: { opacity: 0.5 },
+  purchasedLabel: { color: colors.bg, fontSize: 13, fontWeight: "800" },
+  toast: {
+    position: "absolute",
+    left: LIVESTREAM_HUD_BUBBLE_INSET,
+    right: LIVESTREAM_HUD_BUBBLE_INSET,
+    bottom: LIVESTREAM_HUD_BUBBLE_INSET,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: "rgba(16, 20, 24, 0.92)",
+    borderColor: "rgba(244, 241, 234, 0.16)",
+    borderWidth: 1,
+    borderRadius: 14,
+    paddingHorizontal: space.sm,
+    paddingVertical: 10,
+  },
+  toastCopy: { flex: 1, color: "#FFFFFF", fontSize: 14, fontWeight: "700" },
+  toastAction: { paddingHorizontal: 8, paddingVertical: 4 },
+  toastActionLabel: { color: colors.accent, fontSize: 13, fontWeight: "800" },
 });

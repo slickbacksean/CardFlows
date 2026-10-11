@@ -1,14 +1,18 @@
+import { LOCKED_DISPLAY_CURRENCY } from "./max-buy";
+import { parseDollarsToCents } from "./money";
 import { PRICE_ESTIMATE_REFERENCE_SOURCE } from "./pricing";
 
-export const LIVESTREAM_HUD_BUBBLE_WIDTH = 288;
-export const LIVESTREAM_HUD_BUBBLE_HEIGHT = 84;
-export const LIVESTREAM_HUD_BUBBLE_EXPANDED_HEIGHT = 148;
+export const LIVESTREAM_HUD_BUBBLE_HEIGHT = 108;
+export const LIVESTREAM_HUD_BUBBLE_EXPANDED_HEIGHT = 168;
 export const LIVESTREAM_HUD_BUBBLE_INSET = 12;
 export const LIVESTREAM_HUD_POSITION_KEY = "cardflow.livestream.hud.position";
+export const LIVE_HUD_QUICK_SAVE_ZERO = "0.00";
 
-/** @deprecated Use LIVESTREAM_HUD_BUBBLE_WIDTH. */
+/** Typical phone-width bar; live size is parent minus inset + safe area. */
+export const LIVESTREAM_HUD_BUBBLE_WIDTH = 366;
+/** @deprecated Use LIVESTREAM_HUD_BUBBLE_HEIGHT. */
 export const LIVESTREAM_HUD_BUBBLE_COLLAPSED_SIZE = LIVESTREAM_HUD_BUBBLE_HEIGHT;
-/** @deprecated Use LIVESTREAM_HUD_BUBBLE_WIDTH. */
+/** @deprecated Full-width HUD sizes from the parent. */
 export const LIVESTREAM_HUD_BUBBLE_EXPANDED_WIDTH = LIVESTREAM_HUD_BUBBLE_WIDTH;
 
 export const LIVE_HUD_ALLOWED_PRICE_SOURCES = [
@@ -18,7 +22,7 @@ export const LIVE_HUD_ALLOWED_PRICE_SOURCES = [
   "tcgplayer_usd",
 ] as const;
 
-export type LivestreamHudSnapEdge = "left" | "right";
+export type LivestreamHudSnapEdge = "top" | "bottom";
 
 export interface LivestreamHudBubbleOffset {
   x: number;
@@ -43,7 +47,6 @@ export interface SnapLivestreamHudBubbleOffsetResult extends LivestreamHudBubble
 
 export interface LivestreamHudSavedPosition {
   edge: LivestreamHudSnapEdge;
-  y: number;
 }
 
 export interface LiveHudPriceSlots {
@@ -68,12 +71,40 @@ export interface LiveHudListingMatch {
   setName?: string | null;
 }
 
-export function livestreamHudBubbleSize(expanded: boolean): {
+export interface LiveHudQuickSavePayload {
+  purchasePrice: string;
+  purchasedAt: string;
+  currency: typeof LOCKED_DISPLAY_CURRENCY;
+  shipping: typeof LIVE_HUD_QUICK_SAVE_ZERO;
+  tax: typeof LIVE_HUD_QUICK_SAVE_ZERO;
+  fees: typeof LIVE_HUD_QUICK_SAVE_ZERO;
+  supplies: typeof LIVE_HUD_QUICK_SAVE_ZERO;
+}
+
+export function livestreamHudBubbleWidth(input: {
+  parentWidth: number;
+  safeLeft?: number;
+  safeRight?: number;
+  inset?: number;
+}): number {
+  const inset = input.inset ?? LIVESTREAM_HUD_BUBBLE_INSET;
+  if (input.parentWidth <= 0) return 0;
+  return Math.max(0, input.parentWidth - inset * 2 - (input.safeLeft ?? 0) - (input.safeRight ?? 0));
+}
+
+export function livestreamHudBubbleSize(
+  expanded: boolean,
+  layout: { parentWidth?: number; safeLeft?: number; safeRight?: number } = {},
+): {
   width: number;
   height: number;
 } {
   return {
-    width: LIVESTREAM_HUD_BUBBLE_WIDTH,
+    width: livestreamHudBubbleWidth({
+      parentWidth: layout.parentWidth ?? 0,
+      safeLeft: layout.safeLeft,
+      safeRight: layout.safeRight,
+    }),
     height: expanded ? LIVESTREAM_HUD_BUBBLE_EXPANDED_HEIGHT : LIVESTREAM_HUD_BUBBLE_HEIGHT,
   };
 }
@@ -97,7 +128,7 @@ function safeBox(input: ClampLivestreamHudBubbleOffsetInput): {
   };
 }
 
-/** Keep the floating card on-screen inside the live region and safe area. */
+/** Keep the floating bar on-screen inside the live region and safe area. */
 export function clampLivestreamHudBubbleOffset(
   input: ClampLivestreamHudBubbleOffsetInput,
 ): LivestreamHudBubbleOffset {
@@ -112,7 +143,7 @@ export function clampLivestreamHudBubbleOffset(
   };
 }
 
-/** Spring target after a drag: nearest left/right edge, Y clamped to the safe area. */
+/** Spring target after a vertical drag: nearest top or bottom edge. X stays full-width left. */
 export function snapLivestreamHudBubbleOffset(
   input: ClampLivestreamHudBubbleOffsetInput,
 ): SnapLivestreamHudBubbleOffsetResult {
@@ -121,32 +152,34 @@ export function snapLivestreamHudBubbleOffset(
     return {
       x: inset + (input.safeLeft ?? 0),
       y: inset + (input.safeTop ?? 0),
-      edge: "right",
+      edge: "top",
     };
   }
   const box = safeBox(input);
-  const centerX = input.x + input.bubbleWidth / 2;
-  const edge: LivestreamHudSnapEdge = centerX < input.parentWidth / 2 ? "left" : "right";
-  const x = edge === "left" ? box.minX : box.maxX;
-  const y = Math.min(box.maxY, Math.max(box.minY, input.y));
-  return { x, y, edge };
+  const centerY = input.y + input.bubbleHeight / 2;
+  const edge: LivestreamHudSnapEdge = centerY < input.parentHeight / 2 ? "top" : "bottom";
+  return {
+    x: box.minX,
+    y: edge === "top" ? box.minY : box.maxY,
+    edge,
+  };
 }
 
 export function defaultLivestreamHudSavedPosition(): LivestreamHudSavedPosition {
-  return { edge: "right", y: LIVESTREAM_HUD_BUBBLE_INSET };
+  return { edge: "top" };
 }
 
 export function serializeLivestreamHudPosition(position: LivestreamHudSavedPosition): string {
-  return JSON.stringify({ edge: position.edge, y: position.y });
+  return JSON.stringify({ edge: position.edge });
 }
 
 export function parseLivestreamHudPosition(raw: string | null | undefined): LivestreamHudSavedPosition | null {
   if (!raw) return null;
   try {
-    const parsed = JSON.parse(raw) as { edge?: unknown; y?: unknown };
-    if (parsed.edge !== "left" && parsed.edge !== "right") return null;
-    if (typeof parsed.y !== "number" || !Number.isFinite(parsed.y)) return null;
-    return { edge: parsed.edge, y: parsed.y };
+    const parsed = JSON.parse(raw) as { edge?: unknown };
+    if (parsed.edge === "top" || parsed.edge === "bottom") return { edge: parsed.edge };
+    if (parsed.edge === "left" || parsed.edge === "right") return { edge: "top" };
+    return null;
   } catch {
     return null;
   }
@@ -164,16 +197,15 @@ export function livestreamHudOffsetFromSaved(input: {
   safeBottom?: number;
   safeLeft?: number;
 }): SnapLivestreamHudBubbleOffsetResult {
-  const inset = input.inset ?? LIVESTREAM_HUD_BUBBLE_INSET;
-  const guessedX = input.position.edge === "left" ? 0 : Math.max(input.parentWidth, inset * 2);
+  const guessedY = input.position.edge === "top" ? 0 : Math.max(input.parentHeight, 1);
   return snapLivestreamHudBubbleOffset({
-    x: guessedX,
-    y: input.position.y,
+    x: 0,
+    y: guessedY,
     parentWidth: input.parentWidth,
     parentHeight: input.parentHeight,
     bubbleWidth: input.bubbleWidth,
     bubbleHeight: input.bubbleHeight,
-    inset,
+    inset: input.inset,
     safeTop: input.safeTop,
     safeRight: input.safeRight,
     safeBottom: input.safeBottom,
@@ -190,9 +222,17 @@ function isAllowedPriceSource(source: string | null | undefined): boolean {
   return Boolean(source && (LIVE_HUD_ALLOWED_PRICE_SOURCES as readonly string[]).includes(source));
 }
 
+function dollarAmount(amount: string | null | undefined): string | null {
+  if (!amount) return null;
+  const trimmed = amount.trim().replace(/^\$/, "");
+  if (parseDollarsToCents(trimmed) === null) return null;
+  return trimmed;
+}
+
 /**
  * HUD prices come only from the current match. Allowed sources may fill Raw;
  * PSA 9 / PSA 10 stay empty unless the match already has those amounts.
+ * Never invents a price and never reads a livestream page.
  */
 export function liveHudPricesFromMatch(match: LiveHudPriceMatch | null | undefined): LiveHudPriceSlots {
   if (!match) return { rawAmount: null, psa9Amount: null, psa10Amount: null };
@@ -203,6 +243,35 @@ export function liveHudPricesFromMatch(match: LiveHudPriceMatch | null | undefin
     rawAmount: rawFromEstimate,
     psa9Amount: isAllowedPriceSource(source) ? dollarLabel(match.psa9Amount) : null,
     psa10Amount: isAllowedPriceSource(source) ? dollarLabel(match.psa10Amount) : null,
+  };
+}
+
+/** Local match estimate only. Never read from a livestream page or the live DOM. */
+export function liveHudPurchasePriceFromMatch(match: LiveHudPriceMatch | null | undefined): string | null {
+  if (!match) return null;
+  const source = match.referenceSource ?? match.source ?? null;
+  if (!isAllowedPriceSource(source)) return null;
+  return dollarAmount(match.rawAmount ?? match.estimateAmount);
+}
+
+export function liveHudQuickSavePayload(input: {
+  match?: LiveHudPriceMatch | null;
+  purchasePrice?: string | null;
+  now?: () => string;
+}): { ok: true; payload: LiveHudQuickSavePayload } | { ok: false; reason: "purchase_price_required" } {
+  const purchasePrice = dollarAmount(input.purchasePrice) ?? liveHudPurchasePriceFromMatch(input.match);
+  if (!purchasePrice) return { ok: false, reason: "purchase_price_required" };
+  return {
+    ok: true,
+    payload: {
+      purchasePrice,
+      purchasedAt: (input.now ?? (() => new Date().toISOString()))(),
+      currency: LOCKED_DISPLAY_CURRENCY,
+      shipping: LIVE_HUD_QUICK_SAVE_ZERO,
+      tax: LIVE_HUD_QUICK_SAVE_ZERO,
+      fees: LIVE_HUD_QUICK_SAVE_ZERO,
+      supplies: LIVE_HUD_QUICK_SAVE_ZERO,
+    },
   };
 }
 

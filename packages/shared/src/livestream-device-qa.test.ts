@@ -118,8 +118,8 @@ describe("Task 9 livestream device QA", () => {
     const client = readRepoFile("apps/mobile/lib/api.ts");
     expect(bubble).toContain("Looking for a card…");
     expect(overlay).not.toContain("savePurchased");
-    expect(bubble).toContain("Buy");
-    expect(bubble).toContain("I bought this");
+    expect(bubble).toContain("Purchased");
+    expect(bubble).toContain("liveHudQuickSavePayload");
     expect(listing).toContain("openBrowserAsync");
     expect(listing).not.toMatch(/placeBid|executeScript/);
     expect(scanTab).toContain("saveLivestreamPurchase");
