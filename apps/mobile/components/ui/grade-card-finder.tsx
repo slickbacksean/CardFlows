@@ -55,9 +55,12 @@ export function GradeCardFinder({
   const granted = permission?.granted === true;
   // Live camera is native-only, matching the Capture tab's gate.
   const showLivePreview = IS_NATIVE && granted && !cameraMountFailed;
-  const waitingForCamera = showLivePreview && !cameraReady;
   const [capturing, setCapturing] = useState(false);
   const [pictureSize, setPictureSize] = useState<string | undefined>(undefined);
+  // The shutter waits until the largest picture size is resolved and passed to the
+  // camera, so the first shot never uses the small default size.
+  const [pictureSizeResolved, setPictureSizeResolved] = useState(false);
+  const waitingForCamera = showLivePreview && (!cameraReady || !pictureSizeResolved);
   const shutterDisabled = detecting || waitingForCamera || capturing;
   const banner = error ?? notice ?? null;
 
@@ -78,7 +81,7 @@ export function GradeCardFinder({
         imageType: "jpg",
         skipProcessing: false,
       });
-      if (photo) {
+      if (photo && __DEV__) {
         console.info(`[grade-finder] ${side} still ${photo.width}x${photo.height} (pictureSize=${pictureSize ?? "default"})`);
       }
       const picked = stillFromCameraCapture({
@@ -101,13 +104,17 @@ export function GradeCardFinder({
   }
 
   async function onCameraReady() {
-    setCameraReady(true);
+    let size: string | undefined;
     try {
       const sizes = (await cameraRef.current?.getAvailablePictureSizesAsync()) ?? [];
-      setPictureSize(largestPictureSize(sizes));
+      size = largestPictureSize(sizes);
     } catch {
-      setPictureSize(undefined);
+      size = undefined;
     }
+    // Same render batch: CameraView receives pictureSize before the shutter enables.
+    setPictureSize(size);
+    setPictureSizeResolved(true);
+    setCameraReady(true);
   }
 
   async function openSettings() {

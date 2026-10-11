@@ -380,7 +380,7 @@ function PrepareSheetForm({
               <TextInput
                 accessibilityLabel="Service level note"
                 onChangeText={setServiceLevelNote}
-                placeholder="PSA Regular"
+                placeholder="Service level"
                 placeholderTextColor={colors.muted}
                 style={styles.input}
                 value={serviceLevelNote}

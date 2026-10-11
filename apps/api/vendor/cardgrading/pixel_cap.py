@@ -110,4 +110,23 @@ def imread_capped(path):
                 flag = reduced
                 break
     image = cv2.imread(str(path), flag | cv2.IMREAD_IGNORE_ORIENTATION)
+    if already_oriented(image, size, orientation):
+        orientation = 1
     return cap_pixels(apply_orientation(image, orientation))
+
+
+def already_oriented(image, size, orientation):
+    """True when a 90-degree EXIF tag (5-8) was already applied by the decoder.
+
+    The header size is the stored (pre-rotation) width x height. If the decoded
+    image's long axis is already swapped relative to it, the decoder rotated it,
+    and rotating again would turn an upright card sideways. Square photos can't
+    be told apart and keep the tag.
+    """
+    if image is None or not size or orientation not in (5, 6, 7, 8):
+        return False
+    stored_w, stored_h = size
+    height, width = image.shape[:2]
+    if stored_w == stored_h or width == height:
+        return False
+    return (width > height) != (stored_w > stored_h)

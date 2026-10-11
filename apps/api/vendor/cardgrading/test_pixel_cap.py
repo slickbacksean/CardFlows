@@ -57,6 +57,28 @@ class OrientationTest(unittest.TestCase):
         finally:
             del os.environ["CARDFLOW_GRADE_MAX_PIXELS"]
 
+    def test_decoder_already_rotated_is_not_rotated_twice(self):
+        import cv2
+
+        import pixel_cap
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "o6.jpg")
+            _write_jpeg(path, 6)
+            real_imread = cv2.imread
+
+            def rotating_imread(p, flag=cv2.IMREAD_COLOR):
+                # Simulate a decoder that applies EXIF even when asked not to.
+                return cv2.rotate(real_imread(p, flag), cv2.ROTATE_90_CLOCKWISE)
+
+            cv2.imread = rotating_imread
+            try:
+                image = pixel_cap.imread_capped(path)
+            finally:
+                cv2.imread = real_imread
+            self.assertEqual(image.shape[:2], (400, 200))
+            self.assertGreater(int(image[50, 100][2]), 200)
+
 
 if __name__ == "__main__":
     unittest.main()

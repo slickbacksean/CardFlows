@@ -5,7 +5,7 @@
 
 ## Goal
 
-A phone user photographs a front and a back, confirms a **computer-vision crop** of each, and gets an AI pre-grade (or an honest retake / unavailable state) without dead ends or extra taps.
+A phone user photographs a front and a back, confirms a **computer-vision crop** of each, and gets a Pre-grade estimate (or an honest retake / unavailable state) without dead ends or extra taps.
 
 ## What is already true (do not redo)
 
