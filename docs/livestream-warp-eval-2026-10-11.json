@@ -1,0 +1,50 @@
+{
+  "cards": 300,
+  "accept": 0.86,
+  "margin": 0.02,
+  "upright": {
+    "before": {
+      "top1": 53.3,
+      "accepted_correct": 18.3,
+      "accepted_wrong": 0.7,
+      "mean_top_similarity": 0.8453
+    },
+    "after": {
+      "top1": 54.3,
+      "accepted_correct": 19.0,
+      "accepted_wrong": 0.3,
+      "mean_top_similarity": 0.8475
+    },
+    "warp_fallbacks": 218
+  },
+  "tilted": {
+    "before": {
+      "top1": 35.0,
+      "accepted_correct": 9.0,
+      "accepted_wrong": 0.7,
+      "mean_top_similarity": 0.8401
+    },
+    "after": {
+      "top1": 44.3,
+      "accepted_correct": 17.7,
+      "accepted_wrong": 0.7,
+      "mean_top_similarity": 0.8535
+    },
+    "warp_fallbacks": 12
+  },
+  "steep": {
+    "before": {
+      "top1": 22.0,
+      "accepted_correct": 3.7,
+      "accepted_wrong": 0.7,
+      "mean_top_similarity": 0.8367
+    },
+    "after": {
+      "top1": 47.0,
+      "accepted_correct": 15.7,
+      "accepted_wrong": 0.3,
+      "mean_top_similarity": 0.85
+    },
+    "warp_fallbacks": 24
+  }
+}
