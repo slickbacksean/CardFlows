@@ -31,6 +31,8 @@ apps/api/models/
 apps/api/.obb-train/
 apps/mobile/modules/cardflow-live-video/.yolo26n-export/
 apps/mobile/modules/cardflow-live-video/.yolo26n-train/
+datasets/
+runs/
 apps/api/.cache/
 services/psa-grade-predictor/.venv/
 services/psa-grade-predictor/upstream/

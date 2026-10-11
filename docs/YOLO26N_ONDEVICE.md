@@ -97,3 +97,38 @@ This repo does **not** invent TCG OBB scores. If you have a labeled real holdout
 Shared helper: `compareLiveVideoDetectors` / `summarizeLiveVideoDetectorAb` in `packages/shared/src/live-video-detector.ts`.
 
 Native `pullSampleBuffer` may include `detector`, `detectLatencyMs`, and `detectorAb`. Crops still post to `/v1/livestream/identify` as `identityCropJpeg` / `identityRgb`.
+
+## Benchmarks (measured 2026-10-11)
+
+Hardware: Linux x86_64, Intel Xeon (4 cores), **CPU only**, Python 3.12.3, Ultralytics **8.4.175**, torch **2.14.1+cpu**. Not a phone. Not an emulator.
+
+| Artifact | Size | Notes |
+|----------|------|--------|
+| `yolo26n.pt` (COCO detect, official) | **5,544,453 bytes** (5.29 MiB) | Gitignored |
+| `yolo26n-card.tflite` (LiteRT FP32, imgsz=640) | **9,970,397 bytes** (9.51 MiB) | Export succeeded |
+| `yolo26n-card.mlpackage` (CoreML) | **Not produced** | `coremltools` 9.0 on this Linux VM failed: `only 0-dimensional arrays can be converted to Python scalars`. Re-export on macOS. |
+| `yolo11n-obb.pt` | 5,795,654 bytes | Used only for the DOTA8 probe |
+| `yolo26n-obb.pt` | 5,907,357 bytes | Used only for the DOTA8 probe |
+
+| Latency | Mean | Protocol |
+|---------|------|----------|
+| `yolo26n.pt` detect | **22.62 ms** | imgsz=640, 2 warmup + 5 timed `predict` calls, one 640×480 synthetic rectangle probe (not a TCG photo) |
+| `yolo26n.tflite` detect | **27.92 ms** | Same image / imgsz; TFLite XNNPACK CPU delegate |
+| iOS CoreML / Android device | **Not measured** | No iPhone, Android device, or emulator in this run |
+| Rectangle detector (Vision / Sobel) | **Not measured** | Native-only; no host port |
+
+| Accuracy | Result |
+|----------|--------|
+| TCG livestream / phone frames | **Not measured.** No labeled stream or phone eval set in the repo. Pretrained `yolo26n` is COCO, not a card checkpoint. |
+| Fine-tune on real frames | **Not run.** `finetune-yolo26n.py` refused a missing `--data` path (exit 1). No synthetic substitute was generated. |
+
+### Rotated boxes (DOTA8 official sample — not TCG cards)
+
+Ultralytics `dota8.yaml` val: **4 images, 8 instances**. Too small to confirm or deny the published YOLO26-OBB regression ([ultralytics#24205](https://github.com/ultralytics/ultralytics/issues/24205)).
+
+| Model | mAP50 | mAP50-95 | Inference ms / image (tool log) |
+|-------|-------|----------|----------------------------------|
+| `yolo11n-obb.pt` | 0.995 | 0.857 | 32.1 |
+| `yolo26n-obb.pt` | 0.995 | 0.859 | 26.3 |
+
+On this 4-image official sample, YOLO26n-OBB did **not** score below YOLO11n-OBB. That is not a TCG rotated-card result and is not a substitute for a real holdout.
