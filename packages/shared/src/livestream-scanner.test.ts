@@ -78,10 +78,13 @@ describe("Livestream in-house browser + scanner control", () => {
     expect(scanTab).not.toMatch(/Scan a still photo|Overlay is not live ID/);
     expect(overlay).not.toContain("onScanStill");
     expect(overlay).not.toMatch(/Scan a still photo|Overlay is not live ID/);
-    expect(overlay).toContain("Scanner off");
-    expect(overlay).toContain("Looking for a card…");
-    expect(overlay).toContain("HudEmptyFigures");
-    expect(overlay).toContain("not a cert");
+    expect(overlay).toContain("LiveHudBubble");
+    expect(overlay).not.toContain("onScanStill");
+    const bubble = readRepoFile("apps/mobile/components/ui/live-hud-bubble.tsx");
+    expect(bubble).toContain("Scanner off");
+    expect(bubble).toContain("Looking for a card…");
+    expect(bubble).toContain("PSA 9");
+    expect(bubble).toContain("Raw");
     expect(collection).toContain('router.push("/capture")');
     expect(liveIdentify).toContain("Do not snapshot the live page");
   });

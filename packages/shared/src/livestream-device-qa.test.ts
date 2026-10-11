@@ -63,10 +63,11 @@ describe("Task 9 livestream device QA", () => {
     ).toBe("scanner_off");
 
     const overlay = readRepoFile("apps/mobile/components/ui/screener-overlay.tsx");
+    const bubble = readRepoFile("apps/mobile/components/ui/live-hud-bubble.tsx");
     const scanTab = readRepoFile("apps/mobile/app/(tabs)/scan-tab.tsx");
     expect(overlay).toContain("livestreamOverlayKind");
     expect(overlay).toContain("livestreamOverlayUsesHud");
-    expect(overlay).toContain("Scanner off");
+    expect(bubble).toContain("Scanner off");
     expect(overlay).not.toMatch(SCREENSHOT_APIS);
     expect(scanTab).toContain("useState(false)");
     expect(scanTab).toContain("stopLiveVideoIdentify()");
@@ -111,13 +112,17 @@ describe("Task 9 livestream device QA", () => {
     expect(guess?.writesInventory).toBe(false);
 
     const overlay = readRepoFile("apps/mobile/components/ui/screener-overlay.tsx");
+    const bubble = readRepoFile("apps/mobile/components/ui/live-hud-bubble.tsx");
+    const listing = readRepoFile("apps/mobile/lib/live-hud-listing.ts");
     const scanTab = readRepoFile("apps/mobile/app/(tabs)/scan-tab.tsx");
     const client = readRepoFile("apps/mobile/lib/api.ts");
-    expect(overlay).toContain("Looking for a card…");
+    expect(bubble).toContain("Looking for a card…");
     expect(overlay).not.toContain("savePurchased");
-    expect(overlay).toContain("I bought this");
-    expect(scanTab).toContain("saveLivestreamPurchase");
-    expect(scanTab).toContain("PurchaseSheet");
+    expect(bubble).toContain("Buy");
+    expect(listing).toContain("openBrowserAsync");
+    expect(listing).not.toMatch(/placeBid|executeScript/);
+    expect(scanTab).not.toContain("saveLivestreamPurchase");
+    expect(scanTab).not.toContain("PurchaseSheet");
     expect(client).toContain("/v1/livestream/identify");
     expect(client).not.toMatch(/saveInventoryItem|addPurchased/);
   });
@@ -143,7 +148,7 @@ describe("Task 9 livestream device QA", () => {
     expect(liveIdentify).toContain("publish(mockFrame);\n  publish(mockFrame);");
     expect(overlay).toContain("getLiveOverlayGuess");
     expect(overlay).toContain("isStableLiveIdentity");
-    expect(overlay).toContain("Live guess · not confirmed");
+    expect(overlay).toContain("LiveHudBubble");
   });
 
   it("Whatnot | eBay switch remounts the live page without a screenshot path", () => {
@@ -210,13 +215,14 @@ describe("Task 9 livestream device QA", () => {
     expect(decideScreen).not.toContain("patchLivestreamOverlayCard");
     expect(scanTab).not.toContain("getLivestreamOverlayCardForUser");
     expect(overlay).not.toContain("you typed");
-    expect(overlay).toContain("Scanner off");
+    expect(overlay).toContain("LiveHudBubble");
     expect(overlay).not.toContain("savePurchased");
   });
 
   it("forbids view-shot and Capture on the livestream tab for iOS and Android", () => {
     const scanTab = readRepoFile("apps/mobile/app/(tabs)/scan-tab.tsx");
     const overlay = readRepoFile("apps/mobile/components/ui/screener-overlay.tsx");
+    const bubble = readRepoFile("apps/mobile/components/ui/live-hud-bubble.tsx");
     const liveIdentify = readRepoFile("apps/mobile/lib/live-identify.ts");
     const nativeJs = readRepoFile("apps/mobile/lib/live-video-native.ts");
     const iosPump = readRepoFile(
@@ -226,14 +232,15 @@ describe("Task 9 livestream device QA", () => {
       "apps/mobile/modules/cardflow-live-video/android/src/main/java/expo/modules/cardflowlivevideo/CardFlowLiveVideoModule.kt",
     );
 
-    for (const source of [scanTab, overlay, liveIdentify, nativeJs, iosPump, androidPump]) {
+    for (const source of [scanTab, overlay, bubble, liveIdentify, nativeJs, iosPump, androidPump]) {
       expect(source).not.toMatch(SCREENSHOT_APIS);
     }
     expect(scanTab).not.toContain("/capture");
     expect(scanTab).not.toContain("/v1/scans");
     expect(scanTab).toContain('Platform.OS === "web"');
     expect(scanTab).toContain("LIVESTREAM_SCANNER_UNAVAILABLE_MESSAGE");
-    expect(overlay).toContain("LIVESTREAM_SCANNER_UNAVAILABLE_MESSAGE");
+    expect(overlay).toContain("LiveHudBubble");
+    expect(bubble).toContain("LIVESTREAM_SCANNER_UNAVAILABLE_MESSAGE");
     expect(iosPump).toContain("live_video");
     expect(androidPump).toContain("live_video");
     expect(iosPump).not.toContain("IOSurface");

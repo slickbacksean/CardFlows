@@ -20,6 +20,9 @@ export interface LivestreamHudIdentityPayload {
   imageUrl?: string | null;
   estimateAmount?: string | null;
   maxBuyAmount?: string | null;
+  rawAmount?: string | null;
+  psa9Amount?: string | null;
+  psa10Amount?: string | null;
   confidence?: string | null;
 }
 
@@ -45,53 +48,32 @@ export function livestreamHudOriginWhitelist(pageUrl: string): string[] {
   return match?.[1] ? [match[1]] : [];
 }
 
-/** Collapsed livestream HUD is a circular bubble over the live page, not a strip. */
-export const LIVESTREAM_HUD_BUBBLE_COLLAPSED_SIZE = 72;
-export const LIVESTREAM_HUD_BUBBLE_EXPANDED_WIDTH = 304;
-export const LIVESTREAM_HUD_BUBBLE_EXPANDED_HEIGHT = 268;
-export const LIVESTREAM_HUD_BUBBLE_INSET = 12;
-
-export interface LivestreamHudBubbleOffset {
-  x: number;
-  y: number;
-}
-
-export interface ClampLivestreamHudBubbleOffsetInput extends LivestreamHudBubbleOffset {
-  parentWidth: number;
-  parentHeight: number;
-  bubbleWidth: number;
-  bubbleHeight: number;
-  inset?: number;
-}
-
-export function livestreamHudBubbleSize(expanded: boolean): {
-  width: number;
-  height: number;
-} {
-  if (expanded) {
-    return {
-      width: LIVESTREAM_HUD_BUBBLE_EXPANDED_WIDTH,
-      height: LIVESTREAM_HUD_BUBBLE_EXPANDED_HEIGHT,
-    };
-  }
-  return {
-    width: LIVESTREAM_HUD_BUBBLE_COLLAPSED_SIZE,
-    height: LIVESTREAM_HUD_BUBBLE_COLLAPSED_SIZE,
-  };
-}
-
-/** Keep the floating bubble on-screen after a drag or expand. */
-export function clampLivestreamHudBubbleOffset(
-  input: ClampLivestreamHudBubbleOffsetInput,
-): LivestreamHudBubbleOffset {
-  const inset = input.inset ?? LIVESTREAM_HUD_BUBBLE_INSET;
-  if (input.parentWidth <= 0 || input.parentHeight <= 0) {
-    return { x: inset, y: inset };
-  }
-  const maxX = Math.max(inset, input.parentWidth - input.bubbleWidth - inset);
-  const maxY = Math.max(inset, input.parentHeight - input.bubbleHeight - inset);
-  return {
-    x: Math.min(maxX, Math.max(inset, input.x)),
-    y: Math.min(maxY, Math.max(inset, input.y)),
-  };
-}
+export {
+  LIVE_HUD_ALLOWED_PRICE_SOURCES,
+  LIVESTREAM_HUD_BUBBLE_COLLAPSED_SIZE,
+  LIVESTREAM_HUD_BUBBLE_EXPANDED_HEIGHT,
+  LIVESTREAM_HUD_BUBBLE_EXPANDED_WIDTH,
+  LIVESTREAM_HUD_BUBBLE_HEIGHT,
+  LIVESTREAM_HUD_BUBBLE_INSET,
+  LIVESTREAM_HUD_BUBBLE_WIDTH,
+  LIVESTREAM_HUD_POSITION_KEY,
+  clampLivestreamHudBubbleOffset,
+  defaultLivestreamHudSavedPosition,
+  liveHudListingUrl,
+  liveHudPricesFromMatch,
+  livestreamHudBubbleSize,
+  livestreamHudOffsetFromSaved,
+  parseLivestreamHudPosition,
+  serializeLivestreamHudPosition,
+  snapLivestreamHudBubbleOffset,
+} from "./livestream-hud-bubble";
+export type {
+  ClampLivestreamHudBubbleOffsetInput,
+  LiveHudListingMatch,
+  LiveHudPriceMatch,
+  LiveHudPriceSlots,
+  LivestreamHudBubbleOffset,
+  LivestreamHudSavedPosition,
+  LivestreamHudSnapEdge,
+  SnapLivestreamHudBubbleOffsetResult,
+} from "./livestream-hud-bubble";

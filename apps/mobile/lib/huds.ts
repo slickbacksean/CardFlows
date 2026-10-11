@@ -2,6 +2,7 @@ import { Platform } from "react-native";
 import { isPhysicalRuntime } from "./runtime-host";
 import {
   defaultLivestreamHudOrigin,
+  liveHudPricesFromMatch,
   livestreamHudEventPath,
   livestreamHudPagePath,
   LIVESTREAM_HUD_IDENTITY_EVENT,
@@ -47,6 +48,7 @@ export async function publishLivestreamHud(input: {
   guess?: LiveOverlayGuess | null;
 }): Promise<void> {
   await pushLivestreamHudEvent(LIVESTREAM_HUD_SCANNER_EVENT, { on: input.scannerOn });
+  const prices = liveHudPricesFromMatch(input.guess);
   await pushLivestreamHudEvent(LIVESTREAM_HUD_IDENTITY_EVENT, {
     tcgdexId: input.guess?.tcgdexId ?? input.identity.tcgdexId,
     name: input.guess?.name ?? null,
@@ -55,6 +57,9 @@ export async function publishLivestreamHud(input: {
     imageUrl: input.guess?.imageUrl ?? null,
     estimateAmount: input.guess?.estimateAmount ?? null,
     maxBuyAmount: input.guess?.maxBuyAmount ?? null,
+    rawAmount: prices.rawAmount,
+    psa9Amount: prices.psa9Amount,
+    psa10Amount: prices.psa10Amount,
     confidence: input.guess?.confidence ?? input.identity.confidence,
   });
 }

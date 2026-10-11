@@ -1,9 +1,7 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import {
   LIVESTREAM_SCANNER_UNAVAILABLE_MESSAGE,
-  type LiveOverlayGuess,
   type LiveVideoIdentityResult,
-  type TcgdexVariants,
 } from "@cardflow/shared";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -11,9 +9,7 @@ import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { LivestreamBrowser, type LivestreamBrowserHandle } from "@/components/ui/livestream-browser";
 import { PrimaryButton } from "@/components/ui/primary-button";
-import { PurchaseSheet, type PurchaseSavePayload } from "@/components/ui/purchase-sheet";
 import { ScreenerOverlay } from "@/components/ui/screener-overlay";
-import { saveLivestreamPurchase } from "@/lib/api";
 import {
   injectMockLiveVideoCard,
   startLiveVideoIdentify,
@@ -41,9 +37,6 @@ export default function ScanTabScreen() {
   const [browserEpoch, setBrowserEpoch] = useState(0);
   const [tabFocused, setTabFocused] = useState(true);
   const [liveIdentity, setLiveIdentity] = useState<LiveVideoIdentityResult | null>(null);
-  const [buyGuess, setBuyGuess] = useState<LiveOverlayGuess | null>(null);
-  const [buyError, setBuyError] = useState<string | null>(null);
-  const [isSavingBuy, setIsSavingBuy] = useState(false);
   const browserRef = useRef<LivestreamBrowserHandle>(null);
   const chrome = LIVESTREAM_PLATFORMS[platform];
   const scannerUnavailable = Platform.OS === "web";
@@ -77,23 +70,6 @@ export default function ScanTabScreen() {
     if (scannerOn) {
       stopLiveVideoIdentify();
       startLiveVideoIdentify();
-    }
-  }
-
-  async function onSaveLivePurchase(payload: PurchaseSavePayload) {
-    if (!buyGuess) return;
-    setIsSavingBuy(true);
-    setBuyError(null);
-    try {
-      await saveLivestreamPurchase({
-        tcgdexId: buyGuess.tcgdexId,
-        ...payload,
-      });
-      setBuyGuess(null);
-    } catch (caught) {
-      setBuyError(caught instanceof Error ? caught.message : "Could not save that purchase");
-    } finally {
-      setIsSavingBuy(false);
     }
   }
 
@@ -245,10 +221,6 @@ export default function ScanTabScreen() {
         <View pointerEvents="box-none" style={styles.hudLayer}>
           <ScreenerOverlay
             liveIdentity={liveIdentity}
-            onBuy={(guess) => {
-              setBuyError(null);
-              setBuyGuess(guess);
-            }}
             scannerOn={scannerOn}
             tabFocused={tabFocused}
             unavailable={scannerUnavailable}
@@ -275,31 +247,9 @@ export default function ScanTabScreen() {
           </Pressable>
         ) : null}
       </View>
-      <PurchaseSheet
-        error={buyError}
-        isSaving={isSavingBuy}
-        localId={buyGuess?.number ?? ""}
-        name={buyGuess?.name ?? buyGuess?.tcgdexId ?? "Card"}
-        onClose={() => {
-          if (!isSavingBuy) setBuyGuess(null);
-        }}
-        onSave={(payload) => void onSaveLivePurchase(payload)}
-        selectedVariant="normal"
-        setName={buyGuess?.setName ?? ""}
-        variants={LIVE_PURCHASE_VARIANTS}
-        visible={buyGuess !== null}
-      />
     </SafeAreaView>
   );
 }
-
-const LIVE_PURCHASE_VARIANTS: TcgdexVariants = {
-  normal: true,
-  holo: true,
-  reverse: true,
-  firstEdition: false,
-  wPromo: false,
-};
 
 interface SegmentButtonProps {
   label: string;

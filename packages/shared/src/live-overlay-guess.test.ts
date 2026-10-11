@@ -119,8 +119,8 @@ describe("live overlay guess from catalog + estimate", () => {
     expect(client).toContain("identityHash");
     expect(overlay).toContain("getLiveOverlayGuess");
     expect(overlay).not.toContain("savePurchased");
-    expect(overlay).toContain("I bought this");
-    expect(scanTab).toContain("saveLivestreamPurchase");
-    expect(scanTab).toContain("PurchaseSheet");
+    expect(overlay).toContain("LiveHudBubble");
+    expect(scanTab).not.toContain("saveLivestreamPurchase");
+    expect(scanTab).not.toContain("PurchaseSheet");
   });
 });

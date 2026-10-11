@@ -6,6 +6,10 @@
  * always reported unavailable. The Capacitor packages were removed; the livestream
  * tab uses react-native-webview (components/ui/livestream-browser.tsx).
  * Does not scrape the live page or capture a still of it.
+ *
+ * Capgo InAppBrowser draws over React Native siblings (a native window, not a
+ * child view). If it were re-enabled, the HUD bubble could not sit above the
+ * stream. Keep the RN WebView path so LiveHudBubble can mount with box-none.
  */
 import { LIVESTREAM_INAPP_BROWSER } from "@cardflow/shared";
 

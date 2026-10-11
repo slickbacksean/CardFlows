@@ -119,6 +119,7 @@ export const LivestreamBrowser = forwardRef<LivestreamBrowserHandle, LivestreamB
       return <View accessibilityLabel={liveRegionLabel} style={styles.host} />;
     }
 
+    // Capgo native browser draws over React Native siblings; WebView keeps the HUD on top.
     if (useFallback) {
       return (
         <View accessibilityLabel={liveRegionLabel} style={styles.host}>
