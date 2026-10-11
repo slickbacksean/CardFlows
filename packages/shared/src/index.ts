@@ -555,3 +555,4 @@ export {
   scaleCardCorners,
 } from "./card-quad";
 export type { CardCorners, CardPoint, CardQuad, CardQuadSource } from "./card-quad";
+export * from "./auto-capture";
