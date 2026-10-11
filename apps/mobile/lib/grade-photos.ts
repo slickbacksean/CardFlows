@@ -2,17 +2,23 @@ import {
   CARD_ASPECT_RATIO,
   GRADE_IMAGE_MAX_BYTES,
   GRADE_STILL_QUALITY,
+  GRADE_STILL_MIN_SHORT_SIDE_PX,
   isGradeImageMime,
+  largestPictureSize,
+  stillFromCameraCapture,
+  type PickedGradeStill,
 } from "@cardflow/shared";
 import * as ImagePicker from "expo-image-picker";
 import { Alert, Platform } from "react-native";
 
-export interface PickedGradeStill {
-  uri: string;
-  mimeType: string | null;
-}
-
-export { CARD_ASPECT_RATIO, GRADE_STILL_QUALITY };
+export type { PickedGradeStill };
+export {
+  CARD_ASPECT_RATIO,
+  GRADE_STILL_MIN_SHORT_SIDE_PX,
+  GRADE_STILL_QUALITY,
+  largestPictureSize,
+  stillFromCameraCapture,
+};
 
 const STILL_PICKER: ImagePicker.ImagePickerOptions = {
   mediaTypes: ["images"],
@@ -54,23 +60,6 @@ export function validatePickedGradeStill(
     };
   }
   return { still: { uri: asset.uri, mimeType } };
-}
-
-export function stillFromCameraCapture(input: {
-  uri: string | null | undefined;
-  format?: "jpg" | "png";
-  fileSize?: number;
-}): { still: PickedGradeStill } | { error: string } {
-  if (!input.uri) return { error: "Could not take a photo. Try again." };
-  if (typeof input.fileSize === "number" && input.fileSize > GRADE_IMAGE_MAX_BYTES) {
-    return { error: "Image must be 20 MB or smaller" };
-  }
-  return {
-    still: {
-      uri: input.uri,
-      mimeType: input.format === "png" ? "image/png" : "image/jpeg",
-    },
-  };
 }
 
 async function pickFromLibrary(): Promise<ImagePicker.ImagePickerAsset | null> {

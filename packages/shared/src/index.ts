@@ -549,3 +549,10 @@ export type {
 } from "./photo-pregrade";
 export { RECOGNITION_SCENARIOS } from "./types";
 export type * from "./types";
+export {
+  GRADE_STILL_MIN_SHORT_SIDE_PX,
+  GRADE_STILL_TOO_SMALL_COPY,
+  largestPictureSize,
+  stillFromCameraCapture,
+  type PickedGradeStill,
+} from "./grade-still";

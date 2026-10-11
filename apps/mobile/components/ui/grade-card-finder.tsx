@@ -16,6 +16,7 @@ import { PrimaryButton } from "@/components/ui/primary-button";
 import {
   CARD_ASPECT_RATIO,
   GRADE_STILL_QUALITY,
+  largestPictureSize,
   stillFromCameraCapture,
   type PickedGradeStill,
 } from "@/lib/grade-photos";
@@ -52,20 +53,24 @@ export function GradeCardFinder({
   const [error, setError] = useState<string | null>(null);
 
   const granted = permission?.granted === true;
-  const showLivePreview = granted && !cameraMountFailed;
+  // Live camera is native-only, matching the Capture tab's gate.
+  const showLivePreview = IS_NATIVE && granted && !cameraMountFailed;
   const waitingForCamera = showLivePreview && !cameraReady;
-  const shutterDisabled = detecting || waitingForCamera || busyRef.current;
+  const [capturing, setCapturing] = useState(false);
+  const [pictureSize, setPictureSize] = useState<string | undefined>(undefined);
+  const shutterDisabled = detecting || waitingForCamera || capturing;
   const banner = error ?? notice ?? null;
 
   useEffect(() => {
-    if (!permission?.granted && permission?.canAskAgain) {
+    if (IS_NATIVE && !permission?.granted && permission?.canAskAgain) {
       void requestPermission();
     }
   }, [permission, requestPermission]);
 
   async function onShutter() {
-    if (shutterDisabled || !showLivePreview) return;
+    if (busyRef.current || shutterDisabled || !showLivePreview) return;
     busyRef.current = true;
+    setCapturing(true);
     setError(null);
     try {
       const photo = await cameraRef.current?.takePictureAsync({
@@ -73,9 +78,14 @@ export function GradeCardFinder({
         imageType: "jpg",
         skipProcessing: false,
       });
+      if (photo) {
+        console.info(`[grade-finder] ${side} still ${photo.width}x${photo.height} (pictureSize=${pictureSize ?? "default"})`);
+      }
       const picked = stillFromCameraCapture({
         uri: photo?.uri,
         format: photo?.format,
+        width: photo?.width,
+        height: photo?.height,
       });
       if ("error" in picked) {
         setError(picked.error);
@@ -86,6 +96,17 @@ export function GradeCardFinder({
       setError(caught instanceof Error ? caught.message : "Could not take a photo. Try again.");
     } finally {
       busyRef.current = false;
+      setCapturing(false);
+    }
+  }
+
+  async function onCameraReady() {
+    setCameraReady(true);
+    try {
+      const sizes = (await cameraRef.current?.getAvailablePictureSizesAsync()) ?? [];
+      setPictureSize(largestPictureSize(sizes));
+    } catch {
+      setPictureSize(undefined);
     }
   }
 
@@ -111,7 +132,9 @@ export function GradeCardFinder({
   }
 
   if (!showLivePreview) {
-    const blocked = cameraMountFailed
+    const blocked = !IS_NATIVE
+      ? "The live camera runs in the iOS and Android app. Choose a photo instead."
+      : cameraMountFailed
       ? "Camera could not start. Choose a library photo, or try again."
       : permission.canAskAgain
         ? "CardFlow takes a still of the card in a 63×88 frame, then finds the crop. You can also choose a library photo."
@@ -120,10 +143,12 @@ export function GradeCardFinder({
       <View style={styles.flex}>
         <FinderHeader onBack={onBack} title={`${sideLabel} photo`} />
         <View style={styles.panel}>
-          <Text style={styles.title}>{cameraMountFailed ? "Camera unavailable" : "Allow camera"}</Text>
+          <Text style={styles.title}>
+            {!IS_NATIVE || cameraMountFailed ? "Camera unavailable" : "Allow camera"}
+          </Text>
           <Text style={styles.body}>{blocked}</Text>
           {banner ? <Text style={styles.error}>{banner}</Text> : null}
-          {IS_NATIVE && !permission.canAskAgain && !cameraMountFailed ? (
+          {!IS_NATIVE ? null : !permission.canAskAgain && !cameraMountFailed ? (
             <PrimaryButton label="Open system Settings" onPress={() => void openSettings()} tone="muted" />
           ) : (
             <PrimaryButton
@@ -149,7 +174,8 @@ export function GradeCardFinder({
         enableLivePreview={showLivePreview}
         freezeUri={freezeUri}
         detecting={detecting}
-        onCameraReady={() => setCameraReady(true)}
+        pictureSize={pictureSize}
+        onCameraReady={() => void onCameraReady()}
         onMountError={() => setCameraMountFailed(true)}
       />
       {banner ? <Text style={styles.error}>{banner}</Text> : null}
@@ -212,6 +238,7 @@ interface CardFinderStageProps {
   enableLivePreview: boolean;
   freezeUri: string | null;
   detecting: boolean;
+  pictureSize?: string;
   onCameraReady: () => void;
   onMountError: () => void;
 }
@@ -221,6 +248,7 @@ function CardFinderStage({
   enableLivePreview,
   freezeUri,
   detecting,
+  pictureSize,
   onCameraReady,
   onMountError,
 }: CardFinderStageProps) {
@@ -238,6 +266,7 @@ function CardFinderStage({
             facing="back"
             mode="picture"
             mute
+            pictureSize={pictureSize}
             onCameraReady={onCameraReady}
             onMountError={onMountError}
             style={StyleSheet.absoluteFill}
