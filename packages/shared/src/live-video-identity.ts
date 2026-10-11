@@ -46,6 +46,15 @@ export interface LiveVideoFrame {
    * Never a full page screenshot. Optional; pHash remains the fallback.
    */
   identityCropJpeg?: string | null;
+  /**
+   * Card corners (TL, TR, BR, BL) in `identityCropJpeg` pixel space, 8 numbers.
+   * iOS Vision only; the server straightens the crop to 63:88 with these.
+   */
+  identityCropQuad?: number[] | null;
+  /** Detector box, normalized [0, 1], top-left origin. Used for IoU tracking. */
+  cardBox?: { x: number; y: number; width: number; height: number } | null;
+  /** Native detect time for this frame, ms (debug timing). */
+  detectMs?: number | null;
 }
 
 export interface LiveVideoIdentityInput {

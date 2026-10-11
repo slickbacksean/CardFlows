@@ -115,20 +115,37 @@ final class LiveVideoSamplePump {
         "cardDetected": false,
       ]
     }
+    let detectStart = CFAbsoluteTimeGetCurrent()
     let detection = CardInStreamDetect.inspect(pixelBuffer)
+    let detectMs = (CFAbsoluteTimeGetCurrent() - detectStart) * 1000
     var payload: [String: Any] = [
       "source": "live_video",
       "cardDetected": detection.cardDetected,
+      "detectMs": detectMs,
     ]
     if detection.cardDetected,
        let box = detection.boundingBox
     {
+      // Normalized, top-left origin (Vision is bottom-left). Used for IoU tracking.
+      payload["cardBox"] = [
+        "x": box.minX,
+        "y": 1 - box.maxY,
+        "width": box.width,
+        "height": box.height,
+      ]
       if let identityRgb = LiveVideoIdentityCrop.base64(from: pixelBuffer, normalizedBox: box) {
         payload["identityRgb"] = identityRgb
       }
-      if let cropJpeg = LiveVideoIdentityCrop.jpegBase64(from: pixelBuffer, normalizedBox: box) {
-        payload["identityCropJpeg"] = cropJpeg
+      if let crop = LiveVideoIdentityCrop.jpegBase64(
+        from: pixelBuffer,
+        normalizedBox: box,
+        corners: detection.corners
+      ) {
+        payload["identityCropJpeg"] = crop.jpeg
+        // TL, TR, BR, BL in the JPEG's pixel space; the server straightens with these.
+        if let quad = crop.quad { payload["identityCropQuad"] = quad }
       }
+      payload["cropMs"] = (CFAbsoluteTimeGetCurrent() - detectStart) * 1000 - detectMs
     }
     return payload
   }
@@ -340,6 +357,8 @@ private extension NSLock {
 private struct CardDetectResult {
   let cardDetected: Bool
   let boundingBox: CGRect?
+  /// Vision corners (normalized, bottom-left origin): TL, TR, BR, BL.
+  var corners: [CGPoint]? = nil
 }
 
 /// Pokémon TCG is 63×88 mm (~0.716). Detect a filling rectangle; crop is identity metadata.
@@ -380,7 +399,11 @@ private enum CardInStreamDetect {
     guard let best else {
       return CardDetectResult(cardDetected: false, boundingBox: nil)
     }
-    return CardDetectResult(cardDetected: true, boundingBox: best.boundingBox)
+    return CardDetectResult(
+      cardDetected: true,
+      boundingBox: best.boundingBox,
+      corners: [best.topLeft, best.topRight, best.bottomRight, best.bottomLeft]
+    )
   }
 
   static func shortOverLong(_ observation: VNRectangleObservation) -> CGFloat {
@@ -443,7 +466,11 @@ private enum LiveVideoIdentityCrop {
     return packedRgbBase64(cgImage)
   }
 
-  static func jpegBase64(from pixelBuffer: CVPixelBuffer, normalizedBox: CGRect) -> String? {
+  static func jpegBase64(
+    from pixelBuffer: CVPixelBuffer,
+    normalizedBox: CGRect,
+    corners: [CGPoint]? = nil
+  ) -> (jpeg: String, quad: [Double]?)? {
     let image = CIImage(cvPixelBuffer: pixelBuffer)
     guard let crop = cropRect(for: pixelBuffer, normalizedBox: normalizedBox) else { return nil }
     let longest = max(crop.width, crop.height)
@@ -458,7 +485,17 @@ private enum LiveVideoIdentityCrop {
     let outputRect = CGRect(x: 0, y: 0, width: outW, height: outH)
     guard let cgImage = context.createCGImage(scaled, from: outputRect) else { return nil }
     guard let data = UIImage(cgImage: cgImage).jpegData(compressionQuality: 0.82) else { return nil }
-    return data.base64EncodedString()
+    var quad: [Double]?
+    if let corners, corners.count == 4 {
+      let extent = image.extent
+      // Normalized bottom-left → JPEG pixels, top-left origin.
+      quad = corners.flatMap { point -> [Double] in
+        let x = (extent.minX + point.x * extent.width - crop.minX) * scale
+        let y = outH - (extent.minY + point.y * extent.height - crop.minY) * scale
+        return [Double(x), Double(y)]
+      }
+    }
+    return (data.base64EncodedString(), quad)
   }
 
   static func packedRgbBase64(_ image: CGImage) -> String? {

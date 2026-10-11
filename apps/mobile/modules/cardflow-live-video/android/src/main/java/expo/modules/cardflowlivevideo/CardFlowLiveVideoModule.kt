@@ -112,7 +112,9 @@ internal class LiveVideoSamplePump private constructor() {
 
   fun pullFrame(): Map<String, Any> {
     val pixelBuffer = copyLiveVideoPixelBuffer()
+    val detectStart = System.nanoTime()
     val detection = pixelBuffer?.let(CardInStreamDetect::inspect)
+    val detectMs = (System.nanoTime() - detectStart) / 1_000_000.0
     val cardDetected = detection?.cardDetected == true
     val box = detection?.box
     val identityRgb =
@@ -127,11 +129,26 @@ internal class LiveVideoSamplePump private constructor() {
       } else {
         null
       }
+    // Normalized, top-left origin. The Sobel detector has no corners, only a box,
+    // so Android sends no identityCropQuad and the server keeps the upright crop.
+    val cardBox =
+      if (cardDetected && pixelBuffer != null && box != null && pixelBuffer.width > 0 && pixelBuffer.height > 0) {
+        mapOf(
+          "x" to box.left.toDouble() / pixelBuffer.width,
+          "y" to box.top.toDouble() / pixelBuffer.height,
+          "width" to box.width().toDouble() / pixelBuffer.width,
+          "height" to box.height().toDouble() / pixelBuffer.height,
+        )
+      } else {
+        null
+      }
     if (pixelBuffer != null && !pixelBuffer.isRecycled) pixelBuffer.recycle()
     val payload = mutableMapOf<String, Any>(
       "source" to "live_video",
       "cardDetected" to cardDetected,
     )
+    if (pixelBuffer != null) payload["detectMs"] = detectMs
+    if (cardBox != null) payload["cardBox"] = cardBox
     if (identityRgb != null) payload["identityRgb"] = identityRgb
     if (identityCropJpeg != null) payload["identityCropJpeg"] = identityCropJpeg
     return payload

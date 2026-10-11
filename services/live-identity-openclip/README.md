@@ -46,3 +46,23 @@ CARD_FLOW_LIVE_IDENTITY_OPENCLIP_TOKEN=dev-shared-secret   # if set on the sidec
 When the URL is set and the mobile/native path posts `identityCropJpeg`, `/v1/livestream/identify` prefers OpenCLIP. Otherwise it keeps the RGB pHash index.
 
 CI stays on pHash fixtures / mocks. Fail soft: sidecar down → pHash (or unidentified).
+## Straightened crops (warp before matching)
+
+When the phone sends `quad` (8 numbers: the card's TL, TR, BR, BL corners in the
+crop's pixel space; iOS Vision only today), `/v1/match` warps the crop to a
+63:88 image (`warp.py`) before embedding. A missing, malformed, or implausible
+quad keeps the old upright crop. `LIVE_IDENTITY_WARP=0` turns warping off.
+Android's Sobel detector has no corners, so Android stays on the upright crop.
+
+- `python scripts/test_warp.py` checks the warp.
+- `python scripts/eval_warp.py --index data/index --high data/eval/high` is a
+  synthetic before/after on tilted stream-style frames (not real stream data).
+
+## Debug timing
+
+Every `/v1/match` response carries `timings` (decode, warp, embed, search, orb,
+total ms) and `warped`. The API logs and aggregates per-stage timings only when
+started with `CARD_FLOW_LIVESTREAM_TIMING=1`; then `pnpm livestream:timing`
+prints p50/p95 per stage plus the accept rate. The phone logs its own stages
+(detect, pull, upload, total) only with `EXPO_PUBLIC_CARD_FLOW_LIVESTREAM_TIMING=1`.
+Both are off by default.
