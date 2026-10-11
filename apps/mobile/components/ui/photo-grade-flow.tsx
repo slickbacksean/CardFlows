@@ -6,7 +6,8 @@ import {
 } from "@cardflow/shared";
 import { Image } from "expo-image";
 import { useRef, useState } from "react";
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { GradeCamera } from "@/components/ui/grade-camera";
 import { PrimaryButton } from "@/components/ui/primary-button";
 import { detectGradePhoto, requestPhotoPregrade } from "@/lib/api";
 import { pickGradeStill, type PickedGradeStill } from "@/lib/grade-photos";
@@ -26,7 +27,7 @@ interface PhotoGradeFlowProps {
 }
 
 const GUIDELINES = [
-  "Lay the card flat and keep all four corners in the frame.",
+  "Lay the card flat and line it up inside the frame. The photo takes itself when the phone is level and still.",
   "Use even light. No sleeve, glare, or fingers on the card.",
   "Take the front, then the back. Catalog art is not a grade photo.",
   "Hold the phone flat over the card. A tilted angle means a retake.",
@@ -34,6 +35,14 @@ const GUIDELINES = [
 ];
 
 const PILLARS = ["centering", "corners", "edges", "surface"] as const;
+
+/** Native: grade photos use the in-app camera with the live capture guide. */
+const USE_GUIDED_CAMERA = Platform.OS === "ios" || Platform.OS === "android";
+
+/** iOS can't present the system picker while the camera modal is still sliding away. */
+function afterCameraCloses(run: () => void) {
+  setTimeout(run, Platform.OS === "ios" ? 500 : 0);
+}
 
 function formatPregrade(value: number): string {
   return String(Math.round(value * 100) / 100);
@@ -63,11 +72,20 @@ export function PhotoGradeFlow({ onOpenPipeline }: PhotoGradeFlowProps) {
   const [unavailableMessage, setUnavailableMessage] = useState<string | null>(null);
   const [checking, setChecking] = useState(false);
   const requestId = useRef(0);
+  // One tap on "Use this crop" per crop: a double tap must not open the
+  // camera twice or start two uploads.
+  const confirming = useRef(false);
+  const [confirmBusy, setConfirmBusy] = useState(false);
+  // In-app camera with the live card frame + level guide (native only).
+  const [cameraSide, setCameraSide] = useState<Side | null>(null);
 
   const current = side === "front" ? front : back;
 
   function reset() {
     requestId.current += 1;
+    setCameraSide(null);
+    confirming.current = false;
+    setConfirmBusy(false);
     setStep("guidelines");
     setSide("front");
     setFront(null);
@@ -81,8 +99,17 @@ export function PhotoGradeFlow({ onOpenPipeline }: PhotoGradeFlowProps) {
     setChecking(false);
   }
 
-  async function takePhoto(nextSide: Side, source: "camera" | "library") {
+  async function takePhoto(
+    nextSide: Side,
+    source: "camera" | "library",
+    options: { systemCamera?: boolean } = {},
+  ) {
     setNotice(null);
+    if (source === "camera" && !options.systemCamera && USE_GUIDED_CAMERA) {
+      setSide(nextSide);
+      setCameraSide(nextSide);
+      return;
+    }
     let picked: { still: PickedGradeStill } | { error: string } | null;
     try {
       picked = await pickGradeStill(source);
@@ -92,6 +119,13 @@ export function PhotoGradeFlow({ onOpenPipeline }: PhotoGradeFlowProps) {
       setNotice(caught instanceof Error ? caught.message : "Could not open the camera.");
       return;
     }
+    await acceptPicked(nextSide, picked);
+  }
+
+  async function acceptPicked(
+    nextSide: Side,
+    picked: { still: PickedGradeStill } | { error: string } | null,
+  ) {
     if (!picked) {
       const kept = nextSide === "front" ? front : back;
       setSide(nextSide);
@@ -152,20 +186,27 @@ export function PhotoGradeFlow({ onOpenPipeline }: PhotoGradeFlowProps) {
     }
   }
 
-  function confirmCrop() {
-    if (!detected || !current?.cropUri) return;
-    if (side === "front") {
-      setSide("back");
-      setDetected(false);
-      setNotice(null);
-      void takePhoto("back", "camera");
-      return;
+  async function confirmCrop() {
+    if (confirming.current || !detected || !current?.cropUri) return;
+    confirming.current = true;
+    setConfirmBusy(true);
+    try {
+      if (side === "front") {
+        setSide("back");
+        setDetected(false);
+        setNotice(null);
+        await takePhoto("back", "camera");
+        return;
+      }
+      await scorePhotos();
+    } finally {
+      confirming.current = false;
+      setConfirmBusy(false);
     }
-    void scorePhotos();
   }
 
   async function scorePhotos() {
-    if (!front || !back) return;
+    if (!front || !back || step === "scoring") return;
     const id = ++requestId.current;
     setStep("scoring");
     setNotice(null);
@@ -283,7 +324,11 @@ export function PhotoGradeFlow({ onOpenPipeline }: PhotoGradeFlowProps) {
           ) : null}
           {!checking && notice ? <Text style={styles.error}>{notice}</Text> : null}
           {!checking && detected ? (
-            <PrimaryButton label="Use this crop" onPress={confirmCrop} />
+            <PrimaryButton
+              label="Use this crop"
+              onPress={() => void confirmCrop()}
+              disabled={confirmBusy}
+            />
           ) : null}
           {!checking ? (
             <PrimaryButton
@@ -337,6 +382,31 @@ export function PhotoGradeFlow({ onOpenPipeline }: PhotoGradeFlowProps) {
           <PipelineLink onPress={onOpenPipeline} />
         </View>
       ) : null}
+
+      <GradeCamera
+        onCancel={() => {
+          const closing = cameraSide;
+          setCameraSide(null);
+          if (closing) void acceptPicked(closing, null);
+        }}
+        onCapture={(photo) => {
+          const capturedSide = cameraSide ?? side;
+          setCameraSide(null);
+          void acceptPicked(capturedSide, { still: { uri: photo.uri, mimeType: photo.mimeType } });
+        }}
+        onChooseLibrary={() => {
+          const pickingSide = cameraSide ?? side;
+          setCameraSide(null);
+          afterCameraCloses(() => void takePhoto(pickingSide, "library"));
+        }}
+        onUseSystemCamera={() => {
+          const pickingSide = cameraSide ?? side;
+          setCameraSide(null);
+          afterCameraCloses(() => void takePhoto(pickingSide, "camera", { systemCamera: true }));
+        }}
+        side={cameraSide ?? side}
+        visible={cameraSide !== null}
+      />
     </ScrollView>
   );
 }

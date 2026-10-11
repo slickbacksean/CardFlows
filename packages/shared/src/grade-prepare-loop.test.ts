@@ -168,7 +168,7 @@ describe("Task 8 grading Prepare loop", () => {
     const scanTab = readRepoFile("apps/mobile/app/(tabs)/scan-tab.tsx");
     const liveIdentify = readRepoFile("apps/mobile/lib/live-identify.ts");
 
-    expect(GRADING_TAB_CONSTRAINT).toBe("AI pre-grade estimate, not a cert.");
+    expect(GRADING_TAB_CONSTRAINT).toBe("Pre-grade estimate, not a cert.");
     expect(GRADE_ESTIMATE_EMPTY_COPY).toBe("No photo estimate yet.");
     expect(GRADE_PHOTOS_HINT.toLowerCase()).toContain("still submit");
     expect(PREPARE_SLAB_ROWS.length).toBeGreaterThan(0);
@@ -235,8 +235,8 @@ describe("Task 8 grading Prepare loop", () => {
     expect(assignmentValues(envExample, "XAI_API_KEY")).toEqual([]);
     expect(assignmentValues(envExample, "POKETRACE_API_KEY")).toEqual([""]);
     expect(assignmentValues(envExample, "CARD_FLOW_GRADE_ESTIMATE_ENABLED")).toEqual([""]);
-    expect(assignmentValues(envExample, "CARD_FLOW_PSA_GRADE_URL")).toEqual([""]);
-    expect(assignmentValues(envExample, "CARD_FLOW_PSA_GRADE_TOKEN")).toEqual([""]);
+    expect(assignmentValues(envExample, "CARD_FLOW_PSA_GRADE_URL")).toEqual([]);
+    expect(assignmentValues(envExample, "CARD_FLOW_PSA_GRADE_TOKEN")).toEqual([]);
 
     expect(settings).not.toMatch(/ANTHROPIC_|anthropic|XAI_|AI grading|poketrace|PSA_GRADE/i);
     expect(settings).not.toContain("TextInput");

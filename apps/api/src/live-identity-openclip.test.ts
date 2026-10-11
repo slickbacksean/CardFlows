@@ -75,6 +75,25 @@ describe("live identity OpenCLIP client", () => {
     expect(body.get("name")).toBe("Sizzlipede");
   });
 
+  it("sends several OCR names in one match so the crop is embedded once", async () => {
+    const fetchImpl = vi.fn(
+      async () =>
+        new Response(JSON.stringify({ ok: true, accepted: false, pipeline: "openclip_hnsw" }), {
+          status: 200,
+        }),
+    );
+    const client = createLiveIdentityOpenclipClient({
+      baseUrl: "http://127.0.0.1:8092",
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    });
+    const bytes = Uint8Array.from([0xff, 0xd8, 0xff, 0xd9, ...Array(40).fill(4)]);
+    await client.matchCropJpeg(bytes, "image/png", { names: ["Pikachu", "Raichu", ""] });
+    const body = fetchImpl.mock.calls[0]?.[1]?.body as FormData;
+    expect(body.get("names")).toBe("Pikachu\nRaichu");
+    expect(body.get("name")).toBeNull();
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
   it("fails soft on network errors", async () => {
     const client = createLiveIdentityOpenclipClient({
       baseUrl: "http://127.0.0.1:8092",

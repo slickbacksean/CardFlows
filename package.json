@@ -18,12 +18,15 @@
     "live-identity:up": "sh services/live-identity-openclip/up.sh",
     "live-identity:health": "sh services/live-identity-openclip/health.sh",
     "test": "pnpm --filter @cardflow/shared test && pnpm --filter @cardflow/api test",
-    "typecheck": "pnpm --filter @cardflow/shared typecheck && pnpm --filter @cardflow/api typecheck && pnpm --filter @cardflow/mobile exec tsc --noEmit",
-    "build:legacy": "pnpm --filter @cardflows/shared build",
-    "test:legacy": "pnpm build:legacy && pnpm --filter @cardflows/shared test && pnpm --filter @cardflows/api test",
-    "typecheck:legacy": "pnpm build:legacy && pnpm --filter @cardflows/api typecheck"
+    "typecheck": "pnpm --filter @cardflow/shared typecheck && pnpm --filter @cardflow/api typecheck && pnpm --filter @cardflow/mobile exec tsc --noEmit"
   },
   "dependencies": {
     "huds": "2.2.2"
+  },
+  "pnpm": {
+    "patchedDependencies": {
+      "@capgo/capacitor-inappbrowser@8.17.2": "patches/@capgo__capacitor-inappbrowser@8.17.2.patch",
+      "react-native-webview@13.16.1": "patches/react-native-webview@13.16.1.patch"
+    }
   }
 }

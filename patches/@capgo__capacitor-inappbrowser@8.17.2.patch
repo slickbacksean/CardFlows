@@ -1,0 +1,85 @@
+diff --git a/android/src/main/java/ee/forgr/capacitor_inappbrowser/WebViewDialog.java b/android/src/main/java/ee/forgr/capacitor_inappbrowser/WebViewDialog.java
+index d0d00b0833117acefc16f3dfabddd5db4275f215..a99a3068eb4830da4fc1ca33b8aa09e6ba5ba5e6 100644
+--- a/android/src/main/java/ee/forgr/capacitor_inappbrowser/WebViewDialog.java
++++ b/android/src/main/java/ee/forgr/capacitor_inappbrowser/WebViewDialog.java
+@@ -82,6 +82,7 @@ import androidx.core.view.ViewCompat;
+ import androidx.core.view.WindowInsetsCompat;
+ import androidx.core.view.WindowInsetsControllerCompat;
+ import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
++import androidx.webkit.UserAgentMetadata;
+ import androidx.webkit.WebMessageCompat;
+ import androidx.webkit.WebSettingsCompat;
+ import androidx.webkit.WebViewAssetLoader;
+@@ -2265,6 +2266,9 @@ public class WebViewDialog extends ComponentDialog implements ProxyResponseRouti
+             proxyBridgeScript = loadProxyBridgeScript();
+         }
+         ensureBundledAssetLoader();
++        CookieManager acceptedCookies = CookieManager.getInstance();
++        acceptedCookies.setAcceptCookie(true);
++        acceptedCookies.setAcceptThirdPartyCookies(_webView, true);
+         _webView.getSettings().setJavaScriptEnabled(true);
+         _webView.getSettings().setJavaScriptCanOpenWindowsAutomatically(true);
+         _webView.getSettings().setDatabaseEnabled(true);
+@@ -4702,10 +4706,61 @@ public class WebViewDialog extends ComponentDialog implements ProxyResponseRouti
+             return;
+         }
+ 
++        WebSettings settings = _webView.getSettings();
+         String userAgent = resolveWebViewUserAgent();
+         if (!TextUtils.isEmpty(userAgent)) {
+-            _webView.getSettings().setUserAgentString(userAgent);
++            settings.setUserAgentString(userAgent);
++            applyChromeClientHints(settings, userAgent);
+         }
++        // Android WebView adds the app package in X-Requested-With. Google treats that as an embedded browser.
++        if (WebViewFeature.isFeatureSupported(WebViewFeature.REQUESTED_WITH_HEADER_ALLOW_LIST)) {
++            WebSettingsCompat.setRequestedWithHeaderOriginAllowList(settings, Collections.emptySet());
++        }
++    }
++
++    /**
++     * User-Agent Client Hints still advertise "Android WebView" after setUserAgentString.
++     * Google Sign-In rejects that brand even when the User-Agent string is Chrome.
++     */
++    private void applyChromeClientHints(WebSettings settings, String userAgent) {
++        if (!WebViewFeature.isFeatureSupported(WebViewFeature.USER_AGENT_METADATA)) {
++            return;
++        }
++        String major = "155";
++        String full = "155.0.8059.40";
++        java.util.regex.Matcher matcher = Pattern.compile("Chrome/(\\d+)(?:\\.(\\d+)\\.(\\d+)\\.(\\d+))?").matcher(userAgent);
++        if (matcher.find()) {
++            major = matcher.group(1);
++            if (matcher.group(2) != null) {
++                full = matcher.group(1) + "." + matcher.group(2) + "." + matcher.group(3) + "." + matcher.group(4);
++                if ("0".equals(matcher.group(2)) && "0".equals(matcher.group(3)) && "0".equals(matcher.group(4))) {
++                    full = major + ".0.8059.40";
++                }
++            }
++        }
++        boolean mobile = userAgent.contains("Mobile");
++        String platform = userAgent.contains("Macintosh") ? "macOS" : (userAgent.contains("Windows") ? "Windows" : "Android");
++        String platformVersion = "macOS".equals(platform) ? "15.6.0" : ("Windows".equals(platform) ? "15.0.0" : "14.0.0");
++        String model = "Android".equals(platform) ? "Pixel 8" : "";
++        List<UserAgentMetadata.BrandVersion> brands = Arrays.asList(
++            new UserAgentMetadata.BrandVersion.Builder().setBrand("Chromium").setMajorVersion(major).setFullVersion(full).build(),
++            new UserAgentMetadata.BrandVersion.Builder().setBrand("Google Chrome").setMajorVersion(major).setFullVersion(full).build(),
++            new UserAgentMetadata.BrandVersion.Builder().setBrand("Not-A.Brand").setMajorVersion("24").setFullVersion("24.0.0.0").build()
++        );
++        WebSettingsCompat.setUserAgentMetadata(
++            settings,
++            new UserAgentMetadata.Builder()
++                .setBrandVersionList(brands)
++                .setFullVersion(full)
++                .setPlatform(platform)
++                .setPlatformVersion(platformVersion)
++                .setArchitecture("arm")
++                .setModel(model)
++                .setMobile(mobile)
++                .setBitness(64)
++                .setWow64(false)
++                .build()
++        );
+     }
+ 
+     private Map<String, String> buildRequestHeadersForNativeProxy(Map<String, String> requestHeaders) {

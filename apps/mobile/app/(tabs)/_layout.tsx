@@ -48,8 +48,8 @@ export default function TabsLayout() {
         <Tabs.Screen
           name="collection"
           options={{
-            title: "Collection",
-            tabBarLabel: "Collection",
+            title: "MyDEX",
+            tabBarLabel: "MyDEX",
             tabBarIcon: ({ color, focused, size }) => (
               <Ionicons name={focused ? "grid" : "grid-outline"} size={size} color={color} />
             ),
@@ -58,8 +58,8 @@ export default function TabsLayout() {
         <Tabs.Screen
           name="shop"
           options={{
-            title: "Shop",
-            tabBarLabel: "Shop",
+            title: "FullDEX",
+            tabBarLabel: "FullDEX",
             tabBarIcon: ({ color, focused, size }) => (
               <Ionicons name={focused ? "cart" : "cart-outline"} size={size} color={color} />
             ),
@@ -70,6 +70,8 @@ export default function TabsLayout() {
           options={{
             title: "Livestream Screener",
             tabBarLabel: "Livestream Screener",
+            lazy: true,
+            unmountOnBlur: true,
             sceneStyle: { backgroundColor: colors.bg, paddingBottom: 0 },
           }}
         />

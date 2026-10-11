@@ -1,11 +1,13 @@
 import {
   CONDITION_LABELS,
+  GRADE_ESTIMATE_DISCLAIMER,
   GRADE_ESTIMATE_EMPTY_COPY,
   GRADE_ESTIMATE_UNAVAILABLE_COPY,
   GRADE_PHOTOS_HINT,
   GRADE_SIDES,
   GRADE_SUBGRADE_IDS,
   GRADING_PILLARS,
+  PREGRADE_LABEL,
   SLAB_PRICE_DISCLAIMER,
   SLAB_PRICE_EMPTY_COPY,
   WATCHLIST_CANNOT_SUBMIT_MESSAGE,
@@ -277,8 +279,8 @@ function PrepareSheetForm({
               {photoError ? <Text style={styles.error}>{photoError}</Text> : null}
 
               <View style={styles.guidance}>
-                <Text style={styles.section}>AI pre-grade estimate</Text>
-                <Text style={styles.caption}>{gradeEstimate.disclaimer}</Text>
+                <Text style={styles.section}>{PREGRADE_LABEL}</Text>
+                <Text style={styles.caption}>{GRADE_ESTIMATE_DISCLAIMER}</Text>
                 {gradeEstimate.overall == null ? (
                   <Text style={styles.body}>
                     {gradeEstimate.display === GRADE_ESTIMATE_UNAVAILABLE_COPY
@@ -380,7 +382,7 @@ function PrepareSheetForm({
               <TextInput
                 accessibilityLabel="Service level note"
                 onChangeText={setServiceLevelNote}
-                placeholder="PSA Regular"
+                placeholder="Service and tier"
                 placeholderTextColor={colors.muted}
                 style={styles.input}
                 value={serviceLevelNote}
@@ -413,7 +415,7 @@ function PhotoSlot({ label, uri, onPress }: PhotoSlotProps) {
   const action = uri ? "Replace" : "Add";
   return (
     <Pressable
-      accessibilityLabel={`${action} ${label} photo, required for an AI pre-grade estimate`}
+      accessibilityLabel={`${action} ${label} photo, required for a pre-grade estimate`}
       accessibilityRole="button"
       onPress={onPress}
       style={styles.photoSlot}
@@ -530,7 +532,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.cardBorder,
   },
-  chipSelected: { borderColor: colors.accent, backgroundColor: "#2A2618" },
+  chipSelected: { borderColor: colors.accent, backgroundColor: colors.accentSoft },
   chipLabel: { color: colors.muted, fontWeight: "700", fontSize: 13 },
   chipLabelSelected: { color: colors.accent },
   guidance: {

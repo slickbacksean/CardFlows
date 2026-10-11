@@ -1,6 +1,6 @@
 import { Image } from "expo-image";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import { colors, space } from "@/lib/theme";
+import { colors, radii, space, type } from "@/lib/theme";
 
 export interface CardTileProps {
   placeholder?: boolean;
@@ -31,10 +31,7 @@ export function CardTile({
 }: CardTileProps) {
   if (placeholder) {
     return (
-      <View
-        accessibilityLabel="Empty card slot"
-        style={[styles.tile, styles.placeholder]}
-      >
+      <View accessibilityLabel="Empty card slot" style={[styles.tile, styles.placeholder]}>
         <View style={styles.artSlot} />
         <View style={styles.meta} />
       </View>
@@ -42,14 +39,14 @@ export function CardTile({
   }
 
   const numberLine = localId ? `#${localId} ${language}` : language;
-  const statusLabel = intent === "watchlist" ? "watching" : "purchased";
+  const statusLabel = intent === "watchlist" ? "Watch" : "Owned";
   const valueLabel =
     intent === "watchlist"
       ? targetMaxBuyDisplay
-        ? `target Max Buy ${targetMaxBuyDisplay}`
-        : "target Max Buy"
+        ? `Max ${targetMaxBuyDisplay}`
+        : "Max buy"
       : allInAmount
-        ? `all-in $${allInAmount}`
+        ? `$${allInAmount}`
         : null;
   const showDraft = intent === "purchased" && (hasDraft || showDraftCta);
 
@@ -63,27 +60,33 @@ export function CardTile({
       onPress={onPress}
       style={styles.tile}
     >
-      {imageUrl ? (
-        <Image
-          accessibilityIgnoresInvertColors
-          contentFit="cover"
-          source={{ uri: imageUrl }}
-          style={styles.art}
-        />
-      ) : (
-        <View style={styles.artSlot} />
-      )}
+      <View>
+        {imageUrl ? (
+          <Image
+            accessibilityIgnoresInvertColors
+            contentFit="cover"
+            source={{ uri: imageUrl }}
+            style={styles.art}
+          />
+        ) : (
+          <View style={styles.artSlot} />
+        )}
+        {intent ? (
+          <View style={[styles.badge, intent === "watchlist" && styles.badgeWatch]}>
+            <Text style={[styles.badgeText, intent === "watchlist" && styles.badgeTextWatch]}>
+              {statusLabel}
+            </Text>
+          </View>
+        ) : null}
+      </View>
       <View style={styles.meta}>
         <Text numberOfLines={1} style={styles.name}>
           {name ?? "Card"}
         </Text>
-        <Text style={styles.line}>{numberLine}</Text>
-        <Text style={styles.line}>{statusLabel}</Text>
-        {valueLabel ? <Text style={styles.line}>{valueLabel}</Text> : null}
+        <Text numberOfLines={1} style={styles.price}>
+          {valueLabel ?? numberLine}
+        </Text>
         {showDraft ? <Text style={styles.draft}>Draft</Text> : null}
-        {intent === "watchlist" ? (
-          <Text style={styles.line}>cannot draft</Text>
-        ) : null}
       </View>
     </Pressable>
   );
@@ -93,8 +96,8 @@ const styles = StyleSheet.create({
   tile: {
     backgroundColor: colors.card,
     borderColor: colors.cardBorder,
-    borderWidth: 1,
-    borderRadius: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: radii.md,
     overflow: "hidden",
   },
   placeholder: {
@@ -111,24 +114,44 @@ const styles = StyleSheet.create({
     aspectRatio: 0.715,
     backgroundColor: colors.chip,
   },
+  badge: {
+    position: "absolute",
+    top: 6,
+    left: 6,
+    backgroundColor: colors.accent,
+    borderRadius: radii.pill,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  badgeWatch: {
+    backgroundColor: colors.chip,
+    borderColor: colors.cardBorder,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  badgeText: {
+    color: colors.accentText,
+    ...type.caption,
+  },
+  badgeTextWatch: {
+    color: colors.text,
+  },
   meta: {
-    padding: space.sm,
-    gap: 2,
+    paddingHorizontal: space.sm,
+    paddingVertical: space.xs,
+    gap: 1,
   },
   name: {
     color: colors.text,
-    fontSize: 15,
+    fontSize: 13,
     fontWeight: "700",
+    letterSpacing: -0.2,
   },
-  line: {
-    color: colors.muted,
-    fontSize: 12,
-    lineHeight: 16,
+  price: {
+    color: colors.text,
+    ...type.price,
   },
   draft: {
     color: colors.accent,
-    fontSize: 12,
-    fontWeight: "700",
-    marginTop: 2,
+    ...type.caption,
   },
 });

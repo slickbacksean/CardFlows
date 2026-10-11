@@ -10,10 +10,9 @@ Usage:
     python grade.py front.png back.png
                      [--output-dir output] [--thresholds calibration/thresholds.json]
 
-Card identification uses whichever credentials are configured:
-ANTHROPIC_API_KEY (or an `ant auth login` profile) for Claude, else
-GEMINI_API_KEY for Gemini's free tier. With neither, it's skipped with a note
-in the report and everything else runs unchanged.
+Card identification inside this grader is skipped. CardFlow names the card
+on the scan path, not here. A skipped call costs the report a card name,
+never a grade.
 
 The per-card orchestration lives in grade_card() so calibration/calibrate.py
 can reuse it to batch-run the pipeline against cards with known PSA grades.

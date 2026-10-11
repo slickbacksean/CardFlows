@@ -384,7 +384,7 @@ describe("POST /v1/inventory/:id/grade-estimate", () => {
     const inventoryItemId = await savePurchased(app, confirmation.confirmationId);
     const frontOnly = await postEstimate(app, inventoryItemId, { front: jpegFile() });
     expect(frontOnly.body.estimate?.overall).toBeNull();
-    expect(frontOnly.body.estimate?.display).toBe("Add a back photo for an AI pre-grade estimate.");
+    expect(frontOnly.body.estimate?.display).toBe("Add a back photo for a pre-grade estimate.");
     expect(calls).toEqual([]);
 
     const result = await postEstimate(app, inventoryItemId, {
@@ -395,7 +395,7 @@ describe("POST /v1/inventory/:id/grade-estimate", () => {
     expect(result.body.provider).toBe("cardgrading");
     expect(result.body.estimate?.overall).toBe(8.4);
     expect(result.body.estimate?.notACert).toBe(true);
-    expect(result.body.estimate?.disclaimer).toContain("Not an official PSA, BGS, or CGC grade");
+    expect(result.body.estimate?.disclaimer).toBe("Estimate only. Not an official grade.");
     expect(calls).toEqual(["grade .jpg .jpg"]);
     expect(fetchSpy).not.toHaveBeenCalled();
     fetchSpy.mockRestore();
@@ -430,8 +430,7 @@ describe("POST /v1/inventory/:id/grade-estimate", () => {
     expect(prepare).toContain("getConfirmPictureUri");
     expect(prepare).toContain("gradePhotoUri");
     expect(prepare).toContain("pickGradeStill");
-    // Missing front photo must block the estimate request (guard may be combined with other checks).
-    expect(prepare).toMatch(/if \([^)]*!hasFront\) return;/);
+    expect(prepare).toContain("if (!visible || !itemId || estimate || !hasFront) return;");
     expect(prepare).toContain(".catch(() => {");
     expect(prepare).toContain("disabled={!canSubmit}");
     expect(prepare).not.toMatch(/disabled=\{!canSubmit \|\|/);

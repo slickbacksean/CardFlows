@@ -16,25 +16,35 @@ import {
   type LiveVideoIdentityPlatform,
   type LiveVideoIdentityResult,
 } from "@cardflow/shared";
-import { identifyLivestreamFrame } from "./api";
+import { getHealth, identifyLivestreamFrame } from "./api";
 import { publishLivestreamHud } from "./huds";
 import {
   isLiveVideoNativeAvailable,
   pullLiveVideoSampleBuffer,
   setLiveVideoPlaybackUrl,
   setLiveVideoScannerSession,
+  setLiveVideoYoloDetect,
 } from "./live-video-native";
 
-// OpenCLIP match on this Mac is ~630 ms cosine-only and ~720 ms with ORB
-// (MPS, warm). 250 ms ticks only pile up behind pollInFlight. Match the poll
-// to the measured match time so frames drop instead of queueing.
-const FRAME_POLL_MS = 800;
+// Capture stays ahead of the match. OpenCLIP is ~630 ms, and a Whatnot lot
+// often sells in about 7 seconds, so the next frame is not queued behind it.
+const FRAME_POLL_MS = 250;
 
 let running = false;
 let pendingHlsUrl: string | null = null;
 let mockFrame: LiveVideoFrame | null = null;
 let pollTimer: ReturnType<typeof setInterval> | null = null;
-let pollInFlight = false;
+let captureInFlight = false;
+let identifyInFlight = false;
+let settledKey: string | null = null;
+/** Newest detected crop. Replaces anything still waiting so a slow miss cannot hide the card. */
+let queuedFrame: { frame: LiveVideoFrame; key: string } | null = null;
+/** Keep a settled guess across brief detector dropouts (~1s at the poll interval). */
+let missedCards = 0;
+const MISS_LIMIT = 4;
+/** True after /health says the API loaded YOLO for livestream frames. */
+let yoloDetect = false;
+let yoloTimer: ReturnType<typeof setInterval> | null = null;
 let recentHits: LiveVideoIdentityResult[] = [];
 let latest: LiveVideoIdentityResult = identifyLiveVideo({
   scannerOn: false,
@@ -73,40 +83,131 @@ function publish(frame: LiveVideoFrame | null) {
   );
 }
 
-async function pollNativeFrame() {
-  if (!running || mockFrame || pollInFlight) return;
-  pollInFlight = true;
+function frameKey(frame: LiveVideoFrame): string | null {
+  if (yoloDetect && frame.videoFrameJpeg) return `yolo:${frame.videoFrameJpeg.slice(-48)}`;
+  if (frame.classifiedTcgdexId) return `id:${frame.classifiedTcgdexId}`;
+  if (frame.identityHash) return `hash:${frame.identityHash}`;
+  if (frame.identityCropJpeg) return `crop:${frame.identityCropJpeg.slice(-48)}`;
+  return null;
+}
+
+async function refreshYoloDetect() {
   try {
-    const frame = await pullLiveVideoSampleBuffer();
+    const health = await getHealth();
+    yoloDetect = health.liveVideoYolo === true;
+  } catch {
+    yoloDetect = false;
+  }
+  if (running) void setLiveVideoYoloDetect(yoloDetect);
+}
+
+/** Compression noise flips a few pHash bits on the same card. 105-bit hash. */
+const SAME_CARD_HASH_DISTANCE = 12;
+
+function sameVisibleCard(left: string, right: string): boolean {
+  if (left === right) return true;
+  if (!left.startsWith("hash:") || !right.startsWith("hash:")) return false;
+  const a = left.slice(5);
+  const b = right.slice(5);
+  if (a.length !== b.length || a.length === 0) return false;
+  let distance = 0;
+  for (let i = 0; i < a.length; i++) {
+    if (a[i] !== b[i]) distance += 1;
+    if (distance > SAME_CARD_HASH_DISTANCE) return false;
+  }
+  return true;
+}
+
+function keepSettledIdentity(key: string): boolean {
+  return (
+    latest.reason === "identified" &&
+    settledKey != null &&
+    sameVisibleCard(key, settledKey)
+  );
+}
+
+function drainIdentify() {
+  if (identifyInFlight || !queuedFrame || !running) return;
+  const next = queuedFrame;
+  queuedFrame = null;
+  void identifyFrame(next.frame, next.key);
+}
+
+async function identifyFrame(frame: LiveVideoFrame, key: string) {
+  identifyInFlight = true;
+  try {
+    const response = await identifyLivestreamFrame({
+      source: "live_video",
+      platform: liveVideoPlatform(),
+      cardDetected: frame.cardDetected,
+      classifiedTcgdexId: frame.classifiedTcgdexId ?? null,
+      identityHash: frame.identityHash ?? null,
+      identityCropJpeg: frame.identityCropJpeg ?? null,
+      videoFrameJpeg: yoloDetect ? (frame.videoFrameJpeg ?? null) : null,
+    });
     if (!running) return;
-    if (frame?.cardDetected && (frame.identityHash || frame.classifiedTcgdexId)) {
-      try {
-        const response = await identifyLivestreamFrame({
-          source: "live_video",
-          platform: liveVideoPlatform(),
-          cardDetected: true,
-          classifiedTcgdexId: frame.classifiedTcgdexId ?? null,
-          identityHash: frame.identityHash ?? null,
-          identityCropJpeg: frame.identityCropJpeg ?? null,
-        });
-        if (!running) return;
-        publishResult(response.identity);
-        return;
-      } catch {
-        if (!running) return;
-        publish({
-          source: "live_video",
-          cardDetected: true,
-          classifiedTcgdexId: null,
-          identityHash: null,
-        });
+    if (response.identity.reason === "identified") {
+      missedCards = 0;
+      settledKey = key;
+      publishResult(response.identity);
+      return;
+    }
+    if (response.identity.reason === "no_card" && latest.reason === "identified") {
+      missedCards += 1;
+      if (missedCards < MISS_LIMIT) {
+        publishResult(latest);
         return;
       }
     }
-    publish(frame);
+    if (keepSettledIdentity(key)) {
+      publishResult(latest);
+      return;
+    }
+    publishResult(response.identity);
+  } catch {
+    if (!running || keepSettledIdentity(key)) return;
+    publish({
+      source: "live_video",
+      cardDetected: true,
+      classifiedTcgdexId: null,
+      identityHash: null,
+    });
   } finally {
-    pollInFlight = false;
+    identifyInFlight = false;
+    drainIdentify();
   }
+}
+
+async function pollNativeFrame() {
+  if (!running || mockFrame || captureInFlight) return;
+  captureInFlight = true;
+  let frame: LiveVideoFrame | null = null;
+  try {
+    frame = await pullLiveVideoSampleBuffer();
+  } finally {
+    captureInFlight = false;
+  }
+  if (!running) return;
+  const yoloFrame = yoloDetect && frame?.videoFrameJpeg ? frame : null;
+  const key = yoloFrame ? frameKey(yoloFrame) : frame?.cardDetected ? frameKey(frame) : null;
+  if (!key) {
+    missedCards += 1;
+    if (latest.reason === "identified" && missedCards < MISS_LIMIT) {
+      publishResult(latest);
+      return;
+    }
+    queuedFrame = null;
+    publish(frame);
+    return;
+  }
+  if (!yoloFrame) missedCards = 0;
+  if (keepSettledIdentity(key)) {
+    publishResult(latest);
+    return;
+  }
+  if (latest.reason !== "identified") publish(frame);
+  queuedFrame = { frame, key };
+  drainIdentify();
 }
 
 function startPolling() {
@@ -151,7 +252,17 @@ export function noteLiveHlsUrl(url: string | null): void {
 export function startLiveVideoIdentify(): void {
   running = true;
   recentHits = [];
+  settledKey = null;
+  queuedFrame = null;
+  missedCards = 0;
+  identifyInFlight = false;
   void setLiveVideoScannerSession(true);
+  void refreshYoloDetect();
+  if (!yoloTimer) {
+    yoloTimer = setInterval(() => {
+      if (running) void refreshYoloDetect();
+    }, 8000);
+  }
   if (pendingHlsUrl) void setLiveVideoPlaybackUrl(pendingHlsUrl);
   startPolling();
   publish(mockFrame);
@@ -161,6 +272,16 @@ export function stopLiveVideoIdentify(): void {
   running = false;
   mockFrame = null;
   recentHits = [];
+  settledKey = null;
+  queuedFrame = null;
+  missedCards = 0;
+  yoloDetect = false;
+  identifyInFlight = false;
+  if (yoloTimer) {
+    clearInterval(yoloTimer);
+    yoloTimer = null;
+  }
+  void setLiveVideoYoloDetect(false);
   stopPolling();
   void setLiveVideoPlaybackUrl(null);
   void setLiveVideoScannerSession(false);

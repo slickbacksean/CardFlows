@@ -62,6 +62,7 @@ describe("GET /health", () => {
       recognition: "mock",
       pricingProvider: "off",
       livestreamIdentify: "yolo_identity",
+      liveVideoYolo: false,
       liveIdentityVisual: "off",
       gradeEstimate: "mock",
       slabPricing: "off",

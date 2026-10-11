@@ -3,6 +3,7 @@ import {
   parseMeasuredCenteringRatios,
 } from "./grade-centering";
 import { wearScoresFromDefectCounts, type WearDefectCounts } from "./grade-wear";
+import { PREGRADE_COPY, PREGRADE_DISCLAIMER_TEXT } from "./pregrade-copy";
 
 export const GRADE_SUBGRADE_IDS = ["centering", "corners", "edges", "surface"] as const;
 export type GradeSubgradeId = (typeof GRADE_SUBGRADE_IDS)[number];
@@ -14,16 +15,15 @@ export const GRADE_CONFIDENCE = ["high", "medium", "low"] as const;
 export type GradeConfidence = (typeof GRADE_CONFIDENCE)[number];
 
 export const GRADE_ESTIMATE_LABEL = "estimate" as const;
-export const GRADE_ESTIMATE_DISCLAIMER =
-  "AI pre-grade estimate. Not an official PSA, BGS, or CGC grade." as const;
+export const GRADE_ESTIMATE_DISCLAIMER = PREGRADE_DISCLAIMER_TEXT;
 export const GRADE_ESTIMATE_EMPTY_COPY = "No photo estimate yet." as const;
 export const GRADE_ESTIMATE_UNAVAILABLE_COPY = "Estimate unavailable." as const;
 export const GRADE_ESTIMATE_GUIDANCE_HISTORY_LABEL = "Guidance history" as const;
 export const GRADE_PHOTOS_HINT =
-  "Front and back photos are required for an AI pre-grade estimate. You can still submit without one." as const;
+  "Front and back photos are required for a pre-grade estimate. You can still submit without one." as const;
 export const GRADE_ESTIMATE_NEEDS_BACK_COPY =
-  "Add a back photo for an AI pre-grade estimate." as const;
-export const GRADING_TAB_CONSTRAINT = "AI pre-grade estimate, not a cert." as const;
+  "Add a back photo for a pre-grade estimate." as const;
+export const GRADING_TAB_CONSTRAINT = "Pre-grade estimate, not a cert." as const;
 
 export const GRADE_FRONT_WEIGHT = 0.6;
 export const GRADE_BACK_WEIGHT = 0.4;
@@ -330,6 +330,14 @@ export function serializeGradeEstimate(estimate: CardFlowGradeEstimate): string 
   return JSON.stringify(estimate);
 }
 
+/** Estimates saved before the 2026-10-05 copy fix still say "AI pre-grade". */
+function legacyGradeDisplay(display: string): string {
+  return display
+    .replace(/\ban AI pre-grade estimate\b/gi, "a pre-grade estimate")
+    .replace(/\bAI pre-grade estimate\b/gi, PREGRADE_COPY.title)
+    .replace(/\bAI pre-grade\b/gi, PREGRADE_COPY.displayPrefix);
+}
+
 export function parseStoredGradeEstimate(
   json: string | null | undefined,
 ): CardFlowGradeEstimate | null {
@@ -347,7 +355,7 @@ export function parseStoredGradeEstimate(
         : null;
     const display =
       typeof record.display === "string" && record.display.trim()
-        ? record.display
+        ? legacyGradeDisplay(record.display)
         : formatGradeDisplay(overall);
     return {
       ...emptyGradeEstimate(),

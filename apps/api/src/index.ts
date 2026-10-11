@@ -10,6 +10,8 @@ import { resolveDevAutoSession } from "./session";
 import { createStoreFromEnv } from "./store-env";
 import { loadOptionalPhashIndex } from "./obb-phash-provider";
 import { resolveLiveIdentityOpenclipFromEnv } from "./live-identity-openclip";
+import { resolveLiveVideoObbDetector } from "./live-video-obb";
+import type { ObbDetector } from "@cardflow/shared";
 
 loadLocalApiEnv();
 
@@ -25,6 +27,7 @@ const { grading, cardgrading, selection: gradeEstimateSelection } = createGradeE
 const { slabPricing, selection: slabPricingSelection } = createSlabPricingFromEnv();
 const { client: liveIdentityOpenclip, reason: openclipReason } =
   resolveLiveIdentityOpenclipFromEnv();
+const liveVideoYoloHolder: { detector: ObbDetector | null } = { detector: null };
 const app = createApp(store, {
   devAutoSession: resolveDevAutoSession(),
   catalog,
@@ -37,7 +40,14 @@ const app = createApp(store, {
   livestreamIdentify: "yolo_identity",
   livestreamIdentityIndex: loadOptionalPhashIndex(),
   liveIdentityOpenclip,
+  liveVideoObb: () => liveVideoYoloHolder.detector,
   liveIdentifyEnabled: recognitionSelection.identifyEnabled,
+});
+void resolveLiveVideoObbDetector().then((detector) => {
+  liveVideoYoloHolder.detector = detector;
+  console.log(
+    `Live video YOLO: ${detector ? "on" : "off"} (${detector ? "AGPL accepted, weights loaded" : "needs CARD_FLOW_ULTRALYTICS_AGPL_ACCEPTED=true and CARD_FLOW_OBB_ONNX_PATH"})`,
+  );
 });
 
 serve({ fetch: app.fetch, port }, (info) => {

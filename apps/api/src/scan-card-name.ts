@@ -1,5 +1,6 @@
-import { execFile } from "node:child_process";
-import { existsSync, mkdirSync, unlinkSync, writeFileSync } from "node:fs";
+import { execFile, spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
+import { createInterface } from "node:readline";
+import { existsSync, mkdirSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -16,6 +17,7 @@ import {
   type CardRecognitionProvider,
   type PhashIndex,
   type RecognitionImageMimeType,
+  type RgbBitmap,
   type TcgdexCard,
 } from "@cardflow/shared";
 import { decodeScanStill, encodePngStill } from "./obb-phash-decode";
@@ -27,6 +29,9 @@ const execFileAsync = promisify(execFile);
 const apiRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 const visionBinary = path.join(apiRoot, ".cache", "vision-ocr");
 const visionSource = path.join(apiRoot, "scripts", "vision-ocr.swift");
+/** Longest edge sent to Apple Vision. The full crop still goes to OpenCLIP. */
+export const OCR_MAX_EDGE_PX = 1600;
+const OCR_TIMEOUT_MS = 12_000;
 
 const NAME_STOP_WORDS = new Set([
   "basic",
@@ -198,11 +203,18 @@ export async function tcgdexIdFromPrintedOcr(
   }
 }
 
+function visionBinaryIsCurrent(): boolean {
+  if (!existsSync(visionBinary) || !existsSync(visionSource)) return false;
+  return statSync(visionBinary).mtimeMs >= statSync(visionSource).mtimeMs;
+}
+
 async function ensureVisionBinary(): Promise<string | null> {
   if (process.platform !== "darwin") return null;
-  if (existsSync(visionBinary)) return visionBinary;
+  if (visionBinaryIsCurrent()) return visionBinary;
   if (!existsSync(visionSource)) return null;
   mkdirSync(path.dirname(visionBinary), { recursive: true });
+  visionSession?.stop();
+  visionSession = null;
   try {
     await execFileAsync(
       "swiftc",
@@ -215,27 +227,140 @@ async function ensureVisionBinary(): Promise<string | null> {
   return existsSync(visionBinary) ? visionBinary : null;
 }
 
-/** Apple Vision on the crop. Empty when the helper is unavailable. */
+export function parseVisionOcrLine(line: string): string {
+  try {
+    const parsed = JSON.parse(line) as { text?: unknown };
+    return typeof parsed.text === "string" ? parsed.text : "";
+  } catch {
+    return "";
+  }
+}
+
+interface OcrWaiter {
+  settled: boolean;
+  resolve: (text: string) => void;
+}
+
+type SpawnOcr = (
+  command: string,
+  args: readonly string[],
+  options: { stdio: ["pipe", "pipe", "pipe"] },
+) => ChildProcessWithoutNullStreams;
+
+/** One Apple Vision process. Paths go in, one JSON line comes out, in order. */
+export class VisionOcrSession {
+  private child: ChildProcessWithoutNullStreams | null = null;
+  private waiters: OcrWaiter[] = [];
+  private chain: Promise<void> = Promise.resolve();
+
+  constructor(
+    private readonly binary: string,
+    private readonly spawnImpl: SpawnOcr = spawn as SpawnOcr,
+  ) {}
+
+  recognize(png: Uint8Array): Promise<string> {
+    const run = this.chain.then(() => this.recognizeOne(png));
+    this.chain = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    return run;
+  }
+
+  stop(): void {
+    const child = this.child;
+    this.child = null;
+    child?.stdin.end();
+    child?.kill();
+    this.failWaiters();
+  }
+
+  private recognizeOne(png: Uint8Array): Promise<string> {
+    if (png.byteLength < 32) return Promise.resolve("");
+    const child = this.ensureChild();
+    if (!child) return Promise.resolve("");
+    const filePath = path.join(tmpdir(), `cardflow-ocr-${process.pid}-${Date.now()}.png`);
+    writeFileSync(filePath, png);
+    return new Promise((resolve) => {
+      const waiter: OcrWaiter = {
+        settled: false,
+        resolve: (text) => {
+          if (waiter.settled) return;
+          waiter.settled = true;
+          clearTimeout(timer);
+          try {
+            unlinkSync(filePath);
+          } catch {
+            // temp crop is best-effort
+          }
+          resolve(text);
+        },
+      };
+      const timer = setTimeout(() => {
+        waiter.resolve("");
+        this.stop();
+      }, OCR_TIMEOUT_MS);
+      this.waiters.push(waiter);
+      child.stdin.write(`${filePath}\n`);
+    });
+  }
+
+  private ensureChild(): ChildProcessWithoutNullStreams | null {
+    if (this.child && this.child.exitCode === null && !this.child.killed) return this.child;
+    const child = this.spawnImpl(this.binary, [], {
+      stdio: ["pipe", "pipe", "pipe"],
+    }) as ChildProcessWithoutNullStreams;
+    this.child = child;
+    const lines = createInterface({ input: child.stdout });
+    lines.on("line", (line) => {
+      const waiter = this.waiters.shift();
+      waiter?.resolve(parseVisionOcrLine(line));
+    });
+    const drop = () => {
+      if (this.child === child) this.child = null;
+      this.failWaiters();
+    };
+    child.on("exit", drop);
+    child.on("error", drop);
+    return child;
+  }
+
+  private failWaiters(): void {
+    const waiting = this.waiters.splice(0);
+    for (const waiter of waiting) waiter.resolve("");
+  }
+}
+
+let visionSession: VisionOcrSession | null = null;
+
+/** Apple Vision on the crop. The helper stays running between scans. */
 export async function recognizeCardText(png: Uint8Array): Promise<string> {
   const binary = await ensureVisionBinary();
   if (!binary || png.byteLength < 32) return "";
-  const filePath = path.join(tmpdir(), `cardflow-ocr-${process.pid}-${Date.now()}.png`);
-  writeFileSync(filePath, png);
-  try {
-    const { stdout } = await execFileAsync(binary, [filePath], {
-      timeout: 12_000,
-      maxBuffer: 256_000,
-    });
-    return stdout;
-  } catch {
-    return "";
-  } finally {
-    try {
-      unlinkSync(filePath);
-    } catch {
-      // temp crop is best-effort
+  visionSession ??= new VisionOcrSession(binary);
+  return visionSession.recognize(png);
+}
+
+/** Nearest-neighbor shrink so Vision is not handed a full phone crop. */
+export function bitmapForOcr(bitmap: RgbBitmap, maxEdge: number = OCR_MAX_EDGE_PX): RgbBitmap {
+  const longEdge = Math.max(bitmap.width, bitmap.height);
+  if (!(longEdge > maxEdge) || bitmap.width < 1 || bitmap.height < 1) return bitmap;
+  const scale = maxEdge / longEdge;
+  const width = Math.max(1, Math.round(bitmap.width * scale));
+  const height = Math.max(1, Math.round(bitmap.height * scale));
+  const data = new Uint8Array(width * height * 3);
+  for (let y = 0; y < height; y++) {
+    const sourceY = Math.min(bitmap.height - 1, Math.floor(y / scale));
+    for (let x = 0; x < width; x++) {
+      const sourceX = Math.min(bitmap.width - 1, Math.floor(x / scale));
+      const source = (sourceY * bitmap.width + sourceX) * 3;
+      const dest = (y * width + x) * 3;
+      data[dest] = bitmap.data[source] ?? 0;
+      data[dest + 1] = bitmap.data[source + 1] ?? 0;
+      data[dest + 2] = bitmap.data[source + 2] ?? 0;
     }
   }
+  return { width, height, data };
 }
 
 export function recognitionFromNamedPrint(
@@ -297,10 +422,13 @@ export async function identifyLiveCaptureStill(input: {
   const crop = cropOrientedBox(bitmap, { ...best, angle });
   const tight = crop.width * crop.height < bitmap.width * bitmap.height * 0.92;
   const png = encodePngStill(crop);
-  const text = await (input.recognizeText ?? recognizeCardText)(png);
+  const ocrBitmap = bitmapForOcr(crop);
+  const ocrPng = ocrBitmap === crop ? png : encodePngStill(ocrBitmap);
+  const text = await (input.recognizeText ?? recognizeCardText)(ocrPng);
   if (tight && input.openclip) {
-    for (const name of cardNameCandidatesFromOcr(text).slice(0, 3)) {
-      const match = await input.openclip.matchCropJpeg(png, "image/png", { name });
+    const names = cardNameCandidatesFromOcr(text).slice(0, 3);
+    if (names.length > 0) {
+      const match = await input.openclip.matchCropJpeg(png, "image/png", { names });
       if (match?.accepted && match.tcgdexId) {
         return recognitionFromNamedPrint(match.tcgdexId, match.similarity);
       }
