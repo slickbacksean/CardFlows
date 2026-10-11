@@ -270,7 +270,7 @@ interface CollapsedBubbleProps {
 
 function CollapsedBubble({ kind, liveGuess, onPress }: CollapsedBubbleProps) {
   const name = liveGuess?.name ?? liveGuess?.tcgdexId;
-  const estimateValue = overlayDollarLabel(liveGuess?.estimateAmount, "");
+  const estimateValue = overlayDollarLabel(liveGuess?.estimateAmount ?? null, "");
   const label =
     kind === "unavailable"
       ? LIVESTREAM_SCANNER_UNAVAILABLE_MESSAGE
@@ -455,7 +455,7 @@ function HudEmptyFigures() {
 
 const styles = StyleSheet.create({
   host: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     zIndex: 2,
   },
   bubbleWrap: {
