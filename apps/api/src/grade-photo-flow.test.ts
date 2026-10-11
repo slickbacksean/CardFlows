@@ -176,7 +176,7 @@ describe("grade photo flow", () => {
     });
   });
 
-  it("pregrades both original photos and labels it an AI pre-grade, not a cert", async () => {
+  it("pregrades both original photos and labels it a pre-grade, not a cert", async () => {
     const runner = fakeRunner(successReport);
     const app = createApp(undefined, { cardgrading: runner });
     const form = new FormData();
@@ -190,8 +190,8 @@ describe("grade photo flow", () => {
       ok: true,
       status: "scored",
       estimate: 8.4,
-      label: "AI pre-grade estimate",
-      disclaimer: "Not an official PSA, BGS, or CGC grade.",
+      label: "Pre-grade estimate",
+      disclaimer: "Estimate only. Not an official grade.",
     });
   });
 
@@ -211,7 +211,7 @@ describe("grade photo flow", () => {
       backImage: img,
     });
     expect(scored.overall).toBe(8.4);
-    expect(scored.display).toBe("AI pre-grade 8.4");
+    expect(scored.display).toBe("Pre-grade 8.4");
     expect(scored.subgrades.find((r) => r.id === "surface" && r.side === "front")?.score).toBeNull();
 
     const retake = await createCardgradingProvider(

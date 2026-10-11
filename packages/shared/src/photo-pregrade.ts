@@ -3,8 +3,8 @@
  * (vendored at apps/api/vendor/cardgrading). Mirrors the GitHub
  * packages/api photo-pregrade-mapper body. No model call is on this path.
  */
-export const PREGRADE_LABEL = "AI pre-grade estimate" as const;
-export const PREGRADE_DISCLAIMER = "Not an official PSA, BGS, or CGC grade." as const;
+export const PREGRADE_LABEL = "Pre-grade estimate" as const;
+export const PREGRADE_DISCLAIMER = "Estimate only. Not an official grade." as const;
 export const PHOTO_PREGRADE_SOURCE = "cardgrading-photo" as const;
 export const PREGRADE_SURFACE_NULL_REASON = "single-image relief is not graded" as const;
 export const PREGRADE_UNAVAILABLE_MESSAGE = "Photo scoring is unavailable." as const;

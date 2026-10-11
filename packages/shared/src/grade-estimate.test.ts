@@ -13,6 +13,8 @@ import {
   GRADE_ESTIMATE_GUIDANCE_HISTORY_LABEL,
   GRADE_ESTIMATE_LABEL,
   GRADE_IMAGE_MAX_BYTES,
+  GRADE_STILL_QUALITY,
+  CARD_ASPECT_RATIO,
   GRADE_PHOTOS_HINT,
   gradeEstimateFromSubgrades,
   gradeEstimateFromOverall,
@@ -249,5 +251,12 @@ describe("mock and off grading providers", () => {
     } finally {
       fetchSpy.mockRestore();
     }
+  });
+});
+
+describe("grade still capture", () => {
+  it("keeps full JPEG quality and a 63:88 card frame", () => {
+    expect(GRADE_STILL_QUALITY).toBe(1);
+    expect(CARD_ASPECT_RATIO).toBe(63 / 88);
   });
 });
