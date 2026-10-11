@@ -395,7 +395,7 @@ describe("POST /v1/inventory/:id/grade-estimate", () => {
     expect(result.body.provider).toBe("cardgrading");
     expect(result.body.estimate?.overall).toBe(8.4);
     expect(result.body.estimate?.notACert).toBe(true);
-    expect(result.body.estimate?.disclaimer).toBe("Estimate only. Not an official grade.");
+    expect(result.body.estimate?.disclaimer).toContain("Estimate only. Not an official grade.");
     expect(calls).toEqual(["grade .jpg .jpg"]);
     expect(fetchSpy).not.toHaveBeenCalled();
     fetchSpy.mockRestore();

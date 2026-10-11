@@ -65,6 +65,7 @@ describe("GET /health", () => {
       liveVideoYolo: false,
       liveIdentityVisual: "off",
       gradeEstimate: "mock",
+      gradeEngine: null,
       slabPricing: "off",
     });
     expect(health.body.slabPricing).toBe("off");

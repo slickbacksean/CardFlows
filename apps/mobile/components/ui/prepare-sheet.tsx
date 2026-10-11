@@ -279,8 +279,8 @@ function PrepareSheetForm({
               {photoError ? <Text style={styles.error}>{photoError}</Text> : null}
 
               <View style={styles.guidance}>
-                <Text style={styles.section}>{PREGRADE_LABEL}</Text>
-                <Text style={styles.caption}>{GRADE_ESTIMATE_DISCLAIMER}</Text>
+                <Text style={styles.section}>Pre-grade estimate</Text>
+                <Text style={styles.caption}>{gradeEstimate.disclaimer}</Text>
                 {gradeEstimate.overall == null ? (
                   <Text style={styles.body}>
                     {gradeEstimate.display === GRADE_ESTIMATE_UNAVAILABLE_COPY
@@ -382,7 +382,7 @@ function PrepareSheetForm({
               <TextInput
                 accessibilityLabel="Service level note"
                 onChangeText={setServiceLevelNote}
-                placeholder="Service and tier"
+                placeholder="Service level"
                 placeholderTextColor={colors.muted}
                 style={styles.input}
                 value={serviceLevelNote}

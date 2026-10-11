@@ -4,7 +4,7 @@ import { createApp } from "./app";
 import { createCatalogFromEnv } from "./catalog-env";
 import { createPricingFromEnv, createPokecollectorAccountsFromEnv } from "./pokecollector-env";
 import { createRecognitionFromEnv } from "./recognition-env";
-import { createGradeEstimateFromEnv } from "./grade-estimate-env";
+import { createGradeEstimateFromEnv, gradeEngineProbeFromEnv } from "./grade-estimate-env";
 import { createSlabPricingFromEnv } from "./poketrace-env";
 import { resolveDevAutoSession } from "./session";
 import { createStoreFromEnv } from "./store-env";
@@ -23,7 +23,8 @@ const { pricing, selection: pricingSelection } = createPricingFromEnv();
 const { accounts: pokecollectorAccounts, selection: accountsSelection } =
   createPokecollectorAccountsFromEnv();
 const { recognition, selection: recognitionSelection } = createRecognitionFromEnv();
-const { grading, cardgrading, selection: gradeEstimateSelection } = createGradeEstimateFromEnv();
+const { grading, cardgrading, gradeGate, selection: gradeEstimateSelection } = createGradeEstimateFromEnv();
+const gradeEngineProbe = gradeEngineProbeFromEnv(cardgrading);
 const { slabPricing, selection: slabPricingSelection } = createSlabPricingFromEnv();
 const { client: liveIdentityOpenclip, reason: openclipReason } =
   resolveLiveIdentityOpenclipFromEnv();
@@ -36,6 +37,8 @@ const app = createApp(store, {
   recognition,
   grading,
   cardgrading,
+  gradeEngineProbe,
+  gradeGate,
   slabPricing,
   livestreamIdentify: "yolo_identity",
   livestreamIdentityIndex: loadOptionalPhashIndex(),

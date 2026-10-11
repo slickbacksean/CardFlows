@@ -131,7 +131,7 @@ function ReturnedSheetForm({
                 style={styles.input}
                 value={returnedGrade}
               />
-              <Text style={styles.body}>Typed by you. No certificate file.</Text>
+              <Text style={styles.body}>Your own note. No certificate file.</Text>
 
               <PrimaryButton
                 label={mode === "mark" ? "Mark returned" : "Save"}

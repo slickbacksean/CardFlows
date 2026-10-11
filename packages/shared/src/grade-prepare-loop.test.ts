@@ -235,8 +235,8 @@ describe("Task 8 grading Prepare loop", () => {
     expect(assignmentValues(envExample, "XAI_API_KEY")).toEqual([]);
     expect(assignmentValues(envExample, "POKETRACE_API_KEY")).toEqual([""]);
     expect(assignmentValues(envExample, "CARD_FLOW_GRADE_ESTIMATE_ENABLED")).toEqual([""]);
-    expect(assignmentValues(envExample, "CARD_FLOW_PSA_GRADE_URL")).toEqual([]);
-    expect(assignmentValues(envExample, "CARD_FLOW_PSA_GRADE_TOKEN")).toEqual([]);
+    expect(assignmentValues(envExample, "CARD_FLOW_PSA_GRADE_URL")).toEqual([""]);
+    expect(assignmentValues(envExample, "CARD_FLOW_PSA_GRADE_TOKEN")).toEqual([""]);
 
     expect(settings).not.toMatch(/ANTHROPIC_|anthropic|XAI_|AI grading|poketrace|PSA_GRADE/i);
     expect(settings).not.toContain("TextInput");

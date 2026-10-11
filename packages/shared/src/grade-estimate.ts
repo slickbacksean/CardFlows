@@ -35,6 +35,10 @@ export const GRADE_IMAGE_MIME_TYPES = ["image/jpeg", "image/png", "image/webp"] 
 export type GradeImageMimeType = (typeof GRADE_IMAGE_MIME_TYPES)[number];
 
 export const GRADE_IMAGE_MAX_BYTES = 20 * 1024 * 1024;
+/** JPEG quality for grade stills. `1` means no extra compression before detect/grade. */
+export const GRADE_STILL_QUALITY = 1;
+/** Standard trading-card frame (width / height in mm). */
+export const CARD_ASPECT_RATIO = 63 / 88;
 
 export interface GradeSubgrade {
   id: GradeSubgradeId;

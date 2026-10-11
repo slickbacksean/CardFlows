@@ -34,3 +34,13 @@ deletes the temp directory.
 
 Set `CARDFLOW_GRADE_CARD_PYTHON` to the venv interpreter if `python3` on
 `PATH` does not have OpenCV and NumPy.
+
+## CardFlow local changes
+
+- `pixel_cap.py` (new): decoded photos above `CARDFLOW_GRADE_MAX_PIXELS` (default 16 MP)
+  are downscaled with `INTER_AREA` in `grade.load_image` and `cardflow_detect_adapter.py`.
+- `grade.py`: debug overlay PNGs are written only when `CARDFLOW_GRADE_DEBUG_IMAGES=1`.
+  The aligned front/back PNGs and `report.json` are still written (later stages read them).
+  The API deletes the whole temp output directory after every run.
+- `requirements.txt`: pinned `opencv-python-headless==4.12.0.88`, `numpy==2.2.6`,
+  `Pillow==12.3.0` (the versions the CI grader e2e job runs).

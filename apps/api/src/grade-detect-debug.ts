@@ -7,13 +7,13 @@ import { fileURLToPath } from "node:url";
  * (2026-10-05 phone triage). Saves each upload + the adapter report under
  * apps/api/data/grade-debug/ (gitignored via apps/api/data/) and logs one
  * summary line with the measured sharpness, effective DPI and the phone's
- * capture info (zoom, focal length, exposure). Off with
- * CARDFLOW_GRADE_DEBUG=0. Remove this file and its call sites when done.
+ * capture info (zoom, focal length, exposure). Off by default; on only with
+ * CARDFLOW_GRADE_DEBUG=1. Remove this file and its call sites when done.
  */
 const DEBUG_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "data", "grade-debug");
 
 function enabled(): boolean {
-  return process.env.CARDFLOW_GRADE_DEBUG !== "0" && !process.env.VITEST;
+  return process.env.CARDFLOW_GRADE_DEBUG === "1" && !process.env.VITEST;
 }
 
 function stampBase(label: string): string {

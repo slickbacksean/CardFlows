@@ -6,14 +6,14 @@ import {
 } from "@cardflow/shared";
 import { Image } from "expo-image";
 import { useRef, useState } from "react";
-import { ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import { GradeCamera } from "@/components/ui/grade-camera";
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { GradeCardFinder } from "@/components/ui/grade-card-finder";
 import { PrimaryButton } from "@/components/ui/primary-button";
 import { detectGradePhoto, requestPhotoPregrade } from "@/lib/api";
-import { pickGradeStill, type PickedGradeStill } from "@/lib/grade-photos";
+import { CARD_ASPECT_RATIO, pickGradeStill, type PickedGradeStill } from "@/lib/grade-photos";
 import { colors, space } from "@/lib/theme";
 
-type Step = "guidelines" | "capture" | "crop" | "scoring" | "result";
+type Step = "guidelines" | "finder" | "capture" | "crop" | "scoring" | "result";
 type Side = "front" | "back";
 
 interface SideStill {
@@ -27,22 +27,14 @@ interface PhotoGradeFlowProps {
 }
 
 const GUIDELINES = [
-  "Lay the card flat and line it up inside the frame. The photo takes itself when the phone is level and still.",
+  "Lay the card flat and keep all four corners in the frame.",
   "Use even light. No sleeve, glare, or fingers on the card.",
   "Take the front, then the back. Catalog art is not a grade photo.",
   "Hold the phone flat over the card. A tilted angle means a retake.",
-  "The result is an AI pre-grade estimate, not an official PSA, BGS, or CGC grade.",
+  "The result is a pre-grade estimate. Estimate only. Not an official grade.",
 ];
 
 const PILLARS = ["centering", "corners", "edges", "surface"] as const;
-
-/** Native: grade photos use the in-app camera with the live capture guide. */
-const USE_GUIDED_CAMERA = Platform.OS === "ios" || Platform.OS === "android";
-
-/** iOS can't present the system picker while the camera modal is still sliding away. */
-function afterCameraCloses(run: () => void) {
-  setTimeout(run, Platform.OS === "ios" ? 500 : 0);
-}
 
 function formatPregrade(value: number): string {
   return String(Math.round(value * 100) / 100);
@@ -71,21 +63,13 @@ export function PhotoGradeFlow({ onOpenPipeline }: PhotoGradeFlowProps) {
   const [resultKind, setResultKind] = useState<"score" | "unavailable">("unavailable");
   const [unavailableMessage, setUnavailableMessage] = useState<string | null>(null);
   const [checking, setChecking] = useState(false);
+  const [freezeUri, setFreezeUri] = useState<string | null>(null);
   const requestId = useRef(0);
-  // One tap on "Use this crop" per crop: a double tap must not open the
-  // camera twice or start two uploads.
-  const confirming = useRef(false);
-  const [confirmBusy, setConfirmBusy] = useState(false);
-  // In-app camera with the live card frame + level guide (native only).
-  const [cameraSide, setCameraSide] = useState<Side | null>(null);
 
   const current = side === "front" ? front : back;
 
   function reset() {
     requestId.current += 1;
-    setCameraSide(null);
-    confirming.current = false;
-    setConfirmBusy(false);
     setStep("guidelines");
     setSide("front");
     setFront(null);
@@ -97,19 +81,53 @@ export function PhotoGradeFlow({ onOpenPipeline }: PhotoGradeFlowProps) {
     setResultKind("unavailable");
     setUnavailableMessage(null);
     setChecking(false);
+    setFreezeUri(null);
   }
 
-  async function takePhoto(
-    nextSide: Side,
-    source: "camera" | "library",
-    options: { systemCamera?: boolean } = {},
-  ) {
+  function openFinder(nextSide: Side) {
+    setSide(nextSide);
     setNotice(null);
-    if (source === "camera" && !options.systemCamera && USE_GUIDED_CAMERA) {
-      setSide(nextSide);
-      setCameraSide(nextSide);
+    setDetected(false);
+    setFreezeUri(null);
+    setStep("finder");
+  }
+
+  function handleFinderBack() {
+    if (checking) return;
+    if (side === "back" && front?.cropUri) {
+      setSide("front");
+      setDetected(true);
+      setStep("crop");
       return;
     }
+    setStep("guidelines");
+  }
+
+  async function ingestStill(nextSide: Side, picked: PickedGradeStill, fromFinder: boolean) {
+    const still: SideStill = {
+      uri: picked.uri,
+      mimeType: picked.mimeType,
+      cropUri: null,
+    };
+    if (nextSide === "front") setFront(still);
+    else setBack(still);
+    setSide(nextSide);
+    setDetected(false);
+    if (fromFinder) setFreezeUri(picked.uri);
+    else setStep("crop");
+    await runDetect(nextSide, still);
+    if (fromFinder) {
+      setFreezeUri(null);
+      setStep("crop");
+    }
+  }
+
+  async function takePhoto(nextSide: Side, source: "camera" | "library") {
+    if (source === "camera") {
+      openFinder(nextSide);
+      return;
+    }
+    setNotice(null);
     let picked: { still: PickedGradeStill } | { error: string } | null;
     try {
       picked = await pickGradeStill(source);
@@ -119,14 +137,8 @@ export function PhotoGradeFlow({ onOpenPipeline }: PhotoGradeFlowProps) {
       setNotice(caught instanceof Error ? caught.message : "Could not open the camera.");
       return;
     }
-    await acceptPicked(nextSide, picked);
-  }
-
-  async function acceptPicked(
-    nextSide: Side,
-    picked: { still: PickedGradeStill } | { error: string } | null,
-  ) {
     if (!picked) {
+      if (step === "finder") return;
       const kept = nextSide === "front" ? front : back;
       setSide(nextSide);
       if (kept) setStep("crop");
@@ -135,21 +147,11 @@ export function PhotoGradeFlow({ onOpenPipeline }: PhotoGradeFlowProps) {
     }
     if ("error" in picked) {
       setSide(nextSide);
-      setStep("capture");
       setNotice(picked.error);
+      if (step !== "finder") setStep("capture");
       return;
     }
-    const still: SideStill = {
-      uri: picked.still.uri,
-      mimeType: picked.still.mimeType,
-      cropUri: null,
-    };
-    if (nextSide === "front") setFront(still);
-    else setBack(still);
-    setSide(nextSide);
-    setDetected(false);
-    setStep("crop");
-    await runDetect(nextSide, still);
+    await ingestStill(nextSide, picked.still, false);
   }
 
   async function runDetect(nextSide: Side, still: SideStill) {
@@ -186,27 +188,17 @@ export function PhotoGradeFlow({ onOpenPipeline }: PhotoGradeFlowProps) {
     }
   }
 
-  async function confirmCrop() {
-    if (confirming.current || !detected || !current?.cropUri) return;
-    confirming.current = true;
-    setConfirmBusy(true);
-    try {
-      if (side === "front") {
-        setSide("back");
-        setDetected(false);
-        setNotice(null);
-        await takePhoto("back", "camera");
-        return;
-      }
-      await scorePhotos();
-    } finally {
-      confirming.current = false;
-      setConfirmBusy(false);
+  function confirmCrop() {
+    if (!detected || !current?.cropUri) return;
+    if (side === "front") {
+      openFinder("back");
+      return;
     }
+    void scorePhotos();
   }
 
   async function scorePhotos() {
-    if (!front || !back || step === "scoring") return;
+    if (!front || !back) return;
     const id = ++requestId.current;
     setStep("scoring");
     setNotice(null);
@@ -224,9 +216,9 @@ export function PhotoGradeFlow({ onOpenPipeline }: PhotoGradeFlowProps) {
       setWarnings([]);
       if (missed === "front") setFront((value) => (value ? { ...value, cropUri: null } : value));
       else setBack((value) => (value ? { ...value, cropUri: null } : value));
-      setNotice(`Retake the ${missed} photo: ${graded.reasons.join(", ")}.`);
       setResult(null);
-      setStep("crop");
+      openFinder(missed);
+      setNotice(`Retake the ${missed} photo: ${graded.reasons.join(", ")}.`);
       return;
     }
     if (!graded.ok) {
@@ -243,6 +235,20 @@ export function PhotoGradeFlow({ onOpenPipeline }: PhotoGradeFlowProps) {
 
   const sideLabel = side === "front" ? "Front" : "Back";
 
+  if (step === "finder") {
+    return (
+      <GradeCardFinder
+        detecting={checking}
+        freezeUri={freezeUri}
+        notice={notice}
+        onBack={handleFinderBack}
+        onCaptured={(still) => void ingestStill(side, still, true)}
+        onLibrary={() => void takePhoto(side, "library")}
+        side={side}
+      />
+    );
+  }
+
   return (
     <ScrollView contentContainerStyle={styles.content} style={styles.flex}>
       <Text style={styles.title}>Grading</Text>
@@ -255,7 +261,7 @@ export function PhotoGradeFlow({ onOpenPipeline }: PhotoGradeFlowProps) {
               {line}
             </Text>
           ))}
-          <PrimaryButton label="Take front photo" onPress={() => void takePhoto("front", "camera")} />
+          <PrimaryButton label="Take front photo" onPress={() => openFinder("front")} />
           <PrimaryButton
             label="Choose a photo"
             onPress={() => void takePhoto("front", "library")}
@@ -276,7 +282,7 @@ export function PhotoGradeFlow({ onOpenPipeline }: PhotoGradeFlowProps) {
           {notice ? <Text style={styles.error}>{notice}</Text> : null}
           <PrimaryButton
             label={`Take ${sideLabel.toLowerCase()} photo`}
-            onPress={() => void takePhoto(side, "camera")}
+            onPress={() => openFinder(side)}
           />
           <PrimaryButton
             label="Choose a photo"
@@ -324,16 +330,12 @@ export function PhotoGradeFlow({ onOpenPipeline }: PhotoGradeFlowProps) {
           ) : null}
           {!checking && notice ? <Text style={styles.error}>{notice}</Text> : null}
           {!checking && detected ? (
-            <PrimaryButton
-              label="Use this crop"
-              onPress={() => void confirmCrop()}
-              disabled={confirmBusy}
-            />
+            <PrimaryButton label="Use this crop" onPress={confirmCrop} />
           ) : null}
           {!checking ? (
             <PrimaryButton
               label="Retake"
-              onPress={() => void takePhoto(side, "camera")}
+              onPress={() => openFinder(side)}
               tone={detected ? "muted" : "cta"}
             />
           ) : null}
@@ -382,31 +384,6 @@ export function PhotoGradeFlow({ onOpenPipeline }: PhotoGradeFlowProps) {
           <PipelineLink onPress={onOpenPipeline} />
         </View>
       ) : null}
-
-      <GradeCamera
-        onCancel={() => {
-          const closing = cameraSide;
-          setCameraSide(null);
-          if (closing) void acceptPicked(closing, null);
-        }}
-        onCapture={(photo) => {
-          const capturedSide = cameraSide ?? side;
-          setCameraSide(null);
-          void acceptPicked(capturedSide, { still: { uri: photo.uri, mimeType: photo.mimeType } });
-        }}
-        onChooseLibrary={() => {
-          const pickingSide = cameraSide ?? side;
-          setCameraSide(null);
-          afterCameraCloses(() => void takePhoto(pickingSide, "library"));
-        }}
-        onUseSystemCamera={() => {
-          const pickingSide = cameraSide ?? side;
-          setCameraSide(null);
-          afterCameraCloses(() => void takePhoto(pickingSide, "camera", { systemCamera: true }));
-        }}
-        side={cameraSide ?? side}
-        visible={cameraSide !== null}
-      />
     </ScrollView>
   );
 }
@@ -439,7 +416,13 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     minHeight: 280,
   },
-  frameImage: { width: "100%", height: 360, backgroundColor: colors.chip },
+  frameImage: {
+    width: "70%",
+    aspectRatio: CARD_ASPECT_RATIO,
+    maxHeight: 360,
+    alignSelf: "center",
+    backgroundColor: colors.chip,
+  },
   finding: {
     position: "absolute",
     left: 0,

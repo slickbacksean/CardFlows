@@ -34,7 +34,9 @@ def main(argv: list[str]) -> int:
     import cv2
     from pipeline import detect
 
-    image = cv2.imread(str(args.photo))
+    from pixel_cap import imread_capped  # CardFlow local change: header-checked 16 MP cap
+
+    image = imread_capped(args.photo)
     if image is None:
         json.dump(
             {
