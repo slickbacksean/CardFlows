@@ -25,18 +25,20 @@ import {
  * resolution) still score, with a warning.
  */
 
-const HARD_GATE_NAMES = new Set(["card_detection", "tilt", "aspect_ratio"]);
+const HARD_GATE_NAMES = new Set(["card_detection", "tilt", "aspect_ratio", "rectified_aspect"]);
 
 const HARD_GATE_TIPS: Record<string, string> = {
   card_detection: "Card not found",
   tilt: "Camera angle too tilted",
   aspect_ratio: "Unexpected aspect ratio",
+  rectified_aspect: "That outline isn't a whole card",
 };
 
 const SOFT_GATE_LABELS: Record<string, string> = {
   resolution: "Resolution too low",
   glare: "Glare detected",
   uneven_lighting: "Uneven lighting",
+  level: "Phone wasn't level, card was straightened",
 };
 
 const SURFACE_EXCLUDED_NOTE = "overall estimate excludes surface";

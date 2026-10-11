@@ -547,3 +547,11 @@ export type {
 } from "./photo-pregrade";
 export { RECOGNITION_SCENARIOS } from "./types";
 export type * from "./types";
+export {
+  CARD_CANONICAL_HEIGHT_PX,
+  CARD_CANONICAL_WIDTH_PX,
+  CARD_QUAD_ASPECT,
+  isCardQuad,
+  scaleCardCorners,
+} from "./card-quad";
+export type { CardCorners, CardPoint, CardQuad, CardQuadSource } from "./card-quad";
