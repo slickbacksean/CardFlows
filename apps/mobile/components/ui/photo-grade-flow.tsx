@@ -31,7 +31,7 @@ const GUIDELINES = [
   "Use even light. No sleeve, glare, or fingers on the card.",
   "Take the front, then the back. Catalog art is not a grade photo.",
   "Hold the phone flat over the card. A tilted angle means a retake.",
-  "The result is an AI pre-grade estimate, not an official PSA, BGS, or CGC grade.",
+  "The result is a pre-grade estimate. Estimate only. Not an official grade.",
 ];
 
 const PILLARS = ["centering", "corners", "edges", "surface"] as const;

@@ -6,6 +6,11 @@ header first (Pillow opens lazily, without decoding pixels) and, for large photo
 asks OpenCV for a 1/2, 1/4 or 1/8 reduced decode, so the full-size bitmap is never
 allocated. Whatever is still above CARDFLOW_GRADE_MAX_PIXELS (default 16 MP) is then
 downscaled with INTER_AREA, keeping the aspect ratio.
+
+EXIF orientation is applied explicitly: OpenCV's handling differs by version and
+decode flag, so we decode with IMREAD_IGNORE_ORIENTATION and rotate from the tag
+Pillow reads in the same header pass. A sideways phone JPEG (orientation 6) then
+reaches detect upright.
 """
 from __future__ import annotations
 
@@ -40,6 +45,12 @@ def cap_pixels(image):
 
 def header_size(path):
     """(width, height) from the image header without decoding pixels, or None."""
+    info = header_info(path)
+    return info[0] if info else None
+
+
+def header_info(path):
+    """((width, height), exif_orientation) from the header without decoding pixels, or None."""
     try:
         import warnings
 
@@ -52,15 +63,43 @@ def header_size(path):
             # Only the header is read here; large sizes are handled by the reduced decode.
             warnings.simplefilter("ignore", Image.DecompressionBombWarning)
             with Image.open(path) as image:
-                return image.size
+                try:
+                    orientation = int(image.getexif().get(0x0112, 1) or 1)
+                except Exception:
+                    orientation = 1
+                return image.size, orientation
     except Exception:
         return None
+
+
+def apply_orientation(image, orientation):
+    """Rotate/flip a decoded BGR image so EXIF orientation 1..8 becomes upright."""
+    if image is None or orientation in (None, 1):
+        return image
+    import cv2
+
+    if orientation == 2:
+        return cv2.flip(image, 1)
+    if orientation == 3:
+        return cv2.rotate(image, cv2.ROTATE_180)
+    if orientation == 4:
+        return cv2.flip(image, 0)
+    if orientation == 5:
+        return cv2.flip(cv2.rotate(image, cv2.ROTATE_90_CLOCKWISE), 1)
+    if orientation == 6:
+        return cv2.rotate(image, cv2.ROTATE_90_CLOCKWISE)
+    if orientation == 7:
+        return cv2.flip(cv2.rotate(image, cv2.ROTATE_90_COUNTERCLOCKWISE), 1)
+    if orientation == 8:
+        return cv2.rotate(image, cv2.ROTATE_90_COUNTERCLOCKWISE)
+    return image
 
 
 def imread_capped(path):
     import cv2
 
-    size = header_size(path)
+    info = header_info(path)
+    size, orientation = info if info else (None, 1)
     flag = cv2.IMREAD_COLOR
     if size:
         pixels = size[0] * size[1]
@@ -70,4 +109,5 @@ def imread_capped(path):
             if pixels / (factor * factor) >= limit:
                 flag = reduced
                 break
-    return cap_pixels(cv2.imread(str(path), flag))
+    image = cv2.imread(str(path), flag | cv2.IMREAD_IGNORE_ORIENTATION)
+    return cap_pixels(apply_orientation(image, orientation))

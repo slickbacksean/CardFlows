@@ -277,7 +277,7 @@ function PrepareSheetForm({
               {photoError ? <Text style={styles.error}>{photoError}</Text> : null}
 
               <View style={styles.guidance}>
-                <Text style={styles.section}>AI pre-grade estimate</Text>
+                <Text style={styles.section}>Pre-grade estimate</Text>
                 <Text style={styles.caption}>{gradeEstimate.disclaimer}</Text>
                 {gradeEstimate.overall == null ? (
                   <Text style={styles.body}>
@@ -413,7 +413,7 @@ function PhotoSlot({ label, uri, onPress }: PhotoSlotProps) {
   const action = uri ? "Replace" : "Add";
   return (
     <Pressable
-      accessibilityLabel={`${action} ${label} photo, required for an AI pre-grade estimate`}
+      accessibilityLabel={`${action} ${label} photo, required for a pre-grade estimate`}
       accessibilityRole="button"
       onPress={onPress}
       style={styles.photoSlot}
