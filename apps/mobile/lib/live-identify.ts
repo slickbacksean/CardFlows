@@ -3,6 +3,8 @@
  * sample buffers — never a page still, never Capture jpeg.
  * Do not snapshot the live page or POST a still.
  * Ultralytics weights stay gitignored until CARD_FLOW_ULTRALYTICS_AGPL_ACCEPTED.
+ * On-device YOLO26n is pre-ship only (AGPL + CARD_FLOW_YOLO26N_ONDEVICE, never
+ * production / App Store). Rectangle detect remains the fallback.
  * Identity is live_video metadata (`identityHash`) → POST /v1/livestream/identify.
  */
 import { Platform } from "react-native";
@@ -20,7 +22,9 @@ import { identifyLivestreamFrame } from "./api";
 import { publishLivestreamHud } from "./huds";
 import {
   isLiveVideoNativeAvailable,
+  liveVideoDetectorConfigFromEnv,
   pullLiveVideoSampleBuffer,
+  setLiveVideoDetectorConfig,
   setLiveVideoPlaybackUrl,
   setLiveVideoScannerSession,
 } from "./live-video-native";
@@ -151,6 +155,7 @@ export function noteLiveHlsUrl(url: string | null): void {
 export function startLiveVideoIdentify(): void {
   running = true;
   recentHits = [];
+  void setLiveVideoDetectorConfig(liveVideoDetectorConfigFromEnv());
   void setLiveVideoScannerSession(true);
   if (pendingHlsUrl) void setLiveVideoPlaybackUrl(pendingHlsUrl);
   startPolling();

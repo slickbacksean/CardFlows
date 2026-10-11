@@ -25,6 +25,10 @@ public final class CardFlowLiveVideoModule: Module {
     AsyncFunction("pullSampleBuffer") { () -> [String: Any] in
       LiveVideoSamplePump.shared.pullFrame()
     }
+
+    AsyncFunction("setDetectorConfig") { (config: [String: Any]) in
+      Yolo26nCardDetect.configure(config)
+    }
   }
 }
 
@@ -115,10 +119,13 @@ final class LiveVideoSamplePump {
         "cardDetected": false,
       ]
     }
-    let detection = CardInStreamDetect.inspect(pixelBuffer)
+    let decided = LiveCardDetect.run(pixelBuffer)
+    let detection = decided.crop
     var payload: [String: Any] = [
       "source": "live_video",
       "cardDetected": detection.cardDetected,
+      "detector": decided.cropSource,
+      "detectLatencyMs": decided.latencyMs,
     ]
     if detection.cardDetected,
        let box = detection.boundingBox
@@ -129,6 +136,9 @@ final class LiveVideoSamplePump {
       if let cropJpeg = LiveVideoIdentityCrop.jpegBase64(from: pixelBuffer, normalizedBox: box) {
         payload["identityCropJpeg"] = cropJpeg
       }
+    }
+    if let ab = decided.abPayload {
+      payload["detectorAb"] = ab
     }
     return payload
   }
@@ -337,13 +347,13 @@ private extension NSLock {
   }
 }
 
-private struct CardDetectResult {
+struct CardDetectResult {
   let cardDetected: Bool
   let boundingBox: CGRect?
 }
 
 /// Pokémon TCG is 63×88 mm (~0.716). Detect a filling rectangle; crop is identity metadata.
-private enum CardInStreamDetect {
+enum CardInStreamDetect {
   static let minShortOverLong: CGFloat = 0.60
   static let maxShortOverLong: CGFloat = 0.82
   static let minFill: CGFloat = 0.10

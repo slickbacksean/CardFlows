@@ -29,6 +29,8 @@ infra/huds/huds.pid
 apps/mobile/models/
 apps/api/models/
 apps/api/.obb-train/
+apps/mobile/modules/cardflow-live-video/.yolo26n-export/
+apps/mobile/modules/cardflow-live-video/.yolo26n-train/
 apps/api/.cache/
 services/psa-grade-predictor/.venv/
 services/psa-grade-predictor/upstream/

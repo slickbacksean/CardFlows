@@ -7,7 +7,12 @@ import { NativeModules, Platform } from "react-native";
 import {
   LIVE_VIDEO_IDENTITY_RGB_BYTES,
   LIVE_VIDEO_IDENTITY_RGB_SIZE,
+  normalizeLiveVideoDetectorMode,
+  resolveLiveVideoDetectorConfig,
   rgbPerceptualHash,
+  type LiveVideoDetectorAbSample,
+  type LiveVideoDetectorBox,
+  type LiveVideoDetectorObservation,
   type LiveVideoFrame,
 } from "@cardflow/shared";
 
@@ -15,6 +20,7 @@ interface CardFlowLiveVideoNative {
   pullSampleBuffer?: () => Promise<unknown>;
   setScannerSession?: (active: boolean) => Promise<void>;
   setPlaybackUrl?: (url: string | null) => Promise<void>;
+  setDetectorConfig?: (config: Record<string, unknown>) => Promise<void>;
 }
 
 function nativeModule(): CardFlowLiveVideoNative | null {
@@ -83,6 +89,84 @@ export async function setLiveVideoPlaybackUrl(url: string | null): Promise<void>
   }
 }
 
+function detectorBox(raw: unknown): LiveVideoDetectorBox | null {
+  if (!raw || typeof raw !== "object") return null;
+  const box = raw as Record<string, unknown>;
+  const x = typeof box.x === "number" ? box.x : null;
+  const y = typeof box.y === "number" ? box.y : null;
+  const width = typeof box.width === "number" ? box.width : null;
+  const height = typeof box.height === "number" ? box.height : null;
+  if (x == null || y == null || width == null || height == null) return null;
+  return {
+    x,
+    y,
+    width,
+    height,
+    confidence: typeof box.confidence === "number" ? box.confidence : undefined,
+  };
+}
+
+function detectorObservation(
+  backend: "rectangle" | "yolo26n",
+  raw: unknown,
+): LiveVideoDetectorObservation | null {
+  if (!raw || typeof raw !== "object") return null;
+  const row = raw as Record<string, unknown>;
+  return {
+    backend,
+    cardDetected: Boolean(row.cardDetected),
+    box: detectorBox(row.box),
+    latencyMs: typeof row.latencyMs === "number" ? row.latencyMs : 0,
+  };
+}
+
+function detectorAb(raw: unknown): LiveVideoDetectorAbSample | null {
+  if (!raw || typeof raw !== "object") return null;
+  const row = raw as Record<string, unknown>;
+  const yolo = detectorObservation("yolo26n", row.yolo);
+  const rectangle = detectorObservation("rectangle", row.rectangle);
+  if (!yolo || !rectangle) return null;
+  return {
+    yolo,
+    rectangle,
+    iou: typeof row.iou === "number" ? row.iou : null,
+    agreement: Boolean(row.agreement),
+    cropSource:
+      row.cropSource === "yolo26n" ||
+      row.cropSource === "rectangle" ||
+      row.cropSource === "fallback_rectangle"
+        ? row.cropSource
+        : "rectangle",
+  };
+}
+
+export function liveVideoDetectorConfigFromEnv(
+  env: Record<string, string | undefined> = process.env,
+) {
+  return resolveLiveVideoDetectorConfig({
+    env,
+    easBuildProfile: env.EAS_BUILD_PROFILE ?? env.EXPO_PUBLIC_EAS_BUILD_PROFILE ?? null,
+    mode: env.EXPO_PUBLIC_CARD_FLOW_YOLO26N_MODE ?? env.CARD_FLOW_YOLO26N_MODE,
+  });
+}
+
+export async function setLiveVideoDetectorConfig(
+  config: ReturnType<typeof liveVideoDetectorConfigFromEnv> & { modelPath?: string | null },
+): Promise<void> {
+  const native = nativeModule();
+  if (!native?.setDetectorConfig) return;
+  try {
+    await native.setDetectorConfig({
+      yoloEnabled: config.yoloEnabled,
+      mode: normalizeLiveVideoDetectorMode(config.mode),
+      modelPath: config.modelPath ?? null,
+      licenseTodo: config.licenseTodo,
+    });
+  } catch {
+    /* native build without the detector hook */
+  }
+}
+
 export async function pullLiveVideoSampleBuffer(): Promise<LiveVideoFrame | null> {
   const native = nativeModule();
   if (!native?.pullSampleBuffer) return null;
@@ -99,6 +183,12 @@ export async function pullLiveVideoSampleBuffer(): Promise<LiveVideoFrame | null
       identityHash: identityHashFromRgb(frame.identityRgb),
       identityCropJpeg:
         typeof frame.identityCropJpeg === "string" ? frame.identityCropJpeg : null,
+      detector:
+        typeof frame.detector === "string"
+          ? (frame.detector as LiveVideoFrame["detector"])
+          : null,
+      detectLatencyMs: typeof frame.detectLatencyMs === "number" ? frame.detectLatencyMs : null,
+      detectorAb: detectorAb(frame.detectorAb),
     };
   } catch {
     return null;

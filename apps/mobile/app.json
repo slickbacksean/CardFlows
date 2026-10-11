@@ -76,7 +76,9 @@
       "router": {},
       "eas": {
         "projectId": "5510ee74-4479-4f85-b37c-4d3040bac692"
-      }
+      },
+      "yolo26nOnDevice": false,
+      "ultralyticsAgplAccepted": false
     },
     "owner": "slickbacksean"
   }

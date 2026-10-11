@@ -390,8 +390,18 @@ export {
 export {
   ULTRALYTICS_AGPL_ACCEPTED_FLAG,
   ULTRALYTICS_AGPL_REQUIRED_MESSAGE,
+  YOLO26N_LICENSE_SHIP_TODO,
+  YOLO26N_ONDEVICE_ENV,
+  YOLO26N_ONDEVICE_FLAG,
+  YOLO26N_ONDEVICE_PUBLIC_ENV,
+  YOLO26N_SHIP_BLOCKED_PROFILES,
+  isYolo26nShipBlockedProfile,
   ultralyticsAgplAccepted,
+  ultralyticsAgplAcceptedForClient,
+  yolo26nOnDeviceAllowed,
+  yolo26nOnDeviceRequested,
 } from "./ultralytics-license";
+export type { Yolo26nOnDeviceGateInput } from "./ultralytics-license";
 export {
   createMockCardRecognitionProvider,
   createOffCardRecognitionProvider,
@@ -467,6 +477,30 @@ export type {
   LiveVideoIdentityReason,
   LiveVideoIdentityResult,
 } from "./live-video-identity";
+export {
+  LIVE_VIDEO_CROP_SOURCES,
+  LIVE_VIDEO_DETECTOR_BACKENDS,
+  LIVE_VIDEO_DETECTOR_IOU_AGREE,
+  LIVE_VIDEO_DETECTOR_MODES,
+  boxIou,
+  chooseLiveVideoCropSource,
+  compareLiveVideoDetectors,
+  detectorsAgree,
+  isLiveVideoDetectorMode,
+  normalizeLiveVideoDetectorMode,
+  resolveLiveVideoDetectorConfig,
+  summarizeLiveVideoDetectorAb,
+} from "./live-video-detector";
+export type {
+  LiveVideoCropSource,
+  LiveVideoDetectorAbSample,
+  LiveVideoDetectorAbSummary,
+  LiveVideoDetectorBackend,
+  LiveVideoDetectorBox,
+  LiveVideoDetectorConfig,
+  LiveVideoDetectorMode,
+  LiveVideoDetectorObservation,
+} from "./live-video-detector";
 export {
   LIVE_HLS_REPORT_SCRIPT,
   liveHlsUrlFromWebMessage,

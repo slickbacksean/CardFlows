@@ -53,6 +53,10 @@ class CardFlowLiveVideoModule : Module() {
     AsyncFunction("pullSampleBuffer") {
       LiveVideoSamplePump.shared.pullFrame()
     }
+
+    AsyncFunction("setDetectorConfig") { config: Map<String, Any?> ->
+      Yolo26nCardDetect.configure(config)
+    }
   }
 }
 
@@ -112,7 +116,8 @@ internal class LiveVideoSamplePump private constructor() {
 
   fun pullFrame(): Map<String, Any> {
     val pixelBuffer = copyLiveVideoPixelBuffer()
-    val detection = pixelBuffer?.let(CardInStreamDetect::inspect)
+    val decided = pixelBuffer?.let(LiveCardDetect::run)
+    val detection = decided?.crop
     val cardDetected = detection?.cardDetected == true
     val box = detection?.box
     val identityRgb =
@@ -131,9 +136,12 @@ internal class LiveVideoSamplePump private constructor() {
     val payload = mutableMapOf<String, Any>(
       "source" to "live_video",
       "cardDetected" to cardDetected,
+      "detector" to (decided?.cropSource ?: "rectangle"),
+      "detectLatencyMs" to (decided?.latencyMs ?: 0.0),
     )
     if (identityRgb != null) payload["identityRgb"] = identityRgb
     if (identityCropJpeg != null) payload["identityCropJpeg"] = identityCropJpeg
+    decided?.abPayload?.let { payload["detectorAb"] = it }
     return payload
   }
 
@@ -481,9 +489,9 @@ private fun normalizeLiveHlsUrl(raw: String?): String? {
 }
 
 /// Pokémon TCG is 63×88 mm (~0.716). Detect a filling rectangle; crop is identity metadata.
-private data class CardDetectResult(val cardDetected: Boolean, val box: Rect?)
+internal data class CardDetectResult(val cardDetected: Boolean, val box: Rect?)
 
-private object CardInStreamDetect {
+internal object CardInStreamDetect {
   private const val MIN_SHORT_OVER_LONG = 0.60f
   private const val MAX_SHORT_OVER_LONG = 0.82f
   private const val MIN_FILL = 0.10f

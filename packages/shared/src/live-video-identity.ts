@@ -1,3 +1,8 @@
+import type {
+  LiveVideoCropSource,
+  LiveVideoDetectorAbSample,
+  LiveVideoDetectorBackend,
+} from "./live-video-detector";
 import type { RecognitionConfidence } from "./types";
 
 /** Combined in-stream pipeline. Not Capture OBB/pHash. Not CardSight. */
@@ -29,7 +34,7 @@ export type LiveVideoIdentityReason =
 
 export interface LiveVideoFrame {
   source: LiveVideoFrameSource;
-  /** YOLO detect stage: a card is visible in the live video. */
+  /** Detect stage: a card is visible in the live video (YOLO26n and/or rectangle). */
   cardDetected: boolean;
   /**
    * Identity stage output from the combined model (or a mock classifier).
@@ -46,6 +51,11 @@ export interface LiveVideoFrame {
    * Never a full page screenshot. Optional; pHash remains the fallback.
    */
   identityCropJpeg?: string | null;
+  /** Backend that produced the crop. Rectangle is the production fallback. */
+  detector?: LiveVideoDetectorBackend | LiveVideoCropSource | null;
+  detectLatencyMs?: number | null;
+  /** Present only on the pre-ship A/B path. */
+  detectorAb?: LiveVideoDetectorAbSample | null;
 }
 
 export interface LiveVideoIdentityInput {

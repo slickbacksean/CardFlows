@@ -17,7 +17,7 @@ Pod::Spec.new do |s|
   s.source         = { :git => "https://github.com/slickbacksean/CardFlows.git" }
   s.static_framework = true
   s.dependency "ExpoModulesCore"
-  s.frameworks     = "AVFoundation", "CoreMedia", "Vision", "WebKit"
+  s.frameworks     = "AVFoundation", "CoreMedia", "CoreML", "Vision", "WebKit"
 
   s.pod_target_xcconfig = {
     "DEFINES_MODULE" => "YES",

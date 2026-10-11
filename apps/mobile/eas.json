@@ -11,6 +11,30 @@
       "ios": {
         "resourceClass": "m-medium"
       }
+    },
+    "preview": {
+      "distribution": "internal",
+      "node": "22.22.0",
+      "env": {
+        "CARD_FLOW_YOLO26N_ONDEVICE": "false",
+        "EXPO_PUBLIC_CARD_FLOW_YOLO26N_ONDEVICE": "false",
+        "EXPO_PUBLIC_CARD_FLOW_ULTRALYTICS_AGPL_ACCEPTED": "false"
+      }
+    },
+    "production": {
+      "distribution": "store",
+      "node": "22.22.0",
+      "env": {
+        "CARD_FLOW_YOLO26N_ONDEVICE": "false",
+        "EXPO_PUBLIC_CARD_FLOW_YOLO26N_ONDEVICE": "false",
+        "EXPO_PUBLIC_CARD_FLOW_ULTRALYTICS_AGPL_ACCEPTED": "false"
+      },
+      "ios": {
+        "resourceClass": "m-medium"
+      },
+      "android": {
+        "buildType": "app-bundle"
+      }
     }
   }
 }

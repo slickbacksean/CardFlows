@@ -27,11 +27,21 @@ if (useManagedAndroidSdkVersions) {
   }
 }
 
+def easProfile = (System.getenv("EAS_BUILD_PROFILE") ?: "").toLowerCase()
+def yolo26nBlocked = ["production", "store", "app-store", "appstore"].contains(easProfile)
+def yolo26nOnDevice = !yolo26nBlocked &&
+  (System.getenv("CARD_FLOW_YOLO26N_ONDEVICE") ?: "false").equalsIgnoreCase("true")
+
 android {
   namespace "expo.modules.cardflowlivevideo"
+  buildFeatures {
+    buildConfig true
+  }
   defaultConfig {
     versionCode 1
     versionName "0.0.0"
+    // Pre-ship only. Production / App Store EAS profiles stay false.
+    buildConfigField "boolean", "YOLO26N_ONDEVICE", yolo26nOnDevice.toString()
   }
   lintOptions {
     abortOnError false

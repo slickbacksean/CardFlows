@@ -189,6 +189,7 @@ describe("combined YOLO + card-identity on live video", () => {
     expect(liveIdentify).toContain("pullLiveVideoSampleBuffer");
     expect(liveIdentify).toContain("stabilizeLiveIdentity");
     expect(liveIdentify).toContain("identifyLivestreamFrame");
+    expect(liveIdentify).toContain("setLiveVideoDetectorConfig");
     expect(liveIdentify).toContain("/v1/livestream/identify");
     expect(liveIdentify).toContain("identityHash");
     expect(liveIdentify).toContain('__DEV__ ? "mock" : "none"');
@@ -206,9 +207,11 @@ describe("combined YOLO + card-identity on live video", () => {
     );
     expect(nativeJs).toContain("CardFlowLiveVideo");
     expect(nativeJs).toContain("pullSampleBuffer");
+    expect(nativeJs).toContain("setDetectorConfig");
     expect(nativeJs).toContain("requireOptionalNativeModule");
     expect(nativeJs).toContain("identityRgb");
     expect(nativeJs).toContain("rgbPerceptualHash");
+    expect(nativeJs).toContain("liveVideoDetectorConfigFromEnv");
     expect(nativeJs).not.toMatch(SCREENSHOT_APIS);
     expect(moduleConfig).toContain("CardFlowLiveVideoModule");
     expect(moduleConfig).toContain("android");
@@ -222,6 +225,9 @@ describe("combined YOLO + card-identity on live video", () => {
     expect(iosPump).toContain("live_video");
     expect(iosPump).toContain("identityRgb");
     expect(iosPump).toContain("LiveVideoIdentityCrop");
+    expect(iosPump).toContain("setDetectorConfig");
+    expect(iosPump).toContain("LiveCardDetect");
+    expect(iosPump).toContain("VNDetectRectanglesRequest");
     expect(iosPump).not.toContain("classifiedTcgdexId");
     expect(iosPump).not.toMatch(SCREENSHOT_APIS);
     expect(iosPump).not.toContain("IOSurface");
@@ -237,6 +243,8 @@ describe("combined YOLO + card-identity on live video", () => {
     expect(androidPump).toContain("live_video");
     expect(androidPump).toContain("identityRgb");
     expect(androidPump).toContain("LiveVideoIdentityCrop");
+    expect(androidPump).toContain("setDetectorConfig");
+    expect(androidPump).toContain("LiveCardDetect");
     expect(androidPump).not.toContain("classifiedTcgdexId");
     expect(androidPump).not.toMatch(SCREENSHOT_APIS);
     expect(androidPump).not.toMatch(/AVCaptureDevice|AVCaptureSession|CameraX/);
