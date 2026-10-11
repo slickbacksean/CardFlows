@@ -5,10 +5,12 @@ import { describe, expect, it } from "vitest";
 import { computeMaxBuy } from "./max-buy";
 import {
   LIVE_OVERLAY_REFERENCE_SOURCE,
+  applyLiveOverlaySlabEstimate,
   emptyLiveOverlayGuess,
   isStableLiveIdentity,
   liveOverlayGuessFromSources,
 } from "./live-overlay-guess";
+import { createMockSlabPricingProvider, emptySlabEstimate } from "./slab-pricing";
 import { identifyLiveVideo, mockLiveVideoFrame } from "./live-video-identity";
 import { createMockTcgdexCatalogProvider } from "./catalog";
 import { createMockPricingProvider, PRICE_ESTIMATE_REFERENCE_SOURCE } from "./pricing";
@@ -72,6 +74,31 @@ describe("live overlay guess from catalog + estimate", () => {
     expect(emptyLiveOverlayGuess("base1-58").estimateDisplay).toBe("No estimate");
   });
 
+  it("applies slab rows and stays empty when PokeTrace is off or the key is missing", async () => {
+    const guess = liveOverlayGuessFromSources({ tcgdexId: "base1-58" });
+    expect(guess?.slabSource).toBeNull();
+    const empty = applyLiveOverlaySlabEstimate(guess!, emptySlabEstimate("base1-58"));
+    expect(empty).toMatchObject({
+      rawAmount: null,
+      psa9Amount: null,
+      psa10Amount: null,
+      slabSource: "none",
+      writesInventory: false,
+    });
+    expect(JSON.stringify(empty)).not.toMatch(/8\.25|12\.00|120/);
+
+    const filled = applyLiveOverlaySlabEstimate(
+      guess!,
+      await createMockSlabPricingProvider().getSlabEstimates({ tcgdexId: "base1-58" }),
+    );
+    expect(filled).toMatchObject({
+      rawAmount: "12.00",
+      psa9Amount: null,
+      psa10Amount: "120.00",
+      slabSource: "mock",
+    });
+  });
+
   it("never invents a catalog id", () => {
     expect(liveOverlayGuessFromSources({ tcgdexId: "not a card" })).toBeNull();
     expect(
@@ -118,8 +145,14 @@ describe("live overlay guess from catalog + estimate", () => {
     expect(client).toContain("identifyLivestreamFrame");
     expect(client).toContain("identityHash");
     expect(overlay).toContain("getLiveOverlayGuess");
+    expect(overlay).toContain("getSlabEstimates");
+    expect(overlay).toContain("applyLiveOverlaySlabEstimate");
     expect(overlay).not.toContain("savePurchased");
+    expect(overlay).not.toContain("POKETRACE_API_KEY");
     expect(overlay).toContain("LiveHudBubble");
+    expect(client).toContain("/v1/cards/${encodeURIComponent(tcgdexId)}/slab-estimates");
+    expect(client).toContain("emptySlabEstimate");
+    expect(client).not.toContain("POKETRACE_API_KEY");
     expect(scanTab).toContain("saveLivestreamPurchase");
     expect(scanTab).toContain("PurchaseSheet");
     const bubble = readRepoFile("apps/mobile/components/ui/live-hud-bubble.tsx");

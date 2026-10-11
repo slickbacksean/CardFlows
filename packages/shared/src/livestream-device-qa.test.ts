@@ -148,6 +148,8 @@ describe("Task 9 livestream device QA", () => {
     expect(liveIdentify).toContain("stabilizeLiveIdentity");
     expect(liveIdentify).toContain("publish(mockFrame);\n  publish(mockFrame);");
     expect(overlay).toContain("getLiveOverlayGuess");
+    expect(overlay).toContain("getSlabEstimates");
+    expect(overlay).toContain("applyLiveOverlaySlabEstimate");
     expect(overlay).toContain("isStableLiveIdentity");
     expect(overlay).toContain("LiveHudBubble");
   });

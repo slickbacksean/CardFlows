@@ -24,6 +24,7 @@ import {
 } from "@/lib/live-hud-position";
 import { colors, space } from "@/lib/theme";
 import {
+  LIVE_HUD_PRICE_UNAVAILABLE,
   LIVESTREAM_HUD_BUBBLE_INSET,
   LIVESTREAM_SCANNER_UNAVAILABLE_MESSAGE,
   liveHudPricesFromMatch,
@@ -250,9 +251,25 @@ export function LiveHudBubble({
           <GestureDetector gesture={tap}>
             <View style={styles.body}>
               <View style={styles.prices}>
-                <PriceSlot label="Raw" large tone="raw" value={prices.rawAmount} />
-                <PriceSlot label="PSA 9" large value={prices.psa9Amount} />
-                <PriceSlot label="PSA 10" large value={prices.psa10Amount} />
+                <PriceSlot
+                  label="Raw"
+                  large
+                  tone="raw"
+                  unavailable={kind === "live_guess" && prices.unavailable}
+                  value={prices.rawAmount}
+                />
+                <PriceSlot
+                  label="PSA 9"
+                  large
+                  unavailable={kind === "live_guess" && prices.unavailable}
+                  value={prices.psa9Amount}
+                />
+                <PriceSlot
+                  label="PSA 10"
+                  large
+                  unavailable={kind === "live_guess" && prices.unavailable}
+                  value={prices.psa10Amount}
+                />
               </View>
               <View style={styles.identity}>
                 {kind === "live_guess" && liveGuess?.imageUrl ? (
@@ -328,11 +345,13 @@ function PriceSlot({
   value,
   large,
   tone,
+  unavailable,
 }: {
   label: string;
   value: string | null;
   large?: boolean;
   tone?: "raw";
+  unavailable?: boolean;
 }) {
   return (
     <View style={styles.priceSlot}>
@@ -341,6 +360,8 @@ function PriceSlot({
         <Text style={[styles.priceValue, large && styles.priceValueLarge, tone === "raw" && styles.rawValue]}>
           {value}
         </Text>
+      ) : unavailable ? (
+        <Text style={styles.unavailable}>{LIVE_HUD_PRICE_UNAVAILABLE}</Text>
       ) : null}
     </View>
   );
@@ -380,6 +401,7 @@ const styles = StyleSheet.create({
   priceValue: { color: colors.text, fontSize: 18, fontWeight: "800" },
   priceValueLarge: { fontSize: 26, letterSpacing: -0.4 },
   rawValue: { color: colors.success },
+  unavailable: { color: colors.muted, fontSize: 13, fontWeight: "700" },
   identity: {
     flexDirection: "row",
     alignItems: "center",

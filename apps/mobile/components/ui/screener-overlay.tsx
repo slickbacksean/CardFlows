@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 import { livestreamHudPageUrl, publishLivestreamHud } from "@/lib/huds";
-import { getLiveOverlayGuess } from "@/lib/api";
+import { getLiveOverlayGuess, getSlabEstimates } from "@/lib/api";
 import { LiveHudBubble } from "@/components/ui/live-hud-bubble";
 import {
+  applyLiveOverlaySlabEstimate,
   emptyLiveOverlayGuess,
   isStableLiveIdentity,
   livestreamOverlayKind,
@@ -81,13 +82,12 @@ export function ScreenerOverlay({
     let cancelled = false;
     const tcgdexId = liveIdentity.tcgdexId;
     const fallback = emptyLiveOverlayGuess(tcgdexId, liveIdentity.confidence);
-    void getLiveOverlayGuess(tcgdexId, liveIdentity.confidence)
-      .then((response) => {
-        if (!cancelled) setLiveGuess(response.guess);
-      })
-      .catch(() => {
-        if (!cancelled) setLiveGuess(fallback);
-      });
+    void Promise.all([
+      getLiveOverlayGuess(tcgdexId, liveIdentity.confidence).catch(() => ({ guess: fallback })),
+      getSlabEstimates(tcgdexId),
+    ]).then(([response, slab]) => {
+      if (!cancelled) setLiveGuess(applyLiveOverlaySlabEstimate(response.guess ?? fallback, slab));
+    });
     return () => {
       cancelled = true;
     };

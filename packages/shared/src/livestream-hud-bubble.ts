@@ -1,12 +1,14 @@
 import { LOCKED_DISPLAY_CURRENCY } from "./max-buy";
 import { parseDollarsToCents } from "./money";
 import { PRICE_ESTIMATE_REFERENCE_SOURCE } from "./pricing";
+import type { CardFlowSlabEstimate, SlabPricingSource } from "./slab-pricing";
 
 export const LIVESTREAM_HUD_BUBBLE_HEIGHT = 108;
 export const LIVESTREAM_HUD_BUBBLE_EXPANDED_HEIGHT = 168;
 export const LIVESTREAM_HUD_BUBBLE_INSET = 12;
 export const LIVESTREAM_HUD_POSITION_KEY = "cardflow.livestream.hud.position";
 export const LIVE_HUD_QUICK_SAVE_ZERO = "0.00";
+export const LIVE_HUD_PRICE_UNAVAILABLE = "unavailable";
 
 /** Typical phone-width bar; live size is parent minus inset + safe area. */
 export const LIVESTREAM_HUD_BUBBLE_WIDTH = 366;
@@ -53,6 +55,7 @@ export interface LiveHudPriceSlots {
   rawAmount: string | null;
   psa9Amount: string | null;
   psa10Amount: string | null;
+  unavailable: boolean;
 }
 
 export interface LiveHudPriceMatch {
@@ -62,6 +65,7 @@ export interface LiveHudPriceMatch {
   psa10Amount?: string | null;
   referenceSource?: string | null;
   source?: string | null;
+  slabSource?: SlabPricingSource | null;
 }
 
 export interface LiveHudListingMatch {
@@ -229,26 +233,63 @@ function dollarAmount(amount: string | null | undefined): string | null {
   return trimmed;
 }
 
+export function emptyLiveHudPriceSlots(unavailable = false): LiveHudPriceSlots {
+  return { rawAmount: null, psa9Amount: null, psa10Amount: null, unavailable };
+}
+
 /**
- * HUD prices come only from the current match. Allowed sources may fill Raw;
- * PSA 9 / PSA 10 stay empty unless the match already has those amounts.
- * Never invents a price and never reads a livestream page.
+ * Graded and market slots come from the existing slab estimate (PokeTrace on the
+ * server). Missing key / off / empty rows stay blank — never invented dollars.
+ */
+export function liveHudPricesFromSlabEstimate(
+  estimate: CardFlowSlabEstimate | null | undefined,
+): LiveHudPriceSlots {
+  if (!estimate || estimate.source === "none" || !isAllowedPriceSource(estimate.source)) {
+    return emptyLiveHudPriceSlots(true);
+  }
+  const raw =
+    estimate.rawRows.find((row) => row.condition === "NM" && row.amount)?.amount ??
+    estimate.rawRows.find((row) => row.amount)?.amount ??
+    null;
+  const psa9 = estimate.rows.find((row) => row.company === "PSA" && row.grade === "9")?.amount ?? null;
+  const psa10 = estimate.rows.find((row) => row.company === "PSA" && row.grade === "10")?.amount ?? null;
+  const rawAmount = dollarLabel(raw);
+  const psa9Amount = dollarLabel(psa9);
+  const psa10Amount = dollarLabel(psa10);
+  if (!rawAmount && !psa9Amount && !psa10Amount) return emptyLiveHudPriceSlots(true);
+  return { rawAmount, psa9Amount, psa10Amount, unavailable: false };
+}
+
+/**
+ * HUD prices come only from the current match. Slab/PokeTrace amounts fill Raw
+ * and PSA slots. A finished empty lookup is unavailable, never a made-up number.
  */
 export function liveHudPricesFromMatch(match: LiveHudPriceMatch | null | undefined): LiveHudPriceSlots {
-  if (!match) return { rawAmount: null, psa9Amount: null, psa10Amount: null };
+  if (!match) return emptyLiveHudPriceSlots(false);
+  if (match.slabSource === "none") return emptyLiveHudPriceSlots(true);
+  if (match.slabSource === "poketrace" || match.slabSource === "mock") {
+    const rawAmount = dollarLabel(match.rawAmount);
+    const psa9Amount = dollarLabel(match.psa9Amount);
+    const psa10Amount = dollarLabel(match.psa10Amount);
+    if (!rawAmount && !psa9Amount && !psa10Amount) return emptyLiveHudPriceSlots(true);
+    return { rawAmount, psa9Amount, psa10Amount, unavailable: false };
+  }
   const source = match.referenceSource ?? match.source ?? null;
-  const rawFromEstimate =
-    isAllowedPriceSource(source) ? dollarLabel(match.rawAmount ?? match.estimateAmount) : null;
+  if (!isAllowedPriceSource(source)) return emptyLiveHudPriceSlots(false);
   return {
-    rawAmount: rawFromEstimate,
-    psa9Amount: isAllowedPriceSource(source) ? dollarLabel(match.psa9Amount) : null,
-    psa10Amount: isAllowedPriceSource(source) ? dollarLabel(match.psa10Amount) : null,
+    rawAmount: dollarLabel(match.rawAmount ?? match.estimateAmount),
+    psa9Amount: dollarLabel(match.psa9Amount),
+    psa10Amount: dollarLabel(match.psa10Amount),
+    unavailable: false,
   };
 }
 
 /** Local match estimate only. Never read from a livestream page or the live DOM. */
 export function liveHudPurchasePriceFromMatch(match: LiveHudPriceMatch | null | undefined): string | null {
   if (!match) return null;
+  if (match.slabSource === "poketrace" || match.slabSource === "mock") {
+    return dollarAmount(match.rawAmount) ?? dollarAmount(match.estimateAmount);
+  }
   const source = match.referenceSource ?? match.source ?? null;
   if (!isAllowedPriceSource(source)) return null;
   return dollarAmount(match.rawAmount ?? match.estimateAmount);

@@ -7,6 +7,8 @@ import {
 } from "./pricing";
 import type { TcgdexCard } from "./catalog";
 import type { MaxBuyPreferences, RecognitionConfidence } from "./types";
+import type { CardFlowSlabEstimate, SlabPricingSource } from "./slab-pricing";
+import { liveHudPricesFromSlabEstimate } from "./livestream-hud-bubble";
 
 /** Ephemeral overlay reference. Never persisted on CRM copies. */
 export const LIVE_OVERLAY_REFERENCE_SOURCE = PRICE_ESTIMATE_REFERENCE_SOURCE;
@@ -24,6 +26,10 @@ export interface LiveOverlayGuess {
   maxBuyAmountCents: number | null;
   confidence: RecognitionConfidence | null;
   referenceSource: typeof LIVE_OVERLAY_REFERENCE_SOURCE | "none";
+  rawAmount: string | null;
+  psa9Amount: string | null;
+  psa10Amount: string | null;
+  slabSource: SlabPricingSource | null;
   currency: "USD";
   notConfirmed: true;
   writesInventory: false;
@@ -65,6 +71,10 @@ export function emptyLiveOverlayGuess(
     maxBuyAmountCents: null,
     confidence,
     referenceSource: "none",
+    rawAmount: null,
+    psa9Amount: null,
+    psa10Amount: null,
+    slabSource: null,
     currency: "USD",
     notConfirmed: true,
     writesInventory: false,
@@ -103,8 +113,34 @@ export function liveOverlayGuessFromSources(
     maxBuyAmountCents: maxBuy.maxBuyAmountCents,
     confidence: input.confidence ?? null,
     referenceSource: hasEstimate ? LIVE_OVERLAY_REFERENCE_SOURCE : "none",
+    rawAmount: null,
+    psa9Amount: null,
+    psa10Amount: null,
+    slabSource: null,
     currency: "USD",
     notConfirmed: true,
     writesInventory: false,
+  };
+}
+
+function amountWithoutDollar(amount: string | null): string | null {
+  if (!amount) return null;
+  return amount.charAt(0) === "$" ? amount.slice(1) : amount;
+}
+
+/** Attach existing slab/PokeTrace rows. Off or missing key stays empty. */
+export function applyLiveOverlaySlabEstimate(
+  guess: LiveOverlayGuess,
+  estimate: CardFlowSlabEstimate | null | undefined,
+): LiveOverlayGuess {
+  const slots = liveHudPricesFromSlabEstimate(estimate);
+  const slabSource: SlabPricingSource | null =
+    estimate?.source === "poketrace" || estimate?.source === "mock" ? estimate.source : "none";
+  return {
+    ...guess,
+    rawAmount: amountWithoutDollar(slots.rawAmount),
+    psa9Amount: amountWithoutDollar(slots.psa9Amount),
+    psa10Amount: amountWithoutDollar(slots.psa10Amount),
+    slabSource,
   };
 }

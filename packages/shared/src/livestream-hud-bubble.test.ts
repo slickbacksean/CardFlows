@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import { LOCKED_DISPLAY_CURRENCY } from "./max-buy";
 import { PRICE_ESTIMATE_REFERENCE_SOURCE } from "./pricing";
 import {
+  LIVE_HUD_PRICE_UNAVAILABLE,
   LIVE_HUD_QUICK_SAVE_ZERO,
   LIVESTREAM_HUD_BUBBLE_EXPANDED_HEIGHT,
   LIVESTREAM_HUD_BUBBLE_HEIGHT,
@@ -14,6 +15,7 @@ import {
   defaultLivestreamHudSavedPosition,
   liveHudListingUrl,
   liveHudPricesFromMatch,
+  liveHudPricesFromSlabEstimate,
   liveHudPurchasePriceFromMatch,
   liveHudQuickSavePayload,
   livestreamHudBubbleSize,
@@ -23,6 +25,10 @@ import {
   serializeLivestreamHudPosition,
   snapLivestreamHudBubbleOffset,
 } from "./livestream-hud-bubble";
+import {
+  createMockSlabPricingProvider,
+  emptySlabEstimate,
+} from "./slab-pricing";
 
 const repoRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 const PAGE_SCRAPE = /whatnot|querySelector|innerHTML|executeScript|injectJavaScript|scrape/i;
@@ -132,13 +138,14 @@ describe("Livestream HUD match prices and listing", () => {
       rawAmount: null,
       psa9Amount: null,
       psa10Amount: null,
+      unavailable: false,
     });
     expect(
       liveHudPricesFromMatch({
         estimateAmount: "8.25",
         referenceSource: "none",
       }),
-    ).toEqual({ rawAmount: null, psa9Amount: null, psa10Amount: null });
+    ).toEqual({ rawAmount: null, psa9Amount: null, psa10Amount: null, unavailable: false });
     expect(
       liveHudPricesFromMatch({
         estimateAmount: "8.25",
@@ -150,7 +157,35 @@ describe("Livestream HUD match prices and listing", () => {
       rawAmount: "$8.25",
       psa9Amount: "$55.00",
       psa10Amount: "$120.40",
+      unavailable: false,
     });
+  });
+
+  it("maps PokeTrace slab rows and stays empty when the key is missing", async () => {
+    expect(liveHudPricesFromSlabEstimate(emptySlabEstimate("base1-58"))).toEqual({
+      rawAmount: null,
+      psa9Amount: null,
+      psa10Amount: null,
+      unavailable: true,
+    });
+    expect(liveHudPricesFromMatch({ slabSource: "none", estimateAmount: "8.25" })).toEqual({
+      rawAmount: null,
+      psa9Amount: null,
+      psa10Amount: null,
+      unavailable: true,
+    });
+    expect(JSON.stringify(liveHudPricesFromSlabEstimate(emptySlabEstimate("base1-58")))).not.toMatch(
+      /8\.25|55\.00|120/,
+    );
+
+    const filled = await createMockSlabPricingProvider().getSlabEstimates({ tcgdexId: "base1-58" });
+    expect(liveHudPricesFromSlabEstimate(filled)).toEqual({
+      rawAmount: "$12.00",
+      psa9Amount: null,
+      psa10Amount: "$120.00",
+      unavailable: false,
+    });
+    expect(LIVE_HUD_PRICE_UNAVAILABLE).toBe("unavailable");
   });
 
   it("opens an https listing from match identity and rejects scripted bid URLs", () => {
@@ -269,6 +304,7 @@ describe("Livestream HUD bubble chrome", () => {
     expect(bubble).toContain('label="Raw"');
     expect(bubble).toContain("PSA 9");
     expect(bubble).toContain("PSA 10");
+    expect(bubble).toContain("LIVE_HUD_PRICE_UNAVAILABLE");
     expect(bubble).not.toMatch(/powered by|brickify|poketrace/i);
     expect(bubble).toContain("Purchased");
     expect(bubble).toContain("Add details");

@@ -50,6 +50,7 @@ export function livestreamHudOriginWhitelist(pageUrl: string): string[] {
 
 export {
   LIVE_HUD_ALLOWED_PRICE_SOURCES,
+  LIVE_HUD_PRICE_UNAVAILABLE,
   LIVE_HUD_QUICK_SAVE_ZERO,
   LIVESTREAM_HUD_BUBBLE_COLLAPSED_SIZE,
   LIVESTREAM_HUD_BUBBLE_EXPANDED_HEIGHT,
@@ -60,8 +61,10 @@ export {
   LIVESTREAM_HUD_POSITION_KEY,
   clampLivestreamHudBubbleOffset,
   defaultLivestreamHudSavedPosition,
+  emptyLiveHudPriceSlots,
   liveHudListingUrl,
   liveHudPricesFromMatch,
+  liveHudPricesFromSlabEstimate,
   liveHudPurchasePriceFromMatch,
   liveHudQuickSavePayload,
   livestreamHudBubbleSize,

@@ -474,6 +474,7 @@ export {
 } from "./live-hls-url";
 export {
   LIVE_OVERLAY_REFERENCE_SOURCE,
+  applyLiveOverlaySlabEstimate,
   emptyLiveOverlayGuess,
   isStableLiveIdentity,
   liveOverlayGuessFromSources,
@@ -483,6 +484,7 @@ export { livestreamOverlayKind, livestreamOverlayUsesHud } from "./livestream-ov
 export type { LivestreamOverlayKind, LivestreamOverlayKindInput } from "./livestream-overlay";
 export {
   LIVE_HUD_ALLOWED_PRICE_SOURCES,
+  LIVE_HUD_PRICE_UNAVAILABLE,
   LIVE_HUD_QUICK_SAVE_ZERO,
   LIVESTREAM_HUD_BUBBLE_COLLAPSED_SIZE,
   LIVESTREAM_HUD_BUBBLE_EXPANDED_HEIGHT,
@@ -499,8 +501,10 @@ export {
   clampLivestreamHudBubbleOffset,
   defaultLivestreamHudOrigin,
   defaultLivestreamHudSavedPosition,
+  emptyLiveHudPriceSlots,
   liveHudListingUrl,
   liveHudPricesFromMatch,
+  liveHudPricesFromSlabEstimate,
   liveHudPurchasePriceFromMatch,
   liveHudQuickSavePayload,
   livestreamHudBubbleSize,

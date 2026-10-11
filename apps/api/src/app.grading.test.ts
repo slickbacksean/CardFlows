@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   createMockSlabPricingProvider,
   emptySlabEstimate,
+  liveHudPricesFromSlabEstimate,
   WATCHLIST_CANNOT_SUBMIT_MESSAGE,
 } from "@cardflow/shared";
 import { createApp } from "./app";
@@ -237,6 +238,21 @@ describe("PokeTrace slab estimates", () => {
       "120.00",
     );
     expect(JSON.stringify(mock.body)).not.toMatch(/POKETRACE_|X-API-Key/i);
+  });
+
+  it("HUD slots stay unavailable when PokeTrace is off or the key is missing", async () => {
+    const off = await json<{ estimate: Parameters<typeof liveHudPricesFromSlabEstimate>[0] }>(
+      createApp(createMemoryStore()),
+      "/v1/cards/base1-58/slab-estimates",
+    );
+    expect(off.status).toBe(200);
+    expect(liveHudPricesFromSlabEstimate(off.body.estimate)).toEqual({
+      rawAmount: null,
+      psa9Amount: null,
+      psa10Amount: null,
+      unavailable: true,
+    });
+    expect(JSON.stringify(off.body.estimate)).not.toMatch(/8\.25|12\.00|120\.00/);
   });
 
   it("passes catalog name and number into the slab lookup", async () => {
