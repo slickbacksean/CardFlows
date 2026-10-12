@@ -1,0 +1,8 @@
+{
+  "accept_threshold": 0.69,
+  "val_wrong_accept_rate": 0.00546448087431694,
+  "val_recall": 0.5013774104683195,
+  "val_samples": 400,
+  "val_with_card": 363,
+  "split": "synthetic val (train/art-list.tsv split=val, seed 987654)"
+}

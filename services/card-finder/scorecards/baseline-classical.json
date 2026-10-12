@@ -1,6 +1,7 @@
 {
   "detector": "classical",
-  "manifest": "services/card-finder/baseline/manifest.jsonl",
+  "manifest": "baseline/manifest.jsonl",
+  "provisional_circular_labels": 0,
   "cards": {
     "all": {
       "count": 24,
@@ -8,9 +9,9 @@
       "iou_rate": 0.5,
       "mean_corner_error": 0.04791217703422409,
       "p95_corner_error": 0.21686625259104925,
-      "wrong_accept_rate": 0.125,
-      "wrong_accept_count": 3,
-      "false_retake_rate": 0.0,
+      "wrong_accept_rate": 0.0,
+      "wrong_accept_count": 0,
+      "false_retake_rate": 0.05,
       "passes": false
     },
     "back": {
