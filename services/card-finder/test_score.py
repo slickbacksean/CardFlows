@@ -2,7 +2,7 @@ import unittest
 
 import numpy as np
 
-from score import make_sample, score_samples
+from score import make_sample, polygon_iou, score_samples
 
 GOLD = np.array([[0, 0], [630, 0], [630, 880], [0, 880]], float)
 
@@ -21,6 +21,15 @@ class ScoreTests(unittest.TestCase):
 
     def test_perfect_set_passes(self) -> None:
         self.assertTrue(score_samples([make_sample(str(i), GOLD, True, GOLD) for i in range(50)]).passes)
+
+    def test_order_corners_stays_cyclic_at_45_degrees(self) -> None:
+        from score import order_corners
+
+        diamond = np.array([[100, 0], [200, 100], [100, 200], [0, 100]], float)
+        for perm in ([0, 1, 2, 3], [2, 0, 3, 1], [3, 2, 1, 0]):
+            q = order_corners(diamond[perm])
+            self.assertEqual(len({tuple(p) for p in q}), 4)
+            self.assertAlmostEqual(polygon_iou(q, diamond), 1.0, places=6)
 
 
 if __name__ == "__main__":

@@ -53,16 +53,15 @@ def corner_error_fraction(predicted: np.ndarray, truth: np.ndarray) -> float:
 
 
 def order_corners(points: np.ndarray) -> np.ndarray:
-    """TL, TR, BR, BL."""
+    """TL, TR, BR, BL: clockwise (image coords) around the centroid, starting at min x+y.
+
+    Sorting by angle keeps the order cyclic for any rotation; the sum/diff trick picks
+    the same point twice near 45 degrees and makes a self-crossing quad.
+    """
     pts = np.asarray(points, dtype=np.float64).reshape(4, 2)
-    rect = np.zeros((4, 2), dtype=np.float64)
-    total = pts.sum(axis=1)
-    diff = np.diff(pts, axis=1).reshape(-1)
-    rect[0] = pts[np.argmin(total)]
-    rect[2] = pts[np.argmax(total)]
-    rect[1] = pts[np.argmin(diff)]
-    rect[3] = pts[np.argmax(diff)]
-    return rect
+    c = pts.mean(axis=0)
+    pts = pts[np.argsort(np.arctan2(pts[:, 1] - c[1], pts[:, 0] - c[0]))]
+    return np.roll(pts, -int(np.argmin(pts.sum(axis=1))), axis=0)
 
 
 @dataclass(frozen=True)

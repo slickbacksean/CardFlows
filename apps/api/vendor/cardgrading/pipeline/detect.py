@@ -72,15 +72,15 @@ def load_thresholds(path: str | Path) -> dict:
 
 
 def order_points(pts: np.ndarray) -> np.ndarray:
-    """Order 4 points as top-left, top-right, bottom-right, bottom-left."""
-    rect = np.zeros((4, 2), dtype=np.float32)
-    s = pts.sum(axis=1)
-    rect[0] = pts[np.argmin(s)]
-    rect[2] = pts[np.argmax(s)]
-    diff = np.diff(pts, axis=1)
-    rect[1] = pts[np.argmin(diff)]
-    rect[3] = pts[np.argmax(diff)]
-    return rect
+    """Order 4 points as top-left, top-right, bottom-right, bottom-left.
+
+    Clockwise around the centroid starting at min x+y, so the order stays cyclic at
+    any rotation (the old sum/diff rule could pick one point twice near 45 degrees).
+    """
+    pts = np.asarray(pts, dtype=np.float32).reshape(4, 2)
+    c = pts.mean(axis=0)
+    pts = pts[np.argsort(np.arctan2(pts[:, 1] - c[1], pts[:, 0] - c[0]))]
+    return np.roll(pts, -int(np.argmin(pts.sum(axis=1))), axis=0).astype(np.float32)
 
 
 # How far two corner samples can differ and still count as the same
