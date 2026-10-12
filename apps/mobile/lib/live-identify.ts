@@ -206,7 +206,7 @@ async function pollNativeFrame() {
     return;
   }
   if (latest.reason !== "identified") publish(frame);
-  queuedFrame = { frame, key };
+  if (frame) queuedFrame = { frame, key };
   drainIdentify();
 }
 

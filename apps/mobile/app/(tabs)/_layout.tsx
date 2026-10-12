@@ -71,7 +71,6 @@ export default function TabsLayout() {
             title: "Livestream Screener",
             tabBarLabel: "Livestream Screener",
             lazy: true,
-            unmountOnBlur: true,
             sceneStyle: { backgroundColor: colors.bg, paddingBottom: 0 },
           }}
         />
