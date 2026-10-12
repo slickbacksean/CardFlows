@@ -1,17 +1,96 @@
-import { listPurchasedDraftsForCopy, listingDraftStatusLabel } from "@cardflow/shared";
+import {
+  ebayListingCsv,
+  renderListingTitle,
+  tcgTraderCollectionCsv,
+  descriptionStarter,
+  type EbayListingExportRow,
+  type TcgTraderExportRow,
+} from "@cardflow/shared";
 import Ionicons from "@expo/vector-icons/Ionicons";
-import { useFocusEffect, useRouter } from "expo-router";
+import * as Clipboard from "expo-clipboard";
+import { useFocusEffect } from "expo-router";
 import { useCallback, useMemo, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import { listInventory, type InventoryItem } from "@/lib/api";
-import { pushCopyListing } from "@/lib/copy-listing";
-import { colors, space } from "@/lib/theme";
+import { ActivityIndicator, Pressable, ScrollView, Share, StyleSheet, Text, View } from "react-native";
+import { getDraft, listInventory, type InventoryItem } from "@/lib/api";
+import { colors, radii, space } from "@/lib/theme";
+
+type Destination = "ebay" | "tcg";
+
+function purchasedCopies(items: InventoryItem[]): InventoryItem[] {
+  return items.filter((item) => item.intent === "purchased");
+}
+
+function quantityOf(item: InventoryItem): number {
+  const quantity = item.quantity ?? 1;
+  return quantity > 0 ? quantity : 1;
+}
+
+function tcgRow(item: InventoryItem): TcgTraderExportRow {
+  return {
+    name: item.card?.name?.trim() || item.draft?.title?.trim() || "Card",
+    setName: item.card?.setName?.trim() ?? "",
+    localId: item.card?.localId?.trim() ?? "",
+    variant: item.selectedVariant ?? null,
+    condition: item.condition ?? null,
+    quantity: quantityOf(item),
+  };
+}
+
+async function ebayRow(item: InventoryItem): Promise<EbayListingExportRow> {
+  const card = item.card;
+  const identity = {
+    name: card?.name?.trim() || "Card",
+    setName: card?.setName?.trim() ?? "",
+    localId: card?.localId?.trim() ?? "",
+    selectedVariant: item.selectedVariant ?? null,
+    condition: item.condition ?? null,
+  };
+  let title = item.draft?.title?.trim() || renderListingTitle(identity);
+  let description = descriptionStarter(identity);
+  let condition = item.condition ?? null;
+  let askingPrice: string | null = null;
+
+  if (item.draft?.draftId) {
+    try {
+      const view = await getDraft(item.draft.draftId);
+      title = view.draft.title.trim() || title;
+      description = view.draft.description.trim() || description;
+      condition = view.draft.condition ?? condition;
+      askingPrice = view.draft.askingPrice?.trim() || null;
+    } catch {
+      // Keep the card identity when a draft cannot be loaded.
+    }
+  }
+
+  return {
+    title,
+    description,
+    condition,
+    askingPrice,
+    currency: "USD",
+    quantity: quantityOf(item),
+    setName: identity.setName,
+    localId: identity.localId,
+  };
+}
+
+async function handOff(csv: string, title: string): Promise<"shared" | "copied" | "dismissed"> {
+  try {
+    const result = await Share.share({ message: csv, title });
+    if (result.action === Share.dismissedAction) return "dismissed";
+    return "shared";
+  } catch {
+    await Clipboard.setStringAsync(csv);
+    return "copied";
+  }
+}
 
 export default function ExportScreen() {
-  const router = useRouter();
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [isOpening, setIsOpening] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [busy, setBusy] = useState<Destination | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
   const refreshInventory = useCallback(async () => {
     try {
@@ -19,7 +98,9 @@ export default function ExportScreen() {
       setItems(result.items);
       setError(null);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not load listings");
+      setError(caught instanceof Error ? caught.message : "Could not load the collection");
+    } finally {
+      setIsLoading(false);
     }
   }, []);
 
@@ -29,109 +110,121 @@ export default function ExportScreen() {
     }, [refreshInventory]),
   );
 
-  const readyRows = useMemo(() => listPurchasedDraftsForCopy(items), [items]);
+  const purchased = useMemo(() => purchasedCopies(items), [items]);
+  const countLabel = purchased.length === 1 ? "1 purchased card" : `${purchased.length} purchased cards`;
 
-  async function openCopyListing() {
-    if (isOpening) return;
-    setIsOpening(true);
+  async function shareDestination(destination: Destination) {
+    if (busy || purchased.length === 0) return;
+    setBusy(destination);
     setError(null);
+    setNotice(null);
     try {
-      const result = await listInventory();
-      setItems(result.items);
-      pushCopyListing(router, result.items);
+      const latest = await listInventory();
+      setItems(latest.items);
+      const copies = purchasedCopies(latest.items);
+      if (copies.length === 0) {
+        setNotice("No purchased cards to export.");
+        return;
+      }
+      const ebayRows = destination === "ebay" ? await Promise.all(copies.map((item) => ebayRow(item))) : [];
+      const csv =
+        destination === "ebay"
+          ? ebayListingCsv(ebayRows)
+          : tcgTraderCollectionCsv(copies.map(tcgRow));
+      const title = destination === "ebay" ? "eBay listings" : "TCG Trader collection";
+      const result = await handOff(csv, title);
+      if (result === "dismissed") return;
+      const missingPrice = ebayRows.some((row) => !row.askingPrice);
+      const priceNote = missingPrice ? " Cards without an asking price are left blank." : "";
+      setNotice(
+        result === "copied"
+          ? `Copied ${copies.length} cards. Paste the sheet, then upload it yourself.${priceNote}`
+          : `Shared ${copies.length} cards. Upload the file yourself. CardFlow did not list them.${priceNote}`,
+      );
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not open listing");
+      setError(caught instanceof Error ? caught.message : "Could not export");
     } finally {
-      setIsOpening(false);
+      setBusy(null);
     }
-  }
-
-  function openDraft(draftId: string) {
-    router.push(`/draft/${draftId}`);
   }
 
   return (
     <ScrollView contentContainerStyle={styles.content} style={styles.flex}>
       <Text style={styles.title}>Export</Text>
       <Text style={styles.constraint}>
-        Clipboard copy omits private notes. CardFlow did not publish this.
+        Share purchased cards as a spreadsheet. You upload it. CardFlow does not list them.
       </Text>
 
-      <View style={styles.list}>
-        <DestinationRow
-          label="Copy listing"
-          meta="on listing draft"
-          onPress={() => void openCopyListing()}
-          showChevron
-        />
-      </View>
-      {error ? <Text style={styles.error}>{error}</Text> : null}
-
-      {readyRows.length > 0 ? (
+      {isLoading ? (
+        <ActivityIndicator accessibilityLabel="Loading collection" color={colors.accent} />
+      ) : (
         <View style={styles.list}>
-          <Text style={styles.sectionTitle}>Ready to copy</Text>
-          {readyRows.map((row) => (
-            <DestinationRow
-              key={row.draftId}
-              label={row.label}
-              meta={listingDraftStatusLabel(row.status)}
-              onPress={() => openDraft(row.draftId)}
-              showChevron
-            />
-          ))}
+          <DestinationCard
+            busy={busy === "ebay"}
+            countLabel={countLabel}
+            detail="Title, condition, and asking price. Paste into Seller Hub."
+            disabled={purchased.length === 0 || busy !== null}
+            label="eBay"
+            onPress={() => void shareDestination("ebay")}
+          />
+          <DestinationCard
+            busy={busy === "tcg"}
+            countLabel={countLabel}
+            detail="Name, set, number, condition, and quantity."
+            disabled={purchased.length === 0 || busy !== null}
+            label="TCG Trader"
+            onPress={() => void shareDestination("tcg")}
+          />
         </View>
+      )}
+
+      {purchased.length === 0 && !isLoading ? (
+        <Text style={styles.constraint}>No purchased cards yet. Watchlist cards stay in the app.</Text>
       ) : null}
+      {notice ? <Text style={styles.notice}>{notice}</Text> : null}
+      {error ? <Text style={styles.error}>{error}</Text> : null}
     </ScrollView>
   );
 }
 
-interface DestinationRowProps {
+interface DestinationCardProps {
   label: string;
-  meta: string;
-  disabled?: boolean;
-  showChevron?: boolean;
-  onPress?: () => void;
+  detail: string;
+  countLabel: string;
+  disabled: boolean;
+  busy: boolean;
+  onPress: () => void;
 }
 
-function DestinationRow({
+function DestinationCard({
   label,
-  meta,
-  disabled = false,
-  showChevron = false,
+  detail,
+  countLabel,
+  disabled,
+  busy,
   onPress,
-}: DestinationRowProps) {
-  const body = (
-    <>
-      <View style={styles.rowCopy}>
-        <Text style={[styles.rowLabel, disabled && styles.rowLabelDisabled]}>{label}</Text>
-        <Text style={styles.rowMeta}>{meta}</Text>
-      </View>
-      {showChevron && !disabled ? (
-        <Ionicons color={colors.muted} name="chevron-forward" size={20} />
-      ) : null}
-    </>
-  );
-
-  if (disabled || !onPress) {
-    return (
-      <View
-        accessibilityLabel={`${label}, ${meta}`}
-        accessibilityState={disabled ? { disabled: true } : undefined}
-        style={[styles.row, disabled && styles.rowDisabled]}
-      >
-        {body}
-      </View>
-    );
-  }
-
+}: DestinationCardProps) {
   return (
     <Pressable
-      accessibilityLabel={`${label}, ${meta}`}
+      accessibilityLabel={`${label}, ${detail}, ${countLabel}`}
       accessibilityRole="button"
+      accessibilityState={{ disabled, busy }}
+      disabled={disabled}
       onPress={onPress}
-      style={styles.row}
+      style={[styles.row, disabled && styles.rowDisabled]}
     >
-      {body}
+      <View style={styles.mark}>
+        {busy ? (
+          <ActivityIndicator color={colors.accentText} />
+        ) : (
+          <Ionicons color={colors.accentText} name="share-outline" size={18} />
+        )}
+      </View>
+      <View style={styles.rowCopy}>
+        <Text style={styles.rowLabel}>{label}</Text>
+        <Text style={styles.rowMeta}>{detail}</Text>
+        <Text style={styles.rowCount}>{countLabel}</Text>
+      </View>
     </Pressable>
   );
 }
@@ -143,25 +236,33 @@ const styles = StyleSheet.create({
     paddingBottom: 48,
     gap: space.md,
   },
-  title: { color: colors.text, fontSize: 22, fontWeight: "800" },
+  title: { color: colors.text, fontSize: 22, fontWeight: "800", letterSpacing: -0.4 },
   constraint: { color: colors.muted, fontSize: 15, lineHeight: 22 },
   list: { gap: space.sm },
-  sectionTitle: { color: colors.text, fontSize: 16, fontWeight: "800" },
   row: {
     backgroundColor: colors.card,
     borderColor: colors.cardBorder,
-    borderWidth: 1,
-    borderRadius: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: radii.lg,
     paddingHorizontal: space.md,
     paddingVertical: space.md,
     flexDirection: "row",
     alignItems: "center",
-    gap: space.sm,
+    gap: space.md,
   },
   rowDisabled: { opacity: 0.55 },
+  mark: {
+    width: 40,
+    height: 40,
+    borderRadius: radii.pill,
+    backgroundColor: colors.accent,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   rowCopy: { flex: 1, gap: 2 },
-  error: { color: colors.danger, fontSize: 14 },
-  rowLabel: { color: colors.text, fontSize: 16, fontWeight: "700" },
-  rowLabelDisabled: { color: colors.muted },
+  rowLabel: { color: colors.text, fontSize: 17, fontWeight: "800", letterSpacing: -0.2 },
   rowMeta: { color: colors.muted, fontSize: 13, lineHeight: 18 },
+  rowCount: { color: colors.text, fontSize: 13, fontWeight: "700", marginTop: 4 },
+  notice: { color: colors.text, fontSize: 14, lineHeight: 20 },
+  error: { color: colors.danger, fontSize: 14 },
 });

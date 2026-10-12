@@ -37,6 +37,8 @@ export interface CardFlowHealth {
   recognition: HealthRecognition;
   pricingProvider: HealthPricingProvider;
   livestreamIdentify: HealthLivestreamIdentify;
+  /** True when the API loaded YOLO for livestream frames. Requires the AGPL flag and a local weights file. */
+  liveVideoYolo: boolean;
   /** Preferred livestream visual path. Never a token or sidecar URL. */
   liveIdentityVisual: HealthLiveIdentityVisual;
   gradeEstimate: HealthGradeEstimate;

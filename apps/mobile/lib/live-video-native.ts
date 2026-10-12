@@ -15,6 +15,7 @@ interface CardFlowLiveVideoNative {
   pullSampleBuffer?: () => Promise<unknown>;
   setScannerSession?: (active: boolean) => Promise<void>;
   setPlaybackUrl?: (url: string | null) => Promise<void>;
+  setYoloDetect?: (active: boolean) => Promise<void>;
 }
 
 function nativeModule(): CardFlowLiveVideoNative | null {
@@ -73,6 +74,16 @@ export async function setLiveVideoScannerSession(active: boolean): Promise<void>
   }
 }
 
+export async function setLiveVideoYoloDetect(active: boolean): Promise<void> {
+  const native = nativeModule();
+  if (!native?.setYoloDetect) return;
+  try {
+    await native.setYoloDetect(active);
+  } catch {
+    /* native build without the YOLO hook */
+  }
+}
+
 export async function setLiveVideoPlaybackUrl(url: string | null): Promise<void> {
   const native = nativeModule();
   if (!native?.setPlaybackUrl) return;
@@ -99,6 +110,7 @@ export async function pullLiveVideoSampleBuffer(): Promise<LiveVideoFrame | null
       identityHash: identityHashFromRgb(frame.identityRgb),
       identityCropJpeg:
         typeof frame.identityCropJpeg === "string" ? frame.identityCropJpeg : null,
+      videoFrameJpeg: typeof frame.videoFrameJpeg === "string" ? frame.videoFrameJpeg : null,
     };
   } catch {
     return null;

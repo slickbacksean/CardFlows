@@ -1,14 +1,16 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
+  PREGRADE_COPY,
   PREGRADE_DISCLAIMER,
   PREGRADE_LABEL,
+  pregradeCopyViolations,
   PREGRADE_SURFACE_NULL_REASON,
   type DetectCropResult,
   type PhotoPregradeResult,
 } from "@cardflow/shared";
 import { createApp } from "./app";
-import { mapGradeCardReport } from "./cardgrading-map";
+import { mapDetectReport, mapGradeCardReport, NOTHING_MEASURED_REASON } from "./cardgrading-map";
 import {
   cardgradingChildEnv,
   CARDGRADING_BLANKED_KEYS,
@@ -88,9 +90,27 @@ describe("cardgrading mapper (GitHub contract)", () => {
       status: "retake",
       code: "PHOTO_RETAKE",
       side: "back",
-      reasons: ["Camera angle too tilted"],
+      reasons: [PREGRADE_COPY.tilted],
     });
     expect("estimate" in mapped).toBe(false);
+  });
+
+  it("never shows 0.0 (grade_card's 'nothing measurable') as a grade", () => {
+    const mapped = mapGradeCardReport({
+      ...successReport,
+      grade_estimate: { ...(successReport.grade_estimate as Record<string, unknown>), overall_grade: 0 },
+    });
+    expect(mapped).toMatchObject({ ok: false, status: "retake", reasons: [NOTHING_MEASURED_REASON] });
+    expect("estimate" in mapped).toBe(false);
+  });
+
+  it("reports an undecodable photo as unreadable, not as card not found", () => {
+    const mapped = mapDetectReport(
+      { ok: false, has_crop: false, gates: [{ name: "card_detection", passed: false, detail: "could not decode image", hard: true }] },
+      "front",
+      null,
+    );
+    expect(mapped).toMatchObject({ ok: false, status: "retake", reasons: ["Couldn't read the photo"] });
   });
 
   it("is a retake when both the grade and centering are null", () => {
@@ -105,7 +125,101 @@ describe("cardgrading mapper (GitHub contract)", () => {
     expect(mapped.ok).toBe(true);
     if (!mapped.ok) return;
     expect(mapped.estimate).toBe(8.4);
-    expect(mapped.warning).toBe("Front: Glare detected");
+    expect(mapped.warning).toBe("Front: Glare on the card.");
+  });
+
+  it("plain-words notes: surface not assessed from one photo, size not checked, no jargon", () => {
+    const mapped = mapGradeCardReport(successReport);
+    expect(mapped.ok).toBe(true);
+    if (!mapped.ok) return;
+    expect(mapped.subgrades.surface.reason).toBe("Surface not assessed from a single photo.");
+    expect(mapped.note).toBe("Surface isn't part of this estimate. Card size isn't checked from photos.");
+    expect(mapped.angled).toEqual({ provided: 0, used: 0, status: "not_provided" });
+    const text = JSON.stringify(mapped);
+    expect(text).not.toMatch(/dpi|relief|single-image|psa|tag|cgc/i);
+    expect(pregradeCopyViolations(text)).toEqual([]);
+  });
+
+  it("is a retake 'Photo is blurry' on the sharpness gate, and 'move closer' on capture scale", () => {
+    const blurry = mapGradeCardReport(
+      withGate(successReport, "front", { name: "sharpness", passed: false, hard: true, detail: "laplacian variance=45.8" }),
+    );
+    expect(blurry).toMatchObject({ ok: false, status: "retake", side: "front", reasons: [PREGRADE_COPY.blurry] });
+    const far = mapGradeCardReport(
+      withGate(successReport, "back", { name: "capture_scale", passed: false, hard: true, detail: "effective dpi=220" }),
+    );
+    expect(far).toMatchObject({ ok: false, status: "retake", side: "back", reasons: [PREGRADE_COPY.tooFar] });
+    const small = mapGradeCardReport(
+      withGate(successReport, "back", { name: "capture_scale_low", passed: false, hard: false }),
+    );
+    expect(small).toMatchObject({ ok: true, warning: "Back: Card is small in the photo." });
+  });
+
+  it("never shows a library detail string for an unknown hard gate", () => {
+    const mapped = mapGradeCardReport(
+      withGate(successReport, "front", { name: "mystery", passed: false, hard: true, detail: "max corner angle deviation=3.1 deg" }),
+    );
+    expect(mapped).toMatchObject({ ok: false, reasons: [PREGRADE_COPY.unusable] });
+  });
+
+  it("grades surface only when the adapter accepted the raking-light photos", () => {
+    const withSurface = {
+      ...successReport,
+      subgrades: {
+        front: { ...(successReport.subgrades as { front: object }).front, surface: 7 },
+        back: (successReport.subgrades as { back: object }).back,
+      },
+    };
+    const notAccepted = mapGradeCardReport({
+      ...withSurface,
+      cardflow: { angled: { provided: 4, used: 4, status: "no_light_change" } },
+    });
+    expect(notAccepted.ok && notAccepted.subgrades.surface).toMatchObject({
+      points: null,
+      front: null,
+      reason: PREGRADE_COPY.surfaceAngledNoLight,
+    });
+    const accepted = mapGradeCardReport({
+      ...withSurface,
+      cardflow: {
+        angled: { provided: 4, used: 4, status: "graded" },
+        capture: { front: { sharpness: 240.5, effective_dpi: 810.2 }, back: { sharpness: 210, effective_dpi: 790 } },
+      },
+    });
+    expect(accepted.ok).toBe(true);
+    if (!accepted.ok) return;
+    expect(accepted.subgrades.surface).toEqual({
+      points: 70,
+      front: 7,
+      back: null,
+      reason: PREGRADE_COPY.surfaceNotAssessedBack,
+    });
+    expect(accepted.note).toContain(PREGRADE_COPY.surfaceIncludedNote);
+    expect(accepted.capture).toEqual({
+      front: { sharpness: 240.5, effectiveDpi: 810.2 },
+      back: { sharpness: 210, effectiveDpi: 790 },
+    });
+  });
+
+  it("detect: a blurry photo is a retake with its measurements attached", () => {
+    const mapped = mapDetectReport(
+      {
+        ok: false,
+        gates: [
+          { name: "card_detection", passed: true, hard: true },
+          { name: "sharpness", passed: false, hard: true, detail: "laplacian variance=20.2" },
+        ],
+        cardflow_capture: { sharpness: 20.2, effective_dpi: 553.3 },
+      },
+      "front",
+      Buffer.from([0xff, 0xd8, 0xff, 0xd9]),
+    );
+    expect(mapped).toMatchObject({
+      ok: false,
+      status: "retake",
+      reasons: [PREGRADE_COPY.blurry],
+      capture: { sharpness: 20.2, effectiveDpi: 553.3 },
+    });
   });
 });
 
@@ -156,7 +270,7 @@ describe("grade photo flow", () => {
     const res = await found.request("/v1/grade/detect", { method: "POST", body: form });
     expect(res.status).toBe(200);
     const body = (await res.json()) as DetectCropResult;
-    expect(body).toMatchObject({ ok: true, status: "found", side: "back", warnings: ["Uneven lighting"] });
+    expect(body).toMatchObject({ ok: true, status: "found", side: "back", warnings: [PREGRADE_COPY.unevenLight] });
     if (body.ok) expect(body.crop.mimeType).toBe("image/jpeg");
 
     const miss = createApp(undefined, {
@@ -176,7 +290,7 @@ describe("grade photo flow", () => {
     });
   });
 
-  it("pregrades both original photos and labels it a pre-grade, not a cert", async () => {
+  it("pregrades both original photos and labels it a pre-grade estimate, not a cert", async () => {
     const runner = fakeRunner(successReport);
     const app = createApp(undefined, { cardgrading: runner });
     const form = new FormData();
@@ -218,7 +332,7 @@ describe("grade photo flow", () => {
       fakeRunner(withGate(successReport, "front", { name: "aspect_ratio", passed: false, hard: true })),
     ).estimateGrade({ frontImage: img, backImage: img });
     expect(retake.overall).toBeNull();
-    expect(retake.display).toContain("Unexpected aspect ratio");
+    expect(retake.display).toContain(PREGRADE_COPY.shapeOff);
 
     const needsBack = await createCardgradingProvider(fakeRunner(successReport)).estimateGrade({
       frontImage: img,

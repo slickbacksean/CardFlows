@@ -1,10 +1,15 @@
+import { spawn } from "node:child_process";
 import { describe, expect, it } from "vitest";
-import type { CardCatalogProvider, TcgdexCard } from "@cardflow/shared";
+import type { CardCatalogProvider, RgbBitmap, TcgdexCard } from "@cardflow/shared";
 import {
+  bitmapForOcr,
   cardNameCandidatesFromOcr,
+  OCR_MAX_EDGE_PX,
+  parseVisionOcrLine,
   printedCollectorNumberFromOcr,
   recognitionFromNamedPrint,
   tcgdexIdFromPrintedOcr,
+  VisionOcrSession,
 } from "./scan-card-name";
 
 const GWYNN_TEXT = ["SUPPORTER", "Gwynn", "Discard up to 2 cards", "078/084"].join("\n");
@@ -86,5 +91,46 @@ describe("card name OCR", () => {
     expect(result.detections[0]?.confidence).toBe("High");
     expect(result.detections[0]?.vendorCardId).toBe("me05-009");
     expect(result.detections[0]?.fields).toContainEqual({ key: "tcgdex_id", value: "me05-009" });
+  });
+
+  it("shrinks a large crop for OCR and leaves a small one alone", () => {
+    const wide: RgbBitmap = { width: 3200, height: 800, data: new Uint8Array(3200 * 800 * 3) };
+    const shrunk = bitmapForOcr(wide);
+    expect(Math.max(shrunk.width, shrunk.height)).toBe(OCR_MAX_EDGE_PX);
+    expect(shrunk.width).toBeLessThan(wide.width);
+    const small: RgbBitmap = { width: 400, height: 560, data: new Uint8Array(400 * 560 * 3) };
+    expect(bitmapForOcr(small)).toBe(small);
+  });
+
+  it("reads a Vision JSON line", () => {
+    expect(parseVisionOcrLine(JSON.stringify({ text: "Pikachu\n078/084" }))).toBe("Pikachu\n078/084");
+    expect(parseVisionOcrLine("not-json")).toBe("");
+  });
+});
+
+describe("persistent Vision OCR", () => {
+  it("reuses one process for two crops", async () => {
+    let spawns = 0;
+    const script = [
+      'let buf = "";',
+      'process.stdin.setEncoding("utf8");',
+      'process.stdin.on("data", (chunk) => {',
+      "  buf += chunk;",
+      "  let nl;",
+      '  while ((nl = buf.indexOf("\\n")) >= 0) {',
+      "    buf = buf.slice(nl + 1);",
+      '    process.stdout.write(JSON.stringify({ text: "Pikachu\\n078/084" }) + "\\n");',
+      "  }",
+      "});",
+    ].join("\n");
+    const session = new VisionOcrSession("ocr", () => {
+      spawns += 1;
+      return spawn(process.execPath, ["-e", script], { stdio: ["pipe", "pipe", "pipe"] });
+    });
+    const png = Uint8Array.from(Array(40).fill(1));
+    await expect(session.recognize(png)).resolves.toBe("Pikachu\n078/084");
+    await expect(session.recognize(png)).resolves.toBe("Pikachu\n078/084");
+    expect(spawns).toBe(1);
+    session.stop();
   });
 });

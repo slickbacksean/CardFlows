@@ -23,7 +23,12 @@ const THRESHOLDS = path.join(CARDGRADING_VENDOR_DIR, "calibration", "thresholds.
 const LOCAL_VENV_PYTHON = path.join(API_ROOT, ".venv", "bin", "python");
 
 export const GRADE_CARD_TIMEOUT_MS = 120_000;
-export const DETECT_CARD_TIMEOUT_MS = 30_000;
+/** 3-4 extra raking-light front photos: one detect each plus the photometric solve. */
+export const GRADE_CARD_ANGLED_TIMEOUT_MS = 240_000;
+export const GRADE_ANGLED_MAX_SHOTS = 4;
+// One 12 MP detect measured 3-19 s on this Mac (worse with two in flight);
+// 30 s timed out once on 2026-10-05. Stay under the phone's 45 s budget.
+export const DETECT_CARD_TIMEOUT_MS = 40_000;
 
 /** Keys the child must never see, even if the API process has them. */
 export const CARDGRADING_BLANKED_KEYS = [
@@ -42,6 +47,8 @@ export interface GradeCardPhotoInput {
   backBytes: Uint8Array;
   frontExt: string;
   backExt: string;
+  /** Optional raking-light front photos (card turned a quarter-turn each). */
+  angledFront?: Array<{ bytes: Uint8Array; ext: string }>;
 }
 
 export interface DetectCropPhotoInput {
@@ -310,6 +317,13 @@ function createUngatedRunner(python: string): CardgradingRunner {
         const backPath = path.join(root, `back${input.backExt}`);
         await writeFile(frontPath, input.frontBytes);
         await writeFile(backPath, input.backBytes);
+        const angled = (input.angledFront ?? []).slice(0, GRADE_ANGLED_MAX_SHOTS);
+        const angledPaths: string[] = [];
+        for (const [index, shot] of angled.entries()) {
+          const shotPath = path.join(root, `angled-${index}${shot.ext}`);
+          await writeFile(shotPath, shot.bytes);
+          angledPaths.push(shotPath);
+        }
         return await runAdapter(
           python,
           [
@@ -322,8 +336,9 @@ function createUngatedRunner(python: string): CardgradingRunner {
             path.join(root, "output"),
             "--thresholds",
             THRESHOLDS,
+            ...(angledPaths.length > 0 ? ["--angled-front", ...angledPaths] : []),
           ],
-          GRADE_CARD_TIMEOUT_MS,
+          angledPaths.length > 0 ? GRADE_CARD_ANGLED_TIMEOUT_MS : GRADE_CARD_TIMEOUT_MS,
           "Vendored grade_card",
         );
       } finally {

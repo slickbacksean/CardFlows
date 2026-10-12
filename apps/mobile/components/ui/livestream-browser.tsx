@@ -1,4 +1,9 @@
-import { LIVE_HLS_REPORT_SCRIPT, liveHlsUrlFromWebMessage } from "@cardflow/shared";
+import {
+  LIVE_HLS_REPORT_SCRIPT,
+  allowLivestreamNavigation,
+  liveHlsUrlFromWebMessage,
+  livestreamWebViewUserAgent,
+} from "@cardflow/shared";
 import { useEffect, useImperativeHandle, useRef, useState, forwardRef } from "react";
 import { Platform, StyleSheet, View } from "react-native";
 import { WebView, type WebViewMessageEvent, type WebViewNavigation } from "react-native-webview";
@@ -50,7 +55,6 @@ export const LivestreamBrowser = forwardRef<LivestreamBrowserHandle, LivestreamB
       canGoForward: false,
       pageOn: false,
     });
-
     if (!visible && (pageState.pageOn || pageState.canGoBack || pageState.canGoForward)) {
       setPageState({ canGoBack: false, canGoForward: false, pageOn: false });
     }
@@ -115,18 +119,27 @@ export const LivestreamBrowser = forwardRef<LivestreamBrowserHandle, LivestreamB
       });
     }
 
+    function onShouldStartLoad(requestUrl: string): boolean {
+      return allowLivestreamNavigation(requestUrl);
+    }
+
     if (!visible) {
       return <View accessibilityLabel={liveRegionLabel} style={styles.host} />;
     }
 
     if (useFallback) {
+      const pageUserAgent = livestreamWebViewUserAgent(url);
       return (
         <View accessibilityLabel={liveRegionLabel} style={styles.host}>
           <WebView
             allowsBackForwardNavigationGestures
             allowsFullscreenVideo
             allowsInlineMediaPlayback
-            applicationNameForUserAgent="Version/17.2 Mobile/15E148 Safari/604.1"
+            androidLayerType="hardware"
+            applicationNameForUserAgent={
+              pageUserAgent ? undefined : "Version/17.2 Mobile/15E148 Safari/604.1"
+            }
+            domStorageEnabled
             injectedJavaScriptBeforeContentLoaded={LIVE_HLS_REPORT_SCRIPT}
             javaScriptEnabled
             key={`${url}-${reloadKey}`}
@@ -138,6 +151,7 @@ export const LivestreamBrowser = forwardRef<LivestreamBrowserHandle, LivestreamB
               setPageState((current) => ({ ...current, pageOn: true }));
             }}
             onNavigationStateChange={onNavigationStateChange}
+            onShouldStartLoadWithRequest={(request) => onShouldStartLoad(request.url)}
             originWhitelist={["*"]}
             ref={webViewRef}
             setSupportMultipleWindows={false}
@@ -145,10 +159,12 @@ export const LivestreamBrowser = forwardRef<LivestreamBrowserHandle, LivestreamB
             source={{ uri: url }}
             startInLoadingState
             style={styles.webView}
+            thirdPartyCookiesEnabled
             userAgent={
-              Platform.OS === "ios"
+              pageUserAgent ??
+              (Platform.OS === "ios"
                 ? "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1"
-                : undefined
+                : undefined)
             }
           />
         </View>

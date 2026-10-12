@@ -3,10 +3,12 @@
  * (vendored at apps/api/vendor/cardgrading). Mirrors the GitHub
  * packages/api photo-pregrade-mapper body. No model call is on this path.
  */
-export const PREGRADE_LABEL = "Pre-grade estimate" as const;
-export const PREGRADE_DISCLAIMER = "Estimate only. Not an official grade." as const;
+import { PREGRADE_COPY, PREGRADE_DISCLAIMER_TEXT, PREGRADE_TITLE } from "./pregrade-copy";
+
+export const PREGRADE_LABEL = PREGRADE_TITLE;
+export const PREGRADE_DISCLAIMER = PREGRADE_DISCLAIMER_TEXT;
 export const PHOTO_PREGRADE_SOURCE = "cardgrading-photo" as const;
-export const PREGRADE_SURFACE_NULL_REASON = "single-image relief is not graded" as const;
+export const PREGRADE_SURFACE_NULL_REASON = PREGRADE_COPY.surfaceNotAssessed;
 export const PREGRADE_UNAVAILABLE_MESSAGE = "Photo scoring is unavailable." as const;
 export const PREGRADE_DETECT_UNAVAILABLE_MESSAGE = "Card detection is not available." as const;
 
@@ -38,6 +40,31 @@ export interface PhotoPregradeSuccess {
   subgrades: PhotoPregradeSubgrades;
   note: string;
   warning?: string;
+  /** Per-side capture measurements (sharpness, effective DPI). Diagnostics only. */
+  capture?: Partial<Record<PhotoPregradeSide, PhotoCaptureMetrics>>;
+  /** What happened to the optional raking-light front photos. */
+  angled?: PhotoPregradeAngled;
+}
+
+/** Measured on the card in one photo. Never a grade input on its own. */
+export interface PhotoCaptureMetrics {
+  /** Laplacian variance of the card face at a fixed 750x1050 size. */
+  sharpness: number | null;
+  /** Capture pixels per inch across the card, from its known 63 x 88 mm size. */
+  effectiveDpi: number | null;
+}
+
+export type PhotoPregradeAngledStatus =
+  | "not_provided"
+  | "graded"
+  | "rejected"
+  | "no_light_change"
+  | "solve_failed";
+
+export interface PhotoPregradeAngled {
+  provided: number;
+  used: number;
+  status: PhotoPregradeAngledStatus;
 }
 
 /** Hard gate (card not found, tilt, aspect) or no grade. Never a number. */
@@ -74,6 +101,7 @@ export interface DetectCropSuccess {
   crop: DetectedCardCrop;
   /** Soft gates (glare, lighting, resolution). The photo can still be graded. */
   warnings: string[];
+  capture?: PhotoCaptureMetrics;
 }
 
 export interface DetectCropRetake {
@@ -83,6 +111,7 @@ export interface DetectCropRetake {
   side: PhotoPregradeSide;
   reasons: string[];
   crop?: DetectedCardCrop;
+  capture?: PhotoCaptureMetrics;
 }
 
 export interface DetectCropUnavailable {

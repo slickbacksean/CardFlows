@@ -93,13 +93,34 @@ export const LIVE_HLS_REPORT_SCRIPT = `(function () {
       });
     }
   }
+  function playlistInText(raw) {
+    if (!raw) return;
+    var text = String(raw);
+    if (text.length > 400000) text = text.slice(0, 400000);
+    text = text.replace(/\\\//g, "/").replace(/\\u0026/g, "&");
+    var match = text.match(/https:\/\/[^\s"'<>]+\.m3u8[^\s"'<>]*/i);
+    if (match) report(match[0]);
+  }
+  function watchResponse(response) {
+    if (!response) return;
+    try { report(response.url); } catch (e) {}
+    var type = "";
+    try { type = String(response.headers && response.headers.get && response.headers.get("content-type") || "").toLowerCase(); } catch (e) {}
+    if (type.indexOf("json") === -1 && type.indexOf("text") === -1 && type.indexOf("mpegurl") === -1) return;
+    if (!response.clone) return;
+    response.clone().text().then(playlistInText).catch(function () {});
+  }
   if (window.fetch) {
     var origFetch = window.fetch;
     window.fetch = function (input, init) {
       try {
         report(typeof input === "string" ? input : input && input.url);
       } catch (e) {}
-      return origFetch.apply(this, arguments);
+      var pending = origFetch.apply(this, arguments);
+      if (pending && pending.then) {
+        pending.then(watchResponse).catch(function () {});
+      }
+      return pending;
     };
   }
   var xhrOpen = XMLHttpRequest.prototype.open;
@@ -107,6 +128,13 @@ export const LIVE_HLS_REPORT_SCRIPT = `(function () {
     try {
       report(url);
     } catch (e) {}
+    this.addEventListener("load", function () {
+      try { report(this.responseURL); } catch (e) {}
+      var type = "";
+      try { type = String(this.getResponseHeader("content-type") || "").toLowerCase(); } catch (e) {}
+      if (type.indexOf("json") === -1 && type.indexOf("text") === -1 && type.indexOf("mpegurl") === -1) return;
+      try { playlistInText(this.responseText); } catch (e) {}
+    });
     return xhrOpen.apply(this, arguments);
   };
   function scan() {

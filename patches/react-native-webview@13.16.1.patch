@@ -1,0 +1,181 @@
+diff --git a/android/src/main/java/com/reactnativecommunity/webview/ChromeClientHints.kt b/android/src/main/java/com/reactnativecommunity/webview/ChromeClientHints.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..85b248f82630ece6ddce50b064ce7b5309053d99
+--- /dev/null
++++ b/android/src/main/java/com/reactnativecommunity/webview/ChromeClientHints.kt
+@@ -0,0 +1,114 @@
++package com.reactnativecommunity.webview
++
++import android.net.Uri
++import android.util.Log
++import android.webkit.WebSettings
++import android.webkit.WebView
++import androidx.webkit.UserAgentMetadata
++import androidx.webkit.WebSettingsCompat
++import androidx.webkit.WebViewFeature
++
++/**
++ * Google Sign-In rejects an Android WebView when client hints still say "Android WebView",
++ * and it also rejects a desktop Chrome identity that does not match this WebView.
++ * Whatnot keeps the configured desktop user agent. Google sign-in uses Chrome 145,
++ * the same major version as the system WebView on the emulator.
++ */
++object ChromeClientHints {
++    private const val TAG = "CardFlowUA"
++    private const val GOOGLE_USER_AGENT =
++        "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Mobile Safari/537.36"
++
++    private var savedUserAgent: String? = null
++
++    fun prepareForNavigation(view: WebView, url: String): Boolean {
++        val settings = view.settings
++        val current = settings.userAgentString
++        if (isGoogleSignIn(url)) {
++            if (current == GOOGLE_USER_AGENT) {
++                apply(settings, GOOGLE_USER_AGENT)
++                return false
++            }
++            savedUserAgent = current
++            settings.userAgentString = GOOGLE_USER_AGENT
++            apply(settings, GOOGLE_USER_AGENT)
++            Log.i(TAG, "using Chrome 145 for Google sign-in")
++            return true
++        }
++        val saved = savedUserAgent
++        if (saved != null && current != saved) {
++            settings.userAgentString = saved
++            apply(settings, saved)
++            savedUserAgent = null
++            Log.i(TAG, "restored the livestream page user agent")
++            return true
++        }
++        return false
++    }
++
++    fun apply(settings: WebSettings, userAgent: String?) {
++        if (WebViewFeature.isFeatureSupported(WebViewFeature.REQUESTED_WITH_HEADER_ALLOW_LIST)) {
++            WebSettingsCompat.setRequestedWithHeaderOriginAllowList(settings, emptySet())
++        }
++        if (userAgent.isNullOrEmpty() || !userAgent.contains("Chrome/") || userAgent.contains("; wv")) {
++            Log.i(TAG, "left client hints unchanged")
++            return
++        }
++        if (!WebViewFeature.isFeatureSupported(WebViewFeature.USER_AGENT_METADATA)) {
++            Log.i(TAG, "client hints override is unavailable")
++            return
++        }
++        val match = Regex("""Chrome/(\d+)(?:\.(\d+)\.(\d+)\.(\d+))?""").find(userAgent)
++        var major = "145"
++        var full = "145.0.7632.218"
++        if (match != null) {
++            major = match.groupValues[1]
++            full = when {
++                major == "145" -> "145.0.7632.218"
++                major == "155" -> "155.0.8059.40"
++                match.groupValues[2].isNotEmpty() ->
++                    "${match.groupValues[1]}.${match.groupValues[2]}.${match.groupValues[3]}.${match.groupValues[4]}"
++                else -> "$major.0.0.0"
++            }
++        }
++        val mobile = userAgent.contains("Mobile")
++        val platform = when {
++            userAgent.contains("Macintosh") -> "macOS"
++            userAgent.contains("Windows") -> "Windows"
++            else -> "Android"
++        }
++        val platformVersion = when (platform) {
++            "macOS" -> "15.6.0"
++            "Windows" -> "15.0.0"
++            else -> "14.0.0"
++        }
++        val model = if (platform == "Android") "Pixel 8" else ""
++        val brands = listOf(
++            UserAgentMetadata.BrandVersion.Builder().setBrand("Chromium").setMajorVersion(major).setFullVersion(full).build(),
++            UserAgentMetadata.BrandVersion.Builder().setBrand("Google Chrome").setMajorVersion(major).setFullVersion(full).build(),
++            UserAgentMetadata.BrandVersion.Builder().setBrand("Not-A.Brand").setMajorVersion("24").setFullVersion("24.0.0.0").build()
++        )
++        WebSettingsCompat.setUserAgentMetadata(
++            settings,
++            UserAgentMetadata.Builder()
++                .setBrandVersionList(brands)
++                .setFullVersion(full)
++                .setPlatform(platform)
++                .setPlatformVersion(platformVersion)
++                .setArchitecture("arm")
++                .setModel(model)
++                .setMobile(mobile)
++                .setBitness(64)
++                .setWow64(false)
++                .build()
++        )
++        Log.i(TAG, "client hints $platform Chrome/$full mobile=$mobile")
++    }
++
++    private fun isGoogleSignIn(url: String): Boolean {
++        val host = Uri.parse(url).host?.lowercase() ?: return false
++        return host == "accounts.google.com" ||
++            host.endsWith(".accounts.google.com") ||
++            host == "accounts.youtube.com"
++    }
++}
+diff --git a/android/src/main/java/com/reactnativecommunity/webview/RNCWebViewClient.java b/android/src/main/java/com/reactnativecommunity/webview/RNCWebViewClient.java
+index 0287e1c56b07b6c23b4049f3992d88b86fdc5c79..c4fbee938b3b588c341a9c35e2548f499b12a07f 100644
+--- a/android/src/main/java/com/reactnativecommunity/webview/RNCWebViewClient.java
++++ b/android/src/main/java/com/reactnativecommunity/webview/RNCWebViewClient.java
+@@ -92,6 +92,10 @@ public class RNCWebViewClient extends WebViewClient {
+ 
+     @Override
+     public boolean shouldOverrideUrlLoading(WebView view, String url) {
++        if (ChromeClientHints.INSTANCE.prepareForNavigation(view, url)) {
++            view.loadUrl(url);
++            return true;
++        }
+         final RNCWebView rncWebView = (RNCWebView) view;
+         final boolean isJsDebugging = rncWebView.getReactApplicationContext().getJavaScriptContextHolder().get() == 0;
+ 
+@@ -146,6 +150,17 @@ public class RNCWebViewClient extends WebViewClient {
+         return this.shouldOverrideUrlLoading(view, url);
+     }
+ 
++    @Override
++    public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
++        if (request != null && request.isForMainFrame()) {
++            String host = request.getUrl().getHost();
++            if (host != null && (host.contains("google.") || host.contains("whatnot."))) {
++                Log.i("CardFlowUA", "main " + request.getUrl() + " headers " + request.getRequestHeaders());
++            }
++        }
++        return super.shouldInterceptRequest(view, request);
++    }
++
+     @Override
+     public void onReceivedHttpAuthRequest(WebView view, HttpAuthHandler handler, String host, String realm) {
+         if (basicAuthCredential != null) {
+diff --git a/android/src/main/java/com/reactnativecommunity/webview/RNCWebViewManagerImpl.kt b/android/src/main/java/com/reactnativecommunity/webview/RNCWebViewManagerImpl.kt
+index f83033b3597a425da159555233bacce250ccfce0..6b0d1ae0387786d9fe387db58701ea3c97891e94 100644
+--- a/android/src/main/java/com/reactnativecommunity/webview/RNCWebViewManagerImpl.kt
++++ b/android/src/main/java/com/reactnativecommunity/webview/RNCWebViewManagerImpl.kt
+@@ -243,17 +243,13 @@ class RNCWebViewManagerImpl(private val newArch: Boolean = false) {
+ 
+     private fun setUserAgentString(viewWrapper: RNCWebViewWrapper) {
+         val view = viewWrapper.webView
+-        when {
+-            mUserAgent != null -> {
+-                view.settings.userAgentString = mUserAgent
+-            }
+-            mUserAgentWithApplicationName != null -> {
+-                view.settings.userAgentString = mUserAgentWithApplicationName
+-            }
+-            else -> {
+-                view.settings.userAgentString = WebSettings.getDefaultUserAgent(view.context)
+-            }
++        val userAgent = when {
++            mUserAgent != null -> mUserAgent
++            mUserAgentWithApplicationName != null -> mUserAgentWithApplicationName
++            else -> WebSettings.getDefaultUserAgent(view.context)
+         }
++        view.settings.userAgentString = userAgent
++        ChromeClientHints.apply(view.settings, userAgent)
+     }
+ 
+     fun setBasicAuthCredential(viewWrapper: RNCWebViewWrapper, credential: ReadableMap?) {

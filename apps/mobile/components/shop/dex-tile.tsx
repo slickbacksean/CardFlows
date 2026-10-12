@@ -59,12 +59,13 @@ const styles = StyleSheet.create({
     width: "100%",
     aspectRatio: 0.72,
     borderRadius: 12,
-    backgroundColor: "#E4E4EA",
+    backgroundColor: shopColors.chip,
   },
   name: {
     color: shopColors.text,
-    fontSize: 15,
-    fontWeight: "800",
+    fontSize: 13,
+    fontWeight: "700",
+    letterSpacing: -0.2,
     textAlign: "center",
   },
   number: {

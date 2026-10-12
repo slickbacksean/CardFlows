@@ -116,10 +116,10 @@ const styles = StyleSheet.create({
     padding: shopSpace.lg,
   },
   retry: {
-    backgroundColor: shopColors.text,
-    borderRadius: 14,
+    backgroundColor: shopColors.blue,
+    borderRadius: 999,
     paddingHorizontal: shopSpace.md,
     paddingVertical: shopSpace.sm,
   },
-  retryLabel: { color: "#FFFFFF", fontWeight: "800" },
+  retryLabel: { color: shopColors.onAccent, fontWeight: "800" },
 });

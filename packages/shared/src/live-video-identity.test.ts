@@ -131,8 +131,8 @@ describe("combined YOLO + card-identity on live video", () => {
           frame: mockLiveVideoFrame("base1-58"),
           classifier: "yolo_identity",
         }),
-      ]).reason,
-    ).toBe("unidentified");
+      ]).tcgdexId,
+    ).toBe("base1-58");
     expect(
       stabilizeLiveIdentity([
         identifyLiveVideo({

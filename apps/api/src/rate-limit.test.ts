@@ -39,7 +39,7 @@ describe("grading rate limit", () => {
 
   it("refuses an oversized grading body before parsing it", async () => {
     const app = createApp(createMemoryStore(), { devAutoSession: true, gradeRateLimit: null });
-    const big = new Uint8Array(23 * 1024 * 1024);
+    const big = new Uint8Array(32 * 1024 * 1024);
     const response = await app.request("/v1/grade/pregrade", {
       method: "POST",
       body: big,
@@ -148,13 +148,13 @@ describe("hardening from the #30 review", () => {
 
   it("derives the 413 copy from the real request cap", async () => {
     const app = createApp(createMemoryStore(), { devAutoSession: true });
-    const big = new Uint8Array(23 * 1024 * 1024);
+    const big = new Uint8Array(32 * 1024 * 1024);
     const response = await app.request("/v1/grade/pregrade", {
       method: "POST",
       body: big,
       headers: { "content-type": "multipart/form-data; boundary=x", "content-length": String(big.byteLength) },
     });
     expect(response.status).toBe(413);
-    expect(((await response.json()) as { error: string }).error).toBe("Upload must be 22 MB or smaller");
+    expect(((await response.json()) as { error: string }).error).toBe("Upload must be 31 MB or smaller");
   });
 });

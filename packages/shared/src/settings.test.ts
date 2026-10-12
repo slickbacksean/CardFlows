@@ -95,6 +95,7 @@ describe("Settings stack labels", () => {
     recognition: "obb_phash",
     pricingProvider: "pokecollector",
     livestreamIdentify: "yolo_identity",
+    liveVideoYolo: false,
     liveIdentityVisual: "openclip",
     gradeEstimate: "cardgrading",
     slabPricing: "poketrace",

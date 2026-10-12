@@ -27,8 +27,9 @@ describe("Livestream in-house browser + scanner control", () => {
     expect(scanTab).toContain("hudLayer");
     expect(scanTab).toContain('position: "absolute"');
     expect(browserView).toContain('from "react-native-webview"');
-    expect(browser).toContain("isCapgoLivestreamBrowserAvailable(): boolean {\n  return false;");
-    expect(livestream).toContain('pageUrl: "https://www.whatnot.com"');
+    expect(browser).not.toMatch(/from "@capacitor|from "@capgo/);
+    expect(browser).toContain('return "unavailable";');
+    expect(livestream).toContain('pageUrl: "https://www.whatnot.com/tag/pokemon_cards"');
     expect(livestream).toContain('pageUrl: "https://www.ebay.com/ebaylive"');
     expect(scanTab).not.toContain("injectedJavaScript");
     expect(scanTab).not.toContain("injectJavaScript");
@@ -39,6 +40,11 @@ describe("Livestream in-house browser + scanner control", () => {
     expect(scanTab).not.toContain("Linking.openURL");
     expect(browser).not.toContain("executeScript");
     expect(browserView).toContain("injectedJavaScriptBeforeContentLoaded={LIVE_HLS_REPORT_SCRIPT}");
+    expect(browserView).toContain("onMessage={onWebMessage}");
+    expect(browser).not.toContain("openBrowserAsync");
+    expect(browserView).not.toContain("openLivestreamGoogleSignIn");
+    expect(browserView).toContain("allowLivestreamNavigation");
+    expect(browserView).toContain("livestreamWebViewUserAgent");
   });
 
   it("keeps the scanner off until toggled and stops it on blur or tester switch", () => {
@@ -79,6 +85,10 @@ describe("Livestream in-house browser + scanner control", () => {
     expect(overlay).not.toContain("onScanStill");
     expect(overlay).not.toMatch(/Scan a still photo|Overlay is not live ID/);
     expect(overlay).toContain("Scanner off");
+    expect(overlay).toContain("HudBubble");
+    expect(readRepoFile("apps/mobile/components/ui/hud-bubble.tsx")).toContain(
+      "Drag CardFlow overlay",
+    );
     expect(overlay).toContain("Looking for a card…");
     expect(overlay).toContain("HudEmptyFigures");
     expect(overlay).toContain("not a cert");

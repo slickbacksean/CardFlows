@@ -237,7 +237,7 @@ export function PrintBrowser({
               )}
               {ownedIds.has(item.id) ? (
                 <View style={styles.owned}>
-                  <Ionicons color="#FFFFFF" name="checkmark" size={12} />
+                  <Ionicons color={shopColors.onAccent} name="checkmark" size={12} />
                 </View>
               ) : null}
             </Pressable>
@@ -256,7 +256,7 @@ interface FilterChipProps {
 }
 
 function FilterChip({ label, icon, active = false, onPress }: FilterChipProps) {
-  const tint = active ? "#FFFFFF" : shopColors.text;
+  const tint = active ? shopColors.onAccent : shopColors.text;
   const body = (
     <>
       {icon ? <Ionicons color={tint} name={icon} size={16} /> : null}
@@ -348,23 +348,23 @@ const styles = StyleSheet.create({
     backgroundColor: shopColors.card,
     borderRadius: 22,
     paddingHorizontal: 16,
-    borderWidth: 1,
-    borderColor: "#C5C5CE",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: shopColors.line,
   },
   chipActive: {
     backgroundColor: shopColors.blue,
     borderColor: shopColors.blue,
   },
-  chipLabel: { color: shopColors.text, fontSize: 15, fontWeight: "700", flexShrink: 0 },
-  chipLabelActive: { color: "#FFFFFF" },
+  chipLabel: { color: shopColors.text, fontSize: 14, fontWeight: "700", flexShrink: 0 },
+  chipLabelActive: { color: shopColors.onAccent },
   grid: { paddingHorizontal: shopSpace.md, paddingBottom: shopSpace.lg, gap: shopSpace.sm },
   row: { gap: shopSpace.sm },
   frame: {
-    borderWidth: 3,
-    borderColor: shopColors.gold,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: shopColors.line,
     borderRadius: 12,
     overflow: "hidden",
-    backgroundColor: "#E4E4EA",
+    backgroundColor: shopColors.chip,
   },
   art: { width: "100%", aspectRatio: 0.72 },
   artFallback: {
@@ -396,10 +396,10 @@ const styles = StyleSheet.create({
     padding: shopSpace.lg,
   },
   retry: {
-    backgroundColor: shopColors.text,
-    borderRadius: 14,
+    backgroundColor: shopColors.blue,
+    borderRadius: 999,
     paddingHorizontal: shopSpace.md,
     paddingVertical: shopSpace.sm,
   },
-  retryLabel: { color: "#FFFFFF", fontWeight: "800" },
+  retryLabel: { color: shopColors.onAccent, fontWeight: "800" },
 });

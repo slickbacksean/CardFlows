@@ -11,11 +11,21 @@ const GRADE_ESTIMATE_JSON_SCHEMA = z.object({
   reestimate: z.boolean().optional(),
 }).strict();
 
+/** Optional raking-light front photos for the surface step (max 4). */
+export const GRADE_ANGLED_FIELDS = ["angled_0", "angled_1", "angled_2", "angled_3"] as const;
+/** Client capture info (EXIF zoom/lens/exposure, steadiness). Debug log only. */
+const captureMetaSchema = z.string().max(4000).optional();
+
 const GRADE_ESTIMATE_FORM_SCHEMA = z
   .object({
     front: z.unknown().optional(),
     back: z.unknown().optional(),
     reestimate: z.string().optional(),
+    angled_0: z.unknown().optional(),
+    angled_1: z.unknown().optional(),
+    angled_2: z.unknown().optional(),
+    angled_3: z.unknown().optional(),
+    captureMeta: captureMetaSchema,
   })
   .strict();
 
@@ -33,6 +43,9 @@ export interface ParsedGradeEstimateRequest {
   frontImage: ParsedGradeStill | null;
   backImage: ParsedGradeStill | null;
   reestimate: boolean;
+  /** Raking-light front photos, in shot order. Empty when skipped. */
+  angledFront?: ParsedGradeStill[];
+  captureMeta?: string | null;
 }
 
 export interface GradeEstimateRequestError {
@@ -103,7 +116,7 @@ export function parseGradeEstimateJson(
 export function parseGradeEstimateFormFields(
   body: Record<string, unknown>,
 ):
-  | { front: unknown; back: unknown; reestimate: boolean }
+  | { front: unknown; back: unknown; reestimate: boolean; angled: unknown[]; captureMeta: string | null }
   | GradeEstimateRequestError {
   const parsed = GRADE_ESTIMATE_FORM_SCHEMA.safeParse(body);
   if (!parsed.success) {
@@ -116,6 +129,10 @@ export function parseGradeEstimateFormFields(
     front: parsed.data.front,
     back: parsed.data.back,
     reestimate: parsed.data.reestimate === "true",
+    angled: GRADE_ANGLED_FIELDS.map((field) => parsed.data[field]).filter(
+      (value) => value !== undefined && value !== null && value !== "",
+    ),
+    captureMeta: parsed.data.captureMeta ?? null,
   };
 }
 
@@ -131,10 +148,18 @@ export async function parseGradeEstimateRequest(
     if (front && "error" in front) return front;
     const back = await stillFromFormValue(fields.back);
     if (back && "error" in back) return back;
+    const angledFront: ParsedGradeStill[] = [];
+    for (const value of fields.angled) {
+      const shot = await stillFromFormValue(value);
+      if (shot && "error" in shot) return shot;
+      if (shot) angledFront.push(shot);
+    }
     return {
       frontImage: front,
       backImage: back,
       reestimate: fields.reestimate,
+      angledFront,
+      captureMeta: fields.captureMeta,
     };
   }
 
@@ -150,12 +175,14 @@ const GRADE_DETECT_FORM_SCHEMA = z
     image: z.unknown().optional(),
     photo: z.unknown().optional(),
     side: z.enum(["front", "back"]).optional(),
+    captureMeta: captureMetaSchema,
   })
   .strict();
 
 export interface ParsedGradeDetectRequest {
   still: ParsedGradeStill;
   side: "front" | "back";
+  captureMeta?: string | null;
 }
 
 /** One still for card location. Not a grade. `photo` is the GitHub field name. */
@@ -179,5 +206,5 @@ export async function parseGradeDetectRequest(
     return { error: "Image must be jpeg, png, or webp", status: 400 };
   }
   if ("error" in still) return still;
-  return { still, side: parsed.data.side ?? "front" };
+  return { still, side: parsed.data.side ?? "front", captureMeta: parsed.data.captureMeta ?? null };
 }

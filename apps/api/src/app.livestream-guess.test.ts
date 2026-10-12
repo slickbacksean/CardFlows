@@ -1,3 +1,4 @@
+import jpeg from "jpeg-js";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   computeMaxBuy,
@@ -344,6 +345,81 @@ describe("GET /v1/livestream/guesses/:tcgdexId", () => {
     expect(sidecarDown.body.identity).toMatchObject({
       tcgdexId: "base1-58",
       reason: "identified",
+    });
+  });
+
+  it("uses YOLO on a live-video frame when the AGPL weights are loaded", async () => {
+    const width = 40;
+    const height = 56;
+    const rgba = Buffer.alloc(width * height * 4, 180);
+    const videoFrameJpeg = jpeg.encode({ data: rgba, width, height }, 80).data.toString("base64");
+    const yolo = {
+      async detect() {
+        return [
+          { cx: 20, cy: 28, width: 24, height: 36, angle: 0, score: 0.91 },
+        ];
+      },
+    };
+    const identified = await json<{
+      identity: { tcgdexId: string | null; reason: string };
+    }>(
+      createApp(createMemoryStore(), {
+        liveVideoObb: () => yolo,
+        liveIdentityOpenclip: {
+          name: "openclip_hnsw",
+          async matchCropJpeg() {
+            return {
+              pipeline: "openclip_hnsw" as const,
+              accepted: true,
+              tcgdexId: "base1-4",
+              similarity: 0.9,
+            };
+          },
+        },
+      }),
+      "/v1/livestream/identify",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          source: "live_video",
+          platform: "ios",
+          cardDetected: false,
+          classifiedTcgdexId: "base1-58",
+          videoFrameJpeg,
+        }),
+      },
+    );
+    expect(identified.status).toBe(200);
+    expect(identified.body.identity).toMatchObject({
+      tcgdexId: "base1-4",
+      reason: "identified",
+    });
+
+    const missed = await json<{
+      identity: { tcgdexId: string | null; reason: string };
+    }>(
+      createApp(createMemoryStore(), {
+        liveVideoObb: () => ({
+          async detect() {
+            return [];
+          },
+        }),
+      }),
+      "/v1/livestream/identify",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          source: "live_video",
+          platform: "ios",
+          cardDetected: true,
+          classifiedTcgdexId: "base1-58",
+          videoFrameJpeg,
+        }),
+      },
+    );
+    expect(missed.body.identity).toMatchObject({
+      tcgdexId: null,
+      reason: "no_card",
     });
   });
 });

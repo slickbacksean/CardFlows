@@ -440,7 +440,7 @@ export default function ShopCardScreen() {
                 style={styles.openSet}
               >
                 <Text style={styles.openSetLabel}>Open set</Text>
-                <Ionicons color="#FFFFFF" name="open-outline" size={14} />
+                <Ionicons color={shopColors.onAccent} name="open-outline" size={14} />
               </Pressable>
             ) : null}
           </View>
@@ -569,7 +569,7 @@ const styles = StyleSheet.create({
     width: "42%",
     aspectRatio: 0.72,
     borderRadius: 14,
-    backgroundColor: "#E4E4EA",
+    backgroundColor: shopColors.chip,
   },
   priceBox: {
     flex: 1,
@@ -582,12 +582,12 @@ const styles = StyleSheet.create({
   variantRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   variant: { color: shopColors.muted, fontSize: 15, fontWeight: "700" },
   variantSelected: { color: shopColors.blue },
-  price: { color: shopColors.text, fontSize: 32, fontWeight: "800" },
+  price: { color: shopColors.text, fontSize: 32, fontWeight: "800", letterSpacing: -0.6 },
   estimateLabel: { color: shopColors.muted, fontSize: 13, fontWeight: "700" },
   identity: { flexDirection: "row", alignItems: "center", gap: shopSpace.sm },
   localId: { color: shopColors.text, fontSize: 28, fontWeight: "800" },
   rarityPill: {
-    backgroundColor: "#ECECF1",
+    backgroundColor: shopColors.chip,
     borderRadius: 12,
     paddingHorizontal: 10,
     paddingVertical: 4,
@@ -645,7 +645,7 @@ const styles = StyleSheet.create({
     width: 52,
     height: 52,
     borderRadius: 12,
-    backgroundColor: "#F3F4F6",
+    backgroundColor: shopColors.chip,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -686,7 +686,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 8,
   },
-  openSetLabel: { color: "#FFFFFF", fontSize: 13, fontWeight: "800" },
+  openSetLabel: { color: shopColors.onAccent, fontSize: 13, fontWeight: "800" },
   setRow: { flexDirection: "row", alignItems: "center", gap: shopSpace.sm },
   setLogo: { width: 54, height: 36 },
   setMark: {
@@ -711,19 +711,19 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   tcgWordmark: { fontSize: 22, fontWeight: "900", letterSpacing: 0.4 },
-  tcgDark: { color: "#111111" },
+  tcgDark: { color: shopColors.text },
   tcgBlue: { color: "#1A73E8" },
   ebayWordmark: { fontSize: 32, fontWeight: "800" },
   ebayRed: { color: "#E53238" },
   ebayBlue: { color: "#0064D2" },
   ebayYellow: { color: "#F5AF02" },
   ebayGreen: { color: "#86B817" },
-  linkError: { color: "#C2410C", fontSize: 14 },
+  linkError: { color: shopColors.danger, fontSize: 14 },
   retry: {
-    backgroundColor: shopColors.text,
-    borderRadius: 14,
+    backgroundColor: shopColors.blue,
+    borderRadius: 999,
     paddingHorizontal: shopSpace.md,
     paddingVertical: shopSpace.sm,
   },
-  retryLabel: { color: "#FFFFFF", fontWeight: "800" },
+  retryLabel: { color: shopColors.onAccent, fontWeight: "800" },
 });
