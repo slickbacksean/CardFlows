@@ -72,6 +72,8 @@ import {
   type RecognitionConfidence,
   type TcgdexCard,
   type TitleTemplateId,
+  createLiveScanTimingLog,
+  type LiveScanSample,
 } from "@cardflow/shared";
 import { Hono, type Context as HonoContext } from "hono";
 import { cors } from "hono/cors";
@@ -125,6 +127,7 @@ import {
 } from "./session";
 import {
   decodeIdentityCropJpeg,
+  normalizeIdentityCropQuad,
   type LiveIdentityOpenclipClient,
 } from "./live-identity-openclip";
 import { locateLiveVideoCard } from "./live-video-obb";
@@ -273,6 +276,11 @@ export interface CreateAppOptions {
    * `identityCropJpeg` is present; pHash remains the fallback. Never Gemini.
    */
   liveIdentityOpenclip?: LiveIdentityOpenclipClient | null;
+  /**
+   * Debug-only per-stage livestream timing (log lines + GET /v1/livestream/timing).
+   * Defaults to `CARD_FLOW_LIVESTREAM_TIMING=1`; off unless set, including production.
+   */
+  livestreamTiming?: boolean;
   /** YOLO on livestream frames. Empty until the AGPL flag and weights file are both set. */
   liveVideoObb?: () => ObbDetector | null;
   /** Prepare photo-estimate provider. Tests default to mock; flag off injects unavailable. */
@@ -402,6 +410,9 @@ export function createApp(
   );
   const livestreamIdentityIndex = options.livestreamIdentityIndex ?? null;
   const liveIdentityOpenclip = options.liveIdentityOpenclip ?? null;
+  const livestreamTiming =
+    options.livestreamTiming ?? process.env.CARD_FLOW_LIVESTREAM_TIMING?.trim() === "1";
+  const livestreamTimingLog = createLiveScanTimingLog(500);
   const liveVideoObb = options.liveVideoObb ?? (() => null);
 
   async function bindPokecollectorUser(identity: InvitedIdentity) {
@@ -790,6 +801,7 @@ export function createApp(
       classifiedTcgdexId?: unknown;
       identityHash?: unknown;
       identityCropJpeg?: unknown;
+      identityCropQuad?: unknown;
       videoFrameJpeg?: unknown;
       image?: unknown;
       screenshot?: unknown;
@@ -808,6 +820,7 @@ export function createApp(
     );
     let identityCropJpeg =
       typeof body.identityCropJpeg === "string" ? body.identityCropJpeg : null;
+    let cropFromServerYolo = false;
     const yolo = liveVideoObb();
     if (yolo && typeof body.videoFrameJpeg === "string") {
       const located = await locateLiveVideoCard(yolo, body.videoFrameJpeg);
@@ -819,24 +832,45 @@ export function createApp(
         cardDetected = true;
         identityHash = normalizeLiveVideoIdentityHash(located.identityHash);
         identityCropJpeg = located.jpegBase64;
+        // The phone's corners describe its own crop, not the server YOLO crop.
+        cropFromServerYolo = true;
       }
     }
 
+    const startedAt = performance.now();
+    const stages: LiveScanSample["stages"] = {};
+    let warped = false;
     let openclipTcgdexId: string | null = null;
     if (livestreamIdentify === "yolo_identity" && liveIdentityOpenclip) {
+      const decodeStart = performance.now();
       const crop = decodeIdentityCropJpeg(identityCropJpeg);
+      stages.serverDecode = performance.now() - decodeStart;
       if (crop) {
-        const match = await liveIdentityOpenclip.matchCropJpeg(crop.bytes, crop.mimeType);
+        const sidecarStart = performance.now();
+        const match = await liveIdentityOpenclip.matchCropJpeg(crop.bytes, crop.mimeType, {
+          quad: cropFromServerYolo ? null : normalizeIdentityCropQuad(body.identityCropQuad),
+        });
+        stages.sidecar = performance.now() - sidecarStart;
+        if (match?.timings) {
+          stages.serverDecode = (stages.serverDecode ?? 0) + (match.timings.decodeMs ?? 0);
+          stages.warp = match.timings.warpMs;
+          stages.embed = match.timings.embedMs;
+          stages.search = match.timings.searchMs;
+          stages.orb = match.timings.orbMs;
+        }
+        warped = match?.warped === true;
         if (match?.accepted && match.tcgdexId) {
           openclipTcgdexId = normalizeLiveVideoTcgdexId(match.tcgdexId);
         }
       }
     }
 
+    const phashStart = performance.now();
     const phashTcgdexId =
       livestreamIdentify === "yolo_identity" && identityHash && livestreamIdentityIndex
         ? (matchRgbPhash(identityHash, livestreamIdentityIndex)[0]?.tcgdexId ?? null)
         : null;
+    if (identityHash && livestreamIdentityIndex) stages.phash = performance.now() - phashStart;
 
     const classifiedTcgdexId =
       openclipTcgdexId ??
@@ -858,7 +892,22 @@ export function createApp(
       },
       classifier: livestreamIdentify === "yolo_identity" ? "yolo_identity" : "none",
     });
-    return c.json({ ok: true, identity });
+    if (!livestreamTiming) return c.json({ ok: true, identity });
+    stages.server = performance.now() - startedAt;
+    const sample: LiveScanSample = {
+      stages,
+      outcome: identity.reason === "identified" ? "accepted" : "rejected",
+      warped,
+    };
+    livestreamTimingLog.add(sample);
+    console.info(`[livestream-timing] ${JSON.stringify({ ...sample, tcgdexId: identity.tcgdexId })}`);
+    return c.json({ ok: true, identity, timing: { stages, warped } });
+  });
+
+  /** Debug only: p50/p95 per stage of recent livestream matches. 404 unless timing is on. */
+  app.get("/v1/livestream/timing", (c) => {
+    if (!livestreamTiming) return c.json({ ok: false, error: "livestream timing is off" }, 404);
+    return c.json({ ok: true, summary: livestreamTimingLog.summary() });
   });
 
   app.get("/v1/cards/:tcgdexId/slab-estimates", async (c) => {

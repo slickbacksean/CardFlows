@@ -5,6 +5,7 @@
 import { requireOptionalNativeModule } from "expo";
 import { NativeModules, Platform } from "react-native";
 import {
+  normalizeLiveCardBox,
   LIVE_VIDEO_IDENTITY_RGB_BYTES,
   LIVE_VIDEO_IDENTITY_RGB_SIZE,
   rgbPerceptualHash,
@@ -64,6 +65,12 @@ function identityHashFromRgb(raw: unknown): string | null {
   });
 }
 
+function cropQuad(raw: unknown): number[] | null {
+  if (!Array.isArray(raw) || raw.length !== 8) return null;
+  if (!raw.every((v) => typeof v === "number" && Number.isFinite(v))) return null;
+  return raw as number[];
+}
+
 export async function setLiveVideoScannerSession(active: boolean): Promise<void> {
   const native = nativeModule();
   if (!native?.setScannerSession) return;
@@ -110,6 +117,9 @@ export async function pullLiveVideoSampleBuffer(): Promise<LiveVideoFrame | null
       identityHash: identityHashFromRgb(frame.identityRgb),
       identityCropJpeg:
         typeof frame.identityCropJpeg === "string" ? frame.identityCropJpeg : null,
+      identityCropQuad: cropQuad(frame.identityCropQuad),
+      cardBox: normalizeLiveCardBox(frame.cardBox),
+      detectMs: typeof frame.detectMs === "number" ? frame.detectMs : null,
       videoFrameJpeg: typeof frame.videoFrameJpeg === "string" ? frame.videoFrameJpeg : null,
     };
   } catch {
