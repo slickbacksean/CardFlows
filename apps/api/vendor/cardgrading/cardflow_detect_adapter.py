@@ -57,9 +57,21 @@ def main(argv: list[str]) -> int:
         sys.stdout.write("\n")
         return 0
 
+    from cardflow_orientation import detect_upright
+
+    from cardflow_capture_checks import capture_checks
+
     thresholds = detect.load_thresholds(args.thresholds)
-    result = detect.detect_and_normalize(image, thresholds)
+    result, rotated = detect_upright(image, thresholds, detect)
     payload = result.to_dict()
+    # CardFlow gates on the same warp/quad: blur and card-too-small are hard
+    # (retake), "card is small" is soft. Metrics go to the debug log.
+    checks = capture_checks(result.warped, result.contour)
+    payload["gates"].extend(checks["gates"])
+    payload["ok"] = bool(payload["ok"]) and all(g["passed"] or not g["hard"] for g in checks["gates"])
+    payload["cardflow_capture"] = checks["metrics"]
+    payload["rotated_90"] = rotated
+    payload["image_size"] = [int(image.shape[1]), int(image.shape[0])]
     payload["has_crop"] = result.warped is not None
     if result.warped is not None:
         args.output_dir.mkdir(parents=True, exist_ok=True)

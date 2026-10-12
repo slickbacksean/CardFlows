@@ -107,7 +107,7 @@
 | Submit, mark-returned, and edits update the UI first and swallow errors (`.catch(() => {})`). Refresh snaps the row back. Server deletes the submitted row before inserting returned, with no transaction. (P1-7) | Keep previous state and restore it on error. One SQLite transaction for the move. |
 | Graded PSA / BGS / CGC / TAG amounts are empty on the Free plan. | Leave hidden until a Pro key exists. Do not call `/prices/{tier}/history`. |
 | Prepare front+back smoke and Claude paths are not re-checked in the app. | Manual: one purchased copy, front and back, after API restart. ([RUNTIME_CONFIG_TASKS.md](./RUNTIME_CONFIG_TASKS.md).) |
-| Trained grade weights are still the smoke checkpoint. | Install `phase2_best.pth` and re-check Prepare before trusting the number. |
+| Trained CNN weights and Claude grading. | Removed. Prepare uses the offline cardgrading library. |
 
 ---
 

@@ -56,5 +56,6 @@ export async function publishLivestreamHud(input: {
     estimateAmount: input.guess?.estimateAmount ?? null,
     maxBuyAmount: input.guess?.maxBuyAmount ?? null,
     confidence: input.guess?.confidence ?? input.identity.confidence,
+    cardVisible: input.identity.reason === "unidentified",
   });
 }

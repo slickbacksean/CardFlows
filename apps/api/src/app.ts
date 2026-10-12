@@ -66,6 +66,7 @@ import {
   type ReturnedCopyPatch,
   type HealthLivestreamIdentify,
   type LiveVideoIdentityPlatform,
+  type ObbDetector,
   type MaxBuyPreferences,
   type PhashIndex,
   type RecognitionConfidence,
@@ -129,6 +130,7 @@ import {
   normalizeIdentityCropQuad,
   type LiveIdentityOpenclipClient,
 } from "./live-identity-openclip";
+import { locateLiveVideoCard } from "./live-video-obb";
 import { identifyLiveCaptureStill } from "./scan-card-name";
 import {
   localDateKey,
@@ -279,6 +281,8 @@ export interface CreateAppOptions {
    * Defaults to `CARD_FLOW_LIVESTREAM_TIMING=1`; off unless set, including production.
    */
   livestreamTiming?: boolean;
+  /** YOLO on livestream frames. Empty until the AGPL flag and weights file are both set. */
+  liveVideoObb?: () => ObbDetector | null;
   /** Prepare photo-estimate provider. Tests default to mock; flag off injects unavailable. */
   grading?: CardGradingProvider;
   /**
@@ -409,6 +413,7 @@ export function createApp(
   const livestreamTiming =
     options.livestreamTiming ?? process.env.CARD_FLOW_LIVESTREAM_TIMING?.trim() === "1";
   const livestreamTimingLog = createLiveScanTimingLog(500);
+  const liveVideoObb = options.liveVideoObb ?? (() => null);
 
   async function bindPokecollectorUser(identity: InvitedIdentity) {
     try {
@@ -665,6 +670,7 @@ export function createApp(
       recognition: recognitionStatus,
       pricingProvider: pricingProviderHealth(pricing.name),
       livestreamIdentify,
+      liveVideoYolo: liveVideoObb() != null,
       liveIdentityVisual: liveIdentityVisualHealth({
         livestreamIdentify,
         openclipConfigured: liveIdentityOpenclip != null,
@@ -796,6 +802,7 @@ export function createApp(
       identityHash?: unknown;
       identityCropJpeg?: unknown;
       identityCropQuad?: unknown;
+      videoFrameJpeg?: unknown;
       image?: unknown;
       screenshot?: unknown;
     }>();
@@ -807,9 +814,28 @@ export function createApp(
     }
     const platform: LiveVideoIdentityPlatform =
       body.platform === "android" || body.platform === "web" ? body.platform : "ios";
-    const identityHash = normalizeLiveVideoIdentityHash(
+    let cardDetected = Boolean(body.cardDetected);
+    let identityHash = normalizeLiveVideoIdentityHash(
       typeof body.identityHash === "string" ? body.identityHash : null,
     );
+    let identityCropJpeg =
+      typeof body.identityCropJpeg === "string" ? body.identityCropJpeg : null;
+    let cropFromServerYolo = false;
+    const yolo = liveVideoObb();
+    if (yolo && typeof body.videoFrameJpeg === "string") {
+      const located = await locateLiveVideoCard(yolo, body.videoFrameJpeg);
+      if (located?.found === false) {
+        cardDetected = false;
+        identityHash = null;
+        identityCropJpeg = null;
+      } else if (located?.found) {
+        cardDetected = true;
+        identityHash = normalizeLiveVideoIdentityHash(located.identityHash);
+        identityCropJpeg = located.jpegBase64;
+        // The phone's corners describe its own crop, not the server YOLO crop.
+        cropFromServerYolo = true;
+      }
+    }
 
     const startedAt = performance.now();
     const stages: LiveScanSample["stages"] = {};
@@ -817,14 +843,12 @@ export function createApp(
     let openclipTcgdexId: string | null = null;
     if (livestreamIdentify === "yolo_identity" && liveIdentityOpenclip) {
       const decodeStart = performance.now();
-      const crop = decodeIdentityCropJpeg(
-        typeof body.identityCropJpeg === "string" ? body.identityCropJpeg : null,
-      );
+      const crop = decodeIdentityCropJpeg(identityCropJpeg);
       stages.serverDecode = performance.now() - decodeStart;
       if (crop) {
         const sidecarStart = performance.now();
         const match = await liveIdentityOpenclip.matchCropJpeg(crop.bytes, crop.mimeType, {
-          quad: normalizeIdentityCropQuad(body.identityCropQuad),
+          quad: cropFromServerYolo ? null : normalizeIdentityCropQuad(body.identityCropQuad),
         });
         stages.sidecar = performance.now() - sidecarStart;
         if (match?.timings) {
@@ -862,7 +886,7 @@ export function createApp(
       platform,
       frame: {
         source: "live_video",
-        cardDetected: Boolean(body.cardDetected),
+        cardDetected,
         classifiedTcgdexId,
         identityHash,
       },
@@ -1446,6 +1470,7 @@ export function createApp(
         runner: cardgrading,
         still: parsed.still,
         side: parsed.side,
+        captureMeta: parsed.captureMeta ?? null,
       });
       // Retake and unavailable are answers, not transport errors: 200 with ok:false.
       return c.json(result);
@@ -1473,6 +1498,8 @@ export function createApp(
         runner: cardgrading,
         front: parsed.frontImage,
         back: parsed.backImage,
+        angledFront: parsed.angledFront ?? [],
+        captureMeta: parsed.captureMeta ?? null,
       });
       return c.json(result);
     },

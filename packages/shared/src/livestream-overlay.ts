@@ -14,7 +14,7 @@ export interface LivestreamOverlayKindInput {
 /**
  * Scanner OFF → “Scanner off”, never a live identity and never a Confirm leftover.
  * Scanner ON, no stable guess → “looking”.
- * Two stable hits → live guess (does not mint).
+ * An accepted live match → live guess (does not mint).
  */
 export function livestreamOverlayKind(input: LivestreamOverlayKindInput): LivestreamOverlayKind {
   if (input.unavailable) return "unavailable";

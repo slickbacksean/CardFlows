@@ -1,6 +1,7 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { StyleSheet, TextInput, View } from "react-native";
 import { shopColors, shopSpace } from "@/components/shop/shop-theme";
+import { radii } from "@/lib/theme";
 
 interface SearchFieldProps {
   value: string;
@@ -30,18 +31,15 @@ export function SearchField({ value, placeholder, onChangeText }: SearchFieldPro
 
 const styles = StyleSheet.create({
   field: {
-    minHeight: 46,
-    borderRadius: 23,
+    minHeight: 44,
+    borderRadius: radii.pill,
     backgroundColor: shopColors.card,
+    borderColor: shopColors.line,
+    borderWidth: StyleSheet.hairlineWidth,
     paddingHorizontal: shopSpace.md,
     flexDirection: "row",
     alignItems: "center",
     gap: shopSpace.sm,
-    shadowColor: "#000",
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 1,
   },
   input: {
     flex: 1,

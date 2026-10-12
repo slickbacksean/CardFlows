@@ -32,7 +32,7 @@ import {
   type InventoryItem,
 } from "@/lib/api";
 import { loadActiveIdentity, peekActiveUserId } from "@/lib/identity";
-import { colors, space } from "@/lib/theme";
+import { colors, radii, space } from "@/lib/theme";
 
 function inventoryMaxBuyAmount(item: InventoryItem): string | null {
   return item.purchase?.maxBuy.maxBuyAmount ?? item.targetMaxBuyAmount ?? null;
@@ -428,12 +428,11 @@ function SegmentButton({ label, selected, onPress }: SegmentButtonProps) {
       accessibilityRole="tab"
       accessibilityState={{ selected }}
       onPress={onPress}
-      style={styles.segment}
+      style={[styles.segment, selected && styles.segmentSelected]}
     >
-      <Text style={[styles.segmentLabel, selected && styles.segmentLabelSelected]}>
+      <Text numberOfLines={1} style={[styles.segmentLabel, selected && styles.segmentLabelSelected]}>
         {label}
       </Text>
-      {selected ? <View style={styles.segmentUnderline} /> : <View style={styles.segmentSpacer} />}
     </Pressable>
   );
 }
@@ -651,7 +650,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: space.sm,
   },
-  title: { color: colors.text, fontSize: 22, fontWeight: "800" },
+  title: { color: colors.text, fontSize: 20, fontWeight: "800", letterSpacing: -0.4 },
   searchBox: {
     flex: 1,
     flexDirection: "row",
@@ -659,8 +658,8 @@ const styles = StyleSheet.create({
     gap: space.xs,
     backgroundColor: colors.card,
     borderColor: colors.cardBorder,
-    borderWidth: 1,
-    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: radii.pill,
     paddingHorizontal: space.sm,
     minHeight: 40,
   },
@@ -672,17 +671,21 @@ const styles = StyleSheet.create({
   },
   photoLink: { color: colors.accent, fontSize: 15, fontWeight: "700" },
   constraint: { color: colors.muted, fontSize: 15, lineHeight: 22 },
-  segments: { flexDirection: "row", gap: space.lg },
-  segment: { paddingBottom: 2 },
-  segmentLabel: { color: colors.muted, fontSize: 16, fontWeight: "700" },
-  segmentLabelSelected: { color: colors.text },
-  segmentUnderline: {
-    height: 2,
-    backgroundColor: colors.accent,
-    marginTop: 6,
-    borderRadius: 1,
+  segments: {
+    flexDirection: "row",
+    backgroundColor: colors.chip,
+    borderRadius: radii.pill,
+    padding: 3,
   },
-  segmentSpacer: { height: 2, marginTop: 6 },
+  segment: {
+    flex: 1,
+    alignItems: "center",
+    borderRadius: radii.pill,
+    paddingVertical: 8,
+  },
+  segmentSelected: { backgroundColor: colors.accent },
+  segmentLabel: { color: colors.muted, fontSize: 13, fontWeight: "700" },
+  segmentLabelSelected: { color: colors.accentText },
   empty: { gap: space.sm },
   emptyTitle: { color: colors.text, fontSize: 22, fontWeight: "800" },
   body: { color: colors.muted, fontSize: 15, lineHeight: 22 },
@@ -713,7 +716,7 @@ const styles = StyleSheet.create({
   prepareCta: {
     alignSelf: "flex-start",
     backgroundColor: colors.cta,
-    borderRadius: 10,
+    borderRadius: radii.pill,
     marginTop: 6,
     paddingVertical: 6,
     paddingHorizontal: space.sm,

@@ -483,6 +483,7 @@ export function identifyLivestreamFrame(input: {
   identityHash?: string | null;
   identityCropJpeg?: string | null;
   identityCropQuad?: number[] | null;
+  videoFrameJpeg?: string | null;
 }) {
   return request<{
     ok: true;
@@ -499,6 +500,7 @@ export function identifyLivestreamFrame(input: {
       identityHash: input.identityHash ?? null,
       identityCropJpeg: input.identityCropJpeg ?? null,
       identityCropQuad: input.identityCropQuad ?? null,
+      videoFrameJpeg: input.videoFrameJpeg ?? null,
     }),
   });
 }
@@ -646,7 +648,8 @@ export async function requestPhotoPregrade(input: {
       body: form,
       timeoutMs: GRADE_PREGRADE_TIMEOUT_MS,
     });
-    if (data.ok && typeof data.estimate !== "number") {
+    // 0.0 is grade_card's "nothing measurable", not a grade: never show it.
+    if (data.ok && (typeof data.estimate !== "number" || !(data.estimate >= 1))) {
       return { ok: false, status: "unavailable", code: "UNAVAILABLE", message: PREGRADE_UNAVAILABLE_MESSAGE };
     }
     return data;

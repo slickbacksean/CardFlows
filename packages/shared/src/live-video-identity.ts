@@ -55,6 +55,11 @@ export interface LiveVideoFrame {
   cardBox?: { x: number; y: number; width: number; height: number } | null;
   /** Native detect time for this frame, ms (debug timing). */
   detectMs?: number | null;
+  /**
+   * Downscaled JPEG of the live-video frame for the API YOLO detector.
+   * Sent only while `/health` reports `liveVideoYolo`. Never a page still.
+   */
+  videoFrameJpeg?: string | null;
 }
 
 export interface LiveVideoIdentityInput {
@@ -152,8 +157,11 @@ export function mockLiveVideoFrame(tcgdexId: string): LiveVideoFrame {
   };
 }
 
-/** Same id on N consecutive live-video frames before the overlay treats it as stable. */
-export const LIVE_IDENTITY_STABLE_HITS = 2;
+/**
+ * One accepted match is enough. Whatnot lots often sell in about 7 seconds,
+ * so waiting for a second identical frame spends the bidding window.
+ */
+export const LIVE_IDENTITY_STABLE_HITS = 1;
 
 export function stabilizeLiveIdentity(
   hits: readonly LiveVideoIdentityResult[],

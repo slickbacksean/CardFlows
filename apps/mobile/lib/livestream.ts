@@ -18,8 +18,8 @@ export const LIVESTREAM_PLATFORMS: Record<LivestreamPlatform, LivestreamPlatform
   whatnot: {
     badge: "W",
     label: "Whatnot",
-    urlLabel: "www.whatnot.com",
-    pageUrl: "https://www.whatnot.com",
+    urlLabel: "whatnot.com/tag/pokemon_cards",
+    pageUrl: "https://www.whatnot.com/tag/pokemon_cards",
     liveRegionLabel: "WebView: Whatnot live page",
   },
   ebay: {

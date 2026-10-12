@@ -34,7 +34,7 @@ import {
   markDraftReady,
   patchDraft,
 } from "@/lib/api";
-import { colors, space } from "@/lib/theme";
+import { colors, radii, space } from "@/lib/theme";
 
 function firstParam(value: string | string[] | undefined): string | undefined {
   return Array.isArray(value) ? value[0] : value;
@@ -157,8 +157,7 @@ export default function DraftScreen() {
     return [...chips, condition];
   }, [chips, condition]);
 
-  const headerTitle =
-    status === "ready_for_review" ? "Draft · ready for review" : "Draft · internal";
+  const headerTitle = catalog?.name?.trim() || "Listing";
 
   function goBack() {
     if (router.canGoBack()) {
@@ -374,44 +373,60 @@ export default function DraftScreen() {
                   value={description}
                 />
 
-                <Text style={styles.label}>Keyword chips</Text>
-                <View style={styles.chips}>
-                  {keywordChips.map((chip) => (
-                    <Chip
-                      key={chip}
-                      label={chip}
-                      onPress={() =>
-                        setDescription((current) => appendSnippet(current, chip))
-                      }
-                    />
-                  ))}
+                <View style={styles.section}>
+                  <Text style={styles.sectionTitle}>Add a word</Text>
+                  <ScrollView
+                    horizontal
+                    contentContainerStyle={styles.chipRow}
+                    showsHorizontalScrollIndicator={false}
+                  >
+                    {keywordChips.map((chip) => (
+                      <Chip
+                        key={chip}
+                        label={chip}
+                        onPress={() =>
+                          setDescription((current) => appendSnippet(current, chip))
+                        }
+                      />
+                    ))}
+                  </ScrollView>
                 </View>
 
-                <Text style={styles.label}>Disclosure (optional)</Text>
-                {DISCLOSURE_ITEMS.map((item) => (
-                  <View key={item.id} style={styles.disclosure}>
-                    <Text style={styles.body}>{item.label}</Text>
-                    <View style={styles.chips}>
-                      {item.answers.map((answer) => (
-                        <Chip
-                          key={answer}
-                          label={answer}
-                          selected={disclosure[item.id] === answer}
-                          onPress={() =>
-                            setDisclosure((current) => ({ ...current, [item.id]: answer }))
-                          }
-                        />
-                      ))}
+                <View style={styles.section}>
+                  <Text style={styles.sectionTitle}>Condition notes</Text>
+                  <Text style={styles.hint}>Optional. Nothing is added until you tap the button.</Text>
+                  {DISCLOSURE_ITEMS.map((item) => (
+                    <View key={item.id} style={styles.noteRow}>
+                      <Text style={styles.noteLabel}>{item.label}</Text>
+                      <ScrollView
+                        horizontal
+                        contentContainerStyle={styles.chipRow}
+                        showsHorizontalScrollIndicator={false}
+                      >
+                        {item.answers.map((answer) => (
+                          <Chip
+                            key={answer}
+                            label={answer}
+                            selected={disclosure[item.id] === answer}
+                            onPress={() =>
+                              setDisclosure((current) => ({
+                                ...current,
+                                [item.id]: current[item.id] === answer ? null : answer,
+                              }))
+                            }
+                          />
+                        ))}
+                      </ScrollView>
                     </View>
-                  </View>
-                ))}
-                <PrimaryButton
-                  label="Add disclosure to description"
-                  tone="muted"
-                  onPress={() =>
-                    setDescription((current) => appendSnippet(current, disclosureText))
-                  }
-                />
+                  ))}
+                  <PrimaryButton
+                    label="Add notes to description"
+                    tone="muted"
+                    onPress={() =>
+                      setDescription((current) => appendSnippet(current, disclosureText))
+                    }
+                  />
+                </View>
 
                 <Text style={styles.label}>Channel note (in-app only)</Text>
                 <TextInput
@@ -529,30 +544,44 @@ const styles = StyleSheet.create({
   },
   title: { color: colors.text, fontSize: 22, fontWeight: "800" },
   body: { color: colors.muted, fontSize: 15, lineHeight: 22 },
-  label: { color: colors.text, fontWeight: "700" },
+  label: { color: colors.muted, fontSize: 13, fontWeight: "700" },
   input: {
     backgroundColor: colors.card,
     borderColor: colors.cardBorder,
-    borderWidth: 1,
-    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: radii.md,
     color: colors.text,
     paddingHorizontal: space.md,
     paddingVertical: 12,
     fontSize: 16,
   },
-  multiline: { minHeight: 120, textAlignVertical: "top" },
+  multiline: { minHeight: 96, textAlignVertical: "top" },
+  section: {
+    backgroundColor: colors.card,
+    borderColor: colors.cardBorder,
+    borderRadius: radii.lg,
+    borderWidth: StyleSheet.hairlineWidth,
+    gap: space.sm,
+    padding: space.md,
+  },
+  sectionTitle: { color: colors.text, fontSize: 16, fontWeight: "800", letterSpacing: -0.2 },
+  hint: { color: colors.muted, fontSize: 13, lineHeight: 18 },
+  noteRow: { gap: 6 },
+  noteLabel: { color: colors.text, fontSize: 14, fontWeight: "700" },
   chips: { flexDirection: "row", flexWrap: "wrap", gap: space.xs },
+  chipRow: { flexDirection: "row", alignItems: "center", gap: space.xs },
   chip: {
     backgroundColor: colors.chip,
-    borderRadius: 999,
+    borderRadius: radii.pill,
     paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderWidth: 1,
+    minHeight: 32,
+    justifyContent: "center",
+    borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.cardBorder,
   },
-  chipSelected: { borderColor: colors.accent, backgroundColor: "#2A2618" },
-  chipLabel: { color: colors.muted, fontWeight: "700", fontSize: 13 },
-  chipLabelSelected: { color: colors.accent },
+  chipSelected: { borderColor: colors.accent, backgroundColor: colors.accent },
+  chipLabel: { color: colors.text, fontWeight: "700", fontSize: 13 },
+  chipLabelSelected: { color: colors.accentText },
   guidance: {
     backgroundColor: colors.card,
     borderRadius: 16,
@@ -569,7 +598,6 @@ const styles = StyleSheet.create({
   },
   guidanceLabel: { color: colors.text, fontSize: 16, fontWeight: "800" },
   guidanceValue: { color: colors.text, fontSize: 22, fontWeight: "800" },
-  disclosure: { gap: 8 },
   missing: { gap: 4 },
   notice: { color: colors.success, fontSize: 14, lineHeight: 20 },
   error: { color: colors.danger },

@@ -26,5 +26,10 @@
   },
   "dependencies": {
     "huds": "2.2.2"
+  },
+  "pnpm": {
+    "patchedDependencies": {
+      "react-native-webview@13.16.1": "patches/react-native-webview@13.16.1.patch"
+    }
   }
 }

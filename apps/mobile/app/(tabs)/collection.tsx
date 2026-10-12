@@ -25,7 +25,7 @@ import {
   type InventoryItem,
 } from "@/lib/api";
 import { loadMaxBuyPreferences, peekMaxBuyPreferences } from "@/lib/preferences";
-import { colors, space } from "@/lib/theme";
+import { colors, radii, space, type } from "@/lib/theme";
 
 type LoadState = "loading" | "ready" | "error";
 type Segment = "purchased" | "watchlist";
@@ -37,10 +37,10 @@ function parseSegment(value: string | string[] | undefined): Segment | null {
 }
 
 function collectionColumnCount(width: number): number {
-  if (width >= 1200) return 5;
-  if (width >= 900) return 4;
-  if (width >= 640) return 3;
-  return 2;
+  if (width >= 1200) return 6;
+  if (width >= 900) return 5;
+  if (width >= 700) return 4;
+  return 3;
 }
 
 function matchesSearch(item: InventoryItem, query: string): boolean {
@@ -165,49 +165,19 @@ export default function CollectionScreen() {
   return (
     <View style={styles.flex}>
       <View style={styles.toolbar}>
-        <Pressable
-          accessibilityLabel="Scan a card"
-          accessibilityRole="button"
-          onPress={() => router.push("/capture")}
-          style={styles.scanner}
-        >
-          <View style={styles.scannerIcon}>
-            <Ionicons color={colors.ctaText} name="camera" size={26} />
-          </View>
-          <View style={styles.scannerCopy}>
-            <Text style={styles.scannerTitle}>Scan a card</Text>
-            <Text style={styles.scannerMeta}>
-              Still photo of one English raw single.
-            </Text>
-          </View>
-          <Ionicons color={colors.muted} name="chevron-forward" size={20} />
-        </Pressable>
-
-        {loadState === "ready" ? (
-          <Text
-            accessibilityLabel={`${purchasedCount} purchased, ${watchingCount} watching`}
-            style={styles.counts}
-          >
-            {purchasedCount} purchased · {watchingCount} watching
-          </Text>
-        ) : null}
-
-        <View style={styles.titleRow}>
-          <Text style={styles.screenTitle}>Collection</Text>
-          <View style={styles.searchBox}>
-            <Ionicons color={colors.muted} name="search-outline" size={18} />
-            <TextInput
-              accessibilityLabel="Search collection"
-              autoCapitalize="none"
-              autoCorrect={false}
-              clearButtonMode="while-editing"
-              onChangeText={setQuery}
-              placeholder="Search"
-              placeholderTextColor={colors.muted}
-              style={styles.searchInput}
-              value={query}
-            />
-          </View>
+        <View style={styles.searchBox}>
+          <Ionicons color={colors.muted} name="search" size={16} />
+          <TextInput
+            accessibilityLabel="Search collection"
+            autoCapitalize="none"
+            autoCorrect={false}
+            clearButtonMode="while-editing"
+            onChangeText={setQuery}
+            placeholder="Search cards"
+            placeholderTextColor={colors.muted}
+            style={styles.searchInput}
+            value={query}
+          />
         </View>
 
         <View accessibilityRole="tablist" style={styles.segments}>
@@ -222,6 +192,25 @@ export default function CollectionScreen() {
             selected={segment === "watchlist"}
           />
         </View>
+
+        {loadState === "ready" ? (
+          <Text
+            accessibilityLabel={`${purchasedCount} purchased, ${watchingCount} watching`}
+            style={styles.counts}
+          >
+            {purchasedCount} owned · {watchingCount} watching
+          </Text>
+        ) : null}
+
+        <Pressable
+          accessibilityLabel="Scan a card"
+          accessibilityRole="button"
+          onPress={() => router.push("/capture")}
+          style={styles.scanner}
+        >
+          <Ionicons color={colors.accentText} name="camera" size={16} />
+          <Text style={styles.scannerTitle}>Scan a card</Text>
+        </Pressable>
       </View>
 
       {loadState === "error" ? (
@@ -317,12 +306,9 @@ function SegmentButton({ label, selected, onPress }: SegmentButtonProps) {
       accessibilityRole="tab"
       accessibilityState={{ selected }}
       onPress={onPress}
-      style={styles.segment}
+      style={[styles.segment, selected && styles.segmentSelected]}
     >
-      <Text style={[styles.segmentLabel, selected && styles.segmentLabelSelected]}>
-        {label}
-      </Text>
-      {selected ? <View style={styles.segmentUnderline} /> : <View style={styles.segmentSpacer} />}
+      <Text style={[styles.segmentLabel, selected && styles.segmentLabelSelected]}>{label}</Text>
     </Pressable>
   );
 }
@@ -360,49 +346,32 @@ function EmptyState({ segment, hasQuery, hasSegmentItems }: EmptyStateProps) {
 const styles = StyleSheet.create({
   flex: { flex: 1, backgroundColor: colors.bg },
   toolbar: {
-    paddingHorizontal: space.lg,
-    paddingTop: space.lg,
-    gap: space.md,
+    paddingHorizontal: space.md,
+    paddingTop: space.sm,
+    gap: space.sm,
   },
   bodyPad: { padding: space.lg, gap: space.md },
   content: { padding: space.lg, gap: space.md, paddingBottom: 48 },
   scanner: {
+    alignSelf: "flex-start",
     flexDirection: "row",
     alignItems: "center",
-    gap: space.md,
-    backgroundColor: colors.card,
-    borderColor: colors.cardBorder,
-    borderWidth: 1,
-    borderRadius: 16,
-    padding: space.md,
+    gap: 6,
+    backgroundColor: colors.accent,
+    borderRadius: radii.pill,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
   },
-  scannerIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: colors.cta,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  scannerCopy: { flex: 1, gap: 2 },
-  scannerTitle: { color: colors.text, fontSize: 16, fontWeight: "700" },
-  scannerMeta: { color: colors.muted, fontSize: 13, lineHeight: 18 },
-  counts: { color: colors.muted, fontSize: 13, lineHeight: 18 },
-  titleRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: space.sm,
-  },
-  screenTitle: { color: colors.text, fontSize: 22, fontWeight: "800" },
+  scannerTitle: { color: colors.accentText, fontSize: 13, fontWeight: "800" },
+  counts: { color: colors.muted, ...type.caption },
   searchBox: {
-    flex: 1,
     flexDirection: "row",
     alignItems: "center",
     gap: space.xs,
     backgroundColor: colors.card,
     borderColor: colors.cardBorder,
-    borderWidth: 1,
-    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: radii.pill,
     paddingHorizontal: space.sm,
     minHeight: 40,
   },
@@ -412,18 +381,22 @@ const styles = StyleSheet.create({
     fontSize: 15,
     paddingVertical: 8,
   },
-  segments: { flexDirection: "row", gap: space.lg },
-  segment: { paddingBottom: 2 },
-  segmentLabel: { color: colors.muted, fontSize: 16, fontWeight: "700" },
-  segmentLabelSelected: { color: colors.text },
-  segmentUnderline: {
-    height: 2,
-    backgroundColor: colors.accent,
-    marginTop: 6,
-    borderRadius: 1,
+  segments: {
+    flexDirection: "row",
+    backgroundColor: colors.chip,
+    borderRadius: radii.pill,
+    padding: 3,
   },
-  segmentSpacer: { height: 2, marginTop: 6 },
-  title: { color: colors.text, fontSize: 22, fontWeight: "800" },
+  segment: {
+    flex: 1,
+    alignItems: "center",
+    borderRadius: radii.pill,
+    paddingVertical: 8,
+  },
+  segmentSelected: { backgroundColor: colors.accent },
+  segmentLabel: { color: colors.muted, fontSize: 14, fontWeight: "700" },
+  segmentLabelSelected: { color: colors.accentText },
+  title: { color: colors.text, ...type.title },
   body: { color: colors.muted, fontSize: 15, lineHeight: 22 },
   empty: { gap: space.sm },
   error: { color: colors.danger, fontSize: 14 },

@@ -2,6 +2,7 @@ import { Image } from "expo-image";
 import { useEffect, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { WebView } from "react-native-webview";
+import { HudBubble } from "@/components/ui/hud-bubble";
 import { livestreamHudPageUrl, publishLivestreamHud } from "@/lib/huds";
 import { getLiveOverlayGuess } from "@/lib/api";
 import { overlayDollarLabel } from "@/lib/livestream";
@@ -106,44 +107,81 @@ export function ScreenerOverlay({
   });
 
   const buyGuess = liveGuess?.tcgdexId ? liveGuess : null;
+  const readingCard =
+    scannerOn && !buyGuess && liveIdentity?.reason === "unidentified";
+  const bubble = overlayBubbleCopy(overlayKind, liveGuess, readingCard);
 
   if (overlayKind === "unavailable") {
-    return <NativeOverlay liveGuess={null} scannerOn={false} unavailable />;
+    return (
+      <HudBubble live={false} subtitle={bubble.subtitle} title={bubble.title}>
+        <NativeOverlay liveGuess={null} scannerOn={false} unavailable />
+      </HudBubble>
+    );
   }
 
   if (livestreamOverlayUsesHud(overlayKind, hudReady)) {
     return (
-      <View>
+      <HudBubble live={bubble.live} subtitle={bubble.subtitle} title={bubble.title}>
         <View accessibilityLabel="CardFlow overlay" style={styles.hudBand}>
-        <WebView
-          javaScriptEnabled
-          onError={() => setHudReady(false)}
-          onHttpError={() => setHudReady(false)}
-          onLoadEnd={() => {
-            if (!liveIdentity) return;
-            void publishLivestreamHud({
-              scannerOn,
-              identity: liveIdentity,
-              guess: liveGuess,
-            });
-          }}
-          originWhitelist={livestreamHudOriginWhitelist(livestreamHudPageUrl())}
-          setSupportMultipleWindows={false}
-          source={{ uri: livestreamHudPageUrl() }}
-          style={styles.hudWebView}
-        />
+          <WebView
+            javaScriptEnabled
+            onError={() => setHudReady(false)}
+            onHttpError={() => setHudReady(false)}
+            onLoadEnd={() => {
+              if (!liveIdentity) return;
+              void publishLivestreamHud({
+                scannerOn,
+                identity: liveIdentity,
+                guess: liveGuess,
+              });
+            }}
+            opaque={false}
+            originWhitelist={livestreamHudOriginWhitelist(livestreamHudPageUrl())}
+            setSupportMultipleWindows={false}
+            source={{ uri: livestreamHudPageUrl() }}
+            style={styles.hudWebView}
+          />
         </View>
         {buyGuess && onBuy ? <BuyButton onPress={() => onBuy(buyGuess)} /> : null}
-      </View>
+      </HudBubble>
     );
   }
 
   return (
-    <View>
-      <NativeOverlay liveGuess={liveGuess} scannerOn={scannerOn} />
+    <HudBubble live={bubble.live} subtitle={bubble.subtitle} title={bubble.title}>
+      <NativeOverlay liveGuess={liveGuess} readingCard={readingCard} scannerOn={scannerOn} />
       {buyGuess && onBuy ? <BuyButton onPress={() => onBuy(buyGuess)} /> : null}
-    </View>
+    </HudBubble>
   );
+}
+
+function overlayBubbleCopy(
+  kind: ReturnType<typeof livestreamOverlayKind>,
+  liveGuess: LiveOverlayGuess | null,
+  readingCard = false,
+): { title: string; subtitle: string; live: boolean } {
+  if (kind === "unavailable") {
+    return {
+      title: "Scanner unavailable",
+      subtitle: "iOS and Android only",
+      live: false,
+    };
+  }
+  if (kind === "live_guess" && liveGuess?.tcgdexId) {
+    const name = liveGuess.name ?? liveGuess.tcgdexId;
+    return {
+      title: name,
+      subtitle: `Estimate ${overlayDollarLabel(liveGuess.estimateAmount, "No estimate")}`,
+      live: true,
+    };
+  }
+  if (kind === "looking" && readingCard) {
+    return { title: "Reading this card…", subtitle: "Matching the live crop", live: true };
+  }
+  if (kind === "looking") {
+    return { title: "Looking for a card…", subtitle: "Live video on", live: true };
+  }
+  return { title: "Scanner off", subtitle: "Tap for guidance", live: false };
 }
 
 function BuyButton({ onPress }: { onPress: () => void }) {
@@ -157,12 +195,14 @@ function BuyButton({ onPress }: { onPress: () => void }) {
 interface NativeOverlayProps {
   scannerOn: boolean;
   unavailable?: boolean;
+  readingCard?: boolean;
   liveGuess?: LiveOverlayGuess | null;
 }
 
 function NativeOverlay({
   scannerOn,
   unavailable = false,
+  readingCard = false,
   liveGuess = null,
 }: NativeOverlayProps) {
   const kind = livestreamOverlayKind({
@@ -227,13 +267,20 @@ function NativeOverlay({
   }
 
   if (kind === "looking") {
+    const title = readingCard ? "Reading this card…" : "Looking for a card…";
+    const body = readingCard ? "Matching the live crop." : "Live-video identify is on.";
     return (
-      <View accessibilityLabel="CardFlow overlay, looking for a card" style={styles.band}>
+      <View
+        accessibilityLabel={
+          readingCard ? "CardFlow overlay, reading a card" : "CardFlow overlay, looking for a card"
+        }
+        style={styles.band}
+      >
         <View style={styles.row}>
           <View accessibilityLabel="No catalog art" style={styles.thumb} />
           <View style={styles.copy}>
-            <Text style={styles.name}>Looking for a card…</Text>
-            <Text style={styles.body}>Live-video identify is on.</Text>
+            <Text style={styles.name}>{title}</Text>
+            <Text style={styles.body}>{body}</Text>
             <HudEmptyFigures />
           </View>
         </View>
@@ -286,21 +333,18 @@ function HudEmptyFigures() {
 const styles = StyleSheet.create({
   band: {
     backgroundColor: colors.card,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.cardBorder,
     paddingHorizontal: space.md,
-    paddingVertical: space.sm,
+    paddingTop: space.sm,
+    paddingBottom: space.sm,
     gap: space.sm,
   },
   hudBand: {
-    backgroundColor: colors.card,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.cardBorder,
-    height: 148,
+    backgroundColor: "transparent",
+    height: 132,
   },
   hudWebView: {
     flex: 1,
-    backgroundColor: colors.card,
+    backgroundColor: "transparent",
   },
   row: {
     flexDirection: "row",

@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, View, type LayoutChangeEvent } from "react-native";
 import type { PortfolioHistoryPoint, PortfolioHistoryRange } from "@/lib/api";
-import { colors, space } from "@/lib/theme";
+import { colors, radii, space, type } from "@/lib/theme";
 
 /**
  * Collection value over time, drawn with plain Views (no SVG / native module).
@@ -227,12 +227,12 @@ const styles = StyleSheet.create({
     backgroundColor: colors.card,
     borderColor: colors.cardBorder,
     borderWidth: 1,
-    borderRadius: 16,
+    borderRadius: radii.lg,
     padding: space.md,
     gap: space.xs,
   },
   label: { color: colors.muted, fontSize: 13, fontWeight: "600" },
-  value: { color: colors.text, fontSize: 26, fontWeight: "800" },
+  value: { color: colors.text, ...type.display },
   change: { fontSize: 13, fontWeight: "700" },
   chart: { height: CHART_HEIGHT, marginTop: space.xs, overflow: "hidden" },
   segment: {

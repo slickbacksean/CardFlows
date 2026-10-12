@@ -135,7 +135,7 @@ describe("Task 28 full loop + flags", () => {
 
     const scanTab = readRepoFile("apps/mobile/app/(tabs)/scan-tab.tsx");
     const livestream = readRepoFile("apps/mobile/lib/livestream.ts");
-    expect(livestream).toContain('pageUrl: "https://www.whatnot.com"');
+    expect(livestream).toContain('pageUrl: "https://www.whatnot.com/tag/pokemon_cards"');
     expect(livestream).toContain('pageUrl: "https://www.ebay.com/ebaylive"');
     expect(scanTab).not.toContain("injectJavaScript");
     expect(scanTab).not.toMatch(/bid|placeBid|scrape/i);

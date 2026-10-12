@@ -3,13 +3,14 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
+  bestObbBox,
   ciStillBitmap,
   createYolo11ObbInferenceFromTensor,
+  cropOrientedBox,
   YOLO11_OBB_INPUT,
   type RgbBitmap,
 } from "@cardflow/shared";
-import { encodePngStill } from "./obb-phash-decode";
-import { preprocessGradeStill } from "./grade-preprocess";
+import { decodeScanStill, encodePngStill } from "./obb-phash-decode";
 import {
   createObbDetectorFromEnv,
   createOnnxYolo11ObbInference,
@@ -129,10 +130,12 @@ describe("Capture YOLO11 OBB ONNX wiring", () => {
         CARD_FLOW_ULTRALYTICS_AGPL_ACCEPTED: "true",
         CARD_FLOW_OBB_ONNX_PATH: localOnnx,
       });
-      const cropped = await preprocessGradeStill(still, detector);
-      expect(cropped.usedObbCrop).toBe(true);
-      expect(cropped.bytes.byteLength).toBeGreaterThan(0);
-      expect(cropped.bytes).not.toEqual(still.bytes);
+      const bitmap = await decodeScanStill(still.bytes, still.mimeType);
+      expect(bitmap).not.toBeNull();
+      const box = bestObbBox(await detector.detect(bitmap!));
+      expect(box).toBeTruthy();
+      const cropped = cropOrientedBox(bitmap!, box!);
+      expect(cropped.width * cropped.height).toBeLessThan(bitmap!.width * bitmap!.height);
     },
     20_000,
   );

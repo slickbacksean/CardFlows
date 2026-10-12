@@ -149,7 +149,7 @@ function SubmittedSheetForm({
               <TextInput
                 accessibilityLabel="Company"
                 onChangeText={setCompany}
-                placeholder="PSA"
+                placeholder="Grading company"
                 placeholderTextColor={colors.muted}
                 style={styles.input}
                 value={company}
@@ -272,7 +272,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.cardBorder,
   },
-  chipSelected: { borderColor: colors.accent, backgroundColor: "#2A2618" },
+  chipSelected: { borderColor: colors.accent, backgroundColor: colors.accentSoft },
   chipLabel: { color: colors.muted, fontWeight: "700", fontSize: 13 },
   chipLabelSelected: { color: colors.accent },
 });

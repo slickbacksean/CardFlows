@@ -122,9 +122,9 @@ describe("Task 9 livestream device QA", () => {
     expect(client).not.toMatch(/saveInventoryItem|addPurchased/);
   });
 
-  it("same card for two stable hits fills the overlay guess on iOS and Android", () => {
-    expect(LIVE_IDENTITY_STABLE_HITS).toBe(2);
-    expect(stabilizeLiveIdentity([identifiedHit()]).reason).toBe("unidentified");
+  it("the first accepted match fills the overlay guess on iOS and Android", () => {
+    expect(LIVE_IDENTITY_STABLE_HITS).toBe(1);
+    expect(stabilizeLiveIdentity([identifiedHit()]).tcgdexId).toBe("base1-58");
     expect(stabilizeLiveIdentity([identifiedHit(), identifiedHit()]).tcgdexId).toBe("base1-58");
     expect(
       stabilizeLiveIdentity([identifiedHit("android"), identifiedHit("android")]).tcgdexId,
@@ -156,7 +156,7 @@ describe("Task 9 livestream device QA", () => {
       scanTab.indexOf("function toggleScanner"),
     );
 
-    expect(livestream).toContain('pageUrl: "https://www.whatnot.com"');
+    expect(livestream).toContain('pageUrl: "https://www.whatnot.com/tag/pokemon_cards"');
     expect(livestream).toContain('pageUrl: "https://www.ebay.com/ebaylive"');
     expect(scanTab).toContain("LIVESTREAM_PLATFORM_ORDER");
     expect(selectPlatform).toContain("setBrowserEpoch");
@@ -167,6 +167,7 @@ describe("Task 9 livestream device QA", () => {
     expect(browser).toContain("reloadKey");
     expect(browser).toContain("url");
     expect(browser).not.toMatch(SCREENSHOT_APIS);
+    expect(inApp).not.toMatch(/from "@capacitor|from "@capgo|allowScreenshots/);
     expect(inApp).not.toMatch(SCREENSHOT_APIS);
     expect(inApp).not.toContain("executeScript");
     expect(scanTab).not.toContain("injectedJavaScript");

@@ -22,6 +22,10 @@ public final class CardFlowLiveVideoModule: Module {
       LiveVideoSamplePump.shared.noteHlsUrl(url)
     }
 
+    AsyncFunction("setYoloDetect") { (active: Bool) in
+      LiveVideoSamplePump.shared.setYoloDetect(active)
+    }
+
     AsyncFunction("pullSampleBuffer") { () -> [String: Any] in
       LiveVideoSamplePump.shared.pullFrame()
     }
@@ -38,14 +42,22 @@ final class LiveVideoSamplePump {
   private weak var outputItem: AVPlayerItem?
   private var didInstallHooks = false
   private var scannerSession = false
+  private var yoloDetect = false
   private var hlsPlayer: AVPlayer?
   private var hlsUrl: String?
   private var hlsCookies: [HTTPCookie] = []
   private var hlsCookiesReady = false
   private var hlsCookieGeneration = UUID()
+  private var hlsAppliedCookieCount = -1
 
   /// The play() hook is installed for the process, but players are kept only
   /// during a scanner session and only when they sit in the livestream page.
+  func setYoloDetect(_ active: Bool) {
+    lock.lock()
+    yoloDetect = active
+    lock.unlock()
+  }
+
   func setScannerSession(_ active: Bool) {
     lock.lock()
     scannerSession = active
@@ -72,6 +84,7 @@ final class LiveVideoSamplePump {
     hlsUrl = next
     hlsCookies = []
     hlsCookiesReady = next == nil
+    hlsAppliedCookieCount = -1
     let generation = UUID()
     hlsCookieGeneration = generation
     lock.unlock()
@@ -81,11 +94,18 @@ final class LiveVideoSamplePump {
     guard next != nil else { return }
     WKWebsiteDataStore.default().httpCookieStore.getAllCookies { [weak self] cookies in
       guard let self else { return }
+      var restart = false
       self.lock.lock()
-      defer { self.lock.unlock() }
-      guard self.hlsCookieGeneration == generation else { return }
-      self.hlsCookies = cookies
-      self.hlsCookiesReady = true
+      if self.hlsCookieGeneration == generation {
+        let applied = self.hlsAppliedCookieCount
+        self.hlsCookies = cookies
+        self.hlsCookiesReady = true
+        restart = self.hlsPlayer != nil && cookies.count != applied
+      }
+      self.lock.unlock()
+      if restart {
+        self.onMain { self.stopHlsPlayer() }
+      }
     }
     DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in
       guard let self else { return }
@@ -147,6 +167,10 @@ final class LiveVideoSamplePump {
       }
       payload["cropMs"] = (CFAbsoluteTimeGetCurrent() - detectStart) * 1000 - detectMs
     }
+    let sendFrame = lock.withLock { yoloDetect }
+    if sendFrame, let frameJpeg = LiveVideoIdentityCrop.frameJpegBase64(from: pixelBuffer) {
+      payload["videoFrameJpeg"] = frameJpeg
+    }
     return payload
   }
 
@@ -177,6 +201,9 @@ final class LiveVideoSamplePump {
     if !matched.isEmpty {
       options[AVURLAssetHTTPHeaderFieldsKey] = HTTPCookie.requestHeaderFields(with: matched)
     }
+    lock.lock()
+    hlsAppliedCookieCount = matched.count
+    lock.unlock()
     let asset = AVURLAsset(url: url, options: options)
     let item = AVPlayerItem(asset: asset)
     let player = AVPlayer(playerItem: item)
@@ -226,12 +253,14 @@ final class LiveVideoSamplePump {
   }
 
   private func copyPixelBuffer(from player: AVPlayer) -> CVPixelBuffer? {
-    guard let item = player.currentItem else { return nil }
+    guard let item = player.currentItem, item.status == .readyToPlay else { return nil }
     let output = output(for: item)
     let itemTime = output.itemTime(forHostTime: CACurrentMediaTime())
-    if output.hasNewPixelBuffer(forItemTime: itemTime) {
-      return output.copyPixelBuffer(forItemTime: itemTime, itemTimeForDisplay: nil)
+    if output.hasNewPixelBuffer(forItemTime: itemTime),
+       let buffer = output.copyPixelBuffer(forItemTime: itemTime, itemTimeForDisplay: nil) {
+      return buffer
     }
+    output.requestNotificationOfMediaDataChange(with: itemTime)
     return output.copyPixelBuffer(forItemTime: item.currentTime(), itemTimeForDisplay: nil)
   }
 
@@ -361,22 +390,31 @@ private struct CardDetectResult {
   var corners: [CGPoint]? = nil
 }
 
-/// Pokémon TCG is 63×88 mm (~0.716). Detect a filling rectangle; crop is identity metadata.
+/// Pokémon TCG is 63×88 mm (~0.716). Vision only proposes rectangles.
+/// A box is a card when it has that proportion, a border on every side, and artwork inside.
+/// Chat, buttons, and the video frame itself fail that check.
 private enum CardInStreamDetect {
-  static let minShortOverLong: CGFloat = 0.60
+  static let minShortOverLong: CGFloat = 0.64
   static let maxShortOverLong: CGFloat = 0.82
-  static let minFill: CGFloat = 0.10
+  static let minFill: CGFloat = 0.02
+  static let maxFill: CGFloat = 0.55
+  static let detectMaxSide = 640
+  private static let detectContext = CIContext(options: [
+    .workingColorSpace: NSNull(),
+    .outputColorSpace: NSNull(),
+  ])
 
   static func inspect(_ pixelBuffer: CVPixelBuffer) -> CardDetectResult {
+    let buffer = downscaled(pixelBuffer) ?? pixelBuffer
     let request = VNDetectRectanglesRequest()
-    request.minimumConfidence = 0.45
+    request.minimumConfidence = 0.35
     request.minimumAspectRatio = 0.5
-    request.maximumAspectRatio = 1.0
-    request.minimumSize = 0.18
-    request.quadratureTolerance = 22
-    request.maximumObservations = 6
+    request.maximumAspectRatio = 1.85
+    request.minimumSize = 0.10
+    request.quadratureTolerance = 45
+    request.maximumObservations = 8
 
-    let handler = VNImageRequestHandler(cvPixelBuffer: pixelBuffer, orientation: .up, options: [:])
+    let handler = VNImageRequestHandler(cvPixelBuffer: buffer, orientation: .up, options: [:])
     do {
       try handler.perform([request])
     } catch {
@@ -384,16 +422,19 @@ private enum CardInStreamDetect {
     }
 
     var best: VNRectangleObservation?
-    var bestFill: CGFloat = 0
+    var bestScore: CGFloat = 0
     for observation in request.results ?? [] {
-      guard observation.confidence >= 0.45 else { continue }
+      guard observation.confidence >= 0.35 else { continue }
       let fill = observation.boundingBox.width * observation.boundingBox.height
-      guard fill >= minFill else { continue }
+      guard fill >= minFill && fill <= maxFill else { continue }
       let ratio = shortOverLong(observation)
       guard ratio >= minShortOverLong && ratio <= maxShortOverLong else { continue }
-      if fill > bestFill {
+      let evidence = cardEvidence(buffer, box: observation.boundingBox)
+      guard evidence > 0 else { continue }
+      let score = evidence + fill * 6
+      if score > bestScore {
         best = observation
-        bestFill = fill
+        bestScore = score
       }
     }
     guard let best else {
@@ -420,13 +461,153 @@ private enum CardInStreamDetect {
     guard longest > 0 else { return 0 }
     return shortest / longest
   }
+
+  /// 0 rejects the box. Artwork fills the inside of a card; chat and buttons do not.
+  /// Each side needs an edge, so a text bar or an open video frame cannot pass.
+  static func cardEvidence(_ pixelBuffer: CVPixelBuffer, box: CGRect) -> CGFloat {
+    guard let grid = lumaGrid(pixelBuffer, box: box, cols: 16, rows: 22) else { return 0 }
+    let cols = 16
+    let rows = 22
+    let interior = interiorSamples(grid, cols: cols, rows: rows)
+    guard interior.count >= 12 else { return 0 }
+    let spread = stddev(interior)
+    guard spread >= 16 else { return 0 }
+    let mean = interior.reduce(0, +) / CGFloat(interior.count)
+    let busy = interior.filter { abs($0 - mean) >= 22 }.count
+    guard CGFloat(busy) / CGFloat(interior.count) >= 0.28 else { return 0 }
+    let sides = sideEdges(grid, cols: cols, rows: rows)
+    let weakest = sides.min() ?? 0
+    let average = sides.reduce(0, +) / CGFloat(sides.count)
+    guard weakest >= 4, average >= 9 else { return 0 }
+    return average * 0.55 + spread * 0.7
+  }
+
+  static func interiorSamples(_ grid: [CGFloat], cols: Int, rows: Int) -> [CGFloat] {
+    var values: [CGFloat] = []
+    let y0 = rows / 5
+    let y1 = rows - rows / 5
+    let x0 = cols / 5
+    let x1 = cols - cols / 5
+    for y in y0..<y1 {
+      for x in x0..<x1 {
+        values.append(grid[y * cols + x])
+      }
+    }
+    return values
+  }
+
+  static func sideEdges(_ grid: [CGFloat], cols: Int, rows: Int) -> [CGFloat] {
+    func meanDiff(_ pairs: [(Int, Int)]) -> CGFloat {
+      guard !pairs.isEmpty else { return 0 }
+      let total = pairs.reduce(CGFloat(0)) { partial, pair in
+        partial + abs(grid[pair.0] - grid[pair.1])
+      }
+      return total / CGFloat(pairs.count)
+    }
+    var top: [(Int, Int)] = []
+    var bottom: [(Int, Int)] = []
+    var left: [(Int, Int)] = []
+    var right: [(Int, Int)] = []
+    for x in 0..<cols {
+      top.append((x, cols + x))
+      bottom.append(((rows - 1) * cols + x, (rows - 2) * cols + x))
+    }
+    for y in 0..<rows {
+      left.append((y * cols, y * cols + 1))
+      right.append((y * cols + cols - 1, y * cols + cols - 2))
+    }
+    return [meanDiff(top), meanDiff(bottom), meanDiff(left), meanDiff(right)]
+  }
+
+  static func stddev(_ values: [CGFloat]) -> CGFloat {
+    guard !values.isEmpty else { return 0 }
+    let mean = values.reduce(0, +) / CGFloat(values.count)
+    let variance = values.reduce(CGFloat(0)) { partial, value in
+      let delta = value - mean
+      return partial + delta * delta
+    } / CGFloat(values.count)
+    return sqrt(variance)
+  }
+
+  /// Vision boxes are normalized with a lower-left origin.
+  static func lumaGrid(
+    _ pixelBuffer: CVPixelBuffer,
+    box: CGRect,
+    cols: Int,
+    rows: Int
+  ) -> [CGFloat]? {
+    CVPixelBufferLockBaseAddress(pixelBuffer, .readOnly)
+    defer { CVPixelBufferUnlockBaseAddress(pixelBuffer, .readOnly) }
+    guard CVPixelBufferGetPixelFormatType(pixelBuffer) == kCVPixelFormatType_32BGRA,
+          let base = CVPixelBufferGetBaseAddress(pixelBuffer) else { return nil }
+    let width = CVPixelBufferGetWidth(pixelBuffer)
+    let height = CVPixelBufferGetHeight(pixelBuffer)
+    let bytesPerRow = CVPixelBufferGetBytesPerRow(pixelBuffer)
+    guard width >= cols, height >= rows, bytesPerRow >= width * 4 else { return nil }
+    let originX = box.minX * CGFloat(width)
+    let originY = (1 - box.maxY) * CGFloat(height)
+    let boxWidth = box.width * CGFloat(width)
+    let boxHeight = box.height * CGFloat(height)
+    guard boxWidth >= 8, boxHeight >= 8 else { return nil }
+    let pixels = base.assumingMemoryBound(to: UInt8.self)
+    var grid = [CGFloat](repeating: 0, count: cols * rows)
+    for row in 0..<rows {
+      let y = Int(originY + (CGFloat(row) + 0.5) * boxHeight / CGFloat(rows))
+      let clampedY = min(height - 1, max(0, y))
+      for col in 0..<cols {
+        let x = Int(originX + (CGFloat(col) + 0.5) * boxWidth / CGFloat(cols))
+        let clampedX = min(width - 1, max(0, x))
+        let offset = clampedY * bytesPerRow + clampedX * 4
+        let b = CGFloat(pixels[offset])
+        let g = CGFloat(pixels[offset + 1])
+        let r = CGFloat(pixels[offset + 2])
+        grid[row * cols + col] = (r * 0.299 + g * 0.587 + b * 0.114)
+      }
+    }
+    return grid
+  }
+
+  /// Vision on a full HD frame is too slow for a card that is only up for a few seconds.
+  /// Normalized boxes still map onto the original buffer.
+  static func downscaled(_ pixelBuffer: CVPixelBuffer) -> CVPixelBuffer? {
+    let width = CVPixelBufferGetWidth(pixelBuffer)
+    let height = CVPixelBufferGetHeight(pixelBuffer)
+    let longSide = max(width, height)
+    guard longSide > detectMaxSide, width > 8, height > 8 else { return nil }
+    let scale = CGFloat(detectMaxSide) / CGFloat(longSide)
+    let outW = max(8, Int((CGFloat(width) * scale).rounded()))
+    let outH = max(8, Int((CGFloat(height) * scale).rounded()))
+    var output: CVPixelBuffer?
+    let status = CVPixelBufferCreate(
+      kCFAllocatorDefault,
+      outW,
+      outH,
+      kCVPixelFormatType_32BGRA,
+      nil,
+      &output
+    )
+    guard status == kCVReturnSuccess, let output else { return nil }
+    let source = CIImage(cvPixelBuffer: pixelBuffer)
+    let extent = source.extent
+    let image = source.transformed(
+      by: CGAffineTransform(translationX: -extent.minX, y: -extent.minY)
+        .scaledBy(x: scale, y: scale)
+    )
+    detectContext.render(
+      image,
+      to: output,
+      bounds: CGRect(x: 0, y: 0, width: outW, height: outH),
+      colorSpace: CGColorSpaceCreateDeviceRGB()
+    )
+    return output
+  }
 }
 
 /// 24×24 packed RGB (pHash) plus a larger JPEG crop (OpenCLIP sidecar).
 /// Hash/classify happens on the API, never a page jpeg.
 private enum LiveVideoIdentityCrop {
   static let size = 24
-  static let jpegMaxEdge: CGFloat = 448
+  static let jpegMaxEdge: CGFloat = 224
   private static let context = CIContext(options: [
     .workingColorSpace: NSNull(),
     .outputColorSpace: NSNull(),
@@ -464,6 +645,24 @@ private enum LiveVideoIdentityCrop {
     let outputRect = CGRect(x: 0, y: 0, width: size, height: size)
     guard let cgImage = context.createCGImage(scaled, from: outputRect) else { return nil }
     return packedRgbBase64(cgImage)
+  }
+
+  /// Whole live-video frame, short enough for the identify body limit. Not a page still.
+  static func frameJpegBase64(from pixelBuffer: CVPixelBuffer) -> String? {
+    let image = CIImage(cvPixelBuffer: pixelBuffer)
+    let extent = image.extent
+    guard extent.width >= 8, extent.height >= 8 else { return nil }
+    let longest = max(extent.width, extent.height)
+    let scale = min(1, 480 / longest)
+    let outW = max(8, (extent.width * scale).rounded())
+    let outH = max(8, (extent.height * scale).rounded())
+    let scaled = image.transformed(
+      by: CGAffineTransform(translationX: -extent.minX, y: -extent.minY).scaledBy(x: scale, y: scale)
+    )
+    let outputRect = CGRect(x: 0, y: 0, width: outW, height: outH)
+    guard let cgImage = context.createCGImage(scaled, from: outputRect) else { return nil }
+    guard let data = UIImage(cgImage: cgImage).jpegData(compressionQuality: 0.55) else { return nil }
+    return data.base64EncodedString()
   }
 
   static func jpegBase64(

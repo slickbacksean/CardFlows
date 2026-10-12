@@ -3,12 +3,17 @@ import {
   GRADE_ESTIMATE_DISCLAIMER,
   GRADE_ESTIMATE_LABEL,
   PHOTO_PREGRADE_SOURCE,
+  PREGRADE_COPY,
   PREGRADE_DISCLAIMER,
   PREGRADE_LABEL,
   PREGRADE_SURFACE_NULL_REASON,
   type CardFlowGradeEstimate,
+  type PhotoCaptureMetrics,
+  type PhotoPregradeAngled,
+  type PhotoPregradeAngledStatus,
   type DetectCropResult,
   type DetectCropRetake,
+  type DetectCropSuccess,
   type DetectedCardCrop,
   type GradeSubgrade,
   type PhotoPregradeRetake,
@@ -21,26 +26,30 @@ import {
  * Port of GitHub main packages/api/src/grading/photo-pregrade-mapper.ts and
  * map-detect-result.ts. The only overall number is
  * `grade_estimate.overall_grade`. Hard capture gates (card not found, tilt,
- * aspect) are a retake with no number. Soft gates (glare, lighting,
- * resolution) still score, with a warning.
+ * aspect, and CardFlow's sharpness / capture-scale gates from
+ * cardflow_capture_checks.py) are a retake with no number. Soft gates
+ * (glare, lighting, resolution, small in frame) still score, with a warning.
+ *
+ * Every string a user can see comes from PREGRADE_COPY (plain words, no
+ * library jargon). Library details stay in mathTrace and the debug log.
  */
 
-const HARD_GATE_NAMES = new Set(["card_detection", "tilt", "aspect_ratio"]);
+const HARD_GATE_NAMES = new Set(["card_detection", "tilt", "aspect_ratio", "sharpness", "capture_scale"]);
 
 const HARD_GATE_TIPS: Record<string, string> = {
-  card_detection: "Card not found",
-  tilt: "Camera angle too tilted",
-  aspect_ratio: "Unexpected aspect ratio",
+  card_detection: PREGRADE_COPY.notFound,
+  tilt: PREGRADE_COPY.tilted,
+  aspect_ratio: PREGRADE_COPY.shapeOff,
+  sharpness: PREGRADE_COPY.blurry,
+  capture_scale: PREGRADE_COPY.tooFar,
 };
 
 const SOFT_GATE_LABELS: Record<string, string> = {
-  resolution: "Resolution too low",
-  glare: "Glare detected",
-  uneven_lighting: "Uneven lighting",
+  resolution: PREGRADE_COPY.lowResolution,
+  glare: PREGRADE_COPY.glare,
+  uneven_lighting: PREGRADE_COPY.unevenLight,
+  capture_scale_low: PREGRADE_COPY.smallInFrame,
 };
-
-const SURFACE_EXCLUDED_NOTE = "overall estimate excludes surface";
-const DIMENSIONS_NOTE = "dimensions not measured without dpi";
 
 interface LibraryGate {
   name?: unknown;
@@ -74,18 +83,45 @@ function isHardGate(gate: LibraryGate): boolean {
   return HARD_GATE_NAMES.has(gate.name);
 }
 
+/** Adapter's own decode failure: not a detection result, so don't call it "not found". */
+const DECODE_FAILURE_DETAIL = "could not decode image";
+const DECODE_FAILURE_REASON = PREGRADE_COPY.unreadable;
+
+/** grade_card scores 0.0 when no sub-grade could be measured; that is not a grade. */
+export const NOTHING_MEASURED_REASON = PREGRADE_COPY.nothingMeasured;
+
 function hardGateReason(gate: LibraryGate): string {
+  if (gate.detail === DECODE_FAILURE_DETAIL) return DECODE_FAILURE_REASON;
   if (typeof gate.name === "string") {
     const tip = HARD_GATE_TIPS[gate.name];
     if (tip) return tip;
   }
-  if (typeof gate.detail === "string" && gate.detail.trim() !== "") return gate.detail;
-  return "Card not found";
+  // Never echo library detail strings ("max corner angle deviation=…") to a user.
+  return PREGRADE_COPY.unusable;
 }
 
-function softGateLabel(gate: LibraryGate): string {
-  const name = gate.name as string;
-  return SOFT_GATE_LABELS[name] ?? name;
+function softGateLabel(gate: LibraryGate): string | null {
+  return SOFT_GATE_LABELS[gate.name as string] ?? null;
+}
+
+function softGateLabels(gates: LibraryGate[]): string[] {
+  return failedSoftGates(gates)
+    .map(softGateLabel)
+    .filter((label): label is string => label !== null);
+}
+
+/** cardflow_capture_checks.py metrics → the public diagnostics shape. */
+function captureMetrics(value: unknown): PhotoCaptureMetrics | undefined {
+  const metrics = asRecord(value);
+  if (!metrics) return undefined;
+  return {
+    sharpness: asFiniteNumber(metrics.sharpness),
+    effectiveDpi: asFiniteNumber(metrics.effective_dpi),
+  };
+}
+
+function uniqueReasons(reasons: string[]): string[] {
+  return [...new Set(reasons)];
 }
 
 function failedSoftGates(gates: LibraryGate[]): LibraryGate[] {
@@ -110,6 +146,7 @@ export function mapDetectReport(
   const gates = asGates(report.gates);
   const hardFailures = gates.filter((gate) => gate.passed === false && isHardGate(gate));
   const crop = toCrop(cropBytes);
+  const capture = captureMetrics(asRecord(report.cardflow_capture));
 
   if (hardFailures.length > 0) {
     const body: DetectCropRetake = {
@@ -117,21 +154,24 @@ export function mapDetectReport(
       status: "retake",
       code: "PHOTO_RETAKE",
       side,
-      reasons: hardFailures.map(hardGateReason),
+      reasons: uniqueReasons(hardFailures.map(hardGateReason)),
     };
     if (crop) body.crop = crop;
+    if (capture) body.capture = capture;
     return body;
   }
   if (!crop) {
-    return { ok: false, status: "retake", code: "PHOTO_RETAKE", side, reasons: ["Card not found"] };
+    return { ok: false, status: "retake", code: "PHOTO_RETAKE", side, reasons: [PREGRADE_COPY.notFound] };
   }
-  return {
+  const found: DetectCropSuccess = {
     ok: true,
     status: "found",
     side,
     crop,
-    warnings: failedSoftGates(gates).map(softGateLabel),
+    warnings: softGateLabels(gates),
   };
+  if (capture) found.capture = capture;
+  return found;
 }
 
 /* ------------------------------- pre-grade -------------------------------- */
@@ -169,15 +209,12 @@ function sideGates(report: Record<string, unknown>, side: PhotoPregradeSide): Li
 function softGateWarning(report: Record<string, unknown>): string | undefined {
   const parts: string[] = [];
   for (const side of ["front", "back"] as const) {
-    const failed = failedSoftGates(sideGates(report, side));
-    if (failed.length === 0) continue;
-    parts.push(`${side === "front" ? "Front" : "Back"}: ${failed.map(softGateLabel).join(", ")}`);
+    const labels = softGateLabels(sideGates(report, side));
+    if (labels.length === 0) continue;
+    parts.push(`${side === "front" ? "Front" : "Back"}: ${labels.join(", ")}.`);
   }
   const pair = asRecord(report.capture_pair);
-  if (pair?.same_side_suspected === true) {
-    const note = typeof pair.note === "string" && pair.note.trim() !== "" ? pair.note : null;
-    parts.push(note ?? "The front and back uploads look like the same side.");
-  }
+  if (pair?.same_side_suspected === true) parts.push(PREGRADE_COPY.sameSide);
   return parts.length === 0 ? undefined : parts.join(" ");
 }
 
@@ -187,7 +224,7 @@ function retake(side: PhotoPregradeSide, reasons: string[]): PhotoPregradeRetake
     status: "retake",
     code: "PHOTO_RETAKE",
     side,
-    reasons: reasons.length > 0 ? reasons : ["Card not found"],
+    reasons: reasons.length > 0 ? uniqueReasons(reasons) : [PREGRADE_COPY.notFound],
   };
 }
 
@@ -216,10 +253,10 @@ export function mapGradeCardReport(input: unknown): PhotoPregradeSuccess | Photo
   if (hard) return hard;
 
   if (report.grade_estimate == null && report.centering == null) {
-    return retake("front", ["Card not found"]);
+    return retake("front", [PREGRADE_COPY.notFound]);
   }
   const estimate = asFiniteNumber(asRecord(report.grade_estimate)?.overall_grade);
-  if (estimate === null) return retake("front", ["Card not found"]);
+  if (estimate === null) return retake("front", [PREGRADE_COPY.notFound]);
 
   const centering = asRecord(report.centering);
   const cornersEdges = asRecord(report.corners_edges);
@@ -233,20 +270,30 @@ export function mapGradeCardReport(input: unknown): PhotoPregradeSuccess | Photo
   const kb = sideGrade(subgrades, "back", "corners", asRecord(cornersEdges?.back)?.corners_grade);
   const ef = sideGrade(subgrades, "front", "edges", asRecord(cornersEdges?.front)?.edges_grade);
   const eb = sideGrade(subgrades, "back", "edges", asRecord(cornersEdges?.back)?.edges_grade);
-  const sf = sideGrade(subgrades, "front", "surface", asRecord(surface?.front)?.grade);
-  const sb = sideGrade(subgrades, "back", "surface", asRecord(surface?.back)?.grade);
+  const angled = angledResult(report);
+  // Surface is graded only from the raking-light photos, and only when the
+  // adapter accepted them. Anything else stays "not assessed" — never guessed.
+  const surfaceTrusted = angled.status === "graded";
+  const sf = surfaceTrusted ? sideGrade(subgrades, "front", "surface", asRecord(surface?.front)?.grade) : null;
+  const sb = surfaceTrusted ? sideGrade(subgrades, "back", "surface", asRecord(surface?.back)?.grade) : null;
+
+  // scoring.py returns overall_grade 0.0 ("nothing measurable in this
+  // capture") when every sub-grade is null. Never surface that as a number.
+  const nothingMeasured = [cf, cb, kf, kb, ef, eb, sf, sb].every((value) => value === null);
+  if (estimate < 1 || nothingMeasured) return retake("front", [NOTHING_MEASURED_REASON]);
 
   const surfaceNull = sf === null && sb === null;
   const noteParts: string[] = [];
-  if (surfaceNull) noteParts.push(SURFACE_EXCLUDED_NOTE);
-  if (dimensions?.measurable === false) noteParts.push(DIMENSIONS_NOTE);
+  noteParts.push(surfaceNull ? PREGRADE_COPY.surfaceExcludedNote : PREGRADE_COPY.surfaceIncludedNote);
+  if (dimensions?.measurable === false) noteParts.push(PREGRADE_COPY.sizeNotCheckedNote);
 
   const surfaceRow: PhotoPregradeSubgrade = {
     points: surfaceNull ? null : meanPoints(sf, sb),
     front: sf,
     back: sb,
-    ...(surfaceNull ? { reason: PREGRADE_SURFACE_NULL_REASON } : {}),
   };
+  if (surfaceNull) surfaceRow.reason = surfaceNullReason(angled.status);
+  else if (sb === null) surfaceRow.reason = PREGRADE_COPY.surfaceNotAssessedBack;
 
   const body: PhotoPregradeSuccess = {
     ok: true,
@@ -265,11 +312,44 @@ export function mapGradeCardReport(input: unknown): PhotoPregradeSuccess | Photo
       edges: { points: meanPoints(ef, eb), front: ef, back: eb },
       surface: surfaceRow,
     },
-    note: noteParts.join("; "),
+    note: noteParts.join(" "),
+    angled,
   };
+  const capture = asRecord(asRecord(report.cardflow)?.capture);
+  const front = captureMetrics(capture?.front);
+  const back = captureMetrics(capture?.back);
+  if (front || back) body.capture = { ...(front ? { front } : {}), ...(back ? { back } : {}) };
   const warning = softGateWarning(report);
   if (warning) body.warning = warning;
   return body;
+}
+
+const ANGLED_STATUSES = new Set<PhotoPregradeAngledStatus>([
+  "not_provided",
+  "graded",
+  "rejected",
+  "no_light_change",
+  "solve_failed",
+]);
+
+/** cardflow_adapter.py `cardflow.angled` → public shape. Missing = not provided. */
+function angledResult(report: Record<string, unknown>): PhotoPregradeAngled {
+  const angled = asRecord(asRecord(report.cardflow)?.angled);
+  const status = angled?.status;
+  return {
+    provided: asFiniteNumber(angled?.provided) ?? 0,
+    used: asFiniteNumber(angled?.used) ?? 0,
+    status:
+      typeof status === "string" && ANGLED_STATUSES.has(status as PhotoPregradeAngledStatus)
+        ? (status as PhotoPregradeAngledStatus)
+        : "not_provided",
+  };
+}
+
+function surfaceNullReason(status: PhotoPregradeAngledStatus): string {
+  if (status === "no_light_change") return PREGRADE_COPY.surfaceAngledNoLight;
+  if (status === "rejected" || status === "solve_failed") return PREGRADE_COPY.surfaceAngledFailed;
+  return PREGRADE_SURFACE_NULL_REASON;
 }
 
 /**
@@ -284,12 +364,12 @@ export function gradeEstimateFromPregrade(result: PhotoPregradeSuccess): CardFlo
     score: pillars[slot.id][slot.side],
   }));
   const trace = [`overall=${result.estimate} from cardgrading grade_estimate.overall_grade`];
-  if (pillars.surface.reason) trace.push(`surface not graded: ${pillars.surface.reason}`);
+  if (pillars.surface.reason) trace.push(`surface: ${pillars.surface.reason}`);
   if (result.note) trace.push(result.note);
   if (result.warning) trace.push(`warning: ${result.warning}`);
   return {
     overall: result.estimate,
-    display: `Pre-grade ${result.estimate}`,
+    display: `${PREGRADE_COPY.displayPrefix} ${result.estimate}`,
     confidence: null,
     subgrades,
     usedBack: true,

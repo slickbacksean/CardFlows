@@ -50,6 +50,10 @@ class CardFlowLiveVideoModule : Module() {
       LiveVideoSamplePump.shared.noteHlsUrl(url)
     }
 
+    AsyncFunction("setYoloDetect") { active: Boolean ->
+      LiveVideoSamplePump.shared.setYoloDetect(active)
+    }
+
     AsyncFunction("pullSampleBuffer") {
       LiveVideoSamplePump.shared.pullFrame()
     }
@@ -68,6 +72,7 @@ internal class LiveVideoSamplePump private constructor() {
   private var copyThread: HandlerThread? = null
   private var copyHandler: Handler? = null
   private var scannerSession = false
+  private var yoloDetect = false
   private var hlsUrl: String? = null
   private var hlsPlayer: MediaPlayer? = null
   private var hlsReader: ImageReader? = null
@@ -95,6 +100,10 @@ internal class LiveVideoSamplePump private constructor() {
     }
   }
 
+  fun setYoloDetect(active: Boolean) {
+    synchronized(lock) { yoloDetect = active }
+  }
+
   fun setScannerSession(active: Boolean) {
     synchronized(lock) { scannerSession = active }
     if (!active) stopHlsPlayer()
@@ -115,6 +124,10 @@ internal class LiveVideoSamplePump private constructor() {
     val detectStart = System.nanoTime()
     val detection = pixelBuffer?.let(CardInStreamDetect::inspect)
     val detectMs = (System.nanoTime() - detectStart) / 1_000_000.0
+    android.util.Log.i(
+      "CardFlowLive",
+      "frame=${pixelBuffer != null} card=${detection?.cardDetected == true}",
+    )
     val cardDetected = detection?.cardDetected == true
     val box = detection?.box
     val identityRgb =
@@ -142,6 +155,9 @@ internal class LiveVideoSamplePump private constructor() {
       } else {
         null
       }
+    val sendFrame = synchronized(lock) { yoloDetect }
+    val videoFrameJpeg =
+      if (sendFrame && pixelBuffer != null && !pixelBuffer.isRecycled) frameJpegBase64(pixelBuffer) else null
     if (pixelBuffer != null && !pixelBuffer.isRecycled) pixelBuffer.recycle()
     val payload = mutableMapOf<String, Any>(
       "source" to "live_video",
@@ -151,7 +167,30 @@ internal class LiveVideoSamplePump private constructor() {
     if (cardBox != null) payload["cardBox"] = cardBox
     if (identityRgb != null) payload["identityRgb"] = identityRgb
     if (identityCropJpeg != null) payload["identityCropJpeg"] = identityCropJpeg
+    if (videoFrameJpeg != null) payload["videoFrameJpeg"] = videoFrameJpeg
     return payload
+  }
+
+  private fun frameJpegBase64(bitmap: Bitmap): String? {
+    val longSide = max(bitmap.width, bitmap.height)
+    val scaled = if (longSide <= 480) bitmap else {
+      val scale = 480f / longSide
+      Bitmap.createScaledBitmap(
+        bitmap,
+        max(8, (bitmap.width * scale).toInt()),
+        max(8, (bitmap.height * scale).toInt()),
+        true,
+      )
+    }
+    return try {
+      val stream = ByteArrayOutputStream()
+      val ok = scaled.compress(Bitmap.CompressFormat.JPEG, 55, stream)
+      if (scaled !== bitmap && !scaled.isRecycled) scaled.recycle()
+      if (!ok) null else Base64.encodeToString(stream.toByteArray(), Base64.NO_WRAP)
+    } catch (_: Throwable) {
+      if (scaled !== bitmap && !scaled.isRecycled) scaled.recycle()
+      null
+    }
   }
 
   private fun copyLiveVideoPixelBuffer(): Bitmap? {
@@ -167,7 +206,65 @@ internal class LiveVideoSamplePump private constructor() {
       if (page != null && !isBlankFrame(page)) return page
       page?.recycle()
     }
+    val shot = onMain { livestreamWebViewBounds() }
+    val webViewFrame = shot?.let(::copyWindowShot)
+    if (webViewFrame != null) return webViewFrame
     return copyHlsFrame()
+  }
+
+  private data class WindowShot(val window: android.view.Window, val rect: Rect)
+
+  /// Chromium often paints the live picture into the WebView instead of a
+  /// separate video SurfaceView. The rect is only that WebView.
+  private fun livestreamWebViewBounds(): WindowShot? {
+    val webView = livestreamWebViews().firstOrNull() ?: return null
+    val width = webView.width
+    val height = webView.height
+    if (width < 160 || height < 160) return null
+    val origin = IntArray(2)
+    webView.getLocationInWindow(origin)
+    val window = windowOf(webView) ?: return null
+    return WindowShot(window, Rect(origin[0], origin[1], origin[0] + width, origin[1] + height))
+  }
+
+  private fun copyWindowShot(shot: WindowShot): Bitmap? {
+    val width = shot.rect.width()
+    val height = shot.rect.height()
+    if (width < 160 || height < 160) return null
+    val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+    val handler = synchronized(lock) { copyHandler } ?: run {
+      bitmap.recycle()
+      return null
+    }
+    val latch = CountDownLatch(1)
+    var ok = false
+    try {
+      PixelCopy.request(shot.window, shot.rect, bitmap, { result ->
+        ok = result == PixelCopy.SUCCESS
+        latch.countDown()
+      }, handler)
+    } catch (_: Throwable) {
+      bitmap.recycle()
+      return null
+    }
+    if (!latch.await(250, TimeUnit.MILLISECONDS) || !ok || isBlankFrame(bitmap)) {
+      bitmap.recycle()
+      return null
+    }
+    val (destWidth, destHeight) = destSize(width, height) ?: return bitmap
+    if (destWidth == width && destHeight == height) return bitmap
+    val scaled = Bitmap.createScaledBitmap(bitmap, destWidth, destHeight, true)
+    bitmap.recycle()
+    return scaled
+  }
+
+  private fun windowOf(view: View): android.view.Window? {
+    var context = view.context
+    while (context is android.content.ContextWrapper) {
+      if (context is Activity) return context.window
+      context = context.baseContext
+    }
+    return activityProvider?.invoke()?.window
   }
 
   /// Muted MediaPlayer for the playlist the page exposed. Decoder output, not page pixels.
@@ -339,6 +436,7 @@ internal class LiveVideoSamplePump private constructor() {
 
   private fun collectVideoSurfaces(view: View, into: MutableSet<View>) {
     if (isPhoneCameraView(view)) return
+    if (isAppChromeSurface(view)) return
     if ((view is SurfaceView || view is TextureView) && view.width >= 160 && view.height >= 160) {
       into.add(view)
     }
@@ -359,6 +457,11 @@ internal class LiveVideoSamplePump private constructor() {
     val origin = IntArray(2)
     view.getLocationOnScreen(origin)
     return Rect(origin[0], origin[1], origin[0] + view.width, origin[1] + view.height)
+  }
+
+  private fun isAppChromeSurface(view: View): Boolean {
+    val name = view.javaClass.name
+    return name.contains("ReactSurfaceView") || name.contains("DebuggingOverlay")
   }
 
   private fun isPhoneCameraView(view: View): Boolean {
@@ -497,16 +600,17 @@ private fun normalizeLiveHlsUrl(raw: String?): String? {
   return uri.toString()
 }
 
-/// Pokémon TCG is 63×88 mm (~0.716). Detect a filling rectangle; crop is identity metadata.
+/// Pokémon TCG is 63×88 mm (~0.716). A window is a card only with that
+/// proportion, a border, and artwork inside. Chat and flat buttons fail.
 private data class CardDetectResult(val cardDetected: Boolean, val box: Rect?)
 
 private object CardInStreamDetect {
-  private const val MIN_SHORT_OVER_LONG = 0.60f
+  private const val MIN_SHORT_OVER_LONG = 0.64f
   private const val MAX_SHORT_OVER_LONG = 0.82f
-  private const val MIN_FILL = 0.10f
-  private const val MIN_SIZE = 0.18f
-  private const val DETECT_MAX_SIDE = 320
-  private const val SOBEL_THRESHOLD_SQ = 48 * 48
+  private const val MIN_FILL = 0.02f
+  private const val MAX_FILL = 0.55f
+  private const val MIN_SIZE = 0.12f
+  private const val DETECT_MAX_SIDE = 160
 
   fun inspect(pixelBuffer: Bitmap): CardDetectResult {
     if (pixelBuffer.isRecycled || pixelBuffer.width < 160 || pixelBuffer.height < 160) {
@@ -517,26 +621,8 @@ private object CardInStreamDetect {
       val width = scaled.width
       val height = scaled.height
       val luma = luma(scaled)
-      val edges = sobelEdges(luma, width, height)
-      val minSide = min(width, height).toFloat()
-      val frameArea = (width * height).toFloat()
-      var best: Rect? = null
-      var bestFill = 0f
-      for (box in boundingBoxes(edges, width, height)) {
-        val boxWidth = box.width().toFloat()
-        val boxHeight = box.height().toFloat()
-        val fill = (boxWidth * boxHeight) / frameArea
-        if (fill < MIN_FILL) continue
-        val shortest = min(boxWidth, boxHeight)
-        val longest = max(boxWidth, boxHeight)
-        if (longest <= 0f || shortest < MIN_SIZE * minSide) continue
-        val ratio = shortest / longest
-        if (ratio !in MIN_SHORT_OVER_LONG..MAX_SHORT_OVER_LONG) continue
-        if (fill > bestFill) {
-          best = box
-          bestFill = fill
-        }
-      }
+      val magnitude = sobelMagnitude(luma, width, height)
+      val best = searchCardWindow(luma, magnitude, width, height)
       val mapped = best?.let { toOriginal(it, pixelBuffer, scaled) }
       return CardDetectResult(mapped != null, mapped)
     } finally {
@@ -580,8 +666,140 @@ private object CardInStreamDetect {
     return pixels
   }
 
-  private fun sobelEdges(luma: IntArray, width: Int, height: Int): BooleanArray {
-    val edges = BooleanArray(width * height)
+  /// Card-shaped windows only. Flat chat and buttons lose to artwork inside a border.
+  private fun searchCardWindow(
+    luma: IntArray,
+    magnitude: IntArray,
+    width: Int,
+    height: Int,
+  ): Rect? {
+    val frameMin = min(width, height).toFloat()
+    val frameArea = (width * height).toFloat()
+    var bestScore = 0.0
+    var best: Rect? = null
+    val longFractions = floatArrayOf(0.24f, 0.34f, 0.46f, 0.62f, 0.80f)
+    val aspects = floatArrayOf(0.716f)
+    for (portrait in booleanArrayOf(true, false)) {
+      for (longFrac in longFractions) {
+        val longSide = (frameMin * longFrac).toInt()
+        if (longSide < MIN_SIZE * frameMin) continue
+        for (aspect in aspects) {
+          if (aspect !in MIN_SHORT_OVER_LONG..MAX_SHORT_OVER_LONG) continue
+          val shortSide = (longSide * aspect).toInt()
+          val boxWidth = if (portrait) shortSide else longSide
+          val boxHeight = if (portrait) longSide else shortSide
+          if (boxWidth < 16 || boxHeight < 16 || boxWidth >= width || boxHeight >= height) continue
+          val fill = (boxWidth * boxHeight) / frameArea
+          if (fill < MIN_FILL || fill > MAX_FILL) continue
+          val stepX = max(boxWidth / 4, 12)
+          val stepY = max(boxHeight / 4, 12)
+          var top = 0
+          while (top + boxHeight < height) {
+            var left = 0
+            while (left + boxWidth < width) {
+              val border = borderMean(magnitude, width, left, top, boxWidth, boxHeight)
+              val interior = interiorStats(luma, width, left, top, boxWidth, boxHeight)
+              if (interior.stddev >= 16.0 && interior.busyFraction >= 0.28 && border >= 12.0) {
+                val cx = (left + boxWidth / 2f) / width - 0.5f
+                val cy = (top + boxHeight / 2f) / height - 0.5f
+                val score = border + interior.stddev * 0.45 + (1.0 - (cx * cx + cy * cy) * 4.0) * 4.0
+                if (score > bestScore) {
+                  bestScore = score
+                  best = Rect(left, top, left + boxWidth, top + boxHeight)
+                }
+              }
+              left += stepX
+            }
+            top += stepY
+          }
+        }
+      }
+    }
+    if (bestScore < 28.0) return null
+    return best
+  }
+
+  private data class InteriorStats(val stddev: Double, val busyFraction: Double)
+
+  /// Inner artwork. A flat button or a text bar on one color stays under the gate.
+  private fun interiorStats(
+    luma: IntArray,
+    stride: Int,
+    left: Int,
+    top: Int,
+    boxWidth: Int,
+    boxHeight: Int,
+  ): InteriorStats {
+    val x0 = left + boxWidth / 5
+    val x1 = left + (boxWidth * 4) / 5
+    val y0 = top + boxHeight / 5
+    val y1 = top + (boxHeight * 4) / 5
+    if (x1 <= x0 || y1 <= y0) return InteriorStats(0.0, 0.0)
+    var sum = 0.0
+    var sumSq = 0.0
+    var count = 0
+    val step = 2
+    var y = y0
+    while (y < y1) {
+      var x = x0
+      while (x < x1) {
+        val value = luma[y * stride + x].toDouble()
+        sum += value
+        sumSq += value * value
+        count++
+        x += step
+      }
+      y += step
+    }
+    if (count < 8) return InteriorStats(0.0, 0.0)
+    val mean = sum / count
+    val variance = (sumSq / count - mean * mean).coerceAtLeast(0.0)
+    var busy = 0
+    y = y0
+    while (y < y1) {
+      var x = x0
+      while (x < x1) {
+        if (kotlin.math.abs(luma[y * stride + x] - mean) >= 22.0) busy++
+        x += step
+      }
+      y += step
+    }
+    return InteriorStats(kotlin.math.sqrt(variance), busy.toDouble() / count)
+  }
+
+  private fun borderMean(
+    magnitude: IntArray,
+    stride: Int,
+    left: Int,
+    top: Int,
+    boxWidth: Int,
+    boxHeight: Int,
+  ): Double {
+    var sum = 0.0
+    var count = 0
+    val step = 2
+    fun sample(x: Int, y: Int) {
+      sum += magnitude[y * stride + x]
+      count++
+    }
+    var x = left
+    while (x < left + boxWidth) {
+      sample(x, top)
+      sample(x, top + boxHeight - 1)
+      x += step
+    }
+    var y = top
+    while (y < top + boxHeight) {
+      sample(left, y)
+      sample(left + boxWidth - 1, y)
+      y += step
+    }
+    if (count == 0) return 0.0
+    return sum / count
+  }
+
+  private fun sobelMagnitude(luma: IntArray, width: Int, height: Int): IntArray {
+    val magnitude = IntArray(width * height)
     for (y in 1 until height - 1) {
       for (x in 1 until width - 1) {
         val i = y * width + x
@@ -595,51 +813,10 @@ private object CardInStreamDetect {
         val a22 = luma[i + width + 1]
         val gx = -a00 + a02 - 2 * a10 + 2 * a12 - a20 + a22
         val gy = -a00 - 2 * a01 - a02 + a20 + 2 * a21 + a22
-        edges[i] = gx * gx + gy * gy >= SOBEL_THRESHOLD_SQ
+        magnitude[i] = kotlin.math.sqrt((gx * gx + gy * gy).toDouble()).toInt()
       }
     }
-    return edges
-  }
-
-  private fun boundingBoxes(edges: BooleanArray, width: Int, height: Int): List<Rect> {
-    val n = width * height
-    val parent = IntArray(n) { it }
-    fun find(x: Int): Int {
-      var i = x
-      while (parent[i] != i) {
-        parent[i] = parent[parent[i]]
-        i = parent[i]
-      }
-      return i
-    }
-    fun union(a: Int, b: Int) {
-      val pa = find(a)
-      val pb = find(b)
-      if (pa != pb) parent[pb] = pa
-    }
-    for (y in 0 until height) {
-      for (x in 0 until width) {
-        val i = y * width + x
-        if (!edges[i]) continue
-        if (x + 1 < width && edges[i + 1]) union(i, i + 1)
-        if (y + 1 < height && edges[i + width]) union(i, i + width)
-      }
-    }
-    data class Acc(var minX: Int, var minY: Int, var maxX: Int, var maxY: Int)
-    val acc = HashMap<Int, Acc>()
-    for (y in 0 until height) {
-      for (x in 0 until width) {
-        val i = y * width + x
-        if (!edges[i]) continue
-        val root = find(i)
-        val box = acc.getOrPut(root) { Acc(x, y, x, y) }
-        if (x < box.minX) box.minX = x
-        if (y < box.minY) box.minY = y
-        if (x > box.maxX) box.maxX = x
-        if (y > box.maxY) box.maxY = y
-      }
-    }
-    return acc.values.map { Rect(it.minX, it.minY, it.maxX + 1, it.maxY + 1) }
+    return magnitude
   }
 }
 
@@ -647,7 +824,7 @@ private object CardInStreamDetect {
 /// Hash/classify happens on the API, never a page jpeg.
 private object LiveVideoIdentityCrop {
   private const val SIZE = 24
-  private const val JPEG_MAX_EDGE = 448
+  private const val JPEG_MAX_EDGE = 224
 
   private fun cropBounds(bitmap: Bitmap, box: Rect): Rect? {
     if (bitmap.isRecycled) return null

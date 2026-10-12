@@ -74,7 +74,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.cardBorder,
   },
-  chipSelected: { borderColor: colors.accent, backgroundColor: "#2A2614" },
+  chipSelected: { borderColor: colors.accent, backgroundColor: colors.accentSoft },
   chipLabel: { color: colors.muted, fontWeight: "600", fontSize: 13 },
   chipLabelSelected: { color: colors.accent },
 });
