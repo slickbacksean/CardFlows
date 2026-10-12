@@ -1,3 +1,4 @@
+import { DETAILS_NEEDED_WORKFLOW_STATE } from "./details-needed";
 import { centsToDollarString, optionalDollarsToCents } from "./money";
 import type {
   ClipboardExport,
@@ -96,7 +97,9 @@ export function computeCostToAskSpread(input: {
   askingPrice: string | number | null | undefined;
   allInTotal: string | number | null | undefined;
   currency?: string;
+  workflowState?: string | null;
 }): CostToAskSpread | null {
+  if (input.workflowState === DETAILS_NEEDED_WORKFLOW_STATE) return null;
   const askingCents = optionalDollarsToCents(input.askingPrice ?? null);
   const allInCents = optionalDollarsToCents(input.allInTotal ?? null);
   if (askingCents === null || allInCents === null) return null;

@@ -866,12 +866,12 @@ export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStor
       purchasedAt: purchase.purchasedAt,
       currency: purchase.currency,
       costBasis: {
-        purchasePrice: centsToDollarString(purchase.purchasePrice),
+        purchasePrice: dollarsFromCents(purchase.purchasePrice),
         shipping: centsToDollarString(purchase.shipping),
         tax: centsToDollarString(purchase.tax),
         fees: centsToDollarString(purchase.fees),
         supplies: centsToDollarString(purchase.supplies),
-        allInTotal: centsToDollarString(purchase.allInTotal),
+        allInTotal: dollarsFromCents(purchase.allInTotal),
       },
       maxBuy,
     };
@@ -899,7 +899,9 @@ export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStor
           ? "drafted"
           : item.workflowState === "watching"
             ? "watching"
-            : "acquired",
+            : item.workflowState === "details_needed"
+              ? "details_needed"
+              : "acquired",
       referencePriceAmount: dollarsFromCents(item.referencePriceAmount),
       targetMaxBuyAmount: dollarsFromCents(item.targetMaxBuyAmount),
       createdAt: item.createdAt,
@@ -950,12 +952,13 @@ export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStor
     const referenceCents = optionalDollarsToCents(
       item.referencePriceAmount ?? item.purchase.maxBuy.referencePriceAmount,
     );
-    const purchasePrice = optionalDollarsToCents(cost.purchasePrice) ?? 0;
+    const purchasePrice = optionalDollarsToCents(cost.purchasePrice);
     const shipping = optionalDollarsToCents(cost.shipping) ?? 0;
     const tax = optionalDollarsToCents(cost.tax) ?? 0;
     const fees = optionalDollarsToCents(cost.fees) ?? 0;
     const supplies = optionalDollarsToCents(cost.supplies) ?? 0;
-    const allInTotal = optionalDollarsToCents(cost.allInTotal) ?? 0;
+    const allInTotal =
+      purchasePrice === null ? null : (optionalDollarsToCents(cost.allInTotal) ?? 0);
     const maxBuyAmount = optionalDollarsToCents(item.purchase.maxBuy.maxBuyAmount);
     db.insert(crmPurchases)
       .values({
