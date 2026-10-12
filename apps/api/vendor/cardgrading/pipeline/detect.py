@@ -574,6 +574,34 @@ def detail_warp(image: np.ndarray, corners: np.ndarray | None, thresholds: dict)
     return perspective_correct(image, corners, size)
 
 
+_CARD_FINDER = None
+
+
+def card_finder_enabled() -> bool:
+    """CARD_FLOW_CARD_FINDER=1 uses the trained card finder (services/card-finder) for corners.
+
+    Off by default until it passes the frozen test set. When on, an unconfident
+    finder result is a retake; it never falls back to the contour finder's guess.
+    """
+    import os
+
+    return os.environ.get("CARD_FLOW_CARD_FINDER") == "1"
+
+
+def run_card_finder(image: np.ndarray):
+    global _CARD_FINDER
+    if _CARD_FINDER is None:
+        import sys as _sys
+
+        finder_dir = Path(__file__).resolve().parents[5] / "services" / "card-finder"
+        if str(finder_dir) not in _sys.path:
+            _sys.path.insert(0, str(finder_dir))
+        from finder import CardFinder
+
+        _CARD_FINDER = CardFinder.load()
+    return _CARD_FINDER.find(image)
+
+
 def detect_and_normalize(
     image: np.ndarray,
     thresholds: dict,
@@ -589,6 +617,13 @@ def detect_and_normalize(
 
     if corners is not None:
         corners = np.asarray(corners, dtype=np.float32).reshape(4, 2)
+    elif card_finder_enabled():
+        found = run_card_finder(image)
+        if found is None or not found.confident:
+            reasons = "none" if found is None else ",".join(found.reject_reasons) or "low_confidence"
+            gates.append(QualityGate("card_detection", False, f"card finder not confident ({reasons})"))
+            return DetectResult(ok=False, warped=None, gates=gates, contour=None)
+        corners = np.asarray(found.corners, dtype=np.float32).reshape(4, 2)
     else:
         corners = find_card_contour(image)
     if corners is None:
