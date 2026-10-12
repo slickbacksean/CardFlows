@@ -14,6 +14,7 @@ from score import polygon_iou
 HERE = Path(__file__).resolve().parent
 
 
+@unittest.skipUnless(MODEL_PATH.exists(), "card-finder.onnx not committed yet")
 class FinderTests(unittest.TestCase):
     def test_model_checksum(self) -> None:
         expected = (HERE / "models" / "card-finder.onnx.sha256").read_text().split()[0]
