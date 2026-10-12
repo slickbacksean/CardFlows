@@ -38,6 +38,7 @@ export interface PurchaseSheetProps {
   localId: string;
   variants: TcgdexVariants;
   selectedVariant?: string | null;
+  initialPurchasePrice?: string;
   isSaving: boolean;
   error: string | null;
   onClose: () => void;
@@ -48,7 +49,7 @@ export function PurchaseSheet(props: PurchaseSheetProps) {
   const variantKey = props.selectedVariant ?? defaultVariantId(props.variants, props.selectedVariant);
   return (
     <PurchaseSheetForm
-      key={props.visible ? `open:${variantKey}` : "closed"}
+      key={props.visible ? `open:${variantKey}:${props.initialPurchasePrice ?? ""}` : "closed"}
       {...props}
     />
   );
@@ -61,13 +62,14 @@ function PurchaseSheetForm({
   localId,
   variants,
   selectedVariant,
+  initialPurchasePrice,
   isSaving,
   error,
   onClose,
   onSave,
 }: PurchaseSheetProps) {
   const options = variantOptions(variants);
-  const [purchasePrice, setPurchasePrice] = useState("");
+  const [purchasePrice, setPurchasePrice] = useState(initialPurchasePrice ?? "");
   const [shipping, setShipping] = useState("0.00");
   const [tax, setTax] = useState("0.00");
   const [fees, setFees] = useState("0.00");

@@ -125,7 +125,7 @@ export const crmInventoryItems = sqliteTable(
     check("crm_inventory_items_intent_chk", sql`${table.intent} in ('purchased', 'watchlist')`),
     check(
       "crm_inventory_items_workflow_state_chk",
-      sql`${table.workflowState} in ('watching', 'watchlist_closed', 'acquired', 'drafted', 'archived')`,
+      sql`${table.workflowState} in ('watching', 'watchlist_closed', 'acquired', 'drafted', 'archived', 'details_needed')`,
     ),
     uniqueIndex("crm_inventory_items_watchlist_open_uidx")
       .on(table.userId, table.cardflowCardId, table.selectedVariant)
@@ -144,12 +144,12 @@ export const crmPurchases = sqliteTable(
     purchasedAt: text("purchased_at").notNull(),
     sourceNote: text("source_note"),
     currency: text("currency").notNull().default("USD"),
-    purchasePrice: integer("purchase_price").notNull(),
+    purchasePrice: integer("purchase_price"),
     shipping: integer("shipping").notNull().default(0),
     tax: integer("tax").notNull().default(0),
     fees: integer("fees").notNull().default(0),
     supplies: integer("supplies").notNull().default(0),
-    allInTotal: integer("all_in_total").notNull(),
+    allInTotal: integer("all_in_total"),
     notes: text("notes"),
     maxBuyAmount: integer("max_buy_amount"),
     referencePriceAmount: integer("reference_price_amount"),

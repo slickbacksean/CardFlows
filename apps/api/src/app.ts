@@ -9,6 +9,11 @@ import {
   canonicalCardFromTcgdex,
   computeAllInCost,
   computeMaxBuy,
+  DETAILS_NEEDED_WORKFLOW_STATE,
+  detailsNeededCostBasis,
+  isDetailsNeededPurchase,
+  isRecentDetailsNeededDuplicate,
+  livestreamContextTags,
   keywordChips,
   LOCKED_DISPLAY_CURRENCY,
   mapRecognitionToCatalog,
@@ -1618,14 +1623,29 @@ export function createApp(
       selectedVariant?: string | null;
       referencePriceAmount?: string | number | null;
       anotherCopy?: boolean;
+      detailsNeeded?: boolean;
+      platform?: string | null;
+      streamUrl?: string | null;
     }>();
 
+    const detailsNeeded = body.detailsNeeded === true;
     const purchasePrice =
       body.purchasePrice === undefined || body.purchasePrice === null
         ? ""
         : String(body.purchasePrice).trim();
 
-    if (!body.confirmationId || purchasePrice === "" || !body.purchasedAt) {
+    if (!body.confirmationId) {
+      return c.json(
+        {
+          ok: false,
+          error: detailsNeeded
+            ? "confirmationId is required"
+            : "confirmationId, purchasePrice, and purchasedAt are required",
+        },
+        400,
+      );
+    }
+    if (!detailsNeeded && (purchasePrice === "" || !body.purchasedAt)) {
       return c.json(
         {
           ok: false,
@@ -1636,15 +1656,15 @@ export function createApp(
     }
 
     const moneyError = firstInvalidDollar({
-      purchasePrice,
-      shipping: body.shipping,
-      tax: body.tax,
-      fees: body.fees,
-      supplies: body.supplies,
+      purchasePrice: detailsNeeded ? undefined : purchasePrice,
+      shipping: detailsNeeded ? undefined : body.shipping,
+      tax: detailsNeeded ? undefined : body.tax,
+      fees: detailsNeeded ? undefined : body.fees,
+      supplies: detailsNeeded ? undefined : body.supplies,
       referencePriceAmount: body.referencePriceAmount,
     });
     if (moneyError) return c.json({ ok: false, error: moneyError }, 400);
-    if (!isIsoDateTime(body.purchasedAt)) {
+    if (!detailsNeeded && !isIsoDateTime(body.purchasedAt ?? "")) {
       return c.json({ ok: false, error: "purchasedAt must be an ISO date-time" }, 400);
     }
 
@@ -1665,6 +1685,54 @@ export function createApp(
           );
     if (replay) return c.json({ ok: true, created: false, item: replay });
 
+    if (detailsNeeded) {
+      const recentSameCard = listInventory(userId).find(
+        (item) =>
+          item.intent === "purchased" &&
+          item.workflowState === DETAILS_NEEDED_WORKFLOW_STATE &&
+          isRecentDetailsNeededDuplicate({
+            existing: item,
+            cardflowCardId: confirmation.cardflowCardId,
+          }),
+      );
+      if (recentSameCard) return c.json({ ok: true, created: false, item: recentSameCard });
+
+      const createdAt = new Date().toISOString();
+      const item = saveInventoryItem({
+        inventoryItemId: idempotencyKey
+          ? inventoryIdForIdempotency(userId, "purchased", idempotencyKey)
+          : crypto.randomUUID(),
+        userId,
+        cardflowCardId: confirmation.cardflowCardId,
+        confirmationId: confirmation.confirmationId,
+        scanId: confirmation.scanId,
+        intent: "purchased",
+        grain: "physical_copy",
+        selectedVariant: body.selectedVariant ?? confirmation.selectedVariant,
+        condition: body.condition ?? null,
+        quantity: 1,
+        tags: livestreamContextTags({
+          platform: body.platform,
+          streamUrl: body.streamUrl,
+        }),
+        workflowState: DETAILS_NEEDED_WORKFLOW_STATE,
+        referencePriceAmount: null,
+        targetMaxBuyAmount: null,
+        createdAt,
+        purchase: {
+          purchaseId: crypto.randomUUID(),
+          purchasedAt: createdAt,
+          currency: LOCKED_DISPLAY_CURRENCY,
+          costBasis: detailsNeededCostBasis(),
+          maxBuy: computeMaxBuy({
+            referencePriceAmount: null,
+            preferences: getPreferences(userId),
+          }),
+        },
+      });
+      return c.json({ ok: true, item }, 201);
+    }
+
     const remoteWrite = await writePokecollectorCopy(userId, "purchased", {
       tcgdexId: confirmation.tcgdexId,
       selectedVariant: body.selectedVariant ?? confirmation.selectedVariant,
@@ -1673,6 +1741,7 @@ export function createApp(
     });
     if (!remoteWrite.ok) return c.json(remoteWrite, 503);
 
+    const purchasedAt = body.purchasedAt ?? "";
     const costBasis = computeAllInCost({
       purchasePrice,
       shipping: body.shipping,
@@ -1705,7 +1774,7 @@ export function createApp(
       createdAt: new Date().toISOString(),
       purchase: {
         purchaseId: crypto.randomUUID(),
-        purchasedAt: body.purchasedAt,
+        purchasedAt,
         currency: LOCKED_DISPLAY_CURRENCY,
         costBasis,
         maxBuy,
@@ -1795,15 +1864,104 @@ export function createApp(
     return c.json({ ok: true, item, maxBuy }, 201);
   });
 
+  app.post("/v1/inventory/:inventoryItemId/purchase", async (c) => {
+    const userId = c.get("userId");
+    const item = getInventoryItem(userId, c.req.param("inventoryItemId"));
+    if (!item) return c.json({ ok: false, error: "Inventory item not found" }, 404);
+    if (item.intent !== "purchased") {
+      return c.json({ ok: false, error: "Only Purchased copies can store cost details" }, 409);
+    }
+    if (item.purchase && !isDetailsNeededPurchase(item)) {
+      return c.json({ ok: true, created: false, item: inventoryView(userId, item) });
+    }
+    if (!isDetailsNeededPurchase(item)) {
+      return c.json({ ok: false, error: "This copy is not waiting for purchase details" }, 409);
+    }
+
+    const body = await c.req.json<{
+      purchasePrice?: string | number;
+      purchasedAt?: string;
+      shipping?: string | number | null;
+      tax?: string | number | null;
+      fees?: string | number | null;
+      supplies?: string | number | null;
+      condition?: string | null;
+      selectedVariant?: string | null;
+      referencePriceAmount?: string | number | null;
+    }>();
+    const purchasePrice =
+      body.purchasePrice === undefined || body.purchasePrice === null
+        ? ""
+        : String(body.purchasePrice).trim();
+    if (purchasePrice === "" || !body.purchasedAt) {
+      return c.json(
+        { ok: false, error: "purchasePrice and purchasedAt are required" },
+        400,
+      );
+    }
+    const moneyError = firstInvalidDollar({
+      purchasePrice,
+      shipping: body.shipping,
+      tax: body.tax,
+      fees: body.fees,
+      supplies: body.supplies,
+      referencePriceAmount: body.referencePriceAmount,
+    });
+    if (moneyError) return c.json({ ok: false, error: moneyError }, 400);
+    if (!isIsoDateTime(body.purchasedAt)) {
+      return c.json({ ok: false, error: "purchasedAt must be an ISO date-time" }, 400);
+    }
+
+    const confirmation = getConfirmation(userId, item.confirmationId);
+    if (confirmation?.tcgdexId) {
+      const remoteWrite = await writePokecollectorCopy(userId, "purchased", {
+        tcgdexId: confirmation.tcgdexId,
+        selectedVariant: body.selectedVariant ?? item.selectedVariant,
+        condition: body.condition ?? item.condition,
+        purchasePrice,
+      });
+      if (!remoteWrite.ok) return c.json(remoteWrite, 503);
+    }
+
+    const costBasis = computeAllInCost({
+      purchasePrice,
+      shipping: body.shipping ?? "0",
+      tax: body.tax ?? "0",
+      fees: body.fees ?? "0",
+      supplies: body.supplies ?? "0",
+    });
+    const maxBuy = computeMaxBuy({
+      referencePriceAmount: body.referencePriceAmount ?? item.referencePriceAmount,
+      condition: body.condition ?? item.condition,
+      preferences: getPreferences(userId),
+    });
+    const updated = updateInventoryItem(userId, item.inventoryItemId, {
+      workflowState: "acquired",
+      condition: body.condition ?? item.condition,
+      selectedVariant: body.selectedVariant ?? item.selectedVariant,
+      referencePriceAmount: maxBuy.referencePriceAmount,
+      purchase: {
+        purchaseId: item.purchase?.purchaseId ?? crypto.randomUUID(),
+        purchasedAt: body.purchasedAt,
+        currency: LOCKED_DISPLAY_CURRENCY,
+        costBasis,
+        maxBuy,
+      },
+    });
+    return c.json({ ok: true, item: inventoryView(userId, updated ?? item) });
+  });
+
   app.post("/v1/inventory/:inventoryItemId/drafts", (c) => {
     const userId = c.get("userId");
     const item = getInventoryItem(userId, c.req.param("inventoryItemId"));
     if (!item) return c.json({ ok: false, error: "Inventory item not found" }, 404);
-    if (item.intent !== "purchased" || !item.purchase) {
+    if (isDetailsNeededPurchase(item) || item.intent !== "purchased" || !item.purchase) {
       return c.json(
         {
           ok: false,
-          error: "Listing drafts are Purchased only. Save as Purchased first.",
+          error: isDetailsNeededPurchase(item)
+            ? "Add purchase details before drafting. Cost basis is required."
+            : "Listing drafts are Purchased only. Save as Purchased first.",
         },
         409,
       );

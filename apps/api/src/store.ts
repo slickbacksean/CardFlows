@@ -90,7 +90,7 @@ export interface InventoryItemRecord {
   condition: string | null;
   quantity: number | null;
   tags: string[];
-  workflowState: "acquired" | "watching" | "drafted";
+  workflowState: "acquired" | "watching" | "drafted" | "details_needed";
   referencePriceAmount: string | null;
   targetMaxBuyAmount: string | null;
   createdAt: string;
@@ -99,12 +99,12 @@ export interface InventoryItemRecord {
     purchasedAt: string;
     currency: string;
     costBasis: {
-      purchasePrice: string;
+      purchasePrice: string | null;
       shipping: string;
       tax: string;
       fees: string;
       supplies: string;
-      allInTotal: string;
+      allInTotal: string | null;
     };
     maxBuy: MaxBuyComputation;
   } | null;

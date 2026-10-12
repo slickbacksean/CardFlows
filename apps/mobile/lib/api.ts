@@ -168,7 +168,7 @@ export interface InventoryItem {
   referencePriceAmount: string | null;
   targetMaxBuyAmount: string | null;
   purchase: {
-    costBasis: { allInTotal: string; purchasePrice: string };
+    costBasis: { allInTotal: string | null; purchasePrice: string | null };
     maxBuy: { maxBuyAmount: string | null; display: string };
   } | null;
   card?: {
@@ -761,16 +761,11 @@ export function savePurchased(input: {
   });
 }
 
-/** Livestream buy: confirm the on-screen guess, then store the cost lines the buyer typed. */
+/** Livestream Purchased tap: identity + local stream context, no cost form. */
 export async function saveLivestreamPurchase(input: {
   tcgdexId: string;
-  purchasePrice: string;
-  purchasedAt: string;
-  shipping?: string;
-  tax?: string;
-  fees?: string;
-  supplies?: string;
-  condition?: string | null;
+  platform?: string | null;
+  streamUrl?: string | null;
   selectedVariant?: string | null;
 }) {
   const created = await createScan({ captureMethod: "manual_scan" });
@@ -778,17 +773,40 @@ export async function saveLivestreamPurchase(input: {
     tcgdexId: input.tcgdexId,
     selectedVariant: input.selectedVariant,
   });
-  return savePurchased({
-    confirmationId: confirmed.confirmation.confirmationId,
-    purchasePrice: input.purchasePrice,
-    purchasedAt: input.purchasedAt,
-    shipping: input.shipping,
-    tax: input.tax,
-    fees: input.fees,
-    supplies: input.supplies,
-    condition: input.condition,
-    selectedVariant: input.selectedVariant,
+  return request<{ ok: true; item: InventoryItem; created?: boolean }>("/v1/inventory/purchased", {
+    method: "POST",
+    body: JSON.stringify({
+      confirmationId: confirmed.confirmation.confirmationId,
+      detailsNeeded: true,
+      platform: input.platform,
+      streamUrl: input.streamUrl,
+      selectedVariant: input.selectedVariant,
+    }),
   });
+}
+
+export function completePurchasedDetails(
+  inventoryItemId: string,
+  input: {
+    purchasePrice: string;
+    purchasedAt: string;
+    currency?: string;
+    shipping?: string;
+    tax?: string;
+    fees?: string;
+    supplies?: string;
+    condition?: string | null;
+    selectedVariant?: string | null;
+    referencePriceAmount?: string | null;
+  },
+) {
+  return request<{ ok: true; item: InventoryItem }>(
+    `/v1/inventory/${encodeURIComponent(inventoryItemId)}/purchase`,
+    {
+      method: "POST",
+      body: JSON.stringify({ ...input, currency: LOCKED_DISPLAY_CURRENCY }),
+    },
+  );
 }
 
 export function saveWatchlist(input: {

@@ -887,7 +887,9 @@ describe("collection and portfolio read PokéCollector", () => {
     expect(collection).toContain("colors.muted");
     expect(collection.toLowerCase()).not.toContain("profit");
     expect(collection).toContain("item.readOnly");
-    expect(collection).toContain("showDraftCta={item.intent === \"purchased\" && !item.readOnly}");
+    expect(collection).toContain(
+      "showDraftCta={item.intent === \"purchased\" && !item.readOnly && !detailsNeeded}",
+    );
     expect(apiClient).toContain('"/v1/portfolio"');
     expect(apiClient).not.toMatch(/\/api\/collection|\/api\/wishlist|access_token/i);
   });
