@@ -22,6 +22,7 @@ RUN apt-get update \
 # Manifests first for layer caching. Every workspace package.json is copied so
 # --frozen-lockfile sees the same importers as the lockfile.
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc tsconfig.base.json tsconfig.node-next.json ./
+COPY patches patches
 COPY packages/shared/package.json packages/shared/
 COPY apps/api/package.json apps/api/
 COPY apps/mobile/package.json apps/mobile/
