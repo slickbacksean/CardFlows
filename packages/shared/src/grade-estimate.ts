@@ -15,15 +15,15 @@ export type GradeConfidence = (typeof GRADE_CONFIDENCE)[number];
 
 export const GRADE_ESTIMATE_LABEL = "estimate" as const;
 export const GRADE_ESTIMATE_DISCLAIMER =
-  "AI pre-grade estimate. Not an official PSA, BGS, or CGC grade." as const;
+  "Pre-grade estimate. Estimate only. Not an official grade." as const;
 export const GRADE_ESTIMATE_EMPTY_COPY = "No photo estimate yet." as const;
 export const GRADE_ESTIMATE_UNAVAILABLE_COPY = "Estimate unavailable." as const;
 export const GRADE_ESTIMATE_GUIDANCE_HISTORY_LABEL = "Guidance history" as const;
 export const GRADE_PHOTOS_HINT =
-  "Front and back photos are required for an AI pre-grade estimate. You can still submit without one." as const;
+  "Front and back photos are required for a pre-grade estimate. You can still submit without one." as const;
 export const GRADE_ESTIMATE_NEEDS_BACK_COPY =
-  "Add a back photo for an AI pre-grade estimate." as const;
-export const GRADING_TAB_CONSTRAINT = "AI pre-grade estimate, not a cert." as const;
+  "Add a back photo for a pre-grade estimate." as const;
+export const GRADING_TAB_CONSTRAINT = "Pre-grade estimate, not a cert." as const;
 
 export const GRADE_FRONT_WEIGHT = 0.6;
 export const GRADE_BACK_WEIGHT = 0.4;
@@ -35,6 +35,10 @@ export const GRADE_IMAGE_MIME_TYPES = ["image/jpeg", "image/png", "image/webp"] 
 export type GradeImageMimeType = (typeof GRADE_IMAGE_MIME_TYPES)[number];
 
 export const GRADE_IMAGE_MAX_BYTES = 20 * 1024 * 1024;
+/** JPEG quality for grade stills. `1` means no extra compression before detect/grade. */
+export const GRADE_STILL_QUALITY = 1;
+/** Standard trading-card frame (width / height in mm). */
+export const CARD_ASPECT_RATIO = 63 / 88;
 
 export interface GradeSubgrade {
   id: GradeSubgradeId;

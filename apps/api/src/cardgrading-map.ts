@@ -291,7 +291,7 @@ export function gradeEstimateFromPregrade(result: PhotoPregradeSuccess): CardFlo
   if (result.warning) trace.push(`warning: ${result.warning}`);
   return {
     overall: result.estimate,
-    display: `AI pre-grade ${result.estimate}`,
+    display: `Pre-grade ${result.estimate}`,
     confidence: null,
     subgrades,
     usedBack: true,

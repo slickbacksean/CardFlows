@@ -153,6 +153,8 @@ export {
   GRADE_FRONT_WEIGHT,
   GRADE_IMAGE_MAX_BYTES,
   GRADE_IMAGE_MIME_TYPES,
+  GRADE_STILL_QUALITY,
+  CARD_ASPECT_RATIO,
   GRADE_PHOTOS_HINT,
   GRADE_ESTIMATE_NEEDS_BACK_COPY,
   GRADE_SIDES,
@@ -547,6 +549,13 @@ export type {
 } from "./photo-pregrade";
 export { RECOGNITION_SCENARIOS } from "./types";
 export type * from "./types";
+export {
+  GRADE_STILL_MIN_SHORT_SIDE_PX,
+  GRADE_STILL_TOO_SMALL_COPY,
+  largestPictureSize,
+  stillFromCameraCapture,
+  type PickedGradeStill,
+} from "./grade-still";
 export {
   CARD_CANONICAL_HEIGHT_PX,
   CARD_CANONICAL_WIDTH_PX,
