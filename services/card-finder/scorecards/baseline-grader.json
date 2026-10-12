@@ -5,13 +5,13 @@
   "cards": {
     "all": {
       "count": 24,
-      "found_rate": 0.7916666666666666,
-      "iou_rate": 0.7916666666666666,
-      "mean_corner_error": 0.0018102155506201532,
-      "p95_corner_error": 0.013153102867225265,
+      "found_rate": 0.8333333333333334,
+      "iou_rate": 0.8333333333333334,
+      "mean_corner_error": 0.0020235338089763773,
+      "p95_corner_error": 0.014090496735697946,
       "wrong_accept_rate": 0.0,
       "wrong_accept_count": 0,
-      "false_retake_rate": 0.05263157894736842,
+      "false_retake_rate": 0.05,
       "passes": false
     },
     "back": {

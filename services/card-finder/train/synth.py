@@ -199,6 +199,15 @@ class Synth:
             col = np.array([rng.uniform(60, 140), rng.uniform(90, 170), rng.uniform(140, 230)])
             ex, ey = rng.randrange(w), rng.choice([0, h])
             cv2.ellipse(img, (ex, ey), (rng.randrange(w // 12, w // 4), rng.randrange(h // 8, h // 3)), rng.uniform(0, 180), 0, 360, col.tolist(), -1)
+        if rng.random() < 0.2:  # hand-shake motion blur
+            n = rng.randint(3, 9)
+            kern = np.zeros((n, n), np.float32)
+            kern[n // 2] = 1 / n
+            rot = cv2.getRotationMatrix2D((n / 2 - 0.5, n / 2 - 0.5), rng.uniform(0, 180), 1)
+            kern = cv2.warpAffine(kern, rot, (n, n))
+            img = cv2.filter2D(img, -1, kern / max(kern.sum(), 1e-6))
+        if rng.random() < 0.3:  # white balance / exposure
+            img = img * np.array([rng.uniform(0.8, 1.2), rng.uniform(0.9, 1.1), rng.uniform(0.8, 1.2)]) * rng.uniform(0.6, 1.3)
         k = rng.choice([0, 0, 1, 2, 3])
         if k:
             img = cv2.GaussianBlur(img, (0, 0), k * rng.uniform(0.4, 1.0))
@@ -217,18 +226,23 @@ class Synth:
         H, W = h * work, w * work
         bg = self.texture(H, W)
         mask = np.zeros((H, W), np.uint8)
+        self.last_quad, self.last_findable, quad_full = None, False, None
         if rng.random() < 0.08:  # empty frame (only distractors)
             for _ in range(rng.randint(1, 2)):
                 self.distractor(bg, mask)
         else:
-            card_px = rng.uniform(0.3, 0.72) * min(H, W)
+            card_px = rng.uniform(0.22, 0.75) * min(H, W)
             quad = self.homography_quad(H, W, card_px)
             holder = rng.choices(["raw", "sleeve", "toploader"], [0.6, 0.25, 0.15])[0]
             if rng.random() < 0.35:
                 self.distractor(bg, mask)
             self.paste(bg, self.card_image(), quad, mask, holder=holder)
-            if rng.random() < 0.2:
+            covered = rng.random() < 0.2
+            if covered:
                 self.distractor(bg, mask)
+            inside = bool(((quad >= 0) & (quad <= [W - 1, H - 1])).all())
+            self.last_findable = inside and not covered
+            quad_full = quad
         img = self.photo_effects(bg)
         img = cv2.resize(img, (w, h), interpolation=cv2.INTER_AREA)
         mask = cv2.resize(mask, (w, h), interpolation=cv2.INTER_NEAREST)
@@ -238,4 +252,7 @@ class Synth:
         y0, x0 = (s - h) // 2, (s - w) // 2
         out[y0:y0 + h, x0:x0 + w] = img
         om[y0:y0 + h, x0:x0 + w] = mask
+        self.last_box = (x0, y0, w, h)  # content area inside the letterbox
+        if quad_full is not None:
+            self.last_quad = quad_full / work + [x0, y0]
         return out, om

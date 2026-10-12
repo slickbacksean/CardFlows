@@ -24,10 +24,11 @@ from label_assist import refine  # noqa: E402
 from score import order_corners  # noqa: E402
 
 MODEL_PATH = HERE / "models" / "card-finder.onnx"
-VERSION = "card-finder@0.2.0"
+VERSION = "card-finder@0.2.1"
 SIZE = 256
 MEAN = np.array([0.485, 0.456, 0.406], np.float32)
 STD = np.array([0.229, 0.224, 0.225], np.float32)
+ASPECT_SCALE = 0.12  # aspect error at which confidence reaches 0
 THRESHOLD_PATH = HERE / "models" / "card-finder.threshold.json"
 
 
@@ -51,6 +52,59 @@ class FoundCard:
     confidence: float
     confident: bool
     reject_reasons: tuple[str, ...]
+    features: dict | None = None
+
+
+CONFIDENCE_PATH = HERE / "models" / "card-finder.confidence.json"
+FEATURES = ("agreement", "outside", "aspect_err", "inner", "refine_failed", "area", "largest_share")
+
+
+def confidence_features(prob, binary, quad, scale, image_shape, reasons) -> dict:
+    poly = np.zeros(prob.shape, np.uint8)
+    cv2.fillPoly(poly, [np.round(quad / scale).astype(np.int32)], 1)
+    inter = float((binary & (poly > 0)).sum())
+    union = float((binary | (poly > 0)).sum())
+    ring = cv2.dilate(poly, np.ones((13, 13), np.uint8)) - cv2.dilate(poly, np.ones((5, 5), np.uint8))
+    inner = cv2.erode(poly, np.ones((5, 5), np.uint8))
+    try:
+        from pipeline.plane import estimate_plane_pose
+
+        aspect_err = abs(estimate_plane_pose(quad, image_shape).rectified_aspect / (63 / 88) - 1)
+    except (np.linalg.LinAlgError, ValueError):
+        aspect_err = 1.0
+    n, labels, stats, _ = cv2.connectedComponentsWithStats(binary.astype(np.uint8))
+    areas = stats[1:, cv2.CC_STAT_AREA] if n > 1 else np.array([0])
+    return {
+        "agreement": inter / union if union else 0.0,
+        "outside": float(prob[ring > 0].mean()) if ring.any() else 1.0,
+        "aspect_err": float(min(aspect_err, 1.0)),
+        "inner": float(prob[inner > 0].mean()) if inner.any() else 0.0,
+        "refine_failed": float("edge_refine_failed" in reasons),
+        "area": float(poly.mean()),
+        "largest_share": float(areas.max() / max(1, areas.sum())),
+    }
+
+
+def _load_confidence_weights():
+    import json
+
+    try:
+        d = json.loads(CONFIDENCE_PATH.read_text())
+        return np.array([d["weights"][k] for k in FEATURES]), float(d["bias"])
+    except (OSError, ValueError, KeyError):
+        return None
+
+
+_WEIGHTS = _load_confidence_weights()
+
+
+def score_confidence(f: dict) -> float:
+    """Logistic model fit by train/fit_confidence.py; heuristic fallback if absent."""
+    if _WEIGHTS is not None:
+        w, b = _WEIGHTS
+        z = float(np.dot(w, [f[k] for k in FEATURES]) + b)
+        return float(1 / (1 + np.exp(-z)))
+    return float(np.clip(f["agreement"] * (1 - f["outside"]) * max(0.0, 1 - f["aspect_err"] / ASPECT_SCALE), 0, 1))
 
 
 def upright_order(quad: np.ndarray) -> np.ndarray:
@@ -117,30 +171,23 @@ class CardFinder:
             quad = refine(image, quad, band=0.007)
             # refinement must stay close to the model's outline
             drift = np.linalg.norm(order_corners(quad) - order_corners(coarse_full), axis=1).max() / np.hypot(h, w)
-            if not np.isfinite(quad).all() or drift > 0.03:
+            convex = np.isfinite(quad).all() and cv2.isContourConvex(np.round(order_corners(quad)).astype(np.int32).reshape(-1, 1, 2))
+            if not convex or drift > 0.03:
                 quad = coarse_full
                 reasons.append("edge_refine_failed")
         except (np.linalg.LinAlgError, ValueError, cv2.error):
             quad = coarse_full
             reasons.append("edge_refine_failed")
         quad = upright_order(quad)
-        # confidence: the mask agrees with the quad, and the mask is decisive inside/outside
-        poly = np.zeros(prob.shape, np.uint8)
-        cv2.fillPoly(poly, [np.round(quad / scale).astype(np.int32)], 1)
-        inter = float((binary & (poly > 0)).sum())
-        union = float((binary | (poly > 0)).sum())
-        agreement = inter / union if union else 0.0
-        inside = float(prob[poly > 0].mean()) if poly.any() else 0.0
-        outside_band = cv2.dilate(poly, np.ones((7, 7), np.uint8)) - poly
-        outside = float(prob[outside_band > 0].mean()) if outside_band.any() else 1.0
-        confidence = float(np.clip(agreement * inside * (1 - outside), 0, 1))
+        features = confidence_features(prob, binary, quad, scale, image.shape, reasons)
+        confidence = score_confidence(features)
         margin = EDGE_MARGIN_FRACTION * max(h, w)
         if (quad[:, 0] < margin).any() or (quad[:, 1] < margin).any() or (quad[:, 0] > w - margin).any() or (quad[:, 1] > h - margin).any():
             reasons.append("corner_cut_off")
         if confidence < ACCEPT_THRESHOLD:
             reasons.append("low_confidence")
         confident = confidence >= ACCEPT_THRESHOLD and "corner_cut_off" not in reasons
-        return FoundCard(quad, confidence, confident, tuple(reasons))
+        return FoundCard(quad, confidence, confident, tuple(reasons), features)
 
 
 def gate_quad(corners: np.ndarray, image_shape, thresholds: dict) -> bool:

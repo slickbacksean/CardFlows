@@ -64,22 +64,25 @@ def main() -> None:
     ap.add_argument("--batch", type=int, default=16)
     ap.add_argument("--out", type=Path, default=Path(__file__).resolve().parents[1] / "models")
     ap.add_argument("--resume", type=Path)
+    ap.add_argument("--lr", type=float, default=1e-3)
+    ap.add_argument("--seed", type=int, default=1)
     args = ap.parse_args()
     torch.manual_seed(0)
     torch.set_num_threads(5)
     model = build_model()
     if args.resume:
-        model.load_state_dict(torch.load(args.resume))
-    opt = torch.optim.AdamW(model.parameters(), lr=1e-3, weight_decay=1e-4)
-    sched = torch.optim.lr_scheduler.OneCycleLR(opt, max_lr=1e-3, total_steps=args.steps, pct_start=0.05)
+        model.load_state_dict(torch.load(args.resume, map_location="cpu"))
+    opt = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=1e-4)
+    sched = torch.optim.lr_scheduler.OneCycleLR(opt, max_lr=args.lr, total_steps=args.steps, pct_start=0.05)
     dice = smp.losses.DiceLoss("binary")
     bce = torch.nn.BCEWithLogitsLoss()
     ids = art_ids("train")
     config = {"model": "Unet/timm-mobilenetv3_large_100", "encoder_weights": None, "size": SIZE, "steps": args.steps,
-              "batch": args.batch, "lr": 1e-3, "loss": "bce+dice", "art_train_ids": len(ids), "seed": 1}
+              "batch": args.batch, "lr": args.lr, "loss": "bce+dice", "art_train_ids": len(ids), "seed": args.seed,
+              "resumed_from": str(args.resume) if args.resume else None}
     args.out.mkdir(parents=True, exist_ok=True)
     (args.out / "card-finder.config.json").write_text(json.dumps(config, indent=2) + "\n")
-    loader = DataLoader(SynthStream(args.art, args.tex, 1, ids), batch_size=args.batch, num_workers=3)
+    loader = DataLoader(SynthStream(args.art, args.tex, args.seed, ids), batch_size=args.batch, num_workers=3)
     args.out.mkdir(parents=True, exist_ok=True)
     model.train()
     t0 = time.time()
