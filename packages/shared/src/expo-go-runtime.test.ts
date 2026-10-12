@@ -74,18 +74,24 @@ describe("Expo Go runtime guards", () => {
     expect(finder).toContain('from "expo-camera"');
     expect(finder).toContain("CameraView");
     expect(finder).not.toMatch(/cardflow-live-video|CardFlowLiveVideo|expo-sensors/);
+    // The tilt guide reaches expo-sensors only through the feature-detected loader.
+    expect(finder).toContain('from "@/lib/device-level"');
     expect(flow).toContain("GradeCardFinder");
     expect(flow).not.toMatch(/cardflow-live-video|expo-sensors|@capacitor|@capgo/);
     expect(photos).toContain('from "expo-image-picker"');
     expect(photos).not.toMatch(/expo-sensors|@capacitor|@capgo/);
-    expect(mobilePackage).not.toMatch(/expo-sensors|@capacitor|@capgo/);
+    expect(mobilePackage).not.toMatch(/@capacitor|@capgo/);
     expect(rootPackage).not.toMatch(/expo-sensors|@capacitor\/|@capgo\//);
 
     const sources = walkSourceFiles(path.join(mobileRoot, "app"))
       .concat(walkSourceFiles(path.join(mobileRoot, "components")))
       .concat(walkSourceFiles(path.join(mobileRoot, "lib")));
     expect(sources.length).toBeGreaterThan(20);
+    const deviceLevel = readRepoFile("apps/mobile/lib/device-level.ts");
+    expect(deviceLevel).not.toMatch(/from\s+["']expo-sensors["']\s*;/);
+    expect(deviceLevel).toMatch(/requireOptionalNativeModule\("ExponentDeviceMotion"\)[\s\S]*require\("expo-sensors"\)/);
     for (const file of sources) {
+      if (file.endsWith(path.join("lib", "device-level.ts"))) continue;
       const source = readFileSync(file, "utf8");
       expect(source, file).not.toMatch(FORBIDDEN_IMPORT);
     }
