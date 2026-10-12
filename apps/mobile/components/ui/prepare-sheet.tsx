@@ -1,11 +1,13 @@
 import {
   CONDITION_LABELS,
+  GRADE_ESTIMATE_DISCLAIMER,
   GRADE_ESTIMATE_EMPTY_COPY,
   GRADE_ESTIMATE_UNAVAILABLE_COPY,
   GRADE_PHOTOS_HINT,
   GRADE_SIDES,
   GRADE_SUBGRADE_IDS,
   GRADING_PILLARS,
+  PREGRADE_LABEL,
   SLAB_PRICE_DISCLAIMER,
   SLAB_PRICE_EMPTY_COPY,
   WATCHLIST_CANNOT_SUBMIT_MESSAGE,
@@ -530,7 +532,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.cardBorder,
   },
-  chipSelected: { borderColor: colors.accent, backgroundColor: "#2A2618" },
+  chipSelected: { borderColor: colors.accent, backgroundColor: colors.accentSoft },
   chipLabel: { color: colors.muted, fontWeight: "700", fontSize: 13 },
   chipLabelSelected: { color: colors.accent },
   guidance: {

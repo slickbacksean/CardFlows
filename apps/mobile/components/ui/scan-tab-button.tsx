@@ -22,7 +22,7 @@ export function ScanTabButton({ onPress }: ScanTabButtonProps) {
       style={styles.hitTarget}
     >
       <View style={styles.circle}>
-        <Ionicons color={colors.text} name="videocam-outline" size={28} />
+        <Ionicons color={colors.accentText} name="videocam" size={26} />
       </View>
       <Text style={styles.label}>Livestream{"\n"}Screener</Text>
     </Pressable>
@@ -42,9 +42,8 @@ const styles = StyleSheet.create({
     width: TAB_CIRCLE_SIZE,
     height: TAB_CIRCLE_SIZE,
     borderRadius: TAB_CIRCLE_RADIUS,
-    backgroundColor: colors.chip,
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
+    backgroundColor: colors.accent,
+    borderWidth: 0,
     alignItems: "center",
     justifyContent: "center",
     shadowColor: "#000",

@@ -12,6 +12,7 @@
   let scannerOn = false;
   let tcgdexId = null;
   let guess = null;
+  let cardVisible = false;
 
   function dollar(amount) {
     if (!amount) return null;
@@ -58,6 +59,12 @@
       thumbEl.style.backgroundImage = "";
       thumbEl.setAttribute("aria-label", "No catalog art");
     }
+    if (scannerOn && cardVisible) {
+      bandEl.setAttribute("aria-label", "CardFlow overlay, reading a card");
+      nameEl.textContent = "Reading this card…";
+      bodyEl.textContent = "Matching the live crop.";
+      return;
+    }
     if (scannerOn) {
       bandEl.setAttribute("aria-label", "CardFlow overlay, looking for a card");
       nameEl.textContent = "Looking for a card…";
@@ -76,6 +83,7 @@
     if (!scannerOn) {
       tcgdexId = null;
       guess = null;
+      cardVisible = false;
     }
     render();
   });
@@ -83,6 +91,7 @@
     const next = data && typeof data.tcgdexId === "string" ? data.tcgdexId : null;
     tcgdexId = next;
     guess = next ? data : null;
+    cardVisible = Boolean(data && data.cardVisible);
     render();
   });
   render();

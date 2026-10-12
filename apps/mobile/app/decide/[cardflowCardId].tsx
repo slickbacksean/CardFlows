@@ -453,7 +453,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 6,
   },
-  pillSelected: { borderColor: colors.accent, backgroundColor: "#2A2618" },
+  pillSelected: { borderColor: colors.accent, backgroundColor: colors.accentSoft },
   pillLabel: { color: colors.muted, fontSize: 13, fontWeight: "700" },
   pillLabelSelected: { color: colors.accent },
   caption: {

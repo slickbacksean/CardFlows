@@ -21,6 +21,8 @@ export interface LivestreamHudIdentityPayload {
   estimateAmount?: string | null;
   maxBuyAmount?: string | null;
   confidence?: string | null;
+  /** A card rectangle is in the live frame and the catalog id is not in yet. */
+  cardVisible?: boolean;
 }
 
 export function livestreamHudPagePath(hudId: string = LIVESTREAM_HUD_ID): string {

@@ -14,6 +14,8 @@ Env:
   LIVE_IDENTITY_TOPK    Default 5
   LIVE_IDENTITY_ACCEPT  Cosine similarity accept threshold (default 0.86)
   LIVE_IDENTITY_MARGIN  Min top-1 minus top-2 similarity to accept (default 0.02)
+  LIVE_IDENTITY_LIVE_FLOOR  Lower similarity allowed when the winner is clearly ahead (default 0.80)
+  LIVE_IDENTITY_LIVE_FLOOR_MARGIN  Margin required to use the floor (default 0.045)
 
 Defaults come from scripts/eval_accept.py on the full English index (2026-09-30).
 """
@@ -44,6 +46,10 @@ PORT = int(os.environ.get("LIVE_IDENTITY_PORT", "8092"))
 TOPK = int(os.environ.get("LIVE_IDENTITY_TOPK", "5"))
 ACCEPT = float(os.environ.get("LIVE_IDENTITY_ACCEPT", "0.86"))
 MARGIN = float(os.environ.get("LIVE_IDENTITY_MARGIN", "0.02"))
+# Stream crops of a physical card score under the catalog gate. Accept them only
+# when the winner is clearly ahead of the next candidate.
+LIVE_FLOOR = float(os.environ.get("LIVE_IDENTITY_LIVE_FLOOR", "0.80"))
+LIVE_FLOOR_MARGIN = float(os.environ.get("LIVE_IDENTITY_LIVE_FLOOR_MARGIN", "0.045"))
 # Capture stills of a physical card sit below the livestream gate. A printed name
 # limits the search to that Pokémon's prints, where 0.74 + the same margin separates them.
 NAME_ACCEPT = float(os.environ.get("LIVE_IDENTITY_NAME_ACCEPT", "0.74"))
@@ -164,6 +170,8 @@ def health() -> JSONResponse:
     "indexed": len(_meta),
     "accept": ACCEPT,
     "margin": MARGIN,
+    "liveFloor": LIVE_FLOOR,
+    "liveFloorMargin": LIVE_FLOOR_MARGIN,
     "orb": "fail_soft",
     "matchSamples": len(_match_ms),
     "matchP50Ms": _percentile_ms(50),
@@ -232,10 +240,62 @@ def _maybe_rerank(
   return rerank_near_tie(image, candidates, INDEX_DIR)
 
 
+def _near_tie_same_name(candidates: list[dict[str, Any]]) -> bool:
+  """Same Pokémon across a set reprint tie. A live guess can use the top print."""
+  if len(candidates) < 2:
+    return False
+  top = float(candidates[0]["similarity"])
+  names: list[str] = []
+  for candidate in candidates:
+    if top - float(candidate["similarity"]) > MARGIN:
+      break
+    name = str(candidate.get("name") or "").strip().lower()
+    if not name:
+      return False
+    names.append(name)
+  return len(names) >= 2 and len(set(names)) == 1
+
+
+def _match_reason(
+  candidates: list[dict[str, Any]],
+  accept_at: float,
+  margin: float | None,
+  orb_mode: str,
+) -> str:
+  top = candidates[0] if candidates else None
+  if not top or not top.get("tcgdexId"):
+    return "below_threshold"
+  similarity = float(top["similarity"])
+  if similarity < accept_at:
+    if similarity >= LIVE_FLOOR and margin is not None and margin >= LIVE_FLOOR_MARGIN:
+      return "accepted"
+    return "below_threshold"
+  if orb_mode == "orb":
+    return "accepted"
+  if margin is not None and margin < MARGIN:
+    return "accepted" if _near_tie_same_name(candidates) else "ambiguous"
+  return "accepted"
+
+
+def _name_hints(name: str | None, names: str | None) -> list[str]:
+  """Up to three OCR guesses. One embedding is scored against each."""
+  hints: list[str] = []
+  if names:
+    hints.extend(part.strip() for part in names.split("\n") if part.strip())
+  elif name and name.strip():
+    hints.append(name.strip())
+  unique: list[str] = []
+  for hint in hints:
+    if hint.lower() not in {item.lower() for item in unique}:
+      unique.append(hint)
+  return unique[:3]
+
+
 @app.post("/v1/match")
 async def match(
   crop: UploadFile = File(...),
   name: str | None = Form(default=None),
+  names: str | None = Form(default=None),
   authorization: str | None = Header(default=None),
   x_cardflow_token: str | None = Header(default=None, alias="X-CardFlow-Token"),
 ) -> JSONResponse:
@@ -254,10 +314,18 @@ async def match(
 
   started = time.perf_counter()
   query = _embed(image)
-  name_hint = (name or "").strip()
-  if name_hint:
-    candidates = _rank_named_prints(query, name_hint)
+  hints = _name_hints(name, names)
+  if hints:
+    candidates = []
     accept_at = NAME_ACCEPT
+    for hint in hints:
+      ranked = _rank_named_prints(query, hint)
+      if not ranked:
+        continue
+      candidates = ranked
+      top_try = candidates[0]
+      if top_try.get("tcgdexId") and float(top_try["similarity"]) >= accept_at:
+        break
   else:
     labels, distances = _index.knn_query(query, k=min(max(TOPK, 2), len(_meta)))
     # hnswlib cosine space returns distance = 1 - cosine_similarity
@@ -272,15 +340,7 @@ async def match(
   top = candidates[0] if candidates else None
   runner_up = float(candidates[1]["similarity"]) if len(candidates) > 1 else 0.0
   margin = round(float(top["similarity"]) - runner_up, 4) if top else None
-  if not top or not top.get("tcgdexId") or float(top["similarity"]) < accept_at:
-    reason = "below_threshold"
-  elif orb_mode == "orb":
-    reason = "accepted"
-  elif margin is not None and margin < MARGIN:
-    # Near-ties are mostly same-art reprints from other sets; a wrong set is worse than none.
-    reason = "ambiguous"
-  else:
-    reason = "accepted"
+  reason = _match_reason(candidates, accept_at, margin, orb_mode)
   accepted = reason == "accepted"
   _note_match_ms((time.perf_counter() - started) * 1000)
   return JSONResponse(

@@ -127,7 +127,7 @@ export interface CreateObbDetectorFromEnvOptions {
 }
 
 /**
- * Capture / grade preprocess share this detector.
+ * Capture stills share one detector per ONNX file so a scan does not reload the model.
  * AGPL not accepted, missing path, or missing runtime → full-frame stub (CI stills still hash).
  */
 export async function resolveObbInferenceFromEnv(
@@ -144,14 +144,25 @@ export async function resolveObbInferenceFromEnv(
   });
 }
 
+const detectorsByOnnxPath = new Map<string, ObbDetector>();
+
 export function createObbDetectorFromEnv(
   env: Env = process.env,
   options: CreateObbDetectorFromEnvOptions = {},
 ): ObbDetector {
   if (options.inference) return createYolo11NanoObbDetector(options.inference);
-  if (!ultralyticsAgplAccepted(env) || !envValue(env, "CARD_FLOW_OBB_ONNX_PATH")) {
-    return createYolo11NanoObbDetector();
-  }
+  const pathName = envValue(env, "CARD_FLOW_OBB_ONNX_PATH");
+  if (!ultralyticsAgplAccepted(env) || !pathName) return createYolo11NanoObbDetector();
+  const resolved = options.loadSession ? undefined : resolveObbOnnxPath(pathName);
+  if (!resolved) return lazyDetector(env, options);
+  const cached = detectorsByOnnxPath.get(resolved);
+  if (cached) return cached;
+  const detector = lazyDetector(env, options);
+  detectorsByOnnxPath.set(resolved, detector);
+  return detector;
+}
+
+function lazyDetector(env: Env, options: CreateObbDetectorFromEnvOptions): ObbDetector {
   let cached: ObbDetector | null = null;
   let pending: Promise<ObbDetector> | null = null;
   return {

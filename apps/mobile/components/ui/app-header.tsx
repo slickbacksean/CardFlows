@@ -3,7 +3,7 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import { useRouter } from "expo-router";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { colors, space } from "@/lib/theme";
+import { colors, radii, space, type } from "@/lib/theme";
 
 export function AppHeader() {
   const insets = useSafeAreaInsets();
@@ -51,10 +51,8 @@ const styles = StyleSheet.create({
     gap: space.sm,
   },
   wordmark: {
-    color: colors.accent,
-    fontSize: 22,
-    fontWeight: "800",
-    letterSpacing: 0.2,
+    color: colors.text,
+    ...type.title,
   },
   actions: {
     flexDirection: "row",
@@ -62,10 +60,15 @@ const styles = StyleSheet.create({
     gap: space.sm,
   },
   usd: {
-    color: colors.muted,
-    fontSize: 13,
-    fontWeight: "700",
-    letterSpacing: 0.6,
+    color: colors.accentText,
+    backgroundColor: colors.accent,
+    borderRadius: radii.pill,
+    overflow: "hidden",
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    fontSize: 11,
+    fontWeight: "800",
+    letterSpacing: 0.4,
   },
   avatar: {
     width: 32,

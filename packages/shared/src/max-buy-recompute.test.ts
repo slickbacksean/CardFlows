@@ -167,10 +167,10 @@ describe("Detail, Watchlist, and Purchased surfaces recompute after Save", () =>
   it("card tiles still show all-in for purchased copies", () => {
     const tile = readRepoFile("apps/mobile/components/ui/card-tile.tsx");
     const valueLabel = tile.slice(tile.indexOf("const valueLabel"));
-    expect(valueLabel).toContain("target Max Buy");
-    expect(valueLabel).toContain("all-in $");
+    expect(valueLabel).toContain("`Max ${targetMaxBuyDisplay}`");
+    expect(valueLabel).toContain("`$${allInAmount}`");
     expect(valueLabel.indexOf('intent === "watchlist"')).toBeLessThan(
-      valueLabel.indexOf("`all-in $"),
+      valueLabel.indexOf("`$${allInAmount}`"),
     );
   });
 });

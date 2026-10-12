@@ -13,6 +13,7 @@ import {
 } from "@cardflow/shared";
 import { gradeEstimateFromPregrade, mapDetectReport, mapGradeCardReport } from "./cardgrading-map";
 import { photoExtension, type CardgradingRunner } from "./cardgrading-run";
+import { saveGradeDetectDebug, saveGradePregradeDebug } from "./grade-detect-debug";
 
 export type GradePhotoSide = PhotoPregradeSide;
 
@@ -31,6 +32,7 @@ export async function detectCardForGrade(input: {
   runner: CardgradingRunner | null;
   still: GradeStill;
   side: GradePhotoSide;
+  captureMeta?: string | null;
 }): Promise<DetectCropResult> {
   if (!input.runner) {
     return {
@@ -42,12 +44,23 @@ export async function detectCardForGrade(input: {
     };
   }
   try {
+    const startedAt = Date.now();
     const ran = await input.runner.detectCrop({
       photoBytes: input.still.bytes,
       photoExt: photoExtension(input.still.mimeType),
     });
-    return mapDetectReport(ran.report, input.side, ran.cropBytes);
+    const mapped = mapDetectReport(ran.report, input.side, ran.cropBytes);
+    saveGradeDetectDebug({
+      still: input.still,
+      side: input.side,
+      report: ran.report,
+      mapped,
+      ms: Date.now() - startedAt,
+      captureMeta: input.captureMeta ?? null,
+    });
+    return mapped;
   } catch (error) {
+    saveGradeDetectDebug({ still: input.still, side: input.side, error, captureMeta: input.captureMeta ?? null });
     logGraderFailure("detect", error);
     return {
       ok: false,
@@ -68,19 +81,36 @@ export async function pregradePhotoPair(input: {
   runner: CardgradingRunner | null;
   front: GradeStill;
   back: GradeStill;
+  /** Optional raking-light front photos (surface step). */
+  angledFront?: GradeStill[];
+  captureMeta?: string | null;
 }): Promise<PhotoPregradeResult> {
   if (!input.runner) {
     return { ok: false, status: "unavailable", code: "UNAVAILABLE", message: PREGRADE_UNAVAILABLE_MESSAGE };
   }
+  const angled = input.angledFront ?? [];
+  const startedAt = Date.now();
   try {
     const report = await input.runner.gradeCard({
       frontBytes: input.front.bytes,
       backBytes: input.back.bytes,
       frontExt: photoExtension(input.front.mimeType),
       backExt: photoExtension(input.back.mimeType),
+      ...(angled.length > 0
+        ? { angledFront: angled.map((shot) => ({ bytes: shot.bytes, ext: photoExtension(shot.mimeType) })) }
+        : {}),
     });
-    return mapGradeCardReport(report);
+    const mapped = mapGradeCardReport(report);
+    saveGradePregradeDebug({
+      angled,
+      report,
+      mapped,
+      ms: Date.now() - startedAt,
+      captureMeta: input.captureMeta ?? null,
+    });
+    return mapped;
   } catch (error) {
+    saveGradePregradeDebug({ angled, error, ms: Date.now() - startedAt, captureMeta: input.captureMeta ?? null });
     logGraderFailure("grade_card", error);
     return { ok: false, status: "unavailable", code: "UNAVAILABLE", message: PREGRADE_UNAVAILABLE_MESSAGE };
   }

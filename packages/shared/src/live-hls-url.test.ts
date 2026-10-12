@@ -39,6 +39,8 @@ describe("LIVE_HLS_REPORT_SCRIPT", () => {
     expect(LIVE_HLS_REPORT_SCRIPT).toContain(".m3u8");
     expect(LIVE_HLS_REPORT_SCRIPT).toContain("postMessage");
     expect(LIVE_HLS_REPORT_SCRIPT).toContain('cardflow: "hls"');
+    expect(LIVE_HLS_REPORT_SCRIPT).toContain("responseURL");
+    expect(LIVE_HLS_REPORT_SCRIPT).toContain("playlistInText");
     expect(LIVE_HLS_REPORT_SCRIPT).not.toMatch(
       /view-shot|captureScreen|capturePage|takeSnapshot|toDataURL|captureRef|ViewShot|takeScreenshot/i,
     );

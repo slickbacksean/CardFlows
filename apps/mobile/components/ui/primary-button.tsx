@@ -1,5 +1,5 @@
 import { Pressable, StyleSheet, Text } from "react-native";
-import { colors, space } from "@/lib/theme";
+import { colors, radii, space } from "@/lib/theme";
 
 export type PrimaryButtonTone = "cta" | "accent" | "muted" | "danger";
 
@@ -39,13 +39,14 @@ export function PrimaryButton({
 
 const styles = StyleSheet.create({
   button: {
-    borderRadius: 12,
+    borderRadius: radii.pill,
     paddingVertical: space.sm + 2,
     paddingHorizontal: space.md,
     alignItems: "center",
   },
   label: {
-    fontSize: 16,
-    fontWeight: "700",
+    fontSize: 15,
+    fontWeight: "800",
+    letterSpacing: -0.2,
   },
 });

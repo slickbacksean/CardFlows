@@ -5,11 +5,11 @@ Do these **in order**. One task at a time. Check the box when the “Done when�
 **Source:** [RUNTIME_CONFIG_PRIORITY.md](./RUNTIME_CONFIG_PRIORITY.md)  
 **Last reviewed:** 2026-09-20
 
-**Already operational (do not redo):** Capture OBB + pHash, TCGdex catalog, SQLite + local session, livestream identity via crop → identityHash → pHash. CNN sidecar smoke path is wired (upstream clone, venv, untrained `phase2_best.pth`, API env) — verify Prepare next; do not trust smoke grades.
+**Already operational (do not redo):** Capture OBB + pHash, TCGdex catalog, SQLite + local session, livestream identity via crop → identityHash → pHash. Photo pre-grade is the offline cardgrading library. The CNN sidecar and Claude grade path were removed; the Phase D and Phase H notes below are history, not steps to run.
 
 **Keep:** Secrets only in gitignored `apps/api/.env`. Expo may hold public LAN URLs only (`EXPO_PUBLIC_*`). Never commit `.pth` / `.onnx` / keys. CI stays on mocks. No vendor keys on the phone.
 
-**Suggested order:** P0 (phone) → P2 PokeTrace → P1 CNN smoke verify → P1 alt Claude (usable interim) → PokéCollector (if needed) → HUDS → P3 noop → trained CNN later.
+**Suggested order:** P0 (phone) → P2 PokeTrace → PokéCollector (if needed) → HUDS → P3 noop.
 
 ```sh
 # After config changes that affect the API:

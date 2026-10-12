@@ -1,20 +1,21 @@
+import { colors, space } from "@/lib/theme";
+
+/** Shop uses the same tokens as the rest of the app. `blue` is the yellow action color. */
 export const shopColors = {
-  bg: "#F2F2F6",
-  card: "#FFFFFF",
-  text: "#121212",
-  muted: "#8E8E93",
-  line: "#E6E6EC",
-  blue: "#2F6BFF",
-  blueSoft: "#E7F1FF",
-  gold: "#F5C400",
-  attack: "#F3F4F6",
-  bar: "#3B82F6",
-  owned: "#2F6BFF",
+  bg: colors.bg,
+  card: colors.card,
+  text: colors.text,
+  muted: colors.muted,
+  line: colors.cardBorder,
+  blue: colors.accent,
+  blueSoft: colors.accentSoft,
+  gold: colors.accent,
+  attack: colors.elevated,
+  bar: colors.accent,
+  owned: colors.success,
+  onAccent: colors.accentText,
+  chip: colors.chip,
+  danger: colors.danger,
 };
 
-export const shopSpace = {
-  xs: 6,
-  sm: 10,
-  md: 16,
-  lg: 24,
-};
+export const shopSpace = space;

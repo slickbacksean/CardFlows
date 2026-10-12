@@ -33,7 +33,11 @@ def card(path, face, W=3024, H=4032, cw=1800, seed=1):
         b = int(cw * 0.06)
         d.rounded_rectangle([x0 + b + 5, y0 + b, x0 + cw - b + 5, y0 + ch - b], radius=30, fill=(40, 100, 210))
         d.ellipse([x0 + cw * 0.25, y0 + ch * 0.3, x0 + cw * 0.75, y0 + ch * 0.66], fill=(230, 60, 50))
-    img = img.filter(ImageFilter.GaussianBlur(1.2))
+    # Fine print detail (like real card text and holo texture) so the
+    # sharpness gate in cardflow_capture_checks.py sees an in-focus photo.
+    for k in range(0, ch - 160, 14):
+        d.line([x0 + 140, y0 + 80 + k, x0 + cw - 140, y0 + 80 + k], fill=(60, 60, 60), width=3)
+    img = img.filter(ImageFilter.GaussianBlur(0.6))
     img.save(path, "JPEG", quality=88)
 
 card(sys.argv[1], "front")

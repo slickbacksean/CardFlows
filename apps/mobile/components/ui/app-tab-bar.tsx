@@ -67,7 +67,7 @@ export function AppTabBar({ state, descriptors, navigation, insets }: AppTabBarP
         }}
         style={styles.item}
       >
-        <View style={[styles.square, focused && styles.squareFocused]}>{icon}</View>
+        <View style={styles.square}>{icon}</View>
         <Text numberOfLines={1} style={[styles.label, { color }]}>
           {label}
         </Text>
@@ -166,20 +166,14 @@ const styles = StyleSheet.create({
   square: {
     width: TAB_ICON_SIZE,
     height: TAB_ICON_SIZE,
-    borderRadius: 7,
-    backgroundColor: colors.chip,
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
     alignItems: "center",
     justifyContent: "center",
-  },
-  squareFocused: {
-    borderColor: colors.accent,
   },
   label: {
     width: "100%",
     fontSize: TAB_LABEL_SIZE,
-    fontWeight: "600",
+    fontWeight: "700",
+    letterSpacing: 0.1,
     lineHeight: 11,
     textAlign: "center",
   },

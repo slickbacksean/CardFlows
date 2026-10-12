@@ -25,7 +25,7 @@ function joinUrl(baseUrl: string, pathName: string): string {
 
 export function createLiveIdentityOpenclipClient(options: LiveIdentityOpenclipOptions) {
   const fetchImpl = options.fetchImpl ?? globalThis.fetch.bind(globalThis);
-  const timeoutMs = options.timeoutMs ?? 4000;
+  const timeoutMs = options.timeoutMs ?? 1800;
   const token = options.token?.trim() ?? "";
   const baseUrl = options.baseUrl.trim();
 
@@ -34,7 +34,7 @@ export function createLiveIdentityOpenclipClient(options: LiveIdentityOpenclipOp
     async matchCropJpeg(
       bytes: Uint8Array,
       mimeType = "image/jpeg",
-      options?: { name?: string },
+      options?: { name?: string; names?: string[] },
     ): Promise<LiveIdentityOpenclipMatch | null> {
       if (!baseUrl || bytes.byteLength < 32 || bytes.byteLength > 8_000_000) return null;
       const controller = new AbortController();
@@ -46,8 +46,14 @@ export function createLiveIdentityOpenclipClient(options: LiveIdentityOpenclipOp
           new Blob([Buffer.from(bytes)], { type: mimeType }),
           mimeType === "image/png" ? "crop.png" : "crop.jpg",
         );
+        const names = (options?.names ?? [])
+          .map((name) => name.trim())
+          .filter((name) => name.length > 0)
+          .slice(0, 3);
         const name = options?.name?.trim();
-        if (name) form.append("name", name);
+        if (names.length > 1) form.append("names", names.join("\n"));
+        else if (names.length === 1) form.append("name", names[0]);
+        else if (name) form.append("name", name);
         const headers: Record<string, string> = {};
         if (token) headers["X-CardFlow-Token"] = token;
         const response = await fetchImpl(joinUrl(baseUrl, "/v1/match"), {
@@ -91,12 +97,12 @@ export function resolveLiveIdentityOpenclipFromEnv(env: NodeJS.ProcessEnv = proc
     return { client: null, reason: "CARD_FLOW_LIVE_IDENTITY_OPENCLIP_URL empty" };
   }
   const timeoutRaw = env.CARD_FLOW_LIVE_IDENTITY_OPENCLIP_TIMEOUT_MS?.trim();
-  const timeoutMs = timeoutRaw ? Number(timeoutRaw) : 4000;
+  const timeoutMs = timeoutRaw ? Number(timeoutRaw) : 1800;
   return {
     client: createLiveIdentityOpenclipClient({
       baseUrl,
       token: env.CARD_FLOW_LIVE_IDENTITY_OPENCLIP_TOKEN,
-      timeoutMs: Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : 4000,
+      timeoutMs: Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : 1800,
     }),
     reason: "openclip sidecar",
   };

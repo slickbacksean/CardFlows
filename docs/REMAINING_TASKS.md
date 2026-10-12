@@ -243,7 +243,7 @@ Expo Go cannot load `cardflow-live-video`. Local `expo run:ios` needs Xcode ≥ 
 
 ## Later (not this pass)
 
-- [ ] Replace the smoke `phase2_best.pth` with a trained checkpoint, then re-check Prepare before trusting the number. Claude remains the usable interim while the PSA URL is unset.
+- [x] CNN sidecar and Claude grade fallback removed. Prepare uses the offline cardgrading library.
 - [ ] PokeTrace Pro: one known `tcgdex_id` shows a real PSA / BGS / CGC / TAG amount. Until then, keep graded rows hidden. Do not call `/prices/{tier}/history` on the Free plan (`403 UPGRADE_REQUIRED`).
 - [ ] Shop supplies checkout.
 - [ ] Export CSV.
