@@ -1,8 +1,13 @@
+import type { CardCorners, CardQuad } from "./card-quad";
 import {
   YOLO26N_LICENSE_SHIP_TODO,
   yolo26nOnDeviceAllowed,
   type Yolo26nOnDeviceGateInput,
 } from "./ultralytics-license";
+
+export const YOLO26N_CARD_QUAD_SOURCE = "yolo26n-ab" as const;
+export const YOLO26N_CARD_QUAD_VERSION = "yolo26n-ab@pre-ship" as const;
+export const YOLO26N_CARD_QUAD_MIN_CONF = 0.25;
 
 /** Native card-detect backends on the livestream sample-buffer path. */
 export const LIVE_VIDEO_DETECTOR_BACKENDS = ["rectangle", "yolo26n"] as const;
@@ -156,6 +161,70 @@ export function compareLiveVideoDetectors(
 function mean(values: number[]): number | null {
   if (values.length === 0) return null;
   return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
+export function cardCornersFromAxisAlignedBox(
+  box: LiveVideoDetectorBox,
+  image: { width: number; height: number },
+  origin: "top-left" | "bottom-left" = "top-left",
+): CardCorners {
+  const x1 = box.x * image.width;
+  const width = box.width * image.width;
+  const height = box.height * image.height;
+  const y1 =
+    origin === "bottom-left"
+      ? (1 - box.y - box.height) * image.height
+      : box.y * image.height;
+  const x2 = x1 + width;
+  const y2 = y1 + height;
+  return [
+    [x1, y1],
+    [x2, y1],
+    [x2, y2],
+    [x1, y2],
+  ];
+}
+
+/**
+ * Shared card-finder outline for the test-only YOLO26n A/B baseline.
+ * `source` is always `yolo26n-ab`. Returns null when there is no YOLO box.
+ */
+export function cardQuadFromYolo26n(input: {
+  box: LiveVideoDetectorBox | null | undefined;
+  imageWidth: number;
+  imageHeight: number;
+  origin?: "top-left" | "bottom-left";
+  acceptThreshold?: number;
+}): CardQuad | null {
+  if (!input.box || input.imageWidth < 8 || input.imageHeight < 8) return null;
+  if (input.box.width <= 0 || input.box.height <= 0) return null;
+  const corners = cardCornersFromAxisAlignedBox(
+    input.box,
+    { width: input.imageWidth, height: input.imageHeight },
+    input.origin ?? "top-left",
+  );
+  const confidence = input.box.confidence ?? 0;
+  const threshold = input.acceptThreshold ?? YOLO26N_CARD_QUAD_MIN_CONF;
+  const rejectReasons: string[] = [];
+  const shortest = Math.min(input.box.width * input.imageWidth, input.box.height * input.imageHeight);
+  const longest = Math.max(input.box.width * input.imageWidth, input.box.height * input.imageHeight);
+  const ratio = longest > 0 ? shortest / longest : 0;
+  if (ratio < 0.6 || ratio > 0.82) rejectReasons.push("aspect");
+  const fill = input.box.width * input.box.height;
+  if (fill < 0.1) rejectReasons.push("fill");
+  if (confidence < threshold) rejectReasons.push("low_confidence");
+  return {
+    version: 1,
+    source: YOLO26N_CARD_QUAD_SOURCE,
+    sourceVersion: YOLO26N_CARD_QUAD_VERSION,
+    imageWidth: input.imageWidth,
+    imageHeight: input.imageHeight,
+    corners,
+    confidence,
+    accepted: rejectReasons.length === 0,
+    outOfPlaneDeg: null,
+    rejectReasons,
+  };
 }
 
 /** A/B harness rollup for latency + detection agreement. */

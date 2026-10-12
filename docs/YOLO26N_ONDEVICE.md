@@ -21,6 +21,15 @@ An **A/B mode** (`CARD_FLOW_YOLO26N_MODE=ab`) runs both detectors on the same fr
 
 `yolo_identity` on Settings / `/health` remains the pipeline **name**. It is not a shipped Ultralytics identity head.
 
+YOLO26n emits the shared `CardQuad` (`packages/shared/src/card-quad.ts`) with **`source: "yolo26n-ab"`** so it can be scored next to the other card-finder detectors. Spec: `services/card-finder/INTERFACE.md`. Score with:
+
+```sh
+CARD_FLOW_ULTRALYTICS_AGPL_ACCEPTED=true CARD_FLOW_YOLO26N_ONDEVICE=true \
+  python3 services/card-finder/eval.py MANIFEST --detector yolo26n
+```
+
+PR #34 (`cursor/card-finder-model`) is not merged yet. This branch **copied** `card-quad.ts` / `card-quad.test.ts`, `INTERFACE.md`, and `score.py` verbatim from that branch and added a `yolo26n` runner to `eval.py`. Reconcile by keeping `card-quad.ts` identical and merging only the `yolo26n` bits in `eval.py`.
+
 ## License gate
 
 All of this stays behind the existing AGPL flag plus an explicit opt-in:

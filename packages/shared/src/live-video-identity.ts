@@ -1,3 +1,4 @@
+import type { CardQuad } from "./card-quad";
 import type {
   LiveVideoCropSource,
   LiveVideoDetectorAbSample,
@@ -56,6 +57,13 @@ export interface LiveVideoFrame {
   detectLatencyMs?: number | null;
   /** Present only on the pre-ship A/B path. */
   detectorAb?: LiveVideoDetectorAbSample | null;
+  /**
+   * Shared card-finder outline when YOLO26n produced the crop.
+   * `source` is always `yolo26n-ab`. Absent when YOLO missed (rectangle fallback).
+   */
+  cardQuad?: CardQuad | null;
+  imageWidth?: number | null;
+  imageHeight?: number | null;
 }
 
 export interface LiveVideoIdentityInput {

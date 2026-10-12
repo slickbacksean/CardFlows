@@ -126,6 +126,8 @@ final class LiveVideoSamplePump {
       "cardDetected": detection.cardDetected,
       "detector": decided.cropSource,
       "detectLatencyMs": decided.latencyMs,
+      "imageWidth": decided.imageWidth,
+      "imageHeight": decided.imageHeight,
     ]
     if detection.cardDetected,
        let box = detection.boundingBox
@@ -139,6 +141,9 @@ final class LiveVideoSamplePump {
     }
     if let ab = decided.abPayload {
       payload["detectorAb"] = ab
+    }
+    if let cardQuad = decided.cardQuad {
+      payload["cardQuad"] = cardQuad
     }
     return payload
   }

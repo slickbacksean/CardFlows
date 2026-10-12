@@ -7,9 +7,12 @@ import { NativeModules, Platform } from "react-native";
 import {
   LIVE_VIDEO_IDENTITY_RGB_BYTES,
   LIVE_VIDEO_IDENTITY_RGB_SIZE,
+  cardQuadFromYolo26n,
+  isCardQuad,
   normalizeLiveVideoDetectorMode,
   resolveLiveVideoDetectorConfig,
   rgbPerceptualHash,
+  type CardQuad,
   type LiveVideoDetectorAbSample,
   type LiveVideoDetectorBox,
   type LiveVideoDetectorObservation,
@@ -175,6 +178,22 @@ export async function pullLiveVideoSampleBuffer(): Promise<LiveVideoFrame | null
     if (!raw || typeof raw !== "object") return null;
     const frame = raw as Record<string, unknown>;
     if (frame.source !== "live_video") return null;
+    const ab = detectorAb(frame.detectorAb);
+    const imageWidth = typeof frame.imageWidth === "number" ? frame.imageWidth : null;
+    const imageHeight = typeof frame.imageHeight === "number" ? frame.imageHeight : null;
+    const nativeQuad = isCardQuad(frame.cardQuad) ? frame.cardQuad : null;
+    const constructed =
+      nativeQuad ??
+      (ab?.yolo.cardDetected && imageWidth && imageHeight
+        ? cardQuadFromYolo26n({
+            box: ab.yolo.box,
+            imageWidth,
+            imageHeight,
+            origin: "top-left",
+          })
+        : null);
+    const cardQuad: CardQuad | null =
+      constructed?.source === "yolo26n-ab" ? constructed : null;
     return {
       source: "live_video",
       cardDetected: Boolean(frame.cardDetected),
@@ -188,7 +207,10 @@ export async function pullLiveVideoSampleBuffer(): Promise<LiveVideoFrame | null
           ? (frame.detector as LiveVideoFrame["detector"])
           : null,
       detectLatencyMs: typeof frame.detectLatencyMs === "number" ? frame.detectLatencyMs : null,
-      detectorAb: detectorAb(frame.detectorAb),
+      detectorAb: ab,
+      cardQuad,
+      imageWidth,
+      imageHeight,
     };
   } catch {
     return null;

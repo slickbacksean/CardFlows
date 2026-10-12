@@ -15,9 +15,14 @@ enum LiveCardDetect {
     let cropSource: String
     let latencyMs: Double
     let abPayload: [String: Any]?
+    let cardQuad: [String: Any]?
+    let imageWidth: Int
+    let imageHeight: Int
   }
 
   static func run(_ pixelBuffer: CVPixelBuffer) -> Decision {
+    let width = CVPixelBufferGetWidth(pixelBuffer)
+    let height = CVPixelBufferGetHeight(pixelBuffer)
     let mode = Yolo26nCardDetect.mode
     if !Yolo26nCardDetect.enabled || mode == "rectangle" {
       let started = CFAbsoluteTimeGetCurrent()
@@ -26,7 +31,10 @@ enum LiveCardDetect {
         crop: rectangle,
         cropSource: "rectangle",
         latencyMs: (CFAbsoluteTimeGetCurrent() - started) * 1000,
-        abPayload: nil
+        abPayload: nil,
+        cardQuad: nil,
+        imageWidth: width,
+        imageHeight: height
       )
     }
 
@@ -50,7 +58,10 @@ enum LiveCardDetect {
           "iou": boxIou(yolo?.boundingBox, rectangle.boundingBox) as Any,
           "agreement": detectorsAgree(yolo, rectangle),
           "cropSource": cropSource,
-        ]
+        ],
+        cardQuad: yoloHit ? cardQuad(from: yolo?.boundingBox, width: width, height: height) : nil,
+        imageWidth: width,
+        imageHeight: height
       )
     }
 
@@ -60,7 +71,10 @@ enum LiveCardDetect {
         crop: yolo,
         cropSource: "yolo26n",
         latencyMs: (CFAbsoluteTimeGetCurrent() - started) * 1000,
-        abPayload: nil
+        abPayload: nil,
+        cardQuad: cardQuad(from: yolo.boundingBox, width: width, height: height),
+        imageWidth: width,
+        imageHeight: height
       )
     }
     let fallbackStarted = CFAbsoluteTimeGetCurrent()
@@ -69,8 +83,32 @@ enum LiveCardDetect {
       crop: rectangle,
       cropSource: rectangle.cardDetected ? "fallback_rectangle" : "rectangle",
       latencyMs: (CFAbsoluteTimeGetCurrent() - fallbackStarted) * 1000,
-      abPayload: nil
+      abPayload: nil,
+      cardQuad: nil,
+      imageWidth: width,
+      imageHeight: height
     )
+  }
+
+  /// Vision box is bottom-left; CardQuad corners are top-left pixels, TL TR BR BL.
+  static func cardQuad(from visionBox: CGRect?, width: Int, height: Int, confidence: Double = 0.45) -> [String: Any]? {
+    guard let visionBox, width >= 8, height >= 8 else { return nil }
+    let x1 = visionBox.origin.x * CGFloat(width)
+    let y1 = (1 - visionBox.origin.y - visionBox.height) * CGFloat(height)
+    let x2 = x1 + visionBox.width * CGFloat(width)
+    let y2 = y1 + visionBox.height * CGFloat(height)
+    return [
+      "version": 1,
+      "source": "yolo26n-ab",
+      "sourceVersion": "yolo26n-ab@pre-ship",
+      "imageWidth": width,
+      "imageHeight": height,
+      "corners": [[x1, y1], [x2, y1], [x2, y2], [x1, y2]],
+      "confidence": confidence,
+      "accepted": true,
+      "outOfPlaneDeg": NSNull(),
+      "rejectReasons": [] as [String],
+    ]
   }
 
   private static func observationPayload(
@@ -86,7 +124,7 @@ enum LiveCardDetect {
     if let box = result?.boundingBox {
       payload["box"] = [
         "x": box.origin.x,
-        "y": box.origin.y,
+        "y": 1 - box.origin.y - box.height,
         "width": box.width,
         "height": box.height,
       ]

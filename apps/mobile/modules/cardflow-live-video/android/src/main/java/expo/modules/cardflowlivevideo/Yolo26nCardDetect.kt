@@ -23,6 +23,9 @@ internal data class LiveCardDecision(
   val cropSource: String,
   val latencyMs: Double,
   val abPayload: Map<String, Any>?,
+  val cardQuad: Map<String, Any>?,
+  val imageWidth: Int,
+  val imageHeight: Int,
 )
 
 internal object LiveCardDetect {
@@ -36,6 +39,9 @@ internal object LiveCardDetect {
         cropSource = "rectangle",
         latencyMs = (System.nanoTime() - started) / 1_000_000.0,
         abPayload = null,
+        cardQuad = null,
+        imageWidth = bitmap.width,
+        imageHeight = bitmap.height,
       )
     }
     if (mode == "ab") {
@@ -62,6 +68,9 @@ internal object LiveCardDetect {
           "agreement" to detectorsAgree(yolo, rectangle),
           "cropSource" to cropSource,
         ).filterValues { it !== Unit },
+        cardQuad = if (yoloHit) cardQuad(yolo?.box, bitmap.width, bitmap.height) else null,
+        imageWidth = bitmap.width,
+        imageHeight = bitmap.height,
       )
     }
     val started = System.nanoTime()
@@ -72,6 +81,9 @@ internal object LiveCardDetect {
         cropSource = "yolo26n",
         latencyMs = (System.nanoTime() - started) / 1_000_000.0,
         abPayload = null,
+        cardQuad = cardQuad(yolo.box, bitmap.width, bitmap.height),
+        imageWidth = bitmap.width,
+        imageHeight = bitmap.height,
       )
     }
     val fallbackStarted = System.nanoTime()
@@ -81,6 +93,30 @@ internal object LiveCardDetect {
       cropSource = if (rectangle.cardDetected) "fallback_rectangle" else "rectangle",
       latencyMs = (System.nanoTime() - fallbackStarted) / 1_000_000.0,
       abPayload = null,
+      cardQuad = null,
+      imageWidth = bitmap.width,
+      imageHeight = bitmap.height,
+    )
+  }
+
+  /** Pixel box → CardQuad corners TL, TR, BR, BL (origin top-left). */
+  fun cardQuad(box: Rect?, width: Int, height: Int, confidence: Double = 0.45): Map<String, Any>? {
+    if (box == null || width < 8 || height < 8) return null
+    return mapOf(
+      "version" to 1,
+      "source" to "yolo26n-ab",
+      "sourceVersion" to "yolo26n-ab@pre-ship",
+      "imageWidth" to width,
+      "imageHeight" to height,
+      "corners" to listOf(
+        listOf(box.left.toDouble(), box.top.toDouble()),
+        listOf(box.right.toDouble(), box.top.toDouble()),
+        listOf(box.right.toDouble(), box.bottom.toDouble()),
+        listOf(box.left.toDouble(), box.bottom.toDouble()),
+      ),
+      "confidence" to confidence,
+      "accepted" to true,
+      "rejectReasons" to emptyList<String>(),
     )
   }
 

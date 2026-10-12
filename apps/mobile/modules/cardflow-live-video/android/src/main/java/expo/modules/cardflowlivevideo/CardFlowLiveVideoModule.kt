@@ -138,10 +138,13 @@ internal class LiveVideoSamplePump private constructor() {
       "cardDetected" to cardDetected,
       "detector" to (decided?.cropSource ?: "rectangle"),
       "detectLatencyMs" to (decided?.latencyMs ?: 0.0),
+      "imageWidth" to (decided?.imageWidth ?: 0),
+      "imageHeight" to (decided?.imageHeight ?: 0),
     )
     if (identityRgb != null) payload["identityRgb"] = identityRgb
     if (identityCropJpeg != null) payload["identityCropJpeg"] = identityCropJpeg
     decided?.abPayload?.let { payload["detectorAb"] = it }
+    decided?.cardQuad?.let { payload["cardQuad"] = it }
     return payload
   }
 

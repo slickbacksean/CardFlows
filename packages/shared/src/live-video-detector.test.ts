@@ -2,12 +2,15 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { isCardQuad } from "./card-quad";
 import {
   boxIou,
+  cardQuadFromYolo26n,
   chooseLiveVideoCropSource,
   compareLiveVideoDetectors,
   resolveLiveVideoDetectorConfig,
   summarizeLiveVideoDetectorAb,
+  YOLO26N_CARD_QUAD_SOURCE,
   type LiveVideoDetectorObservation,
 } from "./live-video-detector";
 import {
@@ -107,6 +110,37 @@ describe("on-device YOLO26n license gate", () => {
   });
 });
 
+describe("YOLO26n CardQuad", () => {
+  it("emits source yolo26n-ab with TL TR BR BL corners in top-left pixels", () => {
+    const quad = cardQuadFromYolo26n({
+      box: { x: 0.2, y: 0.1, width: 0.4, height: 0.5, confidence: 0.8 },
+      imageWidth: 1000,
+      imageHeight: 1000,
+    });
+    expect(quad).not.toBeNull();
+    expect(isCardQuad(quad)).toBe(true);
+    expect(quad?.source).toBe(YOLO26N_CARD_QUAD_SOURCE);
+    expect(quad?.source).toBe("yolo26n-ab");
+    expect(quad?.corners).toEqual([
+      [200, 100],
+      [600, 100],
+      [600, 600],
+      [200, 600],
+    ]);
+    expect(quad?.accepted).toBe(true);
+    expect(quad?.outOfPlaneDeg).toBeNull();
+    expect(
+      cardQuadFromYolo26n({
+        box: { x: 0.2, y: 0.1, width: 0.4, height: 0.5, confidence: 0.8 },
+        imageWidth: 1000,
+        imageHeight: 1000,
+        origin: "bottom-left",
+      })?.corners[0],
+    ).toEqual([200, 400]);
+    expect(cardQuadFromYolo26n({ box: null, imageWidth: 100, imageHeight: 100 })).toBeNull();
+  });
+});
+
 describe("livestream detector A/B harness", () => {
   it("compares IoU, agreement, crop fallback, and latency rollup", () => {
     expect(
@@ -190,6 +224,10 @@ describe("pre-ship YOLO26n stays out of production / App Store builds", () => {
     const trainScript = readRepoFile(
       "apps/mobile/modules/cardflow-live-video/scripts/finetune-yolo26n.py",
     );
+    const evalPy = readRepoFile("services/card-finder/eval.py");
+    const yoloRunner = readRepoFile("services/card-finder/yolo26n.py");
+    const interfaceMd = readRepoFile("services/card-finder/INTERFACE.md");
+    const cardQuadTs = readRepoFile("packages/shared/src/card-quad.ts");
 
     for (const source of [ios, android]) {
       expect(source).toContain("TODO(ship)");
@@ -215,5 +253,16 @@ describe("pre-ship YOLO26n stays out of production / App Store builds", () => {
     expect(exportScript).toContain("CARD_FLOW_ULTRALYTICS_AGPL_ACCEPTED");
     expect(trainScript).toContain("refuses synthetic");
     expect(trainScript).not.toContain("synthesize_split");
+    expect(cardQuadTs).toContain('"yolo26n-ab"');
+    expect(interfaceMd).toContain('source: "yolo26n-ab"');
+    expect(evalPy).toContain("yolo26n");
+    expect(evalPy).toContain("run_yolo26n");
+    expect(yoloRunner).toContain('YOLO26N_SOURCE = "yolo26n-ab"');
+    expect(yoloRunner).toContain("CARD_FLOW_ULTRALYTICS_AGPL_ACCEPTED");
+    expect(yoloRunner).toContain("CARD_FLOW_YOLO26N_ONDEVICE");
+    for (const source of [ios, android]) {
+      expect(source).toContain("yolo26n-ab");
+      expect(source).toContain("cardQuad");
+    }
   });
 });
