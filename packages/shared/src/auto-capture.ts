@@ -49,8 +49,8 @@ function distance(a: readonly [number, number], b: readonly [number, number]): n
 function polygonArea(c: CardCorners): number {
   let sum = 0;
   for (let i = 0; i < 4; i += 1) {
-    const [x1, y1] = c[i];
-    const [x2, y2] = c[(i + 1) % 4];
+    const [x1, y1] = c[i]!;
+    const [x2, y2] = c[(i + 1) % 4]!;
     sum += x1 * y2 - x2 * y1;
   }
   return Math.abs(sum) / 2;
@@ -94,7 +94,7 @@ export const INITIAL_CAPTURE_STATE: CaptureState = { readySinceMs: null, last: n
 export function cornerJitter(a: CardQuad, b: CardQuad): number {
   const diag = Math.hypot(b.imageWidth, b.imageHeight);
   let worst = 0;
-  for (let i = 0; i < 4; i += 1) worst = Math.max(worst, distance(a.corners[i], b.corners[i]) / diag);
+  for (let i = 0; i < 4; i += 1) worst = Math.max(worst, distance(a.corners[i]!, b.corners[i]!) / diag);
   return worst;
 }
 
