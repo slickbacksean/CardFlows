@@ -4,7 +4,10 @@ import type { RecognitionConfidence } from "./types";
 export const LIVESTREAM_IDENTIFY_PIPELINE = "yolo_identity" as const;
 
 export const LIVESTREAM_SCANNER_UNAVAILABLE_MESSAGE =
-  "Livestream works in the iOS and Android app." as const;
+  "Live card scanning needs a development build." as const;
+
+export const LIVESTREAM_SCANNER_UNAVAILABLE_DETAIL =
+  "Native livestream frame capture is off. The live page still loads." as const;
 
 export type LiveVideoIdentityPlatform = "ios" | "android" | "web";
 

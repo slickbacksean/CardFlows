@@ -10,6 +10,7 @@ import { colors, space } from "@/lib/theme";
 import {
   emptyLiveOverlayGuess,
   isStableLiveIdentity,
+  LIVESTREAM_SCANNER_UNAVAILABLE_DETAIL,
   LIVESTREAM_SCANNER_UNAVAILABLE_MESSAGE,
   livestreamHudOriginWhitelist,
   livestreamOverlayKind,
@@ -218,7 +219,7 @@ function NativeOverlay({
           <View accessibilityLabel="No catalog art" style={styles.thumb} />
           <View style={styles.copy}>
             <Text style={styles.name}>{LIVESTREAM_SCANNER_UNAVAILABLE_MESSAGE}</Text>
-            <Text style={styles.body}>Live-video identify is native iOS and Android only.</Text>
+            <Text style={styles.body}>{LIVESTREAM_SCANNER_UNAVAILABLE_DETAIL}</Text>
           </View>
         </View>
       </View>
