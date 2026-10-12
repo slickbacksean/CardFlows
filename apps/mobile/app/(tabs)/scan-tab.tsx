@@ -1,5 +1,6 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import {
+  LIVESTREAM_SCANNER_UNAVAILABLE_DETAIL,
   LIVESTREAM_SCANNER_UNAVAILABLE_MESSAGE,
   type LiveOverlayGuess,
   type LiveVideoIdentityResult,
@@ -7,7 +8,7 @@ import {
 } from "@cardflow/shared";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { LivestreamBrowser, type LivestreamBrowserHandle } from "@/components/ui/livestream-browser";
 import { PrimaryButton } from "@/components/ui/primary-button";
@@ -20,6 +21,7 @@ import {
   stopLiveVideoIdentify,
   subscribeLiveVideoIdentity,
 } from "@/lib/live-identify";
+import { isLiveVideoNativeAvailable } from "@/lib/live-video-native";
 import {
   DEFAULT_LIVESTREAM_PLATFORM,
   LIVESTREAM_PLATFORM_ORDER,
@@ -46,7 +48,7 @@ export default function ScanTabScreen() {
   const [isSavingBuy, setIsSavingBuy] = useState(false);
   const browserRef = useRef<LivestreamBrowserHandle>(null);
   const chrome = LIVESTREAM_PLATFORMS[platform];
-  const scannerUnavailable = Platform.OS === "web";
+  const scannerUnavailable = !isLiveVideoNativeAvailable();
 
   useEffect(() => subscribeLiveVideoIdentity(setLiveIdentity), []);
 
@@ -184,23 +186,16 @@ export default function ScanTabScreen() {
           >
             {chrome.urlLabel}
           </Text>
-          {scannerUnavailable ? (
-            <Text
-              accessibilityLabel={LIVESTREAM_SCANNER_UNAVAILABLE_MESSAGE}
-              style={styles.scannerUnavailable}
+          <View style={styles.liveBadges}>
+            <View
+              accessibilityLabel={pageOn ? "Page on" : "Page off"}
+              style={[styles.pageBadge, pageOn ? styles.pageBadgeOn : styles.pageBadgeOff]}
             >
-              {LIVESTREAM_SCANNER_UNAVAILABLE_MESSAGE}
-            </Text>
-          ) : (
-            <View style={styles.liveBadges}>
-              <View
-                accessibilityLabel={pageOn ? "Page on" : "Page off"}
-                style={[styles.pageBadge, pageOn ? styles.pageBadgeOn : styles.pageBadgeOff]}
-              >
-                <Text style={[styles.pageBadgeLabel, pageOn && styles.pageBadgeLabelOn]}>
-                  {pageOn ? "PAGE ON" : "PAGE"}
-                </Text>
-              </View>
+              <Text style={[styles.pageBadgeLabel, pageOn && styles.pageBadgeLabelOn]}>
+                {pageOn ? "PAGE ON" : "PAGE"}
+              </Text>
+            </View>
+            {scannerUnavailable ? null : (
               <Pressable
                 accessibilityHint="Starts live-video identify without taking a screenshot"
                 accessibilityLabel="Scanner"
@@ -214,8 +209,8 @@ export default function ScanTabScreen() {
                   {scannerOn ? "SCANNER ON" : "SCANNER"}
                 </Text>
               </Pressable>
-            </View>
-          )}
+            )}
+          </View>
         </View>
         <View accessibilityRole="tablist" style={styles.segments}>
           {LIVESTREAM_PLATFORM_ORDER.map((id) => (
@@ -227,6 +222,20 @@ export default function ScanTabScreen() {
             />
           ))}
         </View>
+        {scannerUnavailable ? (
+          <View
+            accessibilityLabel={LIVESTREAM_SCANNER_UNAVAILABLE_MESSAGE}
+            accessibilityRole="text"
+            style={styles.unavailableBanner}
+          >
+            <Text style={styles.unavailableBannerText}>
+              {LIVESTREAM_SCANNER_UNAVAILABLE_MESSAGE}
+            </Text>
+            <Text style={styles.unavailableBannerDetail}>
+              {LIVESTREAM_SCANNER_UNAVAILABLE_DETAIL}
+            </Text>
+          </View>
+        ) : null}
       </View>
       <View accessibilityLabel={chrome.liveRegionLabel} style={styles.liveRegion}>
         <LivestreamBrowser
@@ -387,13 +396,25 @@ const styles = StyleSheet.create({
   scannerBadgeLabelOn: {
     color: colors.success,
   },
-  scannerUnavailable: {
+  unavailableBanner: {
+    marginHorizontal: space.md,
+    marginTop: space.sm,
+    paddingHorizontal: space.sm,
+    paddingVertical: space.xs,
+    borderRadius: 8,
+    backgroundColor: colors.chip,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+  },
+  unavailableBannerText: {
+    color: colors.text,
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  unavailableBannerDetail: {
     color: colors.muted,
-    fontSize: 11,
-    fontWeight: "800",
-    letterSpacing: 0.2,
-    maxWidth: 88,
-    textAlign: "right",
+    fontSize: 12,
+    marginTop: 2,
   },
   liveBadges: {
     flexDirection: "row",

@@ -207,6 +207,8 @@ describe("combined YOLO + card-identity on live video", () => {
     expect(nativeJs).toContain("CardFlowLiveVideo");
     expect(nativeJs).toContain("pullSampleBuffer");
     expect(nativeJs).toContain("requireOptionalNativeModule");
+    expect(nativeJs).toContain("isExpoGoRuntime");
+    expect(nativeJs).not.toMatch(/requireNativeModule\s*[<(]/);
     expect(nativeJs).toContain("identityRgb");
     expect(nativeJs).toContain("rgbPerceptualHash");
     expect(nativeJs).not.toMatch(SCREENSHOT_APIS);
@@ -248,10 +250,11 @@ describe("combined YOLO + card-identity on live video", () => {
     expect(scanTab).not.toContain("/capture");
     expect(scanTab).toContain("injectMockLiveVideoCard");
     expect(scanTab).toContain("LIVESTREAM_SCANNER_UNAVAILABLE_MESSAGE");
+    expect(scanTab).toContain("isLiveVideoNativeAvailable");
     expect(LIVESTREAM_SCANNER_UNAVAILABLE_MESSAGE).toBe(
-      "Livestream works in the iOS and Android app.",
+      "Live card scanning needs a development build.",
     );
-    expect(scanTab).toContain('Platform.OS === "web"');
+    expect(scanTab).not.toContain('Platform.OS === "web"');
     expect(scanTab).toContain("goBack");
     expect(scanTab).toContain("goForward");
     expect(scanTab).toContain("PAGE ON");

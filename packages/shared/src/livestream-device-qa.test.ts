@@ -232,7 +232,7 @@ describe("Task 9 livestream device QA", () => {
     }
     expect(scanTab).not.toContain("/capture");
     expect(scanTab).not.toContain("/v1/scans");
-    expect(scanTab).toContain('Platform.OS === "web"');
+    expect(scanTab).toContain("isLiveVideoNativeAvailable");
     expect(scanTab).toContain("LIVESTREAM_SCANNER_UNAVAILABLE_MESSAGE");
     expect(overlay).toContain("LIVESTREAM_SCANNER_UNAVAILABLE_MESSAGE");
     expect(iosPump).toContain("live_video");

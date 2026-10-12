@@ -323,6 +323,11 @@ export function noteLiveHlsUrl(url: string | null): void {
 }
 
 export function startLiveVideoIdentify(): void {
+  if (!isLiveVideoNativeAvailable()) {
+    running = false;
+    publish(null);
+    return;
+  }
   running = true;
   recentHits = [];
   settledKey = null;
