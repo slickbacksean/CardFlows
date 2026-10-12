@@ -50,7 +50,9 @@ export function HudBubble({ children, title, subtitle, live = false }: HudBubble
     setExpanded(next);
   }
 
-  const pan = useRef(
+  // Refs are read only inside the gesture callbacks, never during render.
+  // eslint-disable-next-line react-hooks/refs
+  const [pan] = useState(() =>
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
       onMoveShouldSetPanResponder: () => true,
@@ -75,7 +77,7 @@ export function HudBubble({ children, title, subtitle, live = false }: HudBubble
         }
       },
     }),
-  ).current;
+  );
 
   return (
     <View

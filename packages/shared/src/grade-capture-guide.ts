@@ -262,7 +262,7 @@ export function gradeCaptureReadiness(input: GradeCaptureReadinessInput): GradeC
     // No live card locator in Expo Go. The on-screen frame is the target, so a
     // level, steady phone is enough. An explicit miss (cardInFrame === false)
     // still blocks, via the early return above.
-    autoCaptureReady: input.steady === true && input.cardInFrame !== false,
+    autoCaptureReady: input.steady === true,
     status: GRADE_GUIDE_COPY.looksGood,
     tone: "good",
   };
