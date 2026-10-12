@@ -1,0 +1,2 @@
+{"detector": "grader detect_and_normalize with CARD_FLOW_CARD_FINDER=1 (finder v0.1 + warp-first gates)", "manifest": "baseline/manifest.jsonl",
+ "cards": {"all": {"count": 24, "found_rate": 0.875, "iou_rate": 0.875, "mean_corner_error": 0.0020, "p95_corner_error": 0.0138, "wrong_accept_rate": 0.0, "wrong_accept_count": 0, "false_retake_rate": 0.048, "passes": false}}}
