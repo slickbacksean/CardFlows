@@ -7,11 +7,15 @@
  */
 import { Platform } from "react-native";
 import {
+  createLiveCardTracker,
+  createLiveScanTimingLog,
   identifyLiveVideo,
   LIVE_IDENTITY_STABLE_HITS,
   mockLiveVideoFrame,
   normalizeLiveHlsUrl,
   stabilizeLiveIdentity,
+  type LiveScanSample,
+  type LiveScanSummary,
   type LiveVideoFrame,
   type LiveVideoIdentityPlatform,
   type LiveVideoIdentityResult,
@@ -28,7 +32,33 @@ import {
 
 // Capture stays ahead of the match. OpenCLIP is ~630 ms, and a Whatnot lot
 // often sells in about 7 seconds, so the next frame is not queued behind it.
+// An IoU track + crop-hash gate (below) also skips frames of a card that is
+// already stable, so the faster poll does not add server load.
 const FRAME_POLL_MS = 250;
+
+/**
+ * Debug-only per-stage timing on the phone. Off unless
+ * EXPO_PUBLIC_CARD_FLOW_LIVESTREAM_TIMING=1 (never set in production profiles).
+ */
+const TIMING_ENABLED = process.env.EXPO_PUBLIC_CARD_FLOW_LIVESTREAM_TIMING === "1";
+const timingLog = createLiveScanTimingLog(300);
+/** One IoU track; match on a new card, a pending/unstable id, or a re-confirm. */
+const tracker = createLiveCardTracker();
+
+function nowMs(): number {
+  return globalThis.performance?.now?.() ?? Date.now();
+}
+
+function noteTiming(sample: LiveScanSample) {
+  if (!TIMING_ENABLED) return;
+  timingLog.add(sample);
+  console.info(`[livestream-timing] ${JSON.stringify(sample)}`);
+}
+
+/** Debug: p50/p95 per stage of this session's frames (empty unless timing is on). */
+export function getLiveScanTimingSummary(): LiveScanSummary {
+  return timingLog.summary();
+}
 
 let running = false;
 let pendingHlsUrl: string | null = null;
@@ -38,7 +68,7 @@ let captureInFlight = false;
 let identifyInFlight = false;
 let settledKey: string | null = null;
 /** Newest detected crop. Replaces anything still waiting so a slow miss cannot hide the card. */
-let queuedFrame: { frame: LiveVideoFrame; key: string } | null = null;
+let queuedFrame: { frame: LiveVideoFrame; key: string; pullMs: number } | null = null;
 /** Keep a settled guess across brief detector dropouts (~1s at the poll interval). */
 let missedCards = 0;
 const MISS_LIMIT = 4;
@@ -130,11 +160,13 @@ function drainIdentify() {
   if (identifyInFlight || !queuedFrame || !running) return;
   const next = queuedFrame;
   queuedFrame = null;
-  void identifyFrame(next.frame, next.key);
+  void identifyFrame(next.frame, next.key, next.pullMs);
 }
 
-async function identifyFrame(frame: LiveVideoFrame, key: string) {
+async function identifyFrame(frame: LiveVideoFrame, key: string, pullMs: number) {
   identifyInFlight = true;
+  const sendYolo = yoloDetect && Boolean(frame.videoFrameJpeg);
+  const requestStart = nowMs();
   try {
     const response = await identifyLivestreamFrame({
       source: "live_video",
@@ -143,9 +175,32 @@ async function identifyFrame(frame: LiveVideoFrame, key: string) {
       classifiedTcgdexId: frame.classifiedTcgdexId ?? null,
       identityHash: frame.identityHash ?? null,
       identityCropJpeg: frame.identityCropJpeg ?? null,
+      // Corners describe the phone crop; the server ignores them if YOLO re-crops.
+      identityCropQuad: frame.identityCropQuad ?? null,
       videoFrameJpeg: yoloDetect ? (frame.videoFrameJpeg ?? null) : null,
     });
+    const roundTripMs = nowMs() - requestStart;
     if (!running) return;
+    if (!sendYolo) {
+      tracker.noteMatch({
+        hash: frame.identityHash ?? null,
+        tcgdexId: response.identity.reason === "identified" ? response.identity.tcgdexId : null,
+        nowMs: Date.now(),
+      });
+    }
+    const server = response.timing?.stages ?? {};
+    noteTiming({
+      stages: {
+        ...server,
+        detect: frame.detectMs ?? undefined,
+        pull: pullMs,
+        // Network + JSON both ways: the round trip minus server time.
+        upload: typeof server.server === "number" ? Math.max(0, roundTripMs - server.server) : undefined,
+        total: pullMs + roundTripMs,
+      },
+      outcome: response.identity.reason === "identified" ? "accepted" : "rejected",
+      warped: response.timing?.warped,
+    });
     if (response.identity.reason === "identified") {
       missedCards = 0;
       settledKey = key;
@@ -165,6 +220,8 @@ async function identifyFrame(frame: LiveVideoFrame, key: string) {
     }
     publishResult(response.identity);
   } catch {
+    noteTiming({ stages: { pull: pullMs, total: pullMs + nowMs() - requestStart }, outcome: "error" });
+    if (!sendYolo) tracker.noteMatch({ hash: null, tcgdexId: null, nowMs: Date.now() });
     if (!running || keepSettledIdentity(key)) return;
     publish({
       source: "live_video",
@@ -182,11 +239,13 @@ async function pollNativeFrame() {
   if (!running || mockFrame || captureInFlight) return;
   captureInFlight = true;
   let frame: LiveVideoFrame | null = null;
+  const pullStart = nowMs();
   try {
     frame = await pullLiveVideoSampleBuffer();
   } finally {
     captureInFlight = false;
   }
+  const pullMs = nowMs() - pullStart;
   if (!running) return;
   const yoloFrame = yoloDetect && frame?.videoFrameJpeg ? frame : null;
   const key = yoloFrame ? frameKey(yoloFrame) : frame?.cardDetected ? frameKey(frame) : null;
@@ -197,16 +256,30 @@ async function pollNativeFrame() {
       return;
     }
     queuedFrame = null;
+    tracker.reset();
     publish(frame);
     return;
   }
-  if (!yoloFrame) missedCards = 0;
+  if (!yoloFrame && frame) {
+    missedCards = 0;
+    const decision = tracker.decide({
+      box: frame.cardBox ?? null,
+      hash: frame.identityHash ?? null,
+      nowMs: Date.now(),
+    });
+    if (decision.action === "skip") {
+      // Same tracked card, already stable (or an unchanged rejected crop): send nothing.
+      noteTiming({ stages: { detect: frame.detectMs ?? undefined, pull: pullMs }, outcome: "skipped" });
+      if (latest.reason === "identified") publishResult(latest);
+      return;
+    }
+  }
   if (keepSettledIdentity(key)) {
     publishResult(latest);
     return;
   }
   if (latest.reason !== "identified") publish(frame);
-  if (frame) queuedFrame = { frame, key };
+  if (frame) queuedFrame = { frame, key, pullMs };
   drainIdentify();
 }
 
@@ -261,6 +334,8 @@ export function startLiveVideoIdentify(): void {
   queuedFrame = null;
   missedCards = 0;
   identifyInFlight = false;
+  tracker.reset();
+  timingLog.clear();
   void setLiveVideoScannerSession(true);
   void refreshYoloDetect();
   if (!yoloTimer) {
@@ -282,6 +357,7 @@ export function stopLiveVideoIdentify(): void {
   missedCards = 0;
   yoloDetect = false;
   identifyInFlight = false;
+  tracker.reset();
   if (yoloTimer) {
     clearInterval(yoloTimer);
     yoloTimer = null;

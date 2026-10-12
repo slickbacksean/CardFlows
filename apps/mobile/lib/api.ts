@@ -24,6 +24,7 @@ import {
   type InvitedIdentity,
   type ListingDraft,
   type LiveOverlayGuess,
+  type LiveScanStage,
   type LiveVideoIdentityPlatform,
   type LiveVideoIdentityResult,
   type MaxBuyPreferences,
@@ -481,9 +482,15 @@ export function identifyLivestreamFrame(input: {
   classifiedTcgdexId?: string | null;
   identityHash?: string | null;
   identityCropJpeg?: string | null;
+  identityCropQuad?: number[] | null;
   videoFrameJpeg?: string | null;
 }) {
-  return request<{ ok: true; identity: LiveVideoIdentityResult }>("/v1/livestream/identify", {
+  return request<{
+    ok: true;
+    identity: LiveVideoIdentityResult;
+    /** Present only when the API runs with CARD_FLOW_LIVESTREAM_TIMING=1. */
+    timing?: { stages: Partial<Record<LiveScanStage, number>>; warped: boolean };
+  }>("/v1/livestream/identify", {
     method: "POST",
     body: JSON.stringify({
       source: "live_video",
@@ -492,6 +499,7 @@ export function identifyLivestreamFrame(input: {
       classifiedTcgdexId: input.classifiedTcgdexId ?? null,
       identityHash: input.identityHash ?? null,
       identityCropJpeg: input.identityCropJpeg ?? null,
+      identityCropQuad: input.identityCropQuad ?? null,
       videoFrameJpeg: input.videoFrameJpeg ?? null,
     }),
   });

@@ -567,6 +567,29 @@ export type {
 export { RECOGNITION_SCENARIOS } from "./types";
 export type * from "./types";
 export {
+  createLiveScanTimingLog,
+  LIVE_SCAN_STAGES,
+  percentile,
+  summarizeLiveScanSamples,
+  type LiveScanOutcome,
+  type LiveScanSample,
+  type LiveScanStage,
+  type LiveScanStageSummary,
+  type LiveScanSummary,
+} from "./live-scan-timing";
+export {
+  bitHashDistance,
+  boxIou,
+  createLiveCardTracker,
+  LIVE_TRACK_DEFAULTS,
+  normalizeLiveCardBox,
+  type LiveCardBox,
+  type LiveCardTracker,
+  type LiveCardTrackOptions,
+  type LiveTrackDecision,
+  type LiveTrackFrame,
+} from "./live-card-track";
+export {
   GRADE_AUTO_CAPTURE_HOLD_MS,
   GRADE_CARD_ASPECT,
   GRADE_FRAME_HEIGHT_FILL,
