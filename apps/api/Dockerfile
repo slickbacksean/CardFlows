@@ -41,7 +41,7 @@ COPY apps/api apps/api
 # Trained card finder, used by the grader only when CARD_FLOW_CARD_FINDER=1
 # (apps/api/vendor/cardgrading/pipeline/detect.py looks for /repo/services/card-finder).
 COPY services/card-finder/finder.py services/card-finder/label_assist.py services/card-finder/score.py services/card-finder/
-COPY services/card-finder/models/card-finder.onnx services/card-finder/models/
+COPY services/card-finder/models/ services/card-finder/models/
 # Runs from TypeScript source with tsx (a production dependency). @cardflow/shared
 # ships TS source, so there is no separate compile step.
 RUN rm -rf apps/api/.venv apps/api/data apps/api/models \
