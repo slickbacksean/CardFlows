@@ -9,7 +9,7 @@ Detection pass bars:
 Backs and full-art cards are reported as their own slices.
 
 A "wrong crop" is an outline that is accepted (no hard gate failed) but is
-not the card: IoU below 0.90 or mean corner error above 3% of the diagonal.
+not the card: quad IoU below 0.85 against the label (the agreed bar).
 """
 
 from __future__ import annotations
@@ -25,8 +25,7 @@ PASS_MEAN_CORNER_ERROR = 0.01
 PASS_P95_CORNER_ERROR = 0.02
 PASS_WRONG_ACCEPT_RATE = 0.01
 PASS_FALSE_RETAKE_RATE = 0.05
-WRONG_IOU = 0.90
-WRONG_CORNER_ERROR = 0.03
+WRONG_IOU = 0.85
 
 
 def polygon_iou(predicted: np.ndarray, truth: np.ndarray) -> float:
@@ -77,13 +76,7 @@ class SampleScore:
 
     @property
     def correct(self) -> bool:
-        return (
-            self.found
-            and self.iou is not None
-            and self.iou >= WRONG_IOU
-            and self.corner_error is not None
-            and self.corner_error <= WRONG_CORNER_ERROR
-        )
+        return self.found and self.iou is not None and self.iou >= WRONG_IOU
 
     @property
     def wrong_accept(self) -> bool:

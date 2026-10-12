@@ -24,11 +24,24 @@ from label_assist import refine  # noqa: E402
 from score import order_corners  # noqa: E402
 
 MODEL_PATH = HERE / "models" / "card-finder.onnx"
-VERSION = "card-finder@0.1.0"
+VERSION = "card-finder@0.2.0"
 SIZE = 256
 MEAN = np.array([0.485, 0.456, 0.406], np.float32)
 STD = np.array([0.229, 0.224, 0.225], np.float32)
-ACCEPT_THRESHOLD = 0.80  # calibrated on the test set; see scorecards/
+THRESHOLD_PATH = HERE / "models" / "card-finder.threshold.json"
+
+
+def _accept_threshold() -> float:
+    """Fit on the held-out synthetic validation split by train/calibrate.py, never on baseline/test photos."""
+    import json
+
+    try:
+        return float(json.loads(THRESHOLD_PATH.read_text())["accept_threshold"])
+    except (OSError, ValueError, KeyError):
+        return 0.80
+
+
+ACCEPT_THRESHOLD = _accept_threshold()
 EDGE_MARGIN_FRACTION = 0.005
 
 

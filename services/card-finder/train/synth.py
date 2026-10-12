@@ -4,6 +4,9 @@ Card art: TCGdex card images (approved by Sean for training, 2026-10-11).
 Backgrounds: Poly Haven textures (CC0) plus procedural desks/mats/laptops.
 Each sample is a phone-like photo of one card (or none) with a binary card mask.
 
+Card backs are a generic swirl pattern (no text or logos).
+Art is filtered by train/art-list.tsv (denylisted baseline/test-set cards removed, train/val split by id).
+
 Hard negatives (masked as background): a lone art-window crop, a text panel,
 a sheet of paper, a phone or laptop rectangle, a second card cut by the frame edge
 is labeled card only where visible.
@@ -31,28 +34,25 @@ def rounded_mask(w: int, h: int, r: int) -> np.ndarray:
 
 
 def card_back(w: int, h: int, rng: random.Random) -> np.ndarray:
+    """Generic card-back look-alike: dark border, two-tone swirl, plain disc. No text or logos."""
     y, x = np.mgrid[0:h, 0:w].astype(np.float32)
-    ang = np.arctan2(y - h / 2, x - w / 2) + np.hypot(x - w / 2, y - h / 2) / (w * 0.35)
-    swirl = (0.5 + 0.5 * np.sin(ang * 3)).astype(np.float32)
-    img = np.zeros((h, w, 3), np.float32)
-    img[..., 0] = 150 + 90 * swirl
-    img[..., 1] = 70 + 80 * swirl
-    img[..., 2] = 30 + 60 * swirl
-    b = int(w * 0.055)
-    img[:b], img[-b:], img[:, :b], img[:, -b:] = (110, 40, 20), (110, 40, 20), (110, 40, 20), (110, 40, 20)
-    cx, cy, r = w // 2, h // 2, int(w * 0.22)
-    cv2.circle(img, (cx, cy), r, (40, 40, 210), -1)
-    cv2.ellipse(img, (cx, cy), (r, r), 0, 0, 180, (235, 235, 235), -1)
-    cv2.line(img, (cx - r, cy), (cx + r, cy), (20, 20, 20), max(2, r // 7))
-    cv2.circle(img, (cx, cy), r // 3, (235, 235, 235), -1)
-    for yy in (int(h * 0.2), int(h * 0.8)):
-        cv2.putText(img, "POKEMON", (int(w * 0.12), yy), cv2.FONT_HERSHEY_TRIPLEX, w / 330, (40, 200, 250), max(2, w // 60))
-    return np.clip(img, 0, 255).astype(np.uint8)
+    ang = np.arctan2(y - h / 2, x - w / 2) + np.hypot(x - w / 2, y - h / 2) / (w * rng.uniform(0.25, 0.5))
+    swirl = (0.5 + 0.5 * np.sin(ang * rng.randint(2, 5))).astype(np.float32)
+    base = np.array([rng.uniform(80, 200), rng.uniform(40, 140), rng.uniform(20, 90)], np.float32)
+    img = base[None, None, :] * (0.6 + 0.6 * swirl[..., None])
+    b = int(w * rng.uniform(0.04, 0.07))
+    border = tuple(float(v) for v in base * 0.55)
+    img[:b], img[-b:], img[:, :b], img[:, -b:] = border, border, border, border
+    img = np.clip(img, 0, 255).astype(np.uint8)
+    cv2.circle(img, (w // 2, h // 2), int(w * rng.uniform(0.12, 0.25)), tuple(int(rng.uniform(150, 240)) for _ in range(3)), -1)
+    return img
 
 
 class Synth:
-    def __init__(self, art_glob: str, tex_glob: str, size: int = 256, seed: int = 0):
-        self.art = sorted(glob.glob(art_glob))
+    def __init__(self, art_glob: str, tex_glob: str, size: int = 256, seed: int = 0, art_ids: set[str] | None = None):
+        import os
+
+        self.art = sorted(p for p in glob.glob(art_glob) if art_ids is None or os.path.splitext(os.path.basename(p))[0] in art_ids)
         self.tex = sorted(glob.glob(tex_glob))
         self.size = size
         self.rng = random.Random(seed)

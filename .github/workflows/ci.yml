@@ -85,6 +85,11 @@ jobs:
       - name: Grader unit tests (EXIF orientation)
         run: apps/api/.venv/bin/python -m unittest apps/api/vendor/cardgrading/test_pixel_cap.py
 
+      - name: Card finder and condition patch unit tests
+        run: |
+          (cd services/card-finder && ../../apps/api/.venv/bin/python -m unittest test_tilt test_score test_finder -v)
+          (cd services/condition-patches && ../../apps/api/.venv/bin/python -m unittest test_extract -v)
+
       - name: Real end-to-end photo grade
         run: pnpm --filter @cardflow/api test:grade-e2e
 

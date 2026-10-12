@@ -10,7 +10,7 @@ import numpy as np
 VENDOR = Path(__file__).resolve().parents[2] / "apps" / "api" / "vendor" / "cardgrading"
 sys.path.insert(0, str(VENDOR))
 
-from pipeline.detect import check_level, check_rectified_aspect, check_tilt, load_thresholds  # noqa: E402
+from pipeline.detect import check_corners_in_frame, check_level, check_rectified_aspect, check_tilt, load_thresholds  # noqa: E402
 from pipeline.plane import estimate_plane_pose  # noqa: E402
 
 SHAPE = (4032, 3024, 3)
@@ -52,6 +52,21 @@ class WarpFirstTilt(unittest.TestCase):
         art = project(8, 0, card_w=50.0, card_h=42.0)  # squarish panel, not a card
         self.assertFalse(check_rectified_aspect(art, self.cfg, SHAPE).passed)
         self.assertTrue(check_rectified_aspect(project(8, 0), self.cfg, SHAPE).passed)
+
+    def test_whole_frame_4x3_crop_is_rejected(self) -> None:
+        h, w = SHAPE[:2]
+        frame = np.array([[0, 0], [w - 1, 0], [w - 1, h - 1], [0, h - 1]], float)
+        # 3:4 is only ~4.7% off 63:88, so the aspect gate alone can't catch it...
+        self.assertTrue(check_rectified_aspect(frame, self.cfg, SHAPE).passed)
+        # ...the border gate does.
+        self.assertFalse(check_corners_in_frame(frame, self.cfg, SHAPE).passed)
+        self.assertTrue(check_corners_in_frame(project(5, 3), self.cfg, SHAPE).passed)
+
+    def test_twenty_degree_boundary(self) -> None:
+        for pitch, ok in ((19.0, True), (21.0, False)):
+            gate = check_tilt(project(pitch, 0), self.cfg, SHAPE)
+            self.assertEqual(gate.passed, ok, f"{pitch}° -> {gate.value:.2f}")
+            self.assertAlmostEqual(gate.value, pitch, delta=0.3)
 
 
 if __name__ == "__main__":

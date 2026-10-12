@@ -20,7 +20,7 @@ from pipeline.plane import estimate_plane_pose
 # Validated against real misdetections: a skewed quad shows up as tilt, and a
 # wrong-but-rectangular quad (the minAreaRect fallback around card+background,
 # where tilt is 0 by construction) shows up as aspect_ratio.
-HARD_GATE_NAMES = frozenset({"card_detection", "tilt", "aspect_ratio", "rectified_aspect"})
+HARD_GATE_NAMES = frozenset({"card_detection", "tilt", "aspect_ratio", "rectified_aspect", "corners_in_frame"})
 
 
 @dataclass
@@ -446,6 +446,24 @@ def check_rectified_aspect(
     )
 
 
+def check_corners_in_frame(corners: np.ndarray, cfg: dict, image_shape: tuple[int, ...]) -> QualityGate:
+    """Hard gate: every corner sits inside the photo, off its border.
+
+    A quad touching the photo border is either a card cut off by the frame or a
+    whole-frame "crop" (the contour finder's fallback). Neither can be measured.
+    """
+    h, w = image_shape[:2]
+    margin = float(cfg.get("corner_border_margin_fraction", 0.005)) * max(h, w)
+    q = np.asarray(corners, dtype=np.float64).reshape(4, 2)
+    touching = int(((q[:, 0] < margin) | (q[:, 1] < margin) | (q[:, 0] > w - 1 - margin) | (q[:, 1] > h - 1 - margin)).sum())
+    return QualityGate(
+        "corners_in_frame",
+        touching == 0,
+        f"{touching} corner(s) on the photo border",
+        float(touching),
+    )
+
+
 def check_aspect_ratio(corners: np.ndarray, cfg: dict, tilt_ok: bool = False) -> QualityGate:
     """Check the detected quad's side-length ratio against the card's 63:88.
 
@@ -635,6 +653,7 @@ def detect_and_normalize(
     gates.append(check_level(corners, cap_cfg))
     gates.append(check_aspect_ratio(corners, cap_cfg, tilt_ok=tilt_gate.passed))
     gates.append(check_rectified_aspect(corners, cap_cfg, image.shape))
+    gates.append(check_corners_in_frame(corners, cap_cfg, image.shape))
 
     size = (cap_cfg["canonical_width_px"], cap_cfg["canonical_height_px"])
     warped = perspective_correct(image, corners, size)

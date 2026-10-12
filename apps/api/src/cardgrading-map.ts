@@ -25,13 +25,14 @@ import {
  * resolution) still score, with a warning.
  */
 
-const HARD_GATE_NAMES = new Set(["card_detection", "tilt", "aspect_ratio", "rectified_aspect"]);
+const HARD_GATE_NAMES = new Set(["card_detection", "tilt", "aspect_ratio", "rectified_aspect", "corners_in_frame"]);
 
 const HARD_GATE_TIPS: Record<string, string> = {
   card_detection: "Card not found",
   tilt: "Camera angle too tilted",
   aspect_ratio: "Unexpected aspect ratio",
   rectified_aspect: "That outline isn't a whole card",
+  corners_in_frame: "Fit the whole card in the photo",
 };
 
 const SOFT_GATE_LABELS: Record<string, string> = {

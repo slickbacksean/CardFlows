@@ -1,0 +1,3189 @@
+tcgdex_id	name	split
+30th-006	Cherubi	train
+30th-012	Ho-Oh	train
+30th-018	Articuno	train
+30th-024	Pikachu	train
+30th-030	Pikachu	val
+30th-036	Pikachu	train
+30th-042	Pikachu	train
+30th-048	Pikachu	val
+30th-054	Pikachu ex	train
+30th-060	Toxtricity	train
+30th-066	Mew ex	train
+30th-072	Unown	train
+30th-078	Cosmog	train
+30th-084	Seismitoad	train
+30th-090	Gengar ex	train
+30th-096	Zoroark	train
+30th-102	Jirachi ex	train
+30th-108	Gholdengo	train
+30th-114	Kangaskhan	train
+30th-120	Igglybuff	train
+30th-126	Poké Pad	train
+30th-132	Articuno	train
+30th-138	Lycanroc	train
+30th-144	Meowth	train
+30th-150	Pikachu ex	train
+30th-156	Salamence ex	train
+base1-101	Psychic Energy	val
+base1-15	Venusaur	train
+base1-20	Electabuzz	train
+base1-26	Dratini	train
+base1-31	Jynx	train
+base1-37	Nidorino	train
+base1-42	Wartortle	train
+base1-48	Doduo	train
+base1-53	Magnemite	train
+base1-59	Poliwag	train
+base1-64	Starmie	train
+base1-7	Hitmonchan	train
+base1-75	Lass	train
+base1-80	Defender	val
+base1-86	Pokémon Flute	train
+base1-91	Bill	train
+base1-97	Fighting Energy	train
+base2-12	Vaporeon	train
+base2-18	Electrode	val
+base2-23	Nidoqueen	train
+base2-29	Venomoth	train
+base2-34	Dodrio	train
+base2-4	Jolteon	train
+base2-45	Rhydon	train
+base2-50	Cubone	train
+base2-56	Meowth	train
+base2-61	Rhyhorn	train
+base2-9	Pinsir	train
+base3-14	Raichu	train
+base3-2	Articuno	train
+base3-25	Lapras	train
+base3-30	Zapdos	train
+base3-36	Golem	train
+base3-41	Sandslash	train
+base3-47	Geodude	train
+base3-52	Omanyte	train
+base3-58	Mr. Fuji	train
+base3-7	Hitmonlee	train
+base4-101	Computer Search	train
+base4-107	Scoop Up	train
+base4-112	Maintenance	train
+base4-118	Bill	train
+base4-123	Switch	train
+base4-129	Psychic Energy	train
+base4-17	Scyther	train
+base4-22	Dragonair	train
+base4-28	Pidgeotto	train
+base4-33	Arcanine	val
+base4-39	Exeggutor	train
+base4-44	Ivysaur	train
+base4-5	Clefable	val
+base4-55	Parasect	train
+base4-66	Bellsprout	train
+base4-71	Diglett	train
+base4-77	Jigglypuff	train
+base4-82	Nidoran♀	train
+base4-88	Poliwag	val
+base4-93	Squirtle	train
+base4-99	Vulpix	train
+base5-14	Dark Weezing	train
+base5-2	Dark Arbok	train
+base5-25	Dark Gyarados	val
+base5-30	Dark Vileplume	train
+base5-36	Dark Gloom	train
+base5-41	Dark Muk	train
+base5-47	Magikarp	train
+base5-52	Diglett	train
+base5-58	Koffing	train
+base5-63	Oddish	train
+base5-69	Voltorb	val
+base5-74	Challenge!	train
+base5-8	Dark Gyarados	train
+basep-1	Pikachu	train
+basep-15	Cool Porygon	train
+basep-20	Psyduck	train
+basep-26	Pikachu	train
+basep-31	Cleffa	train
+basep-37	Hitmontop	train
+basep-42	Pokémon Tower	train
+basep-48	Articuno	train
+basep-53	Suicune	train
+bw1-10	Lilligant	train
+bw1-105	Grass Energy	train
+bw1-110	Fighting Energy	train
+bw1-12	Maractus	train
+bw1-18	Pignite	train
+bw1-23	Darumaka	train
+bw1-29	Dewott	train
+bw1-34	Simipour	train
+bw1-4	Servine	train
+bw1-45	Joltik	val
+bw1-50	Woobat	train
+bw1-56	Duosion	train
+bw1-61	Throh	train
+bw1-67	Liepard	train
+bw1-72	Vullaby	train
+bw1-78	Patrat	train
+bw1-83	Stoutland	train
+bw1-89	Cinccino	train
+bw1-94	Energy Switch	train
+bw10-1	Surskit	train
+bw10-104	Dusknoir	train
+bw10-15	Wartortle	train
+bw10-20	Suicune	train
+bw10-26	Abomasnow	train
+bw10-31	Tynamo	val
+bw10-37	Mesprit	train
+bw10-42	Solosis	train
+bw10-48	Machoke	train
+bw10-53	Archen	train
+bw10-59	Aggron	train
+bw10-64	Salamence	train
+bw10-7	Shelmet	train
+bw10-75	Teddiursa	train
+bw10-80	Energy Retrieval	train
+bw10-86	Reversal Trigger	val
+bw10-91	Plasma Energy	train
+bw10-97	Genesect-EX	val
+bw11-101	White Kyurem-EX	val
+bw11-107	Bouffalant	train
+bw11-112	Energy Switch	train
+bw11-14	Crustle	val
+bw11-2	Tangrowth	train
+bw11-25	Tepig	train
+bw11-30	Magikarp	train
+bw11-36	Phione	train
+bw11-41	Palpitoad	train
+bw11-47	Plusle	train
+bw11-52	Zekrom-EX	train
+bw11-58	Mismagius	val
+bw11-63	Toxicroak	train
+bw11-69	Gothita	train
+bw11-74	Solosis	train
+bw11-8	Serperior	train
+bw11-85	Landorus	train
+bw11-90	Zoroark	train
+bw11-96	Garchomp	train
+bw11-RC11	Meloetta-EX	train
+bw11-RC17	Audino	train
+bw11-RC22	Reshiram	train
+bw11-RC5	Torchic	train
+bw2-10	Cottonee	train
+bw2-16	Sawsbuck	train
+bw2-21	Darmanitan	train
+bw2-27	Swanna	train
+bw2-32	Emolga	train
+bw2-38	Venipede	train
+bw2-43	Gothita	train
+bw2-49	Roggenrola	train
+bw2-54	Drilbur	val
+bw2-6	Swadloon	train
+bw2-65	Liepard	train
+bw2-70	Ferroseed	train
+bw2-76	Klinklang	train
+bw2-81	Tranquill	train
+bw2-87	Rufflet	train
+bw2-92	Crushing Hammer	train
+bw2-98	Tornadus	train
+bw3-11	Shelmet	train
+bw3-17	Simisear	train
+bw3-22	Tympole	train
+bw3-28	Vanillish	train
+bw3-33	Cryogonal	train
+bw3-39	Tynamo	train
+bw3-44	Yamask	train
+bw3-5	Lilligant	train
+bw3-55	Elgyem	train
+bw3-60	Chandelure	train
+bw3-66	Archen	train
+bw3-71	Golett	train
+bw3-77	Deino	train
+bw3-82	Bisharp	train
+bw3-88	Haxorus	val
+bw3-93	Plume Fossil	train
+bw3-99	Terrakion	train
+bw4-103	Hydreigon	train
+bw4-16	Simisear	train
+bw4-21	Reshiram	train
+bw4-27	Articuno	train
+bw4-32	Vanillish	train
+bw4-38	Kyurem-EX	val
+bw4-43	Shinx	train
+bw4-49	Emolga	train
+bw4-54	Mewtwo-EX	train
+bw4-6	Pansage	train
+bw4-65	Hippopotas	train
+bw4-70	Weavile	train
+bw4-81	Persian	train
+bw4-87	Exp. Share	train
+bw4-92	Double Colorless Energy	train
+bw4-98	Mewtwo-EX	train
+bw5-102	Ultra Ball	train
+bw5-108	Tornadus-EX	train
+bw5-13	Entei-EX	train
+bw5-19	Heatmor	train
+bw5-24	Slowbro	train
+bw5-3	Venusaur	train
+bw5-35	Ducklett	train
+bw5-40	Minun	train
+bw5-46	Eelektrik	train
+bw5-51	Yamask	train
+bw5-57	Excadrill	train
+bw5-62	Sableye	train
+bw5-68	Scrafty	train
+bw5-73	Vullaby	train
+bw5-79	Bisharp	val
+bw5-84	Eevee	train
+bw5-9	Karrablast	val
+bw5-95	Hooligans Jim & Cas	train
+bw6-10	Nincada	train
+bw6-105	Swablu	train
+bw6-110	Bouffalant	train
+bw6-116	Tool Scrapper	train
+bw6-121	Terrakion-EX	train
+bw6-127	Krookodile	train
+bw6-17	Foongus	train
+bw6-22	Ho-Oh-EX	train
+bw6-28	Milotic	train
+bw6-33	Floatzel	val
+bw6-39	Flaaffy	train
+bw6-44	Manectric	train
+bw6-5	Yanmega	train
+bw6-55	Gothita	train
+bw6-60	Cubone	train
+bw6-66	Boldore	train
+bw6-71	Terrakion-EX	train
+bw6-77	Skuntank	train
+bw6-82	Probopass	train
+bw6-88	Gabite	train
+bw6-93	Deino	train
+bw6-99	Aipom	train
+bw7-103	White Kyurem-EX	train
+bw7-109	Snorlax	train
+bw7-114	Delcatty	train
+bw7-12	Servine	train
+bw7-125	Unfezant	val
+bw7-130	Hugh	train
+bw7-136	Town Map	train
+bw7-141	Celebi-EX	val
+bw7-147	Bianca	train
+bw7-152	Altaria	train
+bw7-2	Gloom	train
+bw7-25	Pignite	train
+bw7-30	Wartortle	val
+bw7-36	Marill	train
+bw7-41	Samurott	val
+bw7-47	Keldeo	train
+bw7-52	Electrode	train
+bw7-58	Wobbuffet	train
+bw7-63	Dusknoir	train
+bw7-69	Musharna	train
+bw7-74	Scolipede	train
+bw7-8	Heracross	val
+bw7-85	Crustle	train
+bw7-90	Purrloin	train
+bw7-96	Skarmory	train
+bw8-100	Dodrio	train
+bw8-106	Loudred	train
+bw8-111	Patrat	train
+bw8-117	Bicycle	train
+bw8-122	Eviolite	train
+bw8-128	Dowsing Machine	train
+bw8-133	Cobalion-EX	train
+bw8-14	Moltres-EX	train
+bw8-2	Grotle	val
+bw8-25	Articuno-EX	train
+bw8-30	Lombre	train
+bw8-36	Vanillish	train
+bw8-41	Beartic	train
+bw8-47	Magnezone	train
+bw8-52	Zubat	train
+bw8-58	Weezing	train
+bw8-63	Trubbish	train
+bw8-69	Elgyem	train
+bw8-74	Solrock	train
+bw8-8	Sewaddle	train
+bw8-85	Scraggy	train
+bw8-90	Klinklang	train
+bw8-96	White Kyurem-EX	train
+bw9-100	Frozen City	train
+bw9-106	Plasma Energy	train
+bw9-111	Deoxys-EX	train
+bw9-117	Empoleon	train
+bw9-122	Ultra Ball	train
+bw9-18	Horsea	train
+bw9-23	Glaceon	train
+bw9-29	Vanilluxe	train
+bw9-34	Jolteon	train
+bw9-4	Exeggcute	val
+bw9-45	Grimer	train
+bw9-50	Beldum	train
+bw9-56	Cofagrigus	train
+bw9-61	Onix	train
+bw9-67	Absol	train
+bw9-72	Pawniard	train
+bw9-78	Hydreigon	train
+bw9-83	Dragonite	train
+bw9-89	Eevee	train
+bw9-94	Kecleon	train
+bwp-BW01	Snivy	train
+bwp-BW09	Zoroark	train
+bwp-BW13	Minccino	train
+bwp-BW19	Zoroark	train
+bwp-BW25	Scraggy	train
+bwp-BW31	Victory Cup	train
+bwp-BW37	Kyurem-EX	train
+bwp-BW43	Landorus	train
+bwp-BW49	Lilligant	train
+bwp-BW55	Elgyem	train
+bwp-BW61	Keldeo-EX	train
+bwp-BW67	Ampharos	train
+bwp-BW73	Darkrai	train
+bwp-BW79	Landorus	train
+bwp-BW85	Lucario	val
+bwp-BW91	Jolteon	train
+bwp-BW98	Mew	train
+cel25-13	Cosmog	train
+cel25-19	Yveltal	train
+cel25-24	Professor's Research (Professor Oak)	train
+cel25-8	Surfing Pikachu V	train
+col1-13	Leafeon	train
+col1-19	Palkia	train
+col1-24	Cleffa	val
+col1-3	Dialga	train
+col1-35	Typhlosion	train
+col1-40	Bayleef	train
+col1-46	Magby	train
+col1-51	Seviper	train
+col1-57	Hitmonchan	val
+col1-62	Magmar	train
+col1-68	Pineco	train
+col1-73	Teddiursa	train
+col1-79	Interviewer's Questions	train
+col1-84	Research Record	train
+col1-9	Ho-Oh	val
+col1-95	Metal Energy	train
+col1-SL4	Groudon	train
+dc1-10	Team Magma's Baltoy	train
+dc1-16	Team Aqua's Poochyena	train
+dc1-21	Team Aqua's Sharpedo	train
+dc1-27	Team Aqua's Great Ball	train
+dc1-32	Team Magma's Secret Base	val
+dc1-7	Team Aqua's Grimer	train
+det1-12	Mewtwo	val
+det1-18	Slaking	val
+det1-7	Psyduck	val
+dp1-101	Starly	val
+dp1-107	Energy Switch	train
+dp1-112	Professor Rowan	train
+dp1-118	Potion	train
+dp1-123	Grass Energy	val
+dp1-129	Darkness Energy	train
+dp1-17	Torterra	train
+dp1-22	Clefable	train
+dp1-28	Heracross	train
+dp1-33	Munchlax	train
+dp1-39	Vespiquen	train
+dp1-44	Cascoon	train
+dp1-5	Infernape	train
+dp1-55	Mantyke	train
+dp1-60	Rhydon	train
+dp1-66	Unown B	train
+dp1-71	Bonsly	train
+dp1-77	Clefairy	val
+dp1-82	Gastly	train
+dp1-88	Marill	train
+dp1-93	Piplup	train
+dp1-99	Skorupi	train
+dp2-103	Spinarak	train
+dp2-109	Bebe's Search	train
+dp2-114	Quick Ball	train
+dp2-12	Magmortar	train
+dp2-13	Meganium	train
+dp2-19	Abomasnow	train
+dp2-24	Exeggutor	train
+dp2-3	Ambipom	train
+dp2-35	Sudowoodo	val
+dp2-40	Whiscash	train
+dp2-46	Dodrio	train
+dp2-51	Graveler	train
+dp2-57	Octillery	val
+dp2-62	Sealeo	train
+dp2-68	Vigoroth	train
+dp2-73	Bidoof	train
+dp2-79	Cyndaquil	train
+dp2-84	Geodude	train
+dp2-9	Garchomp	train
+dp2-95	Remoraid	train
+dp3-10	Ho-Oh	train
+dp3-105	Shellder	train
+dp3-110	Shuppet	train
+dp3-116	Venonat	train
+dp3-121	PlusPower	train
+dp3-127	Potion	train
+dp3-132	Honchkrow	train
+dp3-19	Suicune	train
+dp3-24	Dugtrio	train
+dp3-3	Charizard	train
+dp3-35	Pidgeot	train
+dp3-40	Weavile	train
+dp3-46	Charmeleon	train
+dp3-51	Ivysaur	train
+dp3-57	Nidorino	train
+dp3-62	Roselia	train
+dp3-68	Unown K	train
+dp3-73	Venomoth	val
+dp3-79	Burmy Sandy Cloak	train
+dp3-84	Corsola	train
+dp3-9	Gastrodon West Sea	train
+dp3-95	Murkrow	train
+dp4-10	Tangrowth	val
+dp4-105	Dialga	train
+dp4-15	Claydol	train
+dp4-20	Kingler	train
+dp4-26	Palkia	train
+dp4-31	Weezing	train
+dp4-37	Floatzel	train
+dp4-42	Huntail	train
+dp4-48	Pelipper	train
+dp4-53	Skarmory	train
+dp4-59	Zangoose	train
+dp4-64	Clamperl	train
+dp4-7	Rotom	train
+dp4-75	Krabby	train
+dp4-80	Mudkip	train
+dp4-86	Swablu	train
+dp4-91	Unown L	train
+dp4-97	Amulet Coin	train
+dp5-11	Palkia	train
+dp5-17	Empoleon	train
+dp5-22	Infernape	train
+dp5-28	Plusle	train
+dp5-33	Unown P	train
+dp5-39	Lickitung	train
+dp5-44	Prinplup	train
+dp5-5	Glaceon	train
+dp5-55	Chatot	train
+dp5-60	Croagunk	train
+dp5-66	Hippopotas	train
+dp5-71	Piplup	train
+dp5-77	Turtwig	train
+dp5-82	Fossil Excavator	train
+dp5-88	Warp Point	train
+dp5-93	Darkness Energy	train
+dp5-99	Leafeon	train
+dp6-103	Houndour	train
+dp6-109	Nosepass	train
+dp6-114	Poliwag	val
+dp6-12	Politoed	train
+dp6-125	Tentacool	train
+dp6-130	Buck's Training	train
+dp6-136	Technical Machine TS-1	train
+dp6-141	Gliscor	train
+dp6-15	Regigigas	train
+dp6-20	Bellossom	train
+dp6-26	Deoxys Speed Forme	train
+dp6-31	Jirachi	train
+dp6-37	Regigigas	train
+dp6-42	Unown !	train
+dp6-48	Castform	train
+dp6-53	Drifblim	train
+dp6-59	Lanturn	train
+dp6-64	Metang	train
+dp6-7	Kingdra	train
+dp6-75	Tentacruel	train
+dp6-80	Unown W	train
+dp6-86	Buneary	train
+dp6-91	Dratini	train
+dp6-97	Gloom	train
+dp7-101	Charmander	train
+dp7-14	Cherrim	val
+dp7-2	Empoleon	train
+dp7-25	Scizor	train
+dp7-30	Tyranitar	train
+dp7-36	Electrode	train
+dp7-41	Machoke	train
+dp7-47	Pupitar	train
+dp7-52	Staravia	val
+dp7-58	Drifloon	val
+dp7-63	Larvitar	train
+dp7-69	Onix	train
+dp7-74	Snover	train
+dp7-8	Raichu	train
+dp7-85	Great Ball	train
+dp7-90	Poké Healer +	train
+dp7-96	Dusknoir	train
+dp7-SH3	Voltorb	train
+dpp-DP06	Buneary	val
+dpp-DP12	Lucario	train
+dpp-DP18	Palkia	train
+dpp-DP24	Darkrai	train
+dpp-DP30	Regigigas	train
+dpp-DP36	Gliscor	train
+dpp-DP42	Carnivine G	train
+dpp-DP48	Tropical Wind	train
+dpp-DP54	Beginning Door	train
+dv1-12	Axew	train
+dv1-18	Exp. Share	train
+dv1-4	Dragonair	val
+ecard1-1	Alakazam	train
+ecard1-104	Cyndaquil	train
+ecard1-11	Fearow	train
+ecard1-115	Krabby	train
+ecard1-120	Marill	train
+ecard1-126	Ponyta	train
+ecard1-131	Squirtle	train
+ecard1-137	Bill's Maintenance	train
+ecard1-142	Mary's Impulse	train
+ecard1-148	Professor Elm's Training Method	train
+ecard1-153	Energy Search	train
+ecard1-159	Metal Energy	train
+ecard1-164	Psychic Energy	train
+ecard1-20	Mewtwo	train
+ecard1-26	Rapidash	train
+ecard1-31	Vileplume	train
+ecard1-37	Blastoise	train
+ecard1-42	Cloyster	train
+ecard1-48	Gengar	train
+ecard1-53	Meganium	train
+ecard1-59	Pidgeot	train
+ecard1-64	Typhlosion	train
+ecard1-7	Clefable	train
+ecard1-75	Dragonair	train
+ecard1-80	Haunter	train
+ecard1-86	Magmar	train
+ecard1-91	Quilava	train
+ecard1-97	Charmander	train
+ecard2-101	Pinsir	train
+ecard2-108	Slowpoke	train
+ecard2-113	Tentacool	train
+ecard2-119	Darkness Cube 01	train
+ecard2-124	Grass Cube 01	train
+ecard2-13	Exeggutor	train
+ecard2-135	Time Shard	train
+ecard2-140	Water Cube 01	train
+ecard2-146	Crystal Energy	val
+ecard2-16	Hypno	train
+ecard2-21	Lanturn	train
+ecard2-27	Parasect	train
+ecard2-32	Scizor	train
+ecard2-38	Tentacruel	train
+ecard2-43	Vileplume	train
+ecard2-49	Gloom	train
+ecard2-55	Nidorino	train
+ecard2-60	Skiploom	train
+ecard2-66	Wooper	train
+ecard2-71	Chinchou	train
+ecard2-78	Goldeen	train
+ecard2-83	Hoppip	train
+ecard2-89	Larvitar	val
+ecard2-94	Miltank	train
+ecard3-10	Gengar	train
+ecard3-105	Sunflora	train
+ecard3-110	Ursaring	train
+ecard3-116	Yanma	train
+ecard3-121	Apricorn Maker	train
+ecard3-127	Hyper Potion	train
+ecard3-132	Mirage Stadium	train
+ecard3-138	Oracle	train
+ecard3-143	Cyclone Energy	train
+ecard3-149	Ho-oh	train
+ecard3-19	Magneton	train
+ecard3-24	Piloswine	train
+ecard3-3	Arcanine	train
+ecard3-35	Xatu	train
+ecard3-40	Noctowl	train
+ecard3-46	Abra	train
+ecard3-51	Ditto	train
+ecard3-57	Gastly	train
+ecard3-62	Growlithe	train
+ecard3-68	Jigglypuff	train
+ecard3-73	Ledyba	train
+ecard3-79	Murkrow	train
+ecard3-84	Pikachu	train
+ecard3-9	Forretress	train
+ecard3-95	Seel	train
+ex1-10	Mightyena	train
+ex1-105	Fighting Energy	train
+ex1-12	Slaking	train
+ex1-18	Nosepass	train
+ex1-23	Swampert	train
+ex1-29	Delcatty	train
+ex1-34	Kirlia	train
+ex1-4	Camerupt	train
+ex1-45	Slakoth	val
+ex1-50	Aron	train
+ex1-56	Makuhita	train
+ex1-61	Numel	train
+ex1-67	Ralts	train
+ex1-72	Taillow	train
+ex1-78	Wurmple	train
+ex1-83	Lady Outing	train
+ex1-89	Professor Birch	train
+ex1-94	Metal Energy	train
+ex10-1	Ampharos	train
+ex10-104	Ho-Oh ex	train
+ex10-11	Poliwrath	train
+ex10-115	Suicune ☆	train
+ex10-15	Sudowoodo	train
+ex10-20	Chansey	train
+ex10-26	Hitmontop	train
+ex10-31	Smoochum	val
+ex10-37	Corsola	train
+ex10-42	Miltank	train
+ex10-48	Smeargle	train
+ex10-53	Clefairy	train
+ex10-59	Hoothoot	train
+ex10-64	Oddish	train
+ex10-7	Houndoom	train
+ex10-75	Spinarak	train
+ex10-80	Curse Powder	train
+ex10-86	Mary's Request	train
+ex10-91	Sitrus Berry	train
+ex10-97	Metal Energy	train
+ex11-101	Potion	train
+ex11-107	Metal Energy	train
+ex11-112	Kyogre Star	train
+ex11-15	Starmie δ	train
+ex11-20	Azurill	train
+ex11-26	Rain Castform	train
+ex11-31	Sunny Castform	val
+ex11-37	Ditto	train
+ex11-42	Dragonair δ	train
+ex11-48	Magneton	train
+ex11-53	Shelgon δ	val
+ex11-59	Beldum δ	train
+ex11-64	Ditto	train
+ex11-7	Jolteon δ	train
+ex11-75	Makuhita	train
+ex11-80	Porygon	train
+ex11-86	Taillow	train
+ex11-91	Holon Farmer	train
+ex11-97	Holon Scientist	train
+ex12-12	Shiftry	train
+ex12-18	Huntail	train
+ex12-23	Omastar	train
+ex12-29	Anorith	train
+ex12-34	Graveler	train
+ex12-4	Delcatty	train
+ex12-45	Tentacruel	train
+ex12-50	Chinchou	train
+ex12-56	Lileep	train
+ex12-61	Seedot	train
+ex12-67	Trapinch	val
+ex12-72	Cursed Stone	train
+ex12-78	Claw Fossil	train
+ex12-83	Arcanine ex	train
+ex12-89	Walrein ex	train
+ex13-1	Armaldo δ	train
+ex13-104	Pikachu Star	train
+ex13-11	Latias δ	train
+ex13-15	Raichu δ	train
+ex13-20	Blaziken	train
+ex13-26	Rayquaza δ	val
+ex13-31	Sableye	train
+ex13-37	Chimecho δ	train
+ex13-42	Gloom δ	train
+ex13-48	Persian δ	train
+ex13-53	Sharpedo δ	train
+ex13-59	Baltoy	train
+ex13-64	Electrike	train
+ex13-7	Flygon δ	train
+ex13-75	Phanpy	train
+ex13-80	Poochyena	train
+ex13-86	Holon Fossil	train
+ex13-91	Claw Fossil	val
+ex13-97	Dark Metal Energy	train
+ex14-11	Swalot	train
+ex14-17	Dusclops	train
+ex14-22	Kingler δ	train
+ex14-28	Venusaur	train
+ex14-33	Gulpin	train
+ex14-39	Nuzleaf	train
+ex14-44	Aron	train
+ex14-5	Dugtrio	train
+ex14-55	Lotad	val
+ex14-60	Seedot	train
+ex14-66	Torchic	train
+ex14-71	Bill's Maintenance	train
+ex14-77	Double Full Heal	train
+ex14-82	Poké Ball	train
+ex14-88	Double Rainbow Energy	val
+ex14-93	Groudon ex	train
+ex14-99	Alakazam ☆	train
+ex15-12	Typhlosion δ	train
+ex15-18	Ledian δ	val
+ex15-23	Tropius δ	train
+ex15-29	Electabuzz δ	train
+ex15-34	Nidorina δ	train
+ex15-4	Meganium δ	train
+ex15-45	Cyndaquil δ	train
+ex15-50	Horsea δ	train
+ex15-56	Nidoran♀ δ	train
+ex15-61	Ralts δ	train
+ex15-67	Totodile δ	val
+ex15-72	Buffer Piece	train
+ex15-78	Old Rod	train
+ex15-83	Switch	train
+ex15-89	Scramble Energy	train
+ex15-94	Kingdra ex δ	val
+ex16-1	Aggron	train
+ex16-104	Fire Energy	train
+ex16-12	Raichu	train
+ex16-18	Mightyena	val
+ex16-23	Seviper	train
+ex16-29	Combusken	train
+ex16-34	Medicham	train
+ex16-4	Banette	train
+ex16-45	Beldum	train
+ex16-50	Duskull	train
+ex16-56	Omanyte	train
+ex16-61	Shuppet	train
+ex16-67	Torchic	train
+ex16-72	Drake's Stadium	train
+ex16-78	Master Ball	train
+ex16-83	Steven's Advice	train
+ex16-89	Multi Energy	train
+ex16-94	Flygon ex	train
+ex2-1	Armaldo	train
+ex2-14	Zangoose	train
+ex2-2	Cacturne	train
+ex2-25	Vaporeon	train
+ex2-30	Azumarill	train
+ex2-36	Elekid	train
+ex2-41	Lairon	train
+ex2-47	Murkrow	train
+ex2-52	Vigoroth	train
+ex2-58	Cacnea	train
+ex2-63	Eevee	train
+ex2-69	Natu	train
+ex2-74	Ralts	train
+ex2-8	Lunatone	train
+ex2-85	Zigzagoon	train
+ex2-90	Claw Fossil	train
+ex2-96	Gardevoir ex	train
+ex3-100	Charizard	train
+ex3-16	Girafarig	train
+ex3-21	Skarmory	train
+ex3-27	Flaaffy	train
+ex3-32	Gyarados	val
+ex3-38	Ninjask	train
+ex3-43	Shuppet	train
+ex3-49	Bagon	train
+ex3-54	Corphish	train
+ex3-6	Grumpig	train
+ex3-65	Mudkip	train
+ex3-70	Numel	train
+ex3-76	Taillow	val
+ex3-81	Wurmple	train
+ex3-87	Mr. Briney's Compassion	train
+ex3-92	Kingdra ex	train
+ex3-98	Charmander	val
+ex4-13	Raichu	train
+ex4-19	Team Magma's Camerupt	train
+ex4-24	Team Aqua's Cacnea	train
+ex4-3	Team Aqua's Kyogre	train
+ex4-35	Team Magma's Houndour	train
+ex4-40	Cubone	val
+ex4-46	Squirtle	train
+ex4-51	Team Aqua's Corphish	train
+ex4-57	Team Aqua's Spheal	train
+ex4-62	Team Magma's Houndour	train
+ex4-68	Team Magma's Rhyhorn	train
+ex4-73	Maxie	train
+ex4-79	Team Aqua Technical Machine 01	val
+ex4-84	Team Magma Technical Machine 01	train
+ex4-9	Team Magma's Groudon	train
+ex4-95	Swampert ex	train
+ex5-101	Wigglytuff ex	train
+ex5-15	Walrein	train
+ex5-20	Masquerain	train
+ex5-26	Sunny Castform	train
+ex5-31	Claydol	train
+ex5-37	Igglybuff	val
+ex5-42	Medicham	train
+ex5-48	Spinda	train
+ex5-53	Baltoy	train
+ex5-59	Cyndaquil	val
+ex5-64	Machop	train
+ex5-7	Heracross	train
+ex5-75	Staryu	train
+ex5-80	Voltorb	train
+ex5-86	Ancient Technical Machine [Steel]	train
+ex5-91	Magnetic Storm	train
+ex5-97	Regice ex	train
+ex6-101	Potion	train
+ex6-107	Electrode ex	train
+ex6-112	Venusaur ex	train
+ex6-13	Rapidash	train
+ex6-19	Chansey	val
+ex6-24	Fearow	train
+ex6-3	Dewgong	val
+ex6-35	Ivysaur	train
+ex6-40	Nidorina	train
+ex6-46	Poliwhirl	val
+ex6-51	Weepinbell	train
+ex6-57	Charmander	train
+ex6-62	Doduo	train
+ex6-68	Magnemite	train
+ex6-73	Pidgey	val
+ex6-79	Shellder	train
+ex6-84	Venonat	train
+ex6-9	Nidoqueen	val
+ex6-95	Poké Ball	train
+ex7-10	Dark Steelix	train
+ex7-105	Rocket's Suicune ex	train
+ex7-110	Charmeleon	train
+ex7-16	Dark Muk	train
+ex7-21	Delibird	train
+ex7-27	Qwilfish	train
+ex7-32	Dark Dragonair	train
+ex7-38	Dark Magcargo	train
+ex7-43	Heracross	train
+ex7-49	Skiploom	train
+ex7-54	Drowzee	train
+ex7-6	Dark Hypno	train
+ex7-65	Magikarp	train
+ex7-70	Psyduck	train
+ex7-76	Slowpoke	train
+ex7-81	Wooper	train
+ex7-87	Rocket's Hideout	train
+ex7-92	Swoop! Teleporter	train
+ex7-98	Rocket's Hitmonchan ex	val
+ex8-102	Rayquaza ex	train
+ex8-108	Rocket's Raikou ex	train
+ex8-16	Deoxys	train
+ex8-21	Pelipper	train
+ex8-27	Tropius	train
+ex8-32	Grumpig	train
+ex8-38	Manectric	train
+ex8-43	Nuzleaf	train
+ex8-49	Swellow	train
+ex8-54	Barboach	train
+ex8-6	Crawdaunt	train
+ex8-65	Makuhita	train
+ex8-70	Poochyena	train
+ex8-76	Spoink	train
+ex8-81	Wingull	train
+ex8-87	Lady Outing	train
+ex8-92	Strength Charm	train
+ex8-98	Deoxys ex	train
+ex9-102	Fire Energy	train
+ex9-11	Swampert	train
+ex9-17	Nosepass	train
+ex9-22	Breloom	train
+ex9-28	Grovyle	train
+ex9-33	Kirlia	train
+ex9-39	Plusle	train
+ex9-44	Cacnea	train
+ex9-5	Groudon	train
+ex9-55	Meditite	train
+ex9-60	Pikachu	train
+ex9-66	Spoink	train
+ex9-71	Voltorb	train
+ex9-77	Lanette's Net Search	train
+ex9-82	Professor Birch	train
+ex9-88	Metal Energy	train
+ex9-93	Deoxys ex	train
+ex9-99	Regirock ex	train
+g1-1	Venusaur EX	train
+g1-15	Rapidash	val
+g1-20	Cloyster	train
+g1-26	Pikachu	train
+g1-30	Zubat	train
+g1-36	Jynx	train
+g1-41	Machoke	train
+g1-47	Hitmonlee	train
+g1-52	Mr. Mime	train
+g1-58	Snorlax	train
+g1-63	Imakuni?	train
+g1-69	Pokémon Fan Club	train
+g1-73a	Team Flare Grunt	train
+g1-79	Psychic Energy	train
+g1-9	Pinsir	train
+g1-RC14	Espurr	train
+g1-RC2	Shroomish	train
+g1-RC25	Fletchling	train
+g1-RC30	Gardevoir EX	train
+g1-RC7	Snorunt	train
+gym1-101	Lt. Surge	train
+gym1-107	Celadon City Gym	train
+gym1-112	Lt. Surge's Treaty	train
+gym1-118	Secret Mission	train
+gym1-123	Misty's Duel	train
+gym1-129	Grass Energy	train
+gym1-15	Brock	train
+gym1-20	Brock's Golem	train
+gym1-26	Erika's Victreebel	train
+gym1-31	Misty's Poliwrath	train
+gym1-37	Blaine's Magmar	train
+gym1-42	Erika's Dratini	val
+gym1-48	Erika's Weepinbell	train
+gym1-53	Misty's Poliwhirl	train
+gym1-59	Sabrina's Jynx	train
+gym1-64	Blaine's Tauros	train
+gym1-7	Lt. Surge's Fearow	train
+gym1-75	Erika's Bellsprout	train
+gym1-80	Lt. Surge's Magnemite	train
+gym1-86	Misty's Horsea	train
+gym1-91	Sabrina's Abra	val
+gym1-97	Blaine's Quiz #1	train
+gym2-101	Brock's Protection	train
+gym2-107	Lt. Surge's Secret Plan	val
+gym2-112	Blaine's Quiz #3	val
+gym2-118	Misty's Tears	train
+gym2-123	Viridian City Gym	train
+gym2-129	Grass Energy	train
+gym2-15	Rocket's Zapdos	train
+gym2-20	Sabrina	train
+gym2-26	Koga's Muk	train
+gym2-31	Blaine's Charmeleon	train
+gym2-37	Brock's Vulpix	train
+gym2-42	Giovanni's Machoke	train
+gym2-48	Koga's Koffing	train
+gym2-53	Lt. Surge's Raticate	train
+gym2-59	Sabrina's Mr. Mime	val
+gym2-64	Blaine's Ponyta	train
+gym2-7	Giovanni's Nidoking	train
+gym2-75	Giovanni's Nidoran ♀	train
+gym2-80	Koga's Pidgey	train
+gym2-86	Lt. Surge's Voltorb	train
+gym2-91	Misty's Seel	train
+gym2-97	Sabrina's Gastly	train
+hgss1-101	Professor Oak's New Theory	train
+hgss1-107	Donphan	train
+hgss1-112	Ho-Oh LEGEND	val
+hgss1-118	Lightning Energy	train
+hgss1-123	Gyarados	val
+hgss1-18	Exeggutor	train
+hgss1-23	Hypno	train
+hgss1-29	Sandslash	train
+hgss1-34	Weezing	train
+hgss1-4	Gyarados	train
+hgss1-45	Mantine	train
+hgss1-50	Qwilfish	train
+hgss1-56	Wigglytuff	train
+hgss1-61	Cyndaquil	train
+hgss1-67	Hoppip	train
+hgss1-72	Magikarp	train
+hgss1-78	Pikachu	train
+hgss1-83	Spinarak	train
+hgss1-89	Bill	train
+hgss1-94	Moomoo Milk	train
+hgss1-ONE	Alph Lithograph	train
+hgss2-14	Crobat	train
+hgss2-2	Magmortar	train
+hgss2-25	Torkoal	train
+hgss2-30	Golbat	val
+hgss2-36	Plusle	train
+hgss2-41	Tauros	val
+hgss2-47	Cherubi	train
+hgss2-52	Magmar	train
+hgss2-58	Poliwag	train
+hgss2-63	Squirtle	train
+hgss2-69	Weedle	train
+hgss2-74	Energy Returner	train
+hgss2-8	Shaymin	train
+hgss2-85	Kingdra	train
+hgss2-90	Entei & Raikou LEGEND	train
+hgss2-TWO	Alph Lithograph	train
+hgss3-14	Hariyama	train
+hgss3-2	Espeon	train
+hgss3-25	Weavile	train
+hgss3-30	Metang	train
+hgss3-36	Scyther	train
+hgss3-41	Vaporeon	train
+hgss3-47	Eevee	train
+hgss3-52	Hitmonlee	train
+hgss3-58	Murkrow	train
+hgss3-63	Pineco	train
+hgss3-69	Stunky	train
+hgss3-74	Flower Shop Lady	train
+hgss3-8	Smeargle	val
+hgss3-85	Slowking	train
+hgss3-90	Rayquaza & Deoxys LEGEND	train
+hgss4-102	Palkia & Dialga LEGEND	train
+hgss4-16	Carnivine	train
+hgss4-21	Elekid	train
+hgss4-27	Magmortar	train
+hgss4-32	Dragonair	train
+hgss4-38	Lickilicky	val
+hgss4-43	Magneton	train
+hgss4-49	Porygon2	train
+hgss4-54	Yanmega	train
+hgss4-6	Nidoking	train
+hgss4-65	Kricketot	train
+hgss4-70	Nidoran ♂	train
+hgss4-76	Skorupi	train
+hgss4-81	Venonat	train
+hgss4-87	Junk Arm	train
+hgss4-92	Celebi	val
+hgss4-98	Yanmega	train
+hgssp-HGSS04	Wobbuffet	train
+hgssp-HGSS10	Latias	train
+hgssp-HGSS16	Plusle	train
+lc-103	Pokémon Trader	train
+lc-109	Mysterious Fossil	train
+lc-15	Machamp	train
+lc-20	Beedrill	train
+lc-26	Jynx	train
+lc-31	Nidoking	train
+lc-37	Charmeleon	train
+lc-42	Fearow	val
+lc-48	Kabuto	train
+lc-53	Meowth	val
+lc-59	Primeape	train
+lc-64	Snorlax	train
+lc-7	Dark Raichu	train
+lc-75	Exeggcute	train
+lc-80	Magnemite	train
+lc-86	Pikachu	train
+lc-91	Sandshrew	train
+lc-97	Voltorb	train
+me01-004	Exeggcute	train
+me01-010	Meganium	train
+me01-016	Nincada	train
+me01-022	Mega Camerupt ex	train
+me01-028	Cinderace	val
+me01-034	Kyogre	train
+me01-040	Drizzile	train
+me01-046	Magneton	train
+me01-052	Helioptile	train
+me01-058	Ralts	train
+me01-064	Xerneas	train
+me01-070	Onix	train
+me01-076	Riolu	train
+me01-082	Nacli	train
+me01-088	Yveltal	train
+me01-094	Mega Mawile ex	train
+me01-100	Mega Latias ex	train
+me01-106	Miltank	train
+me01-112	Bewear	train
+me01-118	Iron Defender	train
+me01-124	Premium Power Pro	train
+me01-130	Switch	train
+me01-136	Shuckle	train
+me01-142	Inteleon	train
+me01-148	Spiritomb	train
+me01-154	Stufful	train
+me01-160	Mega Lucario ex	train
+me01-166	Air Balloon	train
+me01-172	Mystery Garden	train
+me01-178	Mega Gardevoir ex	train
+me01-184	Lillie's Determination	train
+me02-002	Gloom	train
+me02-008	Genesect	train
+me02-014	Moltres	train
+me02-020	Ceruledge	train
+me02-026	Suicune	train
+me02-032	Pawmi	train
+me02-038	Granbull	train
+me02-044	Alcremie	train
+me02-050	Gliscor	train
+me02-056	Mega Gengar ex	train
+me02-062	Seviper	train
+me02-068	Toxtricity	train
+me02-074	Duraludon	train
+me02-080	Smeargle	train
+me02-086	Blowtorch	train
+me02-092	Punk Helmet	train
+me02-098	Piplup	train
+me02-104	Togedemaru	val
+me02-110	Oricorio ex	train
+me02-116	Battle Cage	train
+me02-122	Sacred Charm	train
+me02-128	Mega Lopunny ex	train
+me02.5-004	Erika's Bellsprout	train
+me02.5-010	Mega Meganium ex	train
+me02.5-016	Budew	train
+me02.5-022	Mega Charizard Y ex	train
+me02.5-028	Camerupt	train
+me02.5-034	Salandit	train
+me02.5-040	Golduck	train
+me02.5-046	Snorunt	train
+me02.5-052	Snom	train
+me02.5-058	Voltorb ex	val
+me02.5-064	Heliolisk	train
+me02.5-070	Iono's Bellibolt ex	train
+me02.5-076	Lillie's Clefairy ex	val
+me02.5-082	Togekiss	train
+me02.5-088	Kirlia	train
+me02.5-094	Slurpuff	train
+me02.5-100	Team Rocket's Diglett	val
+me02.5-106	Solrock	train
+me02.5-112	Riolu	train
+me02.5-118	Rolycoly	val
+me02.5-124	Haunter	train
+me02.5-130	Galarian Zigzagoon	train
+me02.5-136	N's Zorua	train
+me02.5-142	Fezandipiti ex	val
+me02.5-148	Kingambit	train
+me02.5-154	N's Reshiram	train
+me02.5-160	Dragapult ex	train
+me02.5-166	Delcatty	train
+me02.5-172	Mega Audino ex	train
+me02.5-178	Terapagos	train
+me02.5-184	Buddy-Buddy Poffin	train
+me02.5-190	Iris's Fighting Spirit	train
+me02.5-196	Night Stretcher	train
+me02.5-202	Team Rocket's Ariana	train
+me02.5-208	Team Rocket's Proton	train
+me02.5-214	Urbain	train
+me02.5-220	Dustox	train
+me02.5-226	Psyduck	train
+me02.5-232	Marill	train
+me02.5-238	Team Rocket's Mimikyu	train
+me02.5-244	Cynthia's Spiritomb	train
+me02.5-250	Fan Rotom	train
+me02.5-256	Boss's Orders	train
+me02.5-262	N's PP Up	train
+me02.5-268	Mega Hawlucha ex	train
+me02.5-274	Mega Feraligatr ex	train
+me02.5-280	Lillie's Clefairy ex	train
+me02.5-286	N's Zoroark ex	val
+me02.5-292	Iris's Fighting Spirit	train
+me03-003	Shaymin	train
+me03-009	Vivillon	train
+me03-015	Salandit	train
+me03-021	Mega Starmie ex	train
+me03-027	Luxio	train
+me03-033	Espurr	train
+me03-039	Hippopotas	train
+me03-045	Tyrantrum	train
+me03-051	Skorupi	train
+me03-057	Doublade	train
+me03-063	Snorlax	train
+me03-069	Antique Sail Fossil	train
+me03-075	Jacinthe	train
+me03-081	Poké Pad	train
+me03-087	Rocky Fighting Energy	val
+me03-093	Dedenne	train
+me03-099	Raticate	train
+me03-105	Yveltal ex	train
+me03-111	Lumiose City	train
+me03-117	Wondrous Patch	train
+me03-123	Rosa's Encouragement	train
+me04-005	Chespin	train
+me04-011	Fennekin	train
+me04-017	Octillery	train
+me04-023	Bergmite	train
+me04-029	Ampharos	train
+me04-035	Mega Floette ex	train
+me04-041	Gourgeist ex	train
+me04-047	Claydol	train
+me04-053	Stunky	train
+me04-059	Beldum	train
+me04-065	Mega Dragalge ex	train
+me04-071	Watchog	train
+me04-077	Emma	train
+me04-083	Transformation Tome	train
+me04-089	Frogadier	train
+me04-095	Sliggoo	val
+me04-101	Mega Floette ex	train
+me04-107	Emma	train
+me04-113	Special Red Card	val
+me04-119	Cinccino ex	train
+me05-003	Fomantis	train
+me05-015	Wailmer	train
+me05-021	Finizen	train
+me05-027	Mega Zeraora ex	train
+me05-033	Shuppet	train
+me05-039	Dhelmise	train
+me05-045	Rampardos ex	train
+me05-051	Inkay	train
+me05-057	Maschiff	train
+me05-063	Bronzor	train
+me05-069	Type: Null	val
+me05-075	Dark Bell	train
+me05-081	Rust Syndicate Grunt	train
+me05-087	Goldeen	train
+me05-093	Bastiodon	train
+me05-099	Mega Chandelure ex	train
+me05-105	Crushing Hammer	train
+me05-111	Misty's Vitality	train
+me05-117	Morpeko ex	train
+neo1-100	Double Gust	train
+neo1-106	Fighting Energy	val
+neo1-111	Water Energy	train
+neo1-17	Typhlosion	train
+neo1-22	Elekid	train
+neo1-28	Bayleef	train
+neo1-33	Electabuzz	train
+neo1-39	Ledian	train
+neo1-44	Piloswine	train
+neo1-5	Feraligatr	train
+neo1-55	Chinchou	train
+neo1-60	Hoothoot	train
+neo1-66	Marill	val
+neo1-71	Sentret	val
+neo1-77	Sudowoodo	train
+neo1-82	Wooper	train
+neo1-88	PokéGear	train
+neo1-93	Gold Berry	train
+neo1-99	Berry	train
+neo2-14	Unown [A]	train
+neo2-2	Forretress	train
+neo2-25	Kabutops	train
+neo2-30	Smeargle	train
+neo2-36	Yanma	train
+neo2-41	Kakuna	train
+neo2-47	Unown [D]	train
+neo2-52	Xatu	train
+neo2-58	Mareep	train
+neo2-63	Sentret	train
+neo2-69	Unown [O]	train
+neo2-74	Ruin Wall	train
+neo3-11	Misdreavus	val
+neo3-17	Entei	train
+neo3-22	Raikou	train
+neo3-28	Flaaffy	val
+neo3-33	Magcargo	train
+neo3-39	Unown [B]	train
+neo3-44	Geodude	train
+neo3-5	Delibird	train
+neo3-55	Snubbull	train
+neo3-60	Balloon Berry	train
+neo3-66	Shining Magikarp	train
+neo4-100	Lucky Stadium	train
+neo4-106	Shining Celebi	train
+neo4-111	Shining Raichu	train
+neo4-15	Light Togetic	train
+neo4-20	Dark Slowking	train
+neo4-26	Light Piloswine	train
+neo4-31	Chansey	train
+neo4-37	Dark Omanyte	train
+neo4-42	Hitmonlee	train
+neo4-48	Light Jolteon	train
+neo4-53	Light Venomoth	train
+neo4-59	Unown [Q]	train
+neo4-64	Exeggcute	train
+neo4-7	Dark Houndoom	train
+neo4-75	Mareep	train
+neo4-80	Remoraid	train
+neo4-86	Unown [L]	train
+neo4-91	Vulpix	train
+neo4-97	Counterattack Claws	train
+np-12	Pikachu	train
+np-18	Mudkip	val
+np-23	Metang	train
+np-29	Celebi	train
+np-34	Typhlosion	val
+np-4	Grovyle	train
+np-9	Combusken	train
+pl1-103	Wurmple	val
+pl1-109	Looker's Investigation	train
+pl1-114	Pokédex HANDY910is	train
+pl1-12	Palkia G	train
+pl1-125	Palkia G LV.X	train
+pl1-130	Scyther	train
+pl1-19	Banette	train
+pl1-24	Dugtrio	train
+pl1-3	Blaziken	train
+pl1-35	Luvdisc	train
+pl1-40	Toxicroak G	train
+pl1-46	Cranidos	train
+pl1-51	Kirlia	val
+pl1-57	Muk	train
+pl1-62	Shieldon	val
+pl1-68	Carnivine	train
+pl1-73	Dunsparce	train
+pl1-79	Lapras	train
+pl1-84	Nosepass	train
+pl1-9	Giratina	train
+pl1-95	Slakoth	train
+pl1-SH5	Swablu	train
+pl2-102	Upper Energy	train
+pl2-108	Infernape E4 LV.X	train
+pl2-113	Flying Pikachu	train
+pl2-21	Gastrodon East Sea	train
+pl2-27	Mamoswine GL	val
+pl2-32	Rhyperior E4	train
+pl2-38	Alakazam E4	train
+pl2-43	Infernape E4	train
+pl2-49	Sharpedo	train
+pl2-54	Whiscash E4	train
+pl2-6	Froslass GL	val
+pl2-65	Houndoom E4	train
+pl2-70	Munchlax	train
+pl2-76	Quagsire GL	train
+pl2-81	Snorlax	val
+pl2-88	Aaron's Collection	train
+pl2-93	Pokémon Contest Hall	train
+pl2-99	Darkness Energy	train
+pl2-RT6	Charon's Choice	train
+pl3-103	Drifloon	train
+pl3-109	Kricketot	train
+pl3-114	Meowth	train
+pl3-12	Swampert	train
+pl3-125	Seel	val
+pl3-130	Surskit	train
+pl3-136	Cynthia's Guidance	train
+pl3-141	Absol G LV.X	train
+pl3-147	Staraptor FB LV.X	val
+pl3-17	Butterfree FB	train
+pl3-22	Claydol	train
+pl3-28	Exploud	train
+pl3-33	Mawile	train
+pl3-39	Primeape	train
+pl3-44	Shedinja	train
+pl3-5	Garchomp	val
+pl3-55	Cherrim	train
+pl3-60	Garchomp C	train
+pl3-66	Manectric G	train
+pl3-71	Minun	train
+pl3-77	Raichu	train
+pl3-82	Rotom	train
+pl3-88	Yanma	train
+pl3-93	Bulbasaur	train
+pl3-99	Combee	train
+pl4-11	Toxicroak	train
+pl4-17	Gengar	train
+pl4-22	Manectric	train
+pl4-28	Rapidash	train
+pl4-39	Grovyle	train
+pl4-44	Manectric	train
+pl4-5	Luxray	train
+pl4-55	Buneary	train
+pl4-60	Cherubi	val
+pl4-66	Gulpin	train
+pl4-71	Pikachu	train
+pl4-77	Tangela	val
+pl4-82	Beginning Door	train
+pl4-88	Lucky Egg	train
+pl4-93	Helix Fossil	train
+pl4-99	Tangrowth LV.X	train
+pl4-AR6	Arceus	train
+pl4-SH12	Shinx	train
+pop1-14	Surskit	train
+pop1-4	Sceptile	train
+pop2-1	Entei	train
+pop2-15	Phanpy	train
+pop2-5	Tauros	train
+pop3-10	High Pressure System	train
+pop3-16	Pichu Bros.	train
+pop3-6	Vaporeon	train
+pop4-11	Mudkip	train
+pop4-17	Deoxys ex	train
+pop4-7	Grovyle	val
+pop5-12	Pikachu	train
+pop5-2	Lugia	train
+pop5-8	Boost Energy	train
+pop6-14	Chimchar	train
+pop6-5	Rampardos	train
+pop7-10	Wormadam Sandy Cloak	train
+pop7-16	Sentret	train
+pop7-6	Delibird	train
+pop8-11	Roseanne’s Research	train
+pop8-17	Turtwig	train
+pop8-7	Carnivine	train
+pop9-12	Buneary	train
+pop9-2	Manaphy	train
+pop9-8	Gabite	train
+ru1-13	Skuntank	train
+ru1-4	Heatran	train
+si1-1	Mew	val
+si1-15	Wartortle	train
+si1-4	Togepi	train
+sm1-1	Caterpie	train
+sm1-104	Herdier	val
+sm1-11	Decidueye	train
+sm1-115	Crushing Hammer	train
+sm1-120	Hau	train
+sm1-126	Pokémon Catcher	train
+sm1-131	Rotom Dex	train
+sm1-137	Rainbow Energy	train
+sm1-142	Umbreon GX	train
+sm1-148	Professor Kukui	train
+sm1-153	Lunala GX	train
+sm1-159	Rotom Dex	train
+sm1-164	Grass Energy	train
+sm1-17	Shiinotic	train
+sm1-2	Metapod	train
+sm1-25	Torracat	train
+sm1-30	Poliwag	train
+sm1-36	Corsola	train
+sm1-41	Primarina	train
+sm1-47	Pyukumuku	train
+sm1-52	Vikavolt	val
+sm1-58	Alolan Muk	train
+sm1-63	Toxapex	train
+sm1-69	Roggenrola	train
+sm1-74	Sandygast	train
+sm1-8	Masquerain	train
+sm1-85	Krookodile	train
+sm1-90	Snubbull	train
+sm1-96	Dragonite	train
+sm10-100	Tyrogue	train
+sm10-106	Stakataka	train
+sm10-111	Sharpedo	train
+sm10-117	Greninja	train
+sm10-122	Alolan Dugtrio	train
+sm10-128	Meltan	train
+sm10-133	Clefable	val
+sm10-139	Cottonee	train
+sm10-144	Raticate	train
+sm10-15	Victreebel	train
+sm10-155	Porygon	train
+sm10-160	Purugly	val
+sm10-166	Devolution Spray Z	train
+sm10-171	Fairy Charm Ability	val
+sm10-177	Koga’s Trap	train
+sm10-182	Pokégear 3.0	train
+sm10-188	Ultra Forest Kartenvoy	train
+sm10-193	Venomoth GX	train
+sm10-199	Marshadow & Machamp GX	train
+sm10-203	Lucario & Melmetal GX	train
+sm10-209	Green’s Exploration	train
+sm10-214	Welder	train
+sm10-22	Arcanine	train
+sm10-225	Gardevoir & Sylveon GX	train
+sm10-230	Electromagnetic Radar	train
+sm10-25	Volcanion	train
+sm10-30	Salandit	train
+sm10-36	Poliwag	train
+sm10-41	Tentacruel	train
+sm10-47	Kingler	train
+sm10-52	Frogadier	train
+sm10-58	Charjabug	train
+sm10-63	Arbok	train
+sm10-69	Haunter	train
+sm10-74	Weezing	train
+sm10-8	Vileplume	train
+sm10-85	Diglett	train
+sm10-90	Cubone	train
+sm10-96	Wooper	train
+sm11-100	Cosmog	train
+sm11-106	Aerodactyl GX	train
+sm11-111	Relicanth	train
+sm11-117	Lucario	train
+sm11-122	Terrakion	train
+sm11-128	Murkrow	train
+sm11-133	Sableye	train
+sm11-139	Yveltal	train
+sm11-144	Whimsicott	train
+sm11-15	Fomantis	train
+sm11-155	Fraxure	train
+sm11-160	Naganadel GX	train
+sm11-166	Noctowl	train
+sm11-171	Bidoof	train
+sm11-177	Audino	train
+sm11-182	Oranguru	train
+sm11-188	Blue’s Tactics	train
+sm11-193	Dark City	train
+sm11-199	Grimsley	train
+sm11-203	Normalium Z: Tackle	train
+sm11-209	Tag Switch	train
+sm11-214	Rowlet & Alolan Exeggutor GX	val
+sm11-22	Magmortar	train
+sm11-225	Mega Sableye & Tyranitar GX	train
+sm11-230	Naganadel GX	train
+sm11-236	Poké Maniac	train
+sm11-241	Raichu & Alolan Raichu GX	train
+sm11-247	Garchomp & Giratina GX	train
+sm11-252	Karate Belt	train
+sm11-258	Weakness Guard Energy	train
+sm11-30	Chandelure	train
+sm11-36	Lapras	train
+sm11-41	Snover	train
+sm11-47	Keldeo GX	train
+sm11-52	Pyukumuku	val
+sm11-58	Magnemite	train
+sm11-63	Tynamo	train
+sm11-69	Tapu Koko	train
+sm11-74	Exeggutor	val
+sm11-8	Swadloon	train
+sm11-85	Azelf	train
+sm11-90	Elgyem	train
+sm11-96	Mareanie	train
+sm115-11	Psyduck	train
+sm115-17	Lapras	train
+sm115-22	Electrode	train
+sm115-28	Koffing	train
+sm115-33	Geodude	train
+sm115-39	Clefairy	train
+sm115-44	Moltres & Zapdos & Articuno GX	train
+sm115-5	Scyther	train
+sm115-55	Brock’s Training	train
+sm115-60	Lt. Surge’s Strategy	val
+sm115-66	Moltres & Zapdos & Articuno GX	train
+sm115-9	Charizard GX	val
+sm12-103	Marshadow	train
+sm12-109	Vibrava	train
+sm12-114	Drilbur	val
+sm12-12	Tropius	train
+sm12-125	Passimian	train
+sm12-130	Alolan Grimer	val
+sm12-136	Guzzlord	train
+sm12-141	Probopass	train
+sm12-147	Cottonee	train
+sm12-152	Florges	train
+sm12-158	Naganadel & Guzzlord GX	train
+sm12-163	Kommo-o	train
+sm12-169	Aipom	train
+sm12-174	Lillipup	train
+sm12-18	Rowlet	train
+sm12-185	Beastite	train
+sm12-190	Dragonium Z: Dragon Claw	train
+sm12-196	Lillie’s Full Force	train
+sm12-200	N’s Resolve	train
+sm12-206	Tag Call	train
+sm12-211	Vileplume GX	val
+sm12-217	Oricorio GX	train
+sm12-222	Reshiram & Zekrom GX	train
+sm12-228	Cynthia & Caitlin	train
+sm12-233	Professor Oak’s Setup	train
+sm12-239	Piplup	train
+sm12-244	Gallade	train
+sm12-25	Flareon	train
+sm12-255	Oricorio GX	train
+sm12-260	Naganadel & Guzzlord GX	train
+sm12-266	Lana’s Fishing Rod	train
+sm12-271	Draw Energy	train
+sm12-32	Pignite	train
+sm12-38	Blastoise & Piplup GX	train
+sm12-43	Sneasel	train
+sm12-49	Spheal	val
+sm12-54	Piplup	val
+sm12-6	Tangrowth	train
+sm12-65	Araquanid	train
+sm12-70	Jolteon	train
+sm12-76	Koffing	train
+sm12-81	Kirlia	train
+sm12-87	Woobat	train
+sm12-92	Dragalge	train
+sm12-98	Dhelmise	train
+sm2-102	Blissey	train
+sm2-108	Watchog	train
+sm2-113	Bewear	train
+sm2-119	Aqua Patch	train
+sm2-124	Enhanced Hammer	val
+sm2-13	Chandelure	train
+sm2-135	Tapu Koko GX	train
+sm2-140	Sylveon GX	train
+sm2-147	Incineroar GX	train
+sm2-152	Vikavolt GX	val
+sm2-158	Sylveon GX	train
+sm2-163	Field Blower	train
+sm2-169	Fighting Energy	train
+sm2-21	Alolan Vulpix	val
+sm2-27	Carvanha	train
+sm2-32	Glalie	val
+sm2-38	Wishiwashi GX	train
+sm2-43	Helioptile	train
+sm2-49	Slowbro	train
+sm2-54	Gothitelle	train
+sm2-6	Phantump	train
+sm2-65	Machamp	train
+sm2-70	Barboach	train
+sm2-76	Mudsdale	train
+sm2-81	Absol	val
+sm2-87	Solgaleo	train
+sm2-92	Sylveon GX	train
+sm2-98	Jangmo-o	train
+sm3-102	Persian	train
+sm3-108	Bouffalant	train
+sm3-113	Bodybuilding Dumbbells	train
+sm3-119	Olivia	val
+sm3-124	Super Scoop Up	train
+sm3-13	Simisage	train
+sm3-135	Machamp GX	train
+sm3-140	Gardevoir GX	val
+sm3-146	Sophocles	train
+sm3-151	Salazzle GX	train
+sm3-157	Alolan Muk GX	train
+sm3-162	Choice Band	train
+sm3-168	Darkness Energy	train
+sm3-20	Charizard GX	train
+sm3-26	Turtonator	train
+sm3-31	Kingdra	train
+sm3-37	Simipour	train
+sm3-42	Electabuzz	train
+sm3-48	Slowking	train
+sm3-53	Dusknoir	train
+sm3-59	Espurr	train
+sm3-64	Machamp GX	train
+sm3-7	Tangela	train
+sm3-75	Lycanroc	val
+sm3-80	Marshadow GX	train
+sm3-86	Weavile	train
+sm3-91	Ralts	val
+sm3-97	Morelull	train
+sm4-101	Gyarados GX	train
+sm4-107	Alolan Exeggutor GX	val
+sm4-112	Gyarados GX	train
+sm4-118	Alolan Exeggutor GX	val
+sm4-123	Warp Energy	train
+sm4-17	Magikarp	train
+sm4-22	Remoraid	train
+sm4-28	Regice	train
+sm4-33	Alolan Graveler	train
+sm4-39	Misdreavus	train
+sm4-44	Pumpkaboo	train
+sm4-5	Cacnea	train
+sm4-55	Stufful	train
+sm4-60	Deino	train
+sm4-65	Aron	train
+sm4-70	Kartana GX	train
+sm4-76	Hakamo-o	train
+sm4-81	Starly	train
+sm4-87	Bunnelby	train
+sm4-92	Dashing Pouch	train
+sm4-98	Psychic Memory	train
+sm5-102	Lickitung	val
+sm5-108	Glameow	train
+sm5-113	Gumshoos	train
+sm5-119	Cynthia	train
+sm5-124	Gardenia	train
+sm5-13	Leafeon GX	train
+sm5-135	Volkner	train
+sm5-140	Pheromosa GX	train
+sm5-146	Dialga GX	train
+sm5-151	Lillie	train
+sm5-157	Leafeon GX	train
+sm5-162	Celesteela GX	train
+sm5-168	Missing Clover	train
+sm5-173	Solgaleo GX	train
+sm5-22	Monferno	train
+sm5-28	Alolan Sandshrew	train
+sm5-33	Prinplup	train
+sm5-39	Glaceon GX	train
+sm5-44	Electivire	val
+sm5-5	Roserade	train
+sm5-55	Drapion	train
+sm5-60	Cosmog	train
+sm5-66	Riolu	train
+sm5-71	Murkrow	train
+sm5-77	Darkrai ◇	train
+sm5-82	Magneton	train
+sm5-88	Heatran	train
+sm5-93	Shiinotic	train
+sm5-99	Garchomp	train
+sm6-103	Bonnie	train
+sm6-109	Lady	train
+sm6-114	Ultra Recon Squad	train
+sm6-12	Alolan Marowak	train
+sm6-127	Ultra Necrozma GX	train
+sm6-132	Palkia GX	train
+sm6-139	Xerneas GX	train
+sm6-145	Mysterious Treasure	train
+sm6-19	Pyroar	train
+sm6-24	Greninja GX	train
+sm6-3	Snover	train
+sm6-35	Magneton	train
+sm6-40	Rotom	train
+sm6-46	Honedge	train
+sm6-51	Malamar	train
+sm6-57	Cubone	train
+sm6-62	Garchomp	train
+sm6-68	Tyrunt	train
+sm6-73	Zygarde GX	train
+sm6-79	Yveltal GX	train
+sm6-85	Floette	train
+sm6-91	Goomy	val
+sm6-97	Bunnelby	train
+sm7-101	Kartana	train
+sm7-107	Latias ◇	train
+sm7-112	Pelipper	train
+sm7-118	Loudred	train
+sm7-123	Acro Bike	train
+sm7-129	Energy Switch	train
+sm7-134	Hustle Belt	train
+sm7-14	Shiftry GX	train
+sm7-145	Steven’s Resolve	train
+sm7-150	Underground Expedition	train
+sm7-156	Mr. Mime GX	train
+sm7-161	Apricorn Maker	val
+sm7-167	TV Reporter	train
+sm7-172	Electrode GX	train
+sm7-178	Acro Bike	train
+sm7-183	Rainbow Energy	train
+sm7-23	Slugma	train
+sm7-29	Torkoal	train
+sm7-34	Marshtomp	val
+sm7-4	Scyther	train
+sm7-45	Regice	train
+sm7-50	Lanturn	val
+sm7-56	Mr. Mime GX	val
+sm7-61	Lunatone	train
+sm7-67	Deoxys	train
+sm7-72	Phanpy	train
+sm7-78	Baltoy	train
+sm7-83	Minior	train
+sm7-89	Steelix	train
+sm7-94	Metang	train
+sm8-1	Tangela	train
+sm8-104	Meloetta	train
+sm8-11	Hoppip	train
+sm8-115	Larvitar	train
+sm8-120	Umbreon	train
+sm8-126	Scizor	train
+sm8-131	Magearna	train
+sm8-137	Snubbull	train
+sm8-142	Dedenne	train
+sm8-148	Shiinotic	train
+sm8-153	Blissey	train
+sm8-159	Lugia GX	train
+sm8-164	Pikipek	train
+sm8-17	Shuckle GX	train
+sm8-175	Fairy Charm Psychic	train
+sm8-180	Life Forest ◇	train
+sm8-186	Morty	train
+sm8-191	Thunder Mountain ◇	train
+sm8-197	Virizion GX	train
+sm8-201	Zeraora GX	train
+sm8-207	Lugia GX	train
+sm8-212	Morty	train
+sm8-218	Magcargo GX	val
+sm8-223	Tyranitar GX	train
+sm8-229	Choice Helmet	train
+sm8-234	Net Ball	train
+sm8-27	Cascoon	train
+sm8-32	Vespiquen	train
+sm8-38	Moltres	train
+sm8-43	Slugma	train
+sm8-49	Victini	train
+sm8-54	Slowpoke	train
+sm8-6	Chikorita	train
+sm8-65	Popplio	val
+sm8-70	Bruxish	train
+sm8-76	Mareep	train
+sm8-81	Blitzle	train
+sm8-87	Natu	train
+sm8-92	Unown	train
+sm8-98	Sigilyph GX	train
+sm9-102	Ferroseed	train
+sm9-108	Doublade	train
+sm9-113	Latias & Latios GX	train
+sm9-119	Dragonite	train
+sm9-124	Pidgeot	train
+sm9-13	Charmeleon	train
+sm9-135	Brock’s Grit	val
+sm9-140	Erika’s Hospitality	train
+sm9-146	Judge Whistle	train
+sm9-151	Nita	train
+sm9-157	Water Memory	train
+sm9-162	Pikachu & Zekrom GX	train
+sm9-168	Cobalion GX	train
+sm9-173	Dana	train
+sm9-179	Nanu	train
+sm9-184	Pikachu & Zekrom GX	val
+sm9-19	Moltres	train
+sm9-195	Metal Goggles	train
+sm9-23	Squirtle	train
+sm9-29	Magikarp	train
+sm9-34	Alolan Geodude	train
+sm9-4	Kakuna	train
+sm9-45	Zebstrika	train
+sm9-50	Heliolisk	train
+sm9-56	Nidoqueen	train
+sm9-61	Tentacruel	train
+sm9-67	Mr. Mime GX	val
+sm9-72	Primeape	train
+sm9-78	Kabutops	train
+sm9-83	Alolan Grimer	train
+sm9-89	Spiritomb	train
+sm9-94	Pangoro	val
+sma-SV1	Scyther	train
+sma-SV15	Seviper	val
+sma-SV20	Sudowoodo	train
+sma-SV26	Guzzlord	train
+sma-SV31	Metang	train
+sma-SV37	Altaria	train
+sma-SV42	Swablu	train
+sma-SV48	Golisopod-GX	train
+sma-SV53	Alolan Ninetales-GX	train
+sma-SV59	Mewtwo-GX	train
+sma-SV64	Lucario-GX	train
+sma-SV7	Charmeleon	train
+sma-SV75	Gardevoir-GX	train
+sma-SV80	Drampa-GX	train
+sma-SV86	Lady	val
+sma-SV91	Tapu Bulu-GX	train
+smp-SM03	Popplio	val
+smp-SM09	Togedemaru	train
+smp-SM104	Solgaleo GX	train
+smp-SM11	Bruxish	val
+smp-SM115	Pheromosa	train
+smp-SM120	Rockruff	val
+smp-SM127	Alolan Sandslash	train
+smp-SM132	Delcatty	train
+smp-SM14	Lycanroc GX	train
+smp-SM148	Champions Festival	train
+smp-SM153	Rowlet	train
+smp-SM160	Nidoqueen	train
+smp-SM166	Magikarp & Wailord GX	train
+smp-SM175	Eevee GX	val
+smp-SM19	Oricorio	train
+smp-SM205	Terrakion	train
+smp-SM210	Moltres & Zapdos & Articuno GX	train
+smp-SM216	Porygon-Z GX	train
+smp-SM26	Tsareena	train
+smp-SM32	Tapu Bulu GX	train
+smp-SM38	Incineroar GX	train
+smp-SM44	Togedemaru	train
+smp-SM50	Tapu Koko GX	val
+smp-SM56	Tsareena GX	val
+smp-SM62	Golisopod GX	train
+smp-SM68	Xurkitree GX	train
+smp-SM74	Regirock	train
+smp-SM80	Ho-Oh GX	train
+smp-SM86	Pikachu	train
+smp-SM95	Lucario	train
+sv01-002	Heracross	val
+sv01-008	Scatterbug	train
+sv01-014	Floragato	train
+sv01-020	Smoliv	train
+sv01-026	Toedscruel	train
+sv01-032	Arcanine ex	train
+sv01-038	Skeledirge	train
+sv01-044	Magikarp	train
+sv01-050	Clawitzer	val
+sv01-056	Wiglett	train
+sv01-062	Tatsugiri	train
+sv01-068	Pachirisu	train
+sv01-074	Pawmi	train
+sv01-080	Miraidon	val
+sv01-086	Gardevoir ex	train
+sv01-092	Floette	train
+sv01-098	Fidough	train
+sv01-104	Greavard	val
+sv01-110	Meditite	train
+sv01-116	Krokorok	val
+sv01-122	Klawf	val
+sv01-128	Seviper	val
+sv01-134	Kingambit	train
+sv01-140	Varoom	train
+sv01-146	Zangoose	train
+sv01-152	Greedent	train
+sv01-158	Oinkologne ex	train
+sv01-164	Cyclizar	train
+sv01-170	Electric Generator	train
+sv01-176	Judge	train
+sv01-182	Pal Pad	train
+sv01-188	Potion	train
+sv01-194	Switch	train
+sv01-200	Dolliv	train
+sv01-206	Wiglett	train
+sv01-212	Kirlia	train
+sv01-218	Mabosstiff	train
+sv01-224	Arcanine ex	train
+sv01-230	Great Tusk ex	train
+sv01-236	Jacq	train
+sv01-242	Team Star Grunt	train
+sv01-248	Iron Treads ex	train
+sv01-254	Koraidon ex	train
+sv02-002	Skiploom	train
+sv02-008	Combee	train
+sv02-014	Floragato	train
+sv02-020	Nymble	train
+sv02-026	Rellor	val
+sv02-032	Pyroar	train
+sv02-038	Charcadet	train
+sv02-044	Marill	train
+sv02-050	Quaxly	train
+sv02-056	Veluza	train
+sv02-062	Pikachu	train
+sv02-068	Shinx	train
+sv02-074	Pawmi	train
+sv02-080	Wattrel	train
+sv02-086	Slowking ex	train
+sv02-092	Gothitelle	train
+sv02-098	Ceruledge	train
+sv02-104	Tinkatuff	train
+sv02-110	Larvitar	train
+sv02-116	Rockruff	train
+sv02-122	Naclstack	train
+sv02-128	Paldean Wooper	train
+sv02-134	Weavile	train
+sv02-140	Hydreigon	train
+sv02-146	Grafaiai	train
+sv02-152	Noibat	train
+sv02-158	Wingull	train
+sv02-164	Rookidee	train
+sv02-170	Flamigo	train
+sv02-176	Choice Belt	train
+sv02-182	Giacomo	train
+sv02-188	Super Rod	train
+sv02-194	Heracross	train
+sv02-200	Pyroar	train
+sv02-206	Quaxly	train
+sv02-212	Mismagius	val
+sv02-218	Paldean Tauros	train
+sv02-224	Orthworm	train
+sv02-230	Forretress ex	train
+sv02-236	Chien-Pao ex	train
+sv02-242	Annihilape ex	train
+sv02-248	Boss's Orders	train
+sv02-254	Iono	train
+sv02-260	Quaquaval ex	train
+sv02-266	Dendra	train
+sv02-272	Skeledirge ex	train
+sv02-278	Basic Grass Energy	train
+sv03-005	Shuckle	val
+sv03-011	Phantump	train
+sv03-017	Steenee	train
+sv03-023	Capsakid	train
+sv03-029	Ninetales	train
+sv03-035	Darmanitan	train
+sv03-041	Volcarona	train
+sv03-047	Sharpedo	train
+sv03-053	Cubchoo	train
+sv03-059	Wugtrio	train
+sv03-065	Magnezone	train
+sv03-071	Toxel	train
+sv03-077	Bellibolt	train
+sv03-083	Togepi	train
+sv03-089	Mawile	val
+sv03-095	Claydol	train
+sv03-101	Houndstone	val
+sv03-107	Nosepass	train
+sv03-113	Diggersby	train
+sv03-119	Toedscruel	train
+sv03-125	Charizard ex	train
+sv03-131	Houndour	train
+sv03-137	Inkay	val
+sv03-143	Mawile	train
+sv03-149	Bisharp	train
+sv03-155	Varoom	train
+sv03-161	Drampa	train
+sv03-167	Zigzagoon	train
+sv03-173	Audino	val
+sv03-179	Greedent ex	train
+sv03-185	Flamigo	train
+sv03-191	Patrol Cap	val
+sv03-197	Vengeful Punch	train
+sv03-203	Larvitar	train
+sv03-209	Lechonk	train
+sv03-215	Charizard ex	train
+sv03-221	Ryme	train
+sv03-227	Poppy	train
+sv03.5-003	Venusaur ex	train
+sv03.5-009	Blastoise ex	train
+sv03.5-015	Beedrill	train
+sv03.5-021	Spearow	train
+sv03.5-027	Sandshrew	train
+sv03.5-033	Nidorino	train
+sv03.5-039	Jigglypuff	train
+sv03.5-045	Vileplume	train
+sv03.5-051	Dugtrio	train
+sv03.5-057	Primeape	train
+sv03.5-063	Abra	train
+sv03.5-069	Bellsprout	train
+sv03.5-075	Graveler	train
+sv03.5-081	Magnemite	val
+sv03.5-087	Dewgong	train
+sv03.5-093	Haunter	train
+sv03.5-099	Kingler	train
+sv03.5-105	Marowak	val
+sv03.5-111	Rhyhorn	train
+sv03.5-117	Seadra	train
+sv03.5-123	Scyther	val
+sv03.5-129	Magikarp	train
+sv03.5-135	Jolteon	train
+sv03.5-141	Kabutops	train
+sv03.5-147	Dratini	train
+sv03.5-153	Antique Helix Fossil	train
+sv03.5-159	Energy Sticker	train
+sv03.5-165	Rigid Band	train
+sv03.5-171	Wartortle	val
+sv03.5-177	Machoke	train
+sv03.5-183	Charizard ex	train
+sv03.5-189	Golem ex	train
+sv03.5-195	Daisy's Help	train
+sv03.5-201	Alakazam ex	train
+sv03.5-207	Basic Psychic Energy	train
+sv04-006	Dwebble	train
+sv04-012	Orbeetle	train
+sv04-018	Wo-Chien	train
+sv04-024	Crocalor	train
+sv04-030	Horsea	train
+sv04-036	Milotic	train
+sv04-042	Simipour	train
+sv04-048	Wimpod	train
+sv04-054	Veluza	train
+sv04-060	Plusle	train
+sv04-066	Zekrom	train
+sv04-072	Xatu	train
+sv04-078	Gourgeist	train
+sv04-084	Tinkatuff	train
+sv04-090	Onix	train
+sv04-096	Mienfoo	train
+sv04-102	Nacli	train
+sv04-108	Sandy Shocks ex	train
+sv04-114	Purrloin	train
+sv04-120	Thievul	train
+sv04-126	Jirachi	train
+sv04-132	Doublade	train
+sv04-138	Orthworm	train
+sv04-144	Porygon-Z	val
+sv04-150	Exploud	train
+sv04-162	Defiance Vest	train
+sv04-168	Norman	train
+sv04-174	Shauntal	train
+sv04-180	Techno Radar	train
+sv04-186	Magby	train
+sv04-192	Veluza	train
+sv04-198	Gimmighoul	train
+sv04-204	Garbodor	train
+sv04-210	Aegislash	train
+sv04-216	Iron Jugulis	train
+sv04-222	Tapu Koko ex	train
+sv04-228	Sandy Shocks ex	val
+sv04-240	Professor Turo's Scenario	train
+sv04-246	Golisopod ex	val
+sv04-252	Gholdengo ex	train
+sv04-258	Rika	train
+sv04-264	Counter Catcher	train
+sv04.5-004	Toedscool	train
+sv04.5-010	Magmortar	train
+sv04.5-016	Lapras	train
+sv04.5-022	Kilowattrel	val
+sv04.5-028	Kirlia	train
+sv04.5-034	Cottonee	train
+sv04.5-040	Ceruledge	train
+sv04.5-046	Primeape	train
+sv04.5-052	Grapploct	train
+sv04.5-058	Paldean Wooper	train
+sv04.5-064	Varoom	train
+sv04.5-070	Cyclizar	train
+sv04.5-076	Artazon	train
+sv04.5-082	Nemona	train
+sv04.5-088	Professor's Research	train
+sv04.5-094	Vileplume	train
+sv04.5-100	Snover	train
+sv04.5-106	Capsakid	train
+sv04.5-112	Entei	train
+sv04.5-118	Staryu	train
+sv04.5-124	Palafin	train
+sv04.5-130	Baxcalibur	train
+sv04.5-136	Luxio	train
+sv04.5-142	Pawmi	val
+sv04.5-148	Abra	train
+sv04.5-154	Kirlia	train
+sv04.5-160	Mimikyu	train
+sv04.5-166	Tinkatuff	train
+sv04.5-172	Paldean Tauros	train
+sv04.5-178	Garganacl	train
+sv04.5-184	Sableye	train
+sv04.5-190	Grafaiai	train
+sv04.5-196	Pidgey	val
+sv04.5-202	Snorlax	train
+sv04.5-208	Oinkologne	train
+sv04.5-214	Espathra ex	train
+sv04.5-220	Noivern ex	train
+sv04.5-226	Pawmi	train
+sv04.5-232	Mew ex	train
+sv04.5-238	Nemona	train
+sv04.5-244	Ting-Lu ex	train
+sv05-005	Shiftry	train
+sv05-011	Grotle	train
+sv05-017	Sawsbuck	train
+sv05-023	Rellor	train
+sv05-029	Magcargo	train
+sv05-035	Turtonator	train
+sv05-041	Feraligatr	train
+sv05-047	Wiglett	train
+sv05-053	Electabuzz	train
+sv05-059	Boltund	train
+sv05-065	Azumarill	train
+sv05-071	Duosion	train
+sv05-077	Scream Tail	train
+sv05-083	Medicham	train
+sv05-089	Rockruff	train
+sv05-095	Coalossal	train
+sv05-101	Arbok	val
+sv05-107	Sableye	train
+sv05-113	Beldum	train
+sv05-119	Koraidon	train
+sv05-125	Lickilicky	train
+sv05-131	Delcatty	train
+sv05-137	Cinccino	train
+sv05-143	Boxed Order	train
+sv05-149	Future Booster Energy Capsule	train
+sv05-155	Morty's Conviction	train
+sv05-161	Mist Energy	train
+sv05-167	Litten	train
+sv05-173	Relicanth	train
+sv05-179	Meltan	train
+sv05-185	Torterra ex	train
+sv05-191	Iron Crown ex	val
+sv05-197	Bianca's Devotion	train
+sv05-203	Iron Leaves ex	train
+sv05-209	Bianca's Devotion	train
+sv05-215	Walking Wake ex	train
+sv06-003	Pinsir	train
+sv06-009	Volbeat	train
+sv06-015	Thwackey	train
+sv06-021	Poltchageist	train
+sv06-027	Ninetales	train
+sv06-033	Infernape	train
+sv06-039	Chi-Yu	train
+sv06-051	Snorunt	train
+sv06-057	Frogadier	train
+sv06-063	Walking Wake	train
+sv06-069	Emolga	train
+sv06-075	Wattrel	train
+sv06-081	Kadabra	train
+sv06-087	Floette	train
+sv06-093	Enamorus	train
+sv06-099	Hisuian Growlithe	train
+sv06-105	Conkeldurr	train
+sv06-111	Okidogi	train
+sv06-117	Scolipede	train
+sv06-123	Heatran	train
+sv06-129	Drakloak	val
+sv06-135	Eevee	train
+sv06-141	Bloodmoon Ursaluna ex	train
+sv06-147	Cook	train
+sv06-153	Jamming Tower	train
+sv06-159	Ogre's Mask	train
+sv06-165	Unfair Stamp	train
+sv06-171	Poltchageist	train
+sv06-177	Heliolisk	train
+sv06-183	Timburr	val
+sv06-189	Sinistcha ex	train
+sv06-195	Luxray ex	train
+sv06-201	Blissey ex	train
+sv06-207	Lana's Aid	train
+sv06-213	Wellspring Mask Ogerpon ex	train
+sv06-219	Lana's Aid	train
+sv06-225	Rescue Board	val
+sv06.5-005	Decidueye	train
+sv06.5-011	Seadra	train
+sv06.5-017	Hypno	train
+sv06.5-023	Croagunk	train
+sv06.5-029	Crobat	val
+sv06.5-035	Yveltal	train
+sv06.5-041	Cufant	train
+sv06.5-047	Kyurem	train
+sv06.5-053	Bewear	train
+sv06.5-059	Janine's Secret Art	train
+sv06.5-065	Tapu Bulu	train
+sv06.5-071	Cresselia	train
+sv06.5-077	Fraxure	train
+sv06.5-083	Munkidori ex	train
+sv06.5-089	Xerosic's Machinations	train
+sv06.5-095	Pecharunt ex	train
+sv07-002	Ledyba	train
+sv07-008	Mow Rotom	train
+sv07-014	Hydrapple ex	train
+sv07-020	Rapidash	train
+sv07-026	Scorbunny	val
+sv07-032	Lapras ex	train
+sv07-038	Carracosta	train
+sv07-044	Drednaw	train
+sv07-050	Joltik	train
+sv07-056	Pawmi	train
+sv07-062	Yamask	train
+sv07-068	Flittle	train
+sv07-074	Rhyhorn	train
+sv07-080	Medicham ex	val
+sv07-086	Diancie	train
+sv07-092	Swalot	train
+sv07-098	Jirachi	train
+sv07-104	Melmetal	train
+sv07-110	Orthworm ex	train
+sv07-116	Glameow	train
+sv07-122	Fletchinder	train
+sv07-128	Terapagos ex	train
+sv07-134	Deluxe Bomb	train
+sv07-140	Occa Berry	train
+sv07-146	Turtonator	train
+sv07-152	Milcery	val
+sv07-158	Lapras ex	val
+sv07-164	Crispin	train
+sv07-170	Terapagos ex	train
+sv08-001	Exeggcute	train
+sv08-007	Vivillon	train
+sv08-013	Rellor	train
+sv08-019	Ho-Oh	val
+sv08-025	Volcarona	train
+sv08-031	Skeledirge	train
+sv08-037	Scovillain ex	train
+sv08-043	Spheal	train
+sv08-049	Bruxish	val
+sv08-055	Iron Bundle	train
+sv08-061	Rotom	train
+sv08-067	Kilowattrel	train
+sv08-073	Marill	train
+sv08-079	Mesprit	train
+sv08-085	Meowstic	train
+sv08-091	Palossand ex	val
+sv08-097	Gimmighoul	train
+sv08-103	Donphan	train
+sv08-109	Excadrill	train
+sv08-115	Glimmora	train
+sv08-121	Grafaiai	train
+sv08-133	Alolan Exeggutor ex	train
+sv08-139	Flapple	train
+sv08-145	Slakoth	train
+sv08-151	Bouffalant	train
+sv08-157	Tandemaus	train
+sv08-163	Babiri Berry	train
+sv08-169	Counter Gain	train
+sv08-175	Dusk Ball	train
+sv08-181	Meddling Memo	train
+sv08-187	Surfer	train
+sv08-193	Vivillon	train
+sv08-199	Spheal	train
+sv08-205	Phanpy	train
+sv08-211	Appletun	train
+sv08-217	Milotic ex	train
+sv08-223	Hydreigon ex	train
+sv08-229	Clemont's Quick Wit	train
+sv08-235	Surfer	val
+sv08-241	Archaludon ex	train
+sv08-247	Pikachu ex	train
+sv08.5-001	Exeggcute	train
+sv08.5-007	Cottonee	train
+sv08.5-013	Flareon	train
+sv08.5-019	Slowking	train
+sv08.5-025	Glaceon	train
+sv08.5-031	Iron Hands ex	val
+sv08.5-037	Dusknoir	train
+sv08.5-043	Flutter Mane	train
+sv08.5-049	Groudon	train
+sv08.5-055	Great Tusk	train
+sv08.5-061	Sneasel	train
+sv08.5-073	Dragapult ex	train
+sv08.5-079	Dunsparce	train
+sv08.5-085	Fan Rotom	train
+sv08.5-091	Noivern ex	train
+sv08.5-097	Black Belt's Training	train
+sv08.5-103	Carmine	train
+sv08.5-109	Friends in Paldea	train
+sv08.5-115	Larry's Skill	train
+sv08.5-121	Professor Turo's Scenario	train
+sv08.5-127	Roto-Stick	train
+sv08.5-133	Atticus	train
+sv08.5-139	Larry's Skill	train
+sv08.5-145	Teal Mask Ogerpon ex	train
+sv08.5-151	Palafin ex	train
+sv08.5-157	Iron Valiant ex	train
+sv08.5-163	Pecharunt ex	train
+sv08.5-169	Terapagos ex	train
+sv08.5-175	Lacey	train
+sv09-001	Caterpie	train
+sv09-007	Lilligant	train
+sv09-013	Accelgor	train
+sv09-019	Nymble	train
+sv09-025	Torkoal	train
+sv09-031	Volcanion ex	train
+sv09-037	Ludicolo	train
+sv09-043	Veluza ex	train
+sv09-049	N's Joltik	train
+sv09-055	Iono's Kilowattrel	train
+sv09-061	Beldum	train
+sv09-067	Lillie's Ribombee	train
+sv09-073	Grimmsnarl	train
+sv09-079	Mamoswine ex	train
+sv09-085	Lycanroc	train
+sv09-091	Koffing	train
+sv09-097	N's Zorua	train
+sv09-103	N's Klink	train
+sv09-109	Cufant	train
+sv09-115	Druddigon	train
+sv09-121	Dudunsparce ex	train
+sv09-127	Noibat	train
+sv09-133	Hop's Rookidee	train
+sv09-139	Lechonk	train
+sv09-145	Black Belt's Training	val
+sv09-151	Lillie's Pearl	train
+sv09-157	Ruffian	train
+sv09-163	Iono's Kilowattrel	val
+sv09-169	Noibat	train
+sv09-175	N's Zoroark ex	train
+sv09-181	Ruffian	train
+sv09-187	Salamence ex	train
+sv10-003	Yanmega ex	train
+sv10-009	Mow Rotom	train
+sv10-015	Team Rocket's Blipbug	train
+sv10-021	Smoliv	train
+sv10-027	Growlithe	train
+sv10-033	Ethan's Quilava	train
+sv10-039	Ethan's Ho-Oh ex	train
+sv10-045	Misty's Psyduck	train
+sv10-051	Team Rocket's Articuno	val
+sv10-057	Buizel	train
+sv10-063	Barraskewda	train
+sv10-069	Electivire ex	train
+sv10-075	Electrike	train
+sv10-081	Team Rocket's Mewtwo ex	train
+sv10-087	Team Rocket's Mimikyu	train
+sv10-093	Ethan's Sudowoodo	train
+sv10-099	Meditite	train
+sv10-105	Hippopotas	val
+sv10-111	Cornerstone Mask Ogerpon	train
+sv10-117	Team Rocket's Nidoran♂	train
+sv10-123	Team Rocket's Grimer	train
+sv10-129	Cynthia's Spiritomb	val
+sv10-135	Marnie's Morgrem	val
+sv10-141	Skarmory	train
+sv10-147	Team Rocket's Rattata	train
+sv10-153	Team Rocket's Porygon	train
+sv10-159	Arven's Greedent	train
+sv10-165	Ethan's Adventure	train
+sv10-171	Team Rocket's Ariana	train
+sv10-177	Team Rocket's Proton	val
+sv10-183	Yanma	train
+sv10-189	Rapidash	train
+sv10-195	Clamperl	train
+sv10-201	Zamazenta	train
+sv10-207	Arboliva ex	train
+sv10-213	Team Rocket's Mewtwo ex	train
+sv10-219	Team Rocket's Persian ex	train
+sv10-225	Team Rocket's Giovanni	train
+sv10-231	Team Rocket's Mewtwo ex	train
+sv10-237	Team Rocket's Ariana	train
+sv10-243	Jamming Tower	train
+sv10.5b-005	Simisage	train
+sv10.5b-011	Amoonguss	train
+sv10.5b-017	Panpour	train
+sv10.5b-023	Carracosta	train
+sv10.5b-029	Emolga	train
+sv10.5b-035	Munna	val
+sv10.5b-041	Beheeyem	train
+sv10.5b-047	Timburr	train
+sv10.5b-053	Landorus	train
+sv10.5b-059	Krookodile	train
+sv10.5b-065	Bisharp	train
+sv10.5b-071	Pidove	train
+sv10.5b-077	Rufflet	train
+sv10.5b-083	N's Plan	train
+sv10.5b-089	Pansage	train
+sv10.5b-095	Foongus	train
+sv10.5b-101	Panpour	train
+sv10.5b-107	Carracosta	train
+sv10.5b-113	Tynamo	train
+sv10.5b-119	Duosion	train
+sv10.5b-125	Timburr	train
+sv10.5b-131	Landorus	train
+sv10.5b-137	Krookodile	train
+sv10.5b-143	Bisharp	train
+sv10.5b-149	Tranquill	train
+sv10.5b-155	Braviary	val
+sv10.5b-161	Genesect ex	val
+sv10.5b-167	Meloetta ex	train
+sv10.5w-001	Sewaddle	train
+sv10.5w-007	Sawsbuck	train
+sv10.5w-013	Emboar	train
+sv10.5w-019	Heatmor	train
+sv10.5w-025	Ducklett	train
+sv10.5w-031	Blitzle	train
+sv10.5w-037	Swoobat	val
+sv10.5w-043	Gothitelle	train
+sv10.5w-049	Sawk	train
+sv10.5w-055	Purrloin	train
+sv10.5w-061	Zorua	train
+sv10.5w-067	Hydreigon ex	train
+sv10.5w-073	Watchog	val
+sv10.5w-079	Antique Plume Fossil	train
+sv10.5w-085	Tool Scrapper	train
+sv10.5w-091	Deerling	train
+sv10.5w-097	Pignite	train
+sv10.5w-103	Chandelure	train
+sv10.5w-109	Ducklett	train
+sv10.5w-115	Zebstrika	train
+sv10.5w-121	Sigilyph	train
+sv10.5w-127	Roggenrola	train
+sv10.5w-133	Mienfoo	train
+sv10.5w-139	Scrafty	train
+sv10.5w-145	Mandibuzz	train
+sv10.5w-151	Druddigon	train
+sv10.5w-157	Whimsicott ex	train
+sv10.5w-163	Harlequin	train
+sv10.5w-169	Hydreigon ex	val
+svp-002	Fuecoco	train
+svp-008	Revavroom	train
+svp-014	Koraidon	train
+svp-020	Tinkaton	train
+svp-026	Varoom	train
+svp-032	Annihilape ex	train
+svp-038	Togekiss	train
+svp-044	Charmander	train
+svp-050	Alakazam ex	train
+svp-056	Charizard ex	train
+svp-062	Sinistea	train
+svp-068	Iron Valiant ex	train
+svp-074	Charizard ex	train
+svp-080	Crocalor	train
+svp-087	Sprigatito ex	train
+svp-093	Carvanha	train
+svp-099	Shroodle	val
+svp-106	Pikachu ex	train
+svp-112	Bisharp	train
+svp-118	Tatsugiri	train
+svp-124	Iono	train
+svp-130	Kingambit	train
+svp-136	Bouffalant	val
+svp-142	Victini ex	train
+svp-148	Miraidon	train
+svp-154	Indeedee	train
+svp-160	Squawkabilly ex	train
+svp-166	Teal Mask Ogerpon ex	train
+svp-172	Sylveon	train
+svp-180	Dialga ex	train
+svp-186	Scraggy	train
+svp-195	Lillie's Clefairy ex	train
+swsh1-10	Grookey	train
+swsh1-105	Mudbray	train
+swsh1-110	Sandaconda	train
+swsh1-116	Stonjourner VMAX	train
+swsh1-121	Skorupi	train
+swsh1-127	Galarian Meowth	train
+swsh1-132	Galarian Stunfisk	val
+swsh1-138	Zacian V	train
+swsh1-143	Hoothoot	train
+swsh1-149	Drampa	train
+swsh1-154	Dubwool	train
+swsh1-16	Blipbug	train
+swsh1-165	Hop	train
+swsh1-170	Metal Saucer	train
+swsh1-176	Pokémon Center Lady	train
+swsh1-181	Rotom Bike	train
+swsh1-187	Dhelmise V	train
+swsh1-192	Indeedee V	train
+swsh1-198	Cramorant V	train
+swsh1-202	Team Yell Grunt	val
+swsh1-208	Marnie	train
+swsh1-213	Air Balloon	train
+swsh1-24	Torkoal V	val
+swsh1-3	Roselia	train
+swsh1-35	Cinderace	train
+swsh1-40	Shellder	train
+swsh1-46	Goldeen	train
+swsh1-51	Qwilfish	train
+swsh1-57	Drizzile	train
+swsh1-62	Cramorant	val
+swsh1-68	Chinchou	val
+swsh1-73	Yamper	train
+swsh1-79	Morpeko V	train
+swsh1-84	Haunter	train
+swsh1-9	Dhelmise V	train
+swsh1-95	Hitmonchan	train
+swsh10-002	Hisuian Voltorb	train
+swsh10-008	Heracross	train
+swsh10-014	Shaymin	train
+swsh10-020	Dartrix	train
+swsh10-026	Heatran VMAX	train
+swsh10-032	Piloswine	train
+swsh10-038	Glaceon	train
+swsh10-044	Hisuian Basculegion	train
+swsh10-050	Luxray V	train
+swsh10-056	Togetic	train
+swsh10-062	Gallade	train
+swsh10-068	Diancie	train
+swsh10-074	Sudowoodo	train
+swsh10-080	Hippowdon	train
+swsh10-086	Kleavor	train
+swsh10-092	Hisuian Sneasel	train
+swsh10-098	Darkrai V	train
+swsh10-104	Thievul	train
+swsh10-110	Bastiodon	train
+swsh10-116	Bisharp	train
+swsh10-122	Teddiursa	val
+swsh10-128	Purugly	train
+swsh10-134	Wyrdeer V	train
+swsh10-140	Energy Loto	train
+swsh10-146	Hisuian Heavy Ball	train
+swsh10-152	Supereffective Glasses	train
+swsh10-158	Wait and See Turbo	train
+swsh10-164	Virizion V	train
+swsh10-170	Jirachi V	train
+swsh10-176	Hisuian Samurott V	train
+swsh10-182	Choy	train
+swsh10-188	Roxanne	train
+swsh10-194	Machamp VMAX	train
+swsh10-200	Choy	train
+swsh10-206	Roxanne	train
+swsh10-212	Jubilife Village	train
+swsh10.5-002	Ivysaur	train
+swsh10.5-008	Charmander	train
+swsh10.5-014	Camerupt	train
+swsh10.5-020	Slowbro	val
+swsh10.5-026	Golisopod	train
+swsh10.5-032	Natu	train
+swsh10.5-038	Pupitar	train
+swsh10.5-044	Steelix	train
+swsh10.5-050	Dragonite VSTAR	train
+swsh10.5-056	Aipom	val
+swsh10.5-062	Tranquill	train
+swsh10.5-068	PokéStop	train
+swsh10.5-074	Conkeldurr V	train
+swsh10.5-080	Melmetal VMAX	train
+swsh10.5-086	Mewtwo VSTAR	train
+swsh11-004	Paras	train
+swsh11-010	Dustox	train
+swsh11-016	Phantump	train
+swsh11-022	Magcargo	train
+swsh11-028	Litleo	train
+swsh11-034	Dewgong	train
+swsh11-040	Finneon	train
+swsh11-046	Ducklett	train
+swsh11-052	Pikachu	train
+swsh11-058	Rotom V	train
+swsh11-064	Gastly	train
+swsh11-070	Sableye	train
+swsh11-076	Hisuian Zoroark	train
+swsh11-082	Enamorus V	train
+swsh11-088	Machamp	train
+swsh11-094	Sudowoodo	train
+swsh11-100	Medicham	train
+swsh11-106	Binacle	train
+swsh11-112	Spinarak	val
+swsh11-118	Drapion V	val
+swsh11-124	Radiant Steelix	train
+swsh11-130	Giratina V	train
+swsh11-136	Hisuian Goodra VSTAR	train
+swsh11-142	Porygon-Z	val
+swsh11-148	Bouffalant	train
+swsh11-154	Box of Disaster	train
+swsh11-160	Lake Acuity	train
+swsh11-166	Riley	val
+swsh11-172	Hisuian Electrode V	train
+swsh11-178	Enamorus V	train
+swsh11-184	Galarian Perrserker V	train
+swsh11-190	Colress's Experiment	train
+swsh11-196	Volo	train
+swsh11-202	Hisuian Goodra VSTAR	train
+swsh11-208	Lady	train
+swsh11-214	Box of Disaster	train
+swsh12-003	Spinarak	train
+swsh12-009	Petilil	train
+swsh12-015	Chesnaught V	train
+swsh12-021	Ponyta	train
+swsh12-027	Delphox	train
+swsh12-033	Alolan Vulpix V	train
+swsh12-039	Feebas	train
+swsh12-045	Phione	train
+swsh12-051	Chinchou	train
+swsh12-057	Regieleki V	train
+swsh12-063	Misdreavus	val
+swsh12-069	Gardevoir	train
+swsh12-075	Sigilyph	val
+swsh12-081	Espurr	train
+swsh12-087	Dreepy	train
+swsh12-093	Baltoy	train
+swsh12-099	Sandygast	train
+swsh12-105	Crobat	train
+swsh12-111	Sandile	train
+swsh12-117	Beldum	train
+swsh12-123	Klink	train
+swsh12-129	Dratini	train
+swsh12-135	Regidrago V	train
+swsh12-141	Spinda	val
+swsh12-147	Archeops	train
+swsh12-153	Capturing Aroma	train
+swsh12-159	Lance	train
+swsh12-165	Unidentified Fossil	train
+swsh12-171	Chesnaught V	train
+swsh12-177	Unown V	train
+swsh12-183	Regidrago V	train
+swsh12-189	Candice	train
+swsh12-195	Worker	train
+swsh12-201	Regidrago VSTAR	train
+swsh12-207	Serena	train
+swsh12-213	Gapejaw Bog	train
+swsh12.5-004	Tangela	train
+swsh12.5-010	Kricketot	train
+swsh12.5-016	Zarude	train
+swsh12.5-022	Simisear V	train
+swsh12.5-028	Salazzle	train
+swsh12.5-034	Snorunt	val
+swsh12.5-040	Shinx	train
+swsh12.5-046	Rotom VSTAR	train
+swsh12.5-052	Zeraora	train
+swsh12.5-058	Exeggutor	train
+swsh12.5-064	Tapu Lele	train
+swsh12.5-070	Baltoy	train
+swsh12.5-076	Absol	train
+swsh12.5-082	Dragalge	train
+swsh12.5-088	Lairon	train
+swsh12.5-094	Zacian	train
+swsh12.5-100	Rayquaza V	train
+swsh12.5-106	Tauros	train
+swsh12.5-112	Chatot	train
+swsh12.5-118	Gumshoos	train
+swsh12.5-124	Bede	train
+swsh12.5-130	Friends in Hisui	train
+swsh12.5-136	Nessa	train
+swsh12.5-142	Rescue Carrier	train
+swsh12.5-148	Friends in Hisui	train
+swsh12.5-154	Water Energy	val
+swsh12.5-160	Pikachu	train
+swsh2-103	Binacle	train
+swsh2-109	Falinks	train
+swsh2-114	Stunky	train
+swsh2-12	Snover	train
+swsh2-125	Grimmsnarl	val
+swsh2-136	Copperajah V	train
+swsh2-141	Snorlax	train
+swsh2-147	Diggersby	train
+swsh2-152	Greedent	train
+swsh2-158	Dan	train
+swsh2-163	Oleana	train
+swsh2-169	Training Court	train
+swsh2-174	Twin Energy	train
+swsh2-18	Rillaboom VMAX	train
+swsh2-185	Falinks V	train
+swsh2-190	Milo	train
+swsh2-196	Toxtricity VMAX	train
+swsh2-200	Boss's Orders (Giovanni)	train
+swsh2-206	Big Charm	val
+swsh2-23	Appletun	train
+swsh2-29	Magmar	train
+swsh2-34	Heatmor	train
+swsh2-4	Scyther	train
+swsh2-45	Palpitoad	train
+swsh2-50	Inteleon VMAX	train
+swsh2-56	Voltorb	train
+swsh2-61	Luxio	train
+swsh2-67	Boltund V	train
+swsh2-72	Pincurchin V	val
+swsh2-78	Galarian Corsola	train
+swsh2-83	Hatenna	train
+swsh2-89	Dreepy	train
+swsh2-94	Galarian Farfetch'd	train
+swsh3-1	Butterfree V	train
+swsh3-104	Crobat V	train
+swsh3-11	Rowlet	val
+swsh3-115	Grimmsnarl VMAX	val
+swsh3-120	Skarmory	train
+swsh3-126	Klang	train
+swsh3-131	Cufant	train
+swsh3-137	Dunsparce	train
+swsh3-142	Delcatty	train
+swsh3-148	Ducklett	val
+swsh3-153	Greedent	train
+swsh3-159	Bird Keeper	train
+swsh3-164	Old PC	train
+swsh3-17	Wimpod	train
+swsh3-175	Hiding Darkness Energy	train
+swsh3-180	Vikavolt V	train
+swsh3-186	Kabu	train
+swsh3-191	Centiskorch VMAX	train
+swsh3-197	Rillaboom	train
+swsh3-201	Capture Energy	train
+swsh3-26	Pansear	val
+swsh3-31	Fletchinder	train
+swsh3-37	Suicune	train
+swsh3-42	Simipour	val
+swsh3-48	Cubchoo	train
+swsh3-53	Dracovish	train
+swsh3-59	Manectric	train
+swsh3-64	Pincurchin	train
+swsh3-7	Simisage	val
+swsh3-75	Gothitelle	train
+swsh3-80	Shiinotic	train
+swsh3-86	Larvitar	train
+swsh3-91	Flygon	train
+swsh3-97	Passimian	train
+swsh3.5-12	Sharpedo	train
+swsh3.5-18	Hatenna	train
+swsh3.5-23	Alcremie VMAX	train
+swsh3.5-29	Rockruff	train
+swsh3.5-34	Arbok	train
+swsh3.5-4	Beedrill	train
+swsh3.5-45	Malamar	train
+swsh3.5-50	Bede	train
+swsh3.5-56	Marnie	train
+swsh3.5-61	Potion	train
+swsh3.5-67	Team Yell Grunt	train
+swsh3.5-72	Grapploct V	train
+swsh3.5-78	Piers	train
+swsh4-10	Seedot	train
+swsh4-105	Sableye	train
+swsh4-110	Trubbish	train
+swsh4-116	Beldum	train
+swsh4-121	Dialga	train
+swsh4-127	Aegislash VMAX	train
+swsh4-132	Lugia	train
+swsh4-138	Rayquaza	train
+swsh4-143	Pikipek	train
+swsh4-149	Cara Liss	train
+swsh4-154	Leon	train
+swsh4-16	Genesect	train
+swsh4-165	Wash Water Energy	train
+swsh4-170	Pikachu V	train
+swsh4-176	Steelix V	train
+swsh4-181	Beauty	train
+swsh4-187	Galarian Darmanitan VMAX	train
+swsh4-192	Allister	train
+swsh4-198	Galarian Obstagoon	train
+swsh4-202	Memory Capsule	train
+swsh4-25	Charizard	train
+swsh4-30	Vaporeon	train
+swsh4-36	Galarian Darmanitan V	train
+swsh4-41	Arrokuda	train
+swsh4-47	Jolteon	val
+swsh4-52	Manectric	train
+swsh4-58	Eelektrik	train
+swsh4-63	Clefairy	train
+swsh4-69	Duskull	train
+swsh4-74	Swoobat	train
+swsh4-8	Pineco	train
+swsh4-85	Shuckle	train
+swsh4-90	Riolu	train
+swsh4-96	Mudbray	val
+swsh4.5-11	Grookey	train
+swsh4.5-17	Reshiram	train
+swsh4.5-22	Buizel	train
+swsh4.5-28	Cramorant	train
+swsh4.5-33	Luxray	train
+swsh4.5-39	Indeedee V	train
+swsh4.5-44	Crobat V	train
+swsh4.5-5	Tropius	train
+swsh4.5-55	Cramorant VMAX	train
+swsh4.5-60	Professor's Research (Professor Juniper)	train
+swsh4.5-66	Bird Keeper	train
+swsh4.5-71	Rose	train
+swsh5-10	Durant	train
+swsh5-105	Honedge	train
+swsh5-110	Corviknight VMAX	train
+swsh5-116	Purugly	train
+swsh5-121	Bruno	val
+swsh5-127	Fan of Waves	train
+swsh5-132	Rapid Strike Style Mustard	train
+swsh5-138	Tower of Waters	train
+swsh5-143	Flapple V	train
+swsh5-149	Necrozma V	train
+swsh5-154	Tyranitar V	train
+swsh5-16	Tapu Bulu	train
+swsh5-165	Victini VMAX	train
+swsh5-170	Rapid Strike Urshifu VMAX	val
+swsh5-176	Rapid Strike Style Mustard	train
+swsh5-181	Level Ball	train
+swsh5-21	Victini V	train
+swsh5-27	Salandit	train
+swsh5-32	Seadra	train
+swsh5-38	Corphish	train
+swsh5-43	Bruxish	val
+swsh5-49	Pachirisu	train
+swsh5-54	Galarian Slowpoke	train
+swsh5-6	Kricketune V	train
+swsh5-65	Orbeetle	train
+swsh5-70	Marowak	train
+swsh5-76	Mienfoo	train
+swsh5-81	Silicobra	val
+swsh5-87	Rapid Strike Urshifu V	train
+swsh5-92	Galarian Slowbro	train
+swsh5-98	Morpeko	val
+swsh6-102	Seviper	train
+swsh6-108	Single Strike Urshifu	train
+swsh6-113	Metagross VMAX	train
+swsh6-119	Blissey V	train
+swsh6-124	Tornadus V	train
+swsh6-13	Bounsweet	train
+swsh6-135	Dyna Tree Hill	train
+swsh6-140	Fog Crystal	train
+swsh6-146	Melony	train
+swsh6-151	Rapid Strike Scroll of the Skies	train
+swsh6-157	Impact Energy	train
+swsh6-162	Volcanion V	train
+swsh6-168	Galarian Rapidash V	val
+swsh6-173	Galarian Zapdos V	train
+swsh6-179	Galarian Slowking V	train
+swsh6-184	Tornadus V	train
+swsh6-19	Zarude	train
+swsh6-195	Melony	train
+swsh6-20	Blaziken V	train
+swsh6-205	Shadow Rider Calyrex VMAX	val
+swsh6-210	Agatha	train
+swsh6-216	Karen's Conviction	train
+swsh6-221	Siebold	train
+swsh6-227	Fog Crystal	train
+swsh6-232	Psychic Energy	train
+swsh6-28	Cinderace	train
+swsh6-33	Castform Rainy Form	train
+swsh6-39	Walrein	train
+swsh6-44	Rapid Strike Urshifu	train
+swsh6-5	Ledian	train
+swsh6-55	Gastly	train
+swsh6-60	Kirlia	train
+swsh6-66	Golurk	train
+swsh6-71	Hatenna	train
+swsh6-77	Dugtrio	train
+swsh6-82	Galarian Yamask	val
+swsh6-88	Passimian	train
+swsh6-93	Kubfu	train
+swsh6-99	Galarian Slowking V	train
+swsh7-103	Zoroark	train
+swsh7-109	Salamence	train
+swsh7-114	Zweilous	train
+swsh7-12	Crustle	train
+swsh7-125	Eevee	train
+swsh7-130	Vigoroth	val
+swsh7-136	Rufflet	val
+swsh7-141	Aroma Lady	train
+swsh7-147	Elemental Badge	val
+swsh7-152	Raihan	val
+swsh7-158	Single Strike Scroll of the Fanged Dragon	train
+swsh7-163	Toy Catcher	train
+swsh7-169	Flareon V	train
+swsh7-174	Glaceon V	train
+swsh7-18	Flareon VMAX	train
+swsh7-185	Medicham V	train
+swsh7-190	Garbodor V	train
+swsh7-196	Noivern V	train
+swsh7-200	Copycat	train
+swsh7-206	Trevenant VMAX	train
+swsh7-211	Sylveon VMAX	train
+swsh7-217	Rayquaza VMAX	train
+swsh7-222	Copycat	train
+swsh7-228	Cresselia	train
+swsh7-233	Toy Catcher	train
+swsh7-25	Golduck	train
+swsh7-30	Vaporeon VMAX	train
+swsh7-36	Sharpedo	train
+swsh7-41	Glaceon VMAX	train
+swsh7-47	Eiscue	train
+swsh7-52	Chinchou	train
+swsh7-58	Dracozolt V	train
+swsh7-63	Galarian Articuno	train
+swsh7-69	Swoobat	train
+swsh7-74	Sylveon V	train
+swsh7-8	Leafeon VMAX	train
+swsh7-85	Hippowdon	train
+swsh7-90	Seismitoad	train
+swsh7-96	Nuzleaf	train
+swsh8-100	Charjabug	train
+swsh8-106	Toxel	train
+swsh8-111	Wigglytuff	train
+swsh8-117	Galarian Corsola	train
+swsh8-122	Musharna	train
+swsh8-128	Dreepy	train
+swsh8-133	Mankey	train
+swsh8-139	Steelix	train
+swsh8-144	Baltoy	train
+swsh8-15	Virizion	train
+swsh8-155	Falinks	train
+swsh8-160	Galarian Linoone	train
+swsh8-166	Toxicroak	train
+swsh8-171	Zoroark	train
+swsh8-177	Morgrem	train
+swsh8-182	Skarmory	val
+swsh8-188	Meltan	train
+swsh8-193	Latias	train
+swsh8-199	Meowth	train
+swsh8-203	Blissey	train
+swsh8-209	Smeargle	train
+swsh8-214	Bunnelby	train
+swsh8-22	Rillaboom V	train
+swsh8-225	Battle VIP Pass	train
+swsh8-230	Cross Switcher	val
+swsh8-236	Power Tablet	val
+swsh8-241	Sidney	train
+swsh8-247	Chandelure V	train
+swsh8-252	Sandaconda V	train
+swsh8-258	Chili & Cilan & Cress	train
+swsh8-263	Shauna	train
+swsh8-269	Mew VMAX	train
+swsh8-274	Dancer	train
+swsh8-28	Vulpix	train
+swsh8-29	Vulpix	train
+swsh8-34	Slugma	train
+swsh8-4	Shroomish	train
+swsh8-45	Cinderace VMAX	train
+swsh8-50	Shellder	train
+swsh8-56	Croconaw	train
+swsh8-61	Mantine	val
+swsh8-67	Gorebyss	train
+swsh8-72	Galarian Darmanitan	train
+swsh8-78	Inteleon V	train
+swsh8-83	Barraskewda	train
+swsh8-89	Plusle	train
+swsh8-94	Rotom	val
+swsh9-001	Exeggcute	train
+swsh9-007	Grotle	train
+swsh9-013	Shaymin V	val
+swsh9-019	Magmar	train
+swsh9-025	Monferno	train
+swsh9-031	Lapras	train
+swsh9-037	Empoleon	train
+swsh9-043	Beartic	train
+swsh9-049	Shinx	train
+swsh9-055	Starmie	train
+swsh9-061	Dusclops	train
+swsh9-067	Dedenne	train
+swsh9-073	Nosepass	train
+swsh9-079	Lucario	train
+swsh9-085	Muk	train
+swsh9-091	Liepard	val
+swsh9-097	Aggron VMAX	val
+swsh9-103	Klang	train
+swsh9-109	Garchomp	train
+swsh9-115	Farfetch'd	train
+swsh9-121	Bibarel	train
+swsh9-127	Hawlucha	train
+swsh9-133	Café Master	train
+swsh9-139	Fresh Water Set	train
+swsh9-145	Marnie's Pride	train
+swsh9-151	Double Turbo Energy	train
+swsh9-157	Pikachu V	train
+swsh9-163	Zamazenta V	train
+swsh9-169	Cynthia's Ambition	train
+swsh9-175	Whimsicott VSTAR	train
+swsh9-181	Galarian Articuno V	val
+swshp-SWSH001	Grookey	train
+swshp-SWSH007	Frosmoth	train
+swshp-SWSH013	Galarian Ponyta	train
+swshp-SWSH019	Zamazenta V	val
+swshp-SWSH025	Garbodor	train
+swshp-SWSH031	Morpeko	train
+swshp-SWSH037	Hydreigon	train
+swshp-SWSH043	Galarian Sirfetch'd V	train
+swshp-SWSH049	Dubwool V	train
+swshp-SWSH055	Hatterene V	train
+swshp-SWSH061	Pikachu V	train
+swshp-SWSH067	Donphan	train
+swshp-SWSH073	Sobble	train
+swshp-SWSH081	Polteageist	train
+swshp-SWSH087	Eevee VMAX	train
+swshp-SWSH093	Arrokuda	train
+swshp-SWSH099	Crobat VMAX	train
+swshp-SWSH105	Gardevoir V	val
+swshp-SWSH111	Galarian Rapidash V	train
+swshp-SWSH117	Phanpy	train
+swshp-SWSH123	Galarian Articuno	train
+swshp-SWSH129	Umbreon	train
+swshp-SWSH135	Zacian	train
+swshp-SWSH141	Pikachu V-UNION	train
+swshp-SWSH147	Rayquaza V	train
+swshp-SWSH153	Pikachu	train
+swshp-SWSH159	Mewtwo V-UNION	train
+swshp-SWSH165	Zacian V-UNION	train
+swshp-SWSH171	Latias	train
+swshp-SWSH178	Professor's Research	train
+swshp-SWSH184	Jolteon VMAX	train
+swshp-SWSH190	Eevee	val
+swshp-SWSH196	Glaceon V	train
+swshp-SWSH202	Sylveon V	train
+swshp-SWSH208	Magnezone	train
+swshp-SWSH214	Lucario VSTAR	train
+swshp-SWSH220	Rowlet	train
+swshp-SWSH226	Spark	train
+swshp-SWSH232	Charmander	train
+swshp-SWSH238	Hisuian Decidueye V	train
+swshp-SWSH244	Scorbunny	train
+swshp-SWSH250	Lumineon V	train
+swshp-SWSH257	Rotom V	train
+swshp-SWSH263	Zeraora V	train
+swshp-SWSH269	Sunflora	train
+swshp-SWSH275	Manaphy	train
+swshp-SWSH281	Regidrago V	train
+swshp-SWSH296	Champions Festival	train
+xy0-12	Froakie	train
+xy0-18	Inkay	train
+xy0-23	Granbull	train
+xy0-29	Bidoof	train
+xy0-34	Crushing Hammer	train
+xy0-4	Quilladin	val
+xy1-1	Venusaur EX	train
+xy1-104	Skitty	train
+xy1-11	Simisage	val
+xy1-115	Cassius	train
+xy1-120	Max Revive	train
+xy1-126	Shadow Circle	train
+xy1-131	Rainbow Energy	train
+xy1-137	Fighting Energy	train
+xy1-142	Blastoise EX	train
+xy1-16	Spewpa	train
+xy1-21	Magcargo	val
+xy1-27	Fletchinder	train
+xy1-32	Cloyster	train
+xy1-38	Simipour	val
+xy1-43	Raichu	train
+xy1-49	Spoink	train
+xy1-54	Phantump	train
+xy1-6	Ledyba	train
+xy1-65	Timburr	train
+xy1-70	Krokorok	train
+xy1-76	Malamar	train
+xy1-81	Pawniard	train
+xy1-87	Jigglypuff	train
+xy1-92	Spritzee	train
+xy1-98	Doduo	train
+xy10-102	Helix Fossil Omanyte	train
+xy10-107	Pokémon Fan Club	train
+xy10-111a	Shauna	train
+xy10-117	Alakazam EX	val
+xy10-122	Kingdra EX	train
+xy10-15	Seel	train
+xy10-20	Glaceon EX	val
+xy10-26	M Alakazam EX	train
+xy10-31	Grumpig	train
+xy10-37	Marowak	train
+xy10-42	Pupitar	train
+xy10-47	Lucario	train
+xy10-52	Zygarde	train
+xy10-57	Vullaby	train
+xy10-68	Snubbull	val
+xy10-73	Kingdra EX	train
+xy10-79	Lugia BREAK	train
+xy10-84	Audino EX	train
+xy10-9	Moltres	train
+xy10-95	Devolution Spray	train
+xy11-10	Nuzleaf	train
+xy11-105	Special Charge	train
+xy11-110	Magearna EX	train
+xy11-116	Gardevoir EX	train
+xy11-17	Rapidash	train
+xy11-22	Litleo	train
+xy11-28	Shellos	train
+xy11-33	Clauncher	train
+xy11-39	Flaaffy	train
+xy11-44	Nidorino	train
+xy11-5	Jumpluff	train
+xy11-55	Probopass	train
+xy11-60	Sneasel	train
+xy11-66	Yveltal BREAK	train
+xy11-71	Klink	train
+xy11-77	Azumarill	train
+xy11-82	Xerneas BREAK	train
+xy11-88	Meowth	train
+xy11-93	Braviary	train
+xy11-99	Captivating Poké Puff	val
+xy12-103	Mewtwo EX	val
+xy12-109	ナッシー[Exeggutor]	val
+xy12-12	Charizard EX	train
+xy12-18	Arcanine	train
+xy12-23	Poliwag	val
+xy12-29	Dewgong	train
+xy12-34	Gyarados	train
+xy12-4	Metapod	val
+xy12-45	Nidoking	train
+xy12-50	Koffing	train
+xy12-56	Dugtrio	train
+xy12-61	Onix	train
+xy12-67	Raticate	train
+xy12-72	Dragonite EX	train
+xy12-78	Full Heal	train
+xy12-83	Potion	train
+xy12-89	Venusaur Spirit Link	train
+xy12-94	Lightning Energy	train
+xy2-1	Caterpie	train
+xy2-104	Lysandre	train
+xy2-11	Charizard EX	train
+xy2-17	Fletchinder	train
+xy2-22	Feebas	train
+xy2-28	Buizel	train
+xy2-33	Luxio	train
+xy2-39	Dusclops	train
+xy2-44	Skrelp	train
+xy2-5	Seedot	train
+xy2-55	Skuntank	train
+xy2-60	Forretress	train
+xy2-66	Florges	train
+xy2-71	Dragalge	train
+xy2-77	Pidgeot	train
+xy2-82	Furret	train
+xy2-88	Blacksmith	train
+xy2-92	Pal Pad	val
+xy2-98	Trick Shovel	train
+xy3-102	Training Center	train
+xy3-108	Dragonite EX	train
+xy3-113	M Lucario EX	train
+xy3-17	Poliwrath	train
+xy3-22	Beartic	train
+xy3-28	Raichu	train
+xy3-33	Thundurus	train
+xy3-39	Gothita	train
+xy3-44	Machop	train
+xy3-5	M Heracross EX	val
+xy3-55	M Lucario EX	train
+xy3-6	Shroomish	train
+xy3-65	Drapion	train
+xy3-70	Clefairy	train
+xy3-76	Flygon	val
+xy3-81	Slakoth	train
+xy3-87	Noibat	train
+xy3-92	Fossil Researcher	val
+xy3-98	Sail Fossil	train
+xy4-102	Robo Substitute Team Flare Gear	train
+xy4-108	Trick Coin	train
+xy4-113	Manectric EX	train
+xy4-119	Xerosic	train
+xy4-14	Kingler	train
+xy4-2	Venomoth	train
+xy4-24a	M Manectric EX	val
+xy4-3	Yanma	train
+xy4-35	M Gengar EX	train
+xy4-40	Musharna	train
+xy4-46	Gligar	train
+xy4-51	Murkrow	train
+xy4-57	Liepard	train
+xy4-62	Dialga EX	train
+xy4-67	Florges EX	val
+xy4-72	Deino	train
+xy4-78	Spearow	train
+xy4-83	Whismur	train
+xy4-89	Fletchling	train
+xy4-94	Enhanced Hammer	train
+xy5-1	Weedle	val
+xy5-104	Azumarill	train
+xy5-11	Lombre	val
+xy5-115	Spinda	val
+xy5-120	Bunnelby	train
+xy5-126	Energy Retrieval	train
+xy5-131	Groudon Spirit Link	train
+xy5-137	Rough Seas	train
+xy5-142	Weakness Policy	train
+xy5-148	Kyogre EX	train
+xy5-153	Aggron EX	train
+xy5-159	Professor Birch's Observations	train
+xy5-164	Weakness Policy	train
+xy5-21	Ninetales	train
+xy5-27	Combusken	train
+xy5-32	Staryu	val
+xy5-38	Wailord EX	train
+xy5-43	Feebas	train
+xy5-49	Clamperl	train
+xy5-54	Kyogre EX	train
+xy5-6	Treecko	train
+xy5-65	Eelektross	train
+xy5-70	Tentacool	train
+xy5-76	Rhyperior	train
+xy5-81	Medicham	train
+xy5-87	Hippopotas	train
+xy5-92	Crawdaunt	val
+xy5-98	Honedge	train
+xy6-102	M Latios EX	train
+xy6-108	Winona	train
+xy6-14	Fletchinder	train
+xy6-2	Exeggutor	train
+xy6-25	Manectric	train
+xy6-30	Shuppet	train
+xy6-36	Gligar	train
+xy6-41	Inkay	train
+xy6-47	Carbink	train
+xy6-52	Dragonite	train
+xy6-58	Latios EX	train
+xy6-63	Reshiram	train
+xy6-69	Skarmory	train
+xy6-74	Altaria	train
+xy6-79	Tranquill	train
+xy6-84	Healing Scarf	train
+xy6-9	Nincada	val
+xy6-94	Wally	train
+xy7-1	Oddish	train
+xy7-14	Entei	train
+xy7-2	Gloom	train
+xy7-25	Kyurem EX	train
+xy7-30	Unown	train
+xy7-36	Hoopa EX	train
+xy7-41	Golurk	train
+xy7-47	Beldum	train
+xy7-52	Ralts	train
+xy7-58	Goomy	train
+xy7-63	Eevee	train
+xy7-69	Ace Trainer	train
+xy7-74	Forest of Giant Plants	train
+xy7-79	Paint Roller	train
+xy7-84	Sceptile EX	train
+xy7-9	Combee	train
+xy7-95	Steven	train
+xy8-10	Quilladin	train
+xy8-105	Spritzee	train
+xy8-110	Fraxure	val
+xy8-116	Doduo	val
+xy8-121	Teddiursa	train
+xy8-127	Staraptor	train
+xy8-132	Noibat	train

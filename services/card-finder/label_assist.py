@@ -6,7 +6,10 @@ rough.jsonl rows are manifest rows (see TESTSET.md) whose "corners" are rough
 clicks (any order, within ~2% of the card edge). Each edge is re-fit from image
 gradients (RANSAC + Huber line fit) and corners become the edge-line
 intersections ("virtual corners", the convention for every label and every
-detector output). A review sheet per photo shows 4 zoomed corners with a cross;
+detector output).
+
+The finder uses the same edge snapping, so snapped labels can't score it fairly.
+Labels for the frozen test set use --no-snap with clicks from hand_label.py. A review sheet per photo shows 4 zoomed corners with a cross;
 reject and re-click any whose cross is not on the corner.
 """
 
@@ -90,6 +93,7 @@ def main() -> None:
     ap.add_argument("rough", type=Path)
     ap.add_argument("out", type=Path)
     ap.add_argument("--sheets", type=Path)
+    ap.add_argument("--no-snap", action="store_true", help="keep the hand clicks as labels (for scoring the finder, which snaps)")
     args = ap.parse_args()
     rows = []
     for line in args.rough.read_text().splitlines():
@@ -97,8 +101,12 @@ def main() -> None:
             continue
         row = json.loads(line)
         image = cv2.imread(str(HERE / row["image"]))
-        quad = refine(image, np.asarray(row["corners"], float))
-        quad = refine(image, quad, band=0.008)
+        if args.no_snap:
+            quad = order_corners(np.asarray(row["corners"], float))
+            row["label_method"] = "hand-clicked, no snapping"
+        else:
+            quad = refine(image, np.asarray(row["corners"], float))
+            quad = refine(image, quad, band=0.008)
         row["corners"] = [[round(float(x), 1), round(float(y), 1)] for x, y in quad]
         row.setdefault("label_method", "label_assist edge snap, corners checked by eye")
         rows.append(row)
