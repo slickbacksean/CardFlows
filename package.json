@@ -28,7 +28,6 @@
   },
   "pnpm": {
     "patchedDependencies": {
-      "@capgo/capacitor-inappbrowser@8.17.2": "patches/@capgo__capacitor-inappbrowser@8.17.2.patch",
       "react-native-webview@13.16.1": "patches/react-native-webview@13.16.1.patch"
     }
   }

@@ -20,14 +20,15 @@ describe("Livestream in-house browser + scanner control", () => {
     const browserView = readRepoFile("apps/mobile/components/ui/livestream-browser.tsx");
     const mobilePackage = readRepoFile("apps/mobile/package.json");
 
-    expect(mobilePackage).toContain("@capgo/capacitor-inappbrowser");
+    expect(mobilePackage).not.toMatch(/capacitor|capgo/i);
     expect(mobilePackage).toContain("react-native-webview");
     expect(scanTab).toContain("LivestreamBrowser");
     expect(scanTab).toContain("url={chrome.pageUrl}");
     expect(scanTab).toContain("hudLayer");
     expect(scanTab).toContain('position: "absolute"');
     expect(browserView).toContain('from "react-native-webview"');
-    expect(browser).toContain("isExpoGoRuntime");
+    expect(browser).not.toMatch(/from "@capacitor|from "@capgo/);
+    expect(browser).toContain('return "unavailable";');
     expect(livestream).toContain('pageUrl: "https://www.whatnot.com/tag/pokemon_cards"');
     expect(livestream).toContain('pageUrl: "https://www.ebay.com/ebaylive"');
     expect(scanTab).not.toContain("injectedJavaScript");
@@ -38,9 +39,8 @@ describe("Livestream in-house browser + scanner control", () => {
     expect(scanTab).not.toContain("openBrowserAsync");
     expect(scanTab).not.toContain("Linking.openURL");
     expect(browser).not.toContain("executeScript");
-    expect(browser).toContain("preShowScript: LIVE_HLS_REPORT_SCRIPT");
-    expect(browser).toContain("preventDeeplink: true");
-    expect(browser).toContain("livestreamWebViewUserAgent");
+    expect(browserView).toContain("injectedJavaScriptBeforeContentLoaded={LIVE_HLS_REPORT_SCRIPT}");
+    expect(browserView).toContain("onMessage={onWebMessage}");
     expect(browser).not.toContain("openBrowserAsync");
     expect(browserView).not.toContain("openLivestreamGoogleSignIn");
     expect(browserView).toContain("allowLivestreamNavigation");

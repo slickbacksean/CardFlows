@@ -11,8 +11,6 @@
     "lint": "expo lint"
   },
   "dependencies": {
-    "@capacitor/core": "^8.5.2",
-    "@capgo/capacitor-inappbrowser": "^8.17.2",
     "@cardflow/shared": "workspace:*",
     "cardflow-live-video": "file:./modules/cardflow-live-video",
     "@expo/metro-runtime": "~57.0.16",
