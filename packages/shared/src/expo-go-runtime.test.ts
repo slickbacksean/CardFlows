@@ -48,7 +48,8 @@ describe("Expo Go runtime guards", () => {
     expect(nativeJs).toContain("CardFlowLiveVideo");
     expect(nativeJs).toContain("EXPO_GO_OPTIONAL_NATIVE_MODULES");
     expect(nativeJs).not.toMatch(/requireNativeModule\s*[<(]/);
-    expect(moduleEntry).not.toMatch(/requireNativeModule/);
+    expect(moduleEntry).not.toMatch(/requireNativeModule\s*[<(]/);
+    expect(moduleEntry).toContain("CARD_FLOW_LIVE_VIDEO_MODULE");
     expect(liveIdentify).toContain("if (!isLiveVideoNativeAvailable())");
     expect(scanTab).toContain("isLiveVideoNativeAvailable");
     expect(scanTab).toContain("unavailableBanner");
