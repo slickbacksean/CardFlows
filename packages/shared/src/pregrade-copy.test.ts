@@ -61,6 +61,7 @@ describe("pre-grade copy", () => {
       path.join(REPO, "apps", "mobile", "app", "(tabs)", "grading.tsx"),
       path.join(REPO, "apps", "api", "src", "cardgrading-map.ts"),
       path.join(REPO, "apps", "api", "src", "grade-photo-flow.ts"),
+      path.join(REPO, "packages", "shared", "src", "grade-quota.ts"),
     ];
     const offenders: string[] = [];
     for (const file of files) {

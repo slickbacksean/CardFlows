@@ -8,7 +8,8 @@ original CardFlow code.
 - **Commit:** `d72beae65a40b3c993d325fcc1ca5d30fedb1c61`
   (`Stop displaying large-scale slope the method cannot measure`, 2026-09-18)
 - **Permission:** CardFlow has the repository owner's **written permission**
-  (confirmed by Sean) to use this code inside CardFlow.
+  (granted to Sean Hart, October 2026) to use this code inside CardFlow.
+  Recorded in `docs/THIRD_PARTY.md`.
 - **License:** The upstream repository has no license file.
 
 Only the files needed to call `from grade import grade_card` are included

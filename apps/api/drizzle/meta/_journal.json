@@ -57,6 +57,13 @@
       "when": 1790200000000,
       "tag": "0007_nullable_purchase_price",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1790300000000,
+      "tag": "0008_grade_quotas",
+      "breakpoints": true
     }
   ]
 }

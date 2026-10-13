@@ -3,6 +3,7 @@
  * (vendored at apps/api/vendor/cardgrading). Mirrors the GitHub
  * packages/api photo-pregrade-mapper body. No model call is on this path.
  */
+import type { GradeQuotaSnapshot } from "./grade-quota";
 import { PREGRADE_COPY, PREGRADE_DISCLAIMER_TEXT, PREGRADE_TITLE } from "./pregrade-copy";
 
 export const PREGRADE_LABEL = PREGRADE_TITLE;
@@ -44,6 +45,7 @@ export interface PhotoPregradeSuccess {
   capture?: Partial<Record<PhotoPregradeSide, PhotoCaptureMetrics>>;
   /** What happened to the optional raking-light front photos. */
   angled?: PhotoPregradeAngled;
+  quota?: GradeQuotaSnapshot;
 }
 
 /** Measured on the card in one photo. Never a grade input on its own. */
@@ -74,6 +76,7 @@ export interface PhotoPregradeRetake {
   code: "PHOTO_RETAKE";
   side: PhotoPregradeSide;
   reasons: string[];
+  quota?: GradeQuotaSnapshot;
 }
 
 /** Grader missing, crashed, or timed out. Never a number. */
@@ -82,12 +85,23 @@ export interface PhotoPregradeUnavailable {
   status: "unavailable";
   code: "UNAVAILABLE";
   message: string;
+  quota?: GradeQuotaSnapshot;
+}
+
+/** Monthly allowance and extra credits are both spent. Never a number. */
+export interface PhotoPregradeOutOfGrades {
+  ok: false;
+  status: "out_of_grades";
+  code: "OUT_OF_GRADES";
+  message: string;
+  quota?: GradeQuotaSnapshot;
 }
 
 export type PhotoPregradeResult =
   | PhotoPregradeSuccess
   | PhotoPregradeRetake
-  | PhotoPregradeUnavailable;
+  | PhotoPregradeUnavailable
+  | PhotoPregradeOutOfGrades;
 
 export interface DetectedCardCrop {
   mimeType: "image/jpeg";

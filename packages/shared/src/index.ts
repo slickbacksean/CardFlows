@@ -578,6 +578,7 @@ export type {
   PhotoPregradeSubgrades,
   PhotoPregradeSuccess,
   PhotoPregradeUnavailable,
+  PhotoPregradeOutOfGrades,
 } from "./photo-pregrade";
 export { RECOGNITION_SCENARIOS } from "./types";
 export type * from "./types";
@@ -646,6 +647,31 @@ export {
   PREGRADE_TITLE,
   pregradeCopyViolations,
 } from "./pregrade-copy";
+export {
+  CARDSIGHT_MONTHLY_BUDGET_DEFAULT,
+  calendarMonthKey,
+  decideGradeConsume,
+  extraCreditsLabel,
+  GRADE_PLAN_FREE,
+  GRADE_PLAN_PREMIUM,
+  GRADE_PLANS,
+  GRADE_QUOTA_COPY,
+  GRADE_QUOTA_FREE_PER_MONTH,
+  GRADE_QUOTA_PREMIUM_PER_MONTH,
+  gradeQuotaSnapshot,
+  isGradePlan,
+  isOutOfGradesStatus,
+  monthlyLimitForPlan,
+  nextMonthResetAt,
+  remainingGradesCaption,
+  remainingMonthlyLabel,
+} from "./grade-quota";
+export type {
+  GradePlan,
+  GradeQuotaConsumeDecision,
+  GradeQuotaConsumeSource,
+  GradeQuotaSnapshot,
+} from "./grade-quota";
 export {
   GRADE_STILL_MIN_SHORT_SIDE_PX,
   GRADE_STILL_TOO_SMALL_COPY,
