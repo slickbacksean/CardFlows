@@ -279,7 +279,7 @@ function PrepareSheetForm({
               {photoError ? <Text style={styles.error}>{photoError}</Text> : null}
 
               <View style={styles.guidance}>
-                <Text style={styles.section}>Pre-grade estimate</Text>
+                <Text style={styles.section}>{PREGRADE_LABEL}</Text>
                 <Text style={styles.caption}>{gradeEstimate.disclaimer}</Text>
                 {gradeEstimate.overall == null ? (
                   <Text style={styles.body}>
@@ -291,7 +291,12 @@ function PrepareSheetForm({
                   </Text>
                 ) : (
                   <>
-                    <Text style={styles.estimateOverall}>{gradeEstimate.display}</Text>
+                    <Text
+                      accessibilityLabel={`${PREGRADE_LABEL}, ${gradeEstimate.overall}`}
+                      style={styles.estimateOverall}
+                    >
+                      {gradeEstimate.display}
+                    </Text>
                     {confidence ? <Text style={styles.rowMeta}>{confidence}</Text> : null}
                     {GRADE_SIDES.map((side) => (
                       <View key={side} style={styles.pillar}>
