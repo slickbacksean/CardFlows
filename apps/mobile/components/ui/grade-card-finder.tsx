@@ -1,7 +1,15 @@
+import {
+  CAMERA_ALLOW_LABEL,
+  CAMERA_DENIED_TITLE,
+  CHOOSE_A_PHOTO_LABEL,
+  GRADE_CAMERA_PREPROMPT_BODY,
+  GRADE_CAMERA_PREPROMPT_TITLE,
+  OPEN_SETTINGS_LABEL,
+} from "@cardflow/shared";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { Image } from "expo-image";
-import { useEffect, useRef, useState, type RefObject } from "react";
+import { useRef, useState, type RefObject } from "react";
 import {
   ActivityIndicator,
   Linking,
@@ -63,12 +71,6 @@ export function GradeCardFinder({
   const waitingForCamera = showLivePreview && (!cameraReady || !pictureSizeResolved);
   const shutterDisabled = detecting || waitingForCamera || capturing;
   const banner = error ?? notice ?? null;
-
-  useEffect(() => {
-    if (IS_NATIVE && !permission?.granted && permission?.canAskAgain) {
-      void requestPermission();
-    }
-  }, [permission, requestPermission]);
 
   async function onShutter() {
     if (busyRef.current || shutterDisabled || !showLivePreview) return;
@@ -144,29 +146,38 @@ export function GradeCardFinder({
       : cameraMountFailed
       ? "Camera could not start. Choose a library photo, or try again."
       : permission.canAskAgain
-        ? "CardFlow takes a still of the card in a 63×88 frame, then finds the crop. You can also choose a library photo."
+        ? GRADE_CAMERA_PREPROMPT_BODY
         : "Enable camera in system Settings, or pick a photo from the library.";
+    const canPrompt = IS_NATIVE && (permission.canAskAgain || cameraMountFailed);
     return (
       <View style={styles.flex}>
         <FinderHeader onBack={onBack} title={`${sideLabel} photo`} />
         <View style={styles.panel}>
           <Text style={styles.title}>
-            {!IS_NATIVE || cameraMountFailed ? "Camera unavailable" : "Allow camera"}
+            {!IS_NATIVE || cameraMountFailed
+              ? "Camera unavailable"
+              : permission.canAskAgain
+                ? GRADE_CAMERA_PREPROMPT_TITLE
+                : CAMERA_DENIED_TITLE}
           </Text>
           <Text style={styles.body}>{blocked}</Text>
           {banner ? <Text style={styles.error}>{banner}</Text> : null}
-          {!IS_NATIVE ? null : !permission.canAskAgain && !cameraMountFailed ? (
-            <PrimaryButton label="Open system Settings" onPress={() => void openSettings()} tone="muted" />
-          ) : (
+          {canPrompt ? (
             <PrimaryButton
-              label="Allow camera"
+              label={CAMERA_ALLOW_LABEL}
               onPress={() => {
                 setCameraMountFailed(false);
                 void requestPermission();
               }}
             />
-          )}
-          <PrimaryButton label="Choose a photo" onPress={onLibrary} tone="muted" />
+          ) : IS_NATIVE ? (
+            <PrimaryButton
+              label={OPEN_SETTINGS_LABEL}
+              onPress={() => void openSettings()}
+              tone="muted"
+            />
+          ) : null}
+          <PrimaryButton label={CHOOSE_A_PHOTO_LABEL} onPress={onLibrary} tone="muted" />
         </View>
       </View>
     );
