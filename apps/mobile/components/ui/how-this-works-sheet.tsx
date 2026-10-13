@@ -3,7 +3,7 @@ import {
   HOW_THIS_WORKS_PARAGRAPHS,
   HOW_THIS_WORKS_TITLE,
 } from "@cardflow/shared";
-import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { colors, space } from "@/lib/theme";
 import { PrimaryButton } from "./primary-button";
@@ -14,45 +14,44 @@ interface HowThisWorksSheetProps {
 }
 
 export function HowThisWorksSheet({ visible, onClose }: HowThisWorksSheetProps) {
+  if (!visible) return null;
+
   return (
-    <Modal
-      animationType="slide"
-      onRequestClose={onClose}
-      presentationStyle="overFullScreen"
-      transparent
-      visible={visible}
-    >
-      <View style={styles.backdrop}>
-        <Pressable
-          accessibilityLabel="Dismiss how this works"
-          accessibilityRole="button"
-          onPress={onClose}
-          style={styles.dismiss}
-        />
-        <SafeAreaView edges={["bottom"]} style={styles.sheet}>
-          <View style={styles.handle} />
-          <Text accessibilityRole="header" style={styles.title}>
-            {HOW_THIS_WORKS_TITLE}
-          </Text>
-          <ScrollView contentContainerStyle={styles.body}>
-            {HOW_THIS_WORKS_PARAGRAPHS.map((paragraph) => (
-              <Text key={paragraph} style={styles.paragraph}>
-                {paragraph}
-              </Text>
-            ))}
-          </ScrollView>
-          <PrimaryButton label={HOW_THIS_WORKS_CLOSE_LABEL} onPress={onClose} tone="muted" />
-        </SafeAreaView>
-      </View>
-    </Modal>
+    <View pointerEvents="box-none" style={styles.overlay}>
+      <Pressable
+        accessibilityLabel="Dismiss how this works"
+        accessibilityRole="button"
+        onPress={onClose}
+        style={styles.dismiss}
+      />
+      <SafeAreaView edges={["bottom"]} style={styles.sheet}>
+        <View style={styles.handle} />
+        <Text accessibilityRole="header" style={styles.title}>
+          {HOW_THIS_WORKS_TITLE}
+        </Text>
+        <ScrollView contentContainerStyle={styles.body}>
+          {HOW_THIS_WORKS_PARAGRAPHS.map((paragraph) => (
+            <Text key={paragraph} style={styles.paragraph}>
+              {paragraph}
+            </Text>
+          ))}
+        </ScrollView>
+        <PrimaryButton label={HOW_THIS_WORKS_CLOSE_LABEL} onPress={onClose} tone="muted" />
+      </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  backdrop: {
-    flex: 1,
+  overlay: {
+    position: "absolute",
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
     justifyContent: "flex-end",
     backgroundColor: "rgba(0, 0, 0, 0.55)",
+    zIndex: 20,
   },
   dismiss: { flex: 1 },
   sheet: {
