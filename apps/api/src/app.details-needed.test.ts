@@ -242,4 +242,90 @@ describe("details-needed livestream Purchased", () => {
     expect(listed.body.items[0]?.workflowState).toBe("acquired");
     expect(listed.body.items[0]?.purchase?.costBasis.allInTotal).toBe("10.50");
   });
+
+  it("undo within the toast window leaves no Purchased row behind", async () => {
+    const app = mockPortsApp();
+    const confirmed = await confirmPikachu(app);
+    const saved = await json<{ item: { inventoryItemId: string } }>(app, "/v1/inventory/purchased", {
+      method: "POST",
+      body: JSON.stringify({
+        confirmationId: confirmed.confirmation.confirmationId,
+        detailsNeeded: true,
+        platform: "whatnot",
+        streamUrl: "https://www.whatnot.com",
+      }),
+    });
+    expect(saved.status).toBe(201);
+
+    const undone = await json<{ ok: true; deleted: true }>(
+      app,
+      `/v1/inventory/${saved.body.item.inventoryItemId}`,
+      { method: "DELETE" },
+    );
+    expect(undone.status).toBe(200);
+    expect(undone.body.deleted).toBe(true);
+
+    const listed = await json<{ items: unknown[] }>(app, "/v1/inventory");
+    expect(listed.body.items).toHaveLength(0);
+
+    const missing = await json<{ error: string }>(
+      app,
+      `/v1/inventory/${saved.body.item.inventoryItemId}`,
+      { method: "DELETE" },
+    );
+    expect(missing.status).toBe(404);
+
+    const again = await json<{
+      item: { inventoryItemId: string; workflowState: string };
+    }>(app, "/v1/inventory/purchased", {
+      method: "POST",
+      body: JSON.stringify({
+        confirmationId: confirmed.confirmation.confirmationId,
+        detailsNeeded: true,
+        platform: "whatnot",
+        streamUrl: "https://www.whatnot.com",
+      }),
+    });
+    expect(again.status).toBe(201);
+    expect(again.body.item.inventoryItemId).not.toBe(saved.body.item.inventoryItemId);
+    expect(again.body.item.workflowState).toBe(DETAILS_NEEDED_WORKFLOW_STATE);
+  });
+
+  it("does not undo a Purchased copy after details are completed", async () => {
+    const app = mockPortsApp();
+    const confirmed = await confirmPikachu(app);
+    const saved = await json<{ item: { inventoryItemId: string } }>(app, "/v1/inventory/purchased", {
+      method: "POST",
+      body: JSON.stringify({
+        confirmationId: confirmed.confirmation.confirmationId,
+        detailsNeeded: true,
+      }),
+    });
+    expect(saved.status).toBe(201);
+
+    const completed = await json<{ item: { workflowState: string } }>(
+      app,
+      `/v1/inventory/${saved.body.item.inventoryItemId}/purchase`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          purchasePrice: "10.50",
+          purchasedAt: "2026-10-11T22:40:00.000Z",
+        }),
+      },
+    );
+    expect(completed.status).toBe(200);
+    expect(completed.body.item.workflowState).toBe("acquired");
+
+    const blocked = await json<{ error: string }>(
+      app,
+      `/v1/inventory/${saved.body.item.inventoryItemId}`,
+      { method: "DELETE" },
+    );
+    expect(blocked.status).toBe(409);
+
+    const listed = await json<{ items: Array<{ inventoryItemId: string }> }>(app, "/v1/inventory");
+    expect(listed.body.items).toHaveLength(1);
+    expect(listed.body.items[0]?.inventoryItemId).toBe(saved.body.item.inventoryItemId);
+  });
 });

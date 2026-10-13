@@ -344,6 +344,7 @@ export function createApp(
     listInventory,
     saveDraft,
     saveInventoryItem,
+    deleteInventoryItem,
     saveScan,
     rejectScan,
     saveScanImage,
@@ -1455,6 +1456,23 @@ export function createApp(
       canonicalCard: card ?? null,
       draft: draft ?? null,
     });
+  });
+
+  app.delete("/v1/inventory/:inventoryItemId", (c) => {
+    const userId = c.get("userId");
+    const inventoryItemId = c.req.param("inventoryItemId");
+    const item = getInventoryItem(userId, inventoryItemId);
+    if (!item) return c.json({ ok: false, error: "Inventory item not found" }, 404);
+    if (item.intent !== "purchased" || !isDetailsNeededPurchase(item)) {
+      return c.json(
+        { ok: false, error: "Only incomplete Purchased copies can be undone" },
+        409,
+      );
+    }
+    if (!deleteInventoryItem(userId, inventoryItemId)) {
+      return c.json({ ok: false, error: "Inventory item not found" }, 404);
+    }
+    return c.json({ ok: true, deleted: true });
   });
 
 
