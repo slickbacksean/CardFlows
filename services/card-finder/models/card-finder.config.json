@@ -1,0 +1,12 @@
+{
+  "model": "Unet/timm-mobilenetv3_large_100",
+  "encoder_weights": null,
+  "size": 256,
+  "steps": 6000,
+  "batch": 16,
+  "lr": 0.0005,
+  "loss": "bce+dice",
+  "art_train_ids": 2882,
+  "seed": 2,
+  "resumed_from": "/workspace/cf/models-v0.2/card-finder.pt"
+}

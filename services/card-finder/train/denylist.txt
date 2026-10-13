@@ -1,0 +1,8 @@
+# Card names in the baseline and test set. Their art is never used for training.
+# Add every test-set card here before training.
+Sizzlipede
+Antique Skull Fossil
+Bombirdier
+Seaking
+Gwynn
+Bronzong

@@ -34,7 +34,7 @@ import {
  * library jargon). Library details stay in mathTrace and the debug log.
  */
 
-const HARD_GATE_NAMES = new Set(["card_detection", "tilt", "aspect_ratio", "sharpness", "capture_scale"]);
+const HARD_GATE_NAMES = new Set(["card_detection", "tilt", "aspect_ratio", "sharpness", "capture_scale", "rectified_aspect", "corners_in_frame"]);
 
 const HARD_GATE_TIPS: Record<string, string> = {
   card_detection: PREGRADE_COPY.notFound,
@@ -42,6 +42,8 @@ const HARD_GATE_TIPS: Record<string, string> = {
   aspect_ratio: PREGRADE_COPY.shapeOff,
   sharpness: PREGRADE_COPY.blurry,
   capture_scale: PREGRADE_COPY.tooFar,
+  rectified_aspect: "That outline isn't a whole card",
+  corners_in_frame: "Fit the whole card in the photo",
 };
 
 const SOFT_GATE_LABELS: Record<string, string> = {
@@ -49,6 +51,7 @@ const SOFT_GATE_LABELS: Record<string, string> = {
   glare: PREGRADE_COPY.glare,
   uneven_lighting: PREGRADE_COPY.unevenLight,
   capture_scale_low: PREGRADE_COPY.smallInFrame,
+  level: "Phone wasn't level, card was straightened",
 };
 
 interface LibraryGate {

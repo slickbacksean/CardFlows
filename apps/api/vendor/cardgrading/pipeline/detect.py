@@ -9,6 +9,8 @@ from pathlib import Path
 import cv2
 import numpy as np
 
+from pipeline.plane import estimate_plane_pose
+
 
 # Gates whose failure means the detected geometry itself is wrong — the warp
 # isn't a usable image of the card, so downstream measurements would be
@@ -18,7 +20,7 @@ import numpy as np
 # Validated against real misdetections: a skewed quad shows up as tilt, and a
 # wrong-but-rectangular quad (the minAreaRect fallback around card+background,
 # where tilt is 0 by construction) shows up as aspect_ratio.
-HARD_GATE_NAMES = frozenset({"card_detection", "tilt", "aspect_ratio"})
+HARD_GATE_NAMES = frozenset({"card_detection", "tilt", "aspect_ratio", "rectified_aspect", "corners_in_frame"})
 
 
 @dataclass
@@ -70,15 +72,15 @@ def load_thresholds(path: str | Path) -> dict:
 
 
 def order_points(pts: np.ndarray) -> np.ndarray:
-    """Order 4 points as top-left, top-right, bottom-right, bottom-left."""
-    rect = np.zeros((4, 2), dtype=np.float32)
-    s = pts.sum(axis=1)
-    rect[0] = pts[np.argmin(s)]
-    rect[2] = pts[np.argmax(s)]
-    diff = np.diff(pts, axis=1)
-    rect[1] = pts[np.argmin(diff)]
-    rect[3] = pts[np.argmax(diff)]
-    return rect
+    """Order 4 points as top-left, top-right, bottom-right, bottom-left.
+
+    Clockwise around the centroid starting at min x+y, so the order stays cyclic at
+    any rotation (the old sum/diff rule could pick one point twice near 45 degrees).
+    """
+    pts = np.asarray(pts, dtype=np.float32).reshape(4, 2)
+    c = pts.mean(axis=0)
+    pts = pts[np.argsort(np.arctan2(pts[:, 1] - c[1], pts[:, 0] - c[0]))]
+    return np.roll(pts, -int(np.argmin(pts.sum(axis=1))), axis=0).astype(np.float32)
 
 
 # How far two corner samples can differ and still count as the same
@@ -379,10 +381,87 @@ def check_resolution(image: np.ndarray, cfg: dict) -> QualityGate:
     )
 
 
-def check_tilt(corners: np.ndarray, cfg: dict) -> QualityGate:
+def check_tilt(
+    corners: np.ndarray,
+    cfg: dict,
+    image_shape: tuple[int, ...] | None = None,
+    focal_px: float | None = None,
+) -> QualityGate:
+    """Hard gate on what a perspective warp cannot fix.
+
+    With the image size known, the quad is warped back to the card plane first
+    (see ``pipeline.plane``) and the gate reads the real out-of-plane angle,
+    limit ``max_out_of_plane_deg``. Mild off-overhead shots, which used to trip
+    the 2° corner-angle rule, are straightened rather than rejected.
+
+    Without the image size it falls back to the legacy corner-angle rule.
+    """
+    if image_shape is None:
+        max_dev = max(corner_angle_deviations(corners))
+        passed = max_dev <= cfg["max_corner_angle_deviation_deg"]
+        return QualityGate("tilt", passed, f"max corner angle deviation={max_dev:.2f} deg", max_dev)
+    pose = estimate_plane_pose(corners, image_shape, focal_px)
+    limit = float(cfg.get("max_out_of_plane_deg", 20.0))
+    passed = pose.out_of_plane_deg <= limit
+    return QualityGate(
+        "tilt",
+        passed,
+        f"card plane {pose.out_of_plane_deg:.1f} deg off the camera axis after warp (limit {limit:.0f})",
+        pose.out_of_plane_deg,
+    )
+
+
+def check_level(corners: np.ndarray, cfg: dict) -> QualityGate:
+    """Soft advisory: phone was not square to the card. The card was straightened."""
     max_dev = max(corner_angle_deviations(corners))
     passed = max_dev <= cfg["max_corner_angle_deviation_deg"]
-    return QualityGate("tilt", passed, f"max corner angle deviation={max_dev:.2f} deg", max_dev)
+    return QualityGate("level", passed, f"max corner angle deviation={max_dev:.2f} deg", max_dev)
+
+
+def check_rectified_aspect(
+    corners: np.ndarray,
+    cfg: dict,
+    image_shape: tuple[int, ...],
+    focal_px: float | None = None,
+) -> QualityGate:
+    """Hard gate: the rectified rectangle must be 63:88.
+
+    Catches the silent wrong crops (art window, text panel, card plus
+    background) that pass the image-space ratio check because perspective
+    foreshortening makes them look card-shaped.
+    """
+    pose = estimate_plane_pose(corners, image_shape, focal_px)
+    expected_w, expected_h = cfg["card_aspect_ratio"]
+    expected = expected_w / expected_h
+    actual = pose.rectified_aspect
+    if actual > 1:
+        actual = 1.0 / actual
+    deviation_pct = 100.0 * abs(actual - expected) / expected
+    tolerance = float(cfg.get("rectified_aspect_tolerance_pct", 6.0))
+    return QualityGate(
+        "rectified_aspect",
+        deviation_pct <= tolerance,
+        f"rectified aspect {actual:.3f} vs {expected:.3f} ({deviation_pct:.1f}% off, limit {tolerance:.0f}%)",
+        deviation_pct,
+    )
+
+
+def check_corners_in_frame(corners: np.ndarray, cfg: dict, image_shape: tuple[int, ...]) -> QualityGate:
+    """Hard gate: every corner sits inside the photo, off its border.
+
+    A quad touching the photo border is either a card cut off by the frame or a
+    whole-frame "crop" (the contour finder's fallback). Neither can be measured.
+    """
+    h, w = image_shape[:2]
+    margin = float(cfg.get("corner_border_margin_fraction", 0.005)) * max(h, w)
+    q = np.asarray(corners, dtype=np.float64).reshape(4, 2)
+    touching = int(((q[:, 0] < margin) | (q[:, 1] < margin) | (q[:, 0] > w - 1 - margin) | (q[:, 1] > h - 1 - margin)).sum())
+    return QualityGate(
+        "corners_in_frame",
+        touching == 0,
+        f"{touching} corner(s) on the photo border",
+        float(touching),
+    )
 
 
 def check_aspect_ratio(corners: np.ndarray, cfg: dict, tilt_ok: bool = False) -> QualityGate:
@@ -513,19 +592,68 @@ def detail_warp(image: np.ndarray, corners: np.ndarray | None, thresholds: dict)
     return perspective_correct(image, corners, size)
 
 
-def detect_and_normalize(image: np.ndarray, thresholds: dict) -> DetectResult:
-    """Run Stage 1: find the card, perspective-correct it, and check capture quality."""
+_CARD_FINDER = None
+
+
+def card_finder_enabled() -> bool:
+    """CARD_FLOW_CARD_FINDER=1 uses the trained card finder (services/card-finder) for corners.
+
+    Off by default until it passes the frozen test set. When on, an unconfident
+    finder result is a retake; it never falls back to the contour finder's guess.
+    """
+    import os
+
+    return os.environ.get("CARD_FLOW_CARD_FINDER") == "1"
+
+
+def run_card_finder(image: np.ndarray):
+    global _CARD_FINDER
+    if _CARD_FINDER is None:
+        import sys as _sys
+
+        finder_dir = Path(__file__).resolve().parents[5] / "services" / "card-finder"
+        if str(finder_dir) not in _sys.path:
+            _sys.path.insert(0, str(finder_dir))
+        from finder import CardFinder
+
+        _CARD_FINDER = CardFinder.load()
+    return _CARD_FINDER.find(image)
+
+
+def detect_and_normalize(
+    image: np.ndarray,
+    thresholds: dict,
+    corners: np.ndarray | None = None,
+) -> DetectResult:
+    """Run Stage 1: find the card, perspective-correct it, and check capture quality.
+
+    ``corners`` (TL, TR, BR, BL virtual corners, see services/card-finder/INTERFACE.md)
+    come from an external card finder when given; otherwise the contour finder runs.
+    """
     cap_cfg = thresholds["capture"]
     gates: list[QualityGate] = [check_resolution(image, cap_cfg)]
 
-    corners = find_card_contour(image)
+    if corners is not None:
+        corners = np.asarray(corners, dtype=np.float32).reshape(4, 2)
+    elif card_finder_enabled():
+        found = run_card_finder(image)
+        if found is None or not found.confident:
+            reasons = "none" if found is None else ",".join(found.reject_reasons) or "low_confidence"
+            gates.append(QualityGate("card_detection", False, f"card finder not confident ({reasons})"))
+            return DetectResult(ok=False, warped=None, gates=gates, contour=None)
+        corners = np.asarray(found.corners, dtype=np.float32).reshape(4, 2)
+    else:
+        corners = find_card_contour(image)
     if corners is None:
         gates.append(QualityGate("card_detection", False, "no card contour found"))
         return DetectResult(ok=False, warped=None, gates=gates, contour=None)
     gates.append(QualityGate("card_detection", True, "card contour found"))
-    tilt_gate = check_tilt(corners, cap_cfg)
+    tilt_gate = check_tilt(corners, cap_cfg, image.shape)
     gates.append(tilt_gate)
+    gates.append(check_level(corners, cap_cfg))
     gates.append(check_aspect_ratio(corners, cap_cfg, tilt_ok=tilt_gate.passed))
+    gates.append(check_rectified_aspect(corners, cap_cfg, image.shape))
+    gates.append(check_corners_in_frame(corners, cap_cfg, image.shape))
 
     size = (cap_cfg["canonical_width_px"], cap_cfg["canonical_height_px"])
     warped = perspective_correct(image, corners, size)

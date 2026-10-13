@@ -1,0 +1,15 @@
+{
+  "weights": {
+    "agreement": 14.63269372966995,
+    "outside": -6.305802119291627,
+    "aspect_err": -11.684803918800514,
+    "inner": 1.2696959501909106,
+    "refine_failed": -1.1129948462961332,
+    "area": 2.1106736253782135,
+    "largest_share": 12.13824405507279
+  },
+  "bias": -23.72747440201873,
+  "fit_samples": 573,
+  "positives": 478,
+  "split": "synthetic, train-split art, seed 424242, 512px"
+}

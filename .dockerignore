@@ -11,7 +11,11 @@
 .git
 .github
 docs
-services
+services/*
+!services/card-finder
+services/card-finder/photos
+services/card-finder/train
+services/card-finder/models/*.tflite
 infra
 legacy/mobile-react-navigation
 apps/mobile/*
