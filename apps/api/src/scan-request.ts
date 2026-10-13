@@ -5,7 +5,7 @@ import {
 } from "@cardflow/shared";
 import type { Context } from "hono";
 import { z } from "zod";
-import { oversizedImageHeaderError } from "./grade-image";
+import { oversizedImageHeaderError, stripImageMetadata } from "./grade-image";
 import {
   SCAN_IMAGE_MAX_BYTES,
   mimeFromFileName,
@@ -86,7 +86,7 @@ function validateImageBytes(
   }
   const oversized = oversizedImageHeaderError(bytes);
   if (oversized) return oversized;
-  return { bytes, mimeType: mime.data };
+  return { bytes: stripImageMetadata(bytes, mime.data), mimeType: mime.data };
 }
 
 export function parseScanCreateJson(

@@ -7,6 +7,7 @@ import { createRecognitionFromEnv } from "./recognition-env";
 import { createGradeEstimateFromEnv, gradeEngineProbeFromEnv } from "./grade-estimate-env";
 import { createSlabPricingFromEnv } from "./poketrace-env";
 import { resolveDevAutoSession } from "./session";
+import { startPhotoRetentionJob } from "./photo-retention";
 import { createStoreFromEnv } from "./store-env";
 import { loadOptionalPhashIndex } from "./obb-phash-provider";
 import { resolveLiveIdentityOpenclipFromEnv } from "./live-identity-openclip";
@@ -46,6 +47,15 @@ const app = createApp(store, {
   liveVideoObb: () => liveVideoYoloHolder.detector,
   liveIdentifyEnabled: recognitionSelection.identifyEnabled,
 });
+startPhotoRetentionJob({
+  purge: (now) => store.purgeExpiredGradePhotos(now),
+  onPurge: (result) => {
+    if (result.deleted > 0) {
+      console.log(`Photo retention: deleted ${result.deleted} graded photo(s) older than 30 days`);
+    }
+  },
+});
+
 void resolveLiveVideoObbDetector().then((detector) => {
   liveVideoYoloHolder.detector = detector;
   console.log(

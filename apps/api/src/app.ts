@@ -341,6 +341,7 @@ export function createApp(
     getScan,
     getScanImage,
     getGradeImage,
+    deleteUserPhotos,
     getGradeEstimateCache,
     saveGradeEstimateCache,
     getSessionByToken,
@@ -1104,6 +1105,16 @@ export function createApp(
     });
   });
 
+  app.post("/v1/account/delete", (c) => {
+    const userId = c.get("userId");
+    const photos = deleteUserPhotos(userId);
+    const staged = gradeUploads.releaseUser(userId);
+    return c.json({
+      ok: true,
+      photosDeleted: photos.deleted + staged,
+    });
+  });
+
   app.get("/v1/identity", async (c) => {
     await bindPokecollectorUser(c.get("identity"));
     return c.json({
@@ -1518,6 +1529,9 @@ export function createApp(
         angledFront: parsed.angledFront ?? [],
         captureMeta: parsed.captureMeta ?? null,
       });
+      const userId = c.get("userId");
+      if (parsed.frontUploadId) gradeUploads.release(userId, parsed.frontUploadId);
+      if (parsed.backUploadId) gradeUploads.release(userId, parsed.backUploadId);
       return c.json(result);
     },
   );
@@ -1547,11 +1561,18 @@ export function createApp(
         return c.json({ ok: false, error: parsed.error }, parsed.status);
       }
 
+      const createdAt = now().toISOString();
       if (parsed.frontImage) {
-        saveGradeImage(userId, item.inventoryItemId, "front", parsed.frontImage);
+        saveGradeImage(userId, item.inventoryItemId, "front", {
+          ...parsed.frontImage,
+          createdAt,
+        });
       }
       if (parsed.backImage) {
-        saveGradeImage(userId, item.inventoryItemId, "back", parsed.backImage);
+        saveGradeImage(userId, item.inventoryItemId, "back", {
+          ...parsed.backImage,
+          createdAt,
+        });
       }
 
       const frontImage =
@@ -1567,6 +1588,8 @@ export function createApp(
         const cachedEstimate =
           cached?.photoHash === photoHash ? parseStoredGradeEstimate(cached.estimateJson) : null;
         if (cachedEstimate) {
+          if (parsed.frontUploadId) gradeUploads.release(userId, parsed.frontUploadId);
+          if (parsed.backUploadId) gradeUploads.release(userId, parsed.backUploadId);
           return c.json({
             ok: true,
             provider: gradeEstimateHealth(gradingProvider.name),
@@ -1594,6 +1617,8 @@ export function createApp(
         });
       }
 
+      if (parsed.frontUploadId) gradeUploads.release(userId, parsed.frontUploadId);
+      if (parsed.backUploadId) gradeUploads.release(userId, parsed.backUploadId);
       return c.json({
         ok: true,
         provider: gradeEstimateHealth(gradingProvider.name),

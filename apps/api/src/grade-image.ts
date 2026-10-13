@@ -7,7 +7,10 @@ import {
 } from "@cardflow/shared";
 import { scanImageExtension, type ScanImageBytes, type ScanImageMimeType } from "./scan-image";
 
-export type GradeImageBytes = ScanImageBytes;
+export interface GradeImageBytes extends ScanImageBytes {
+  /** ISO time the still was persisted. Used by the 30-day retention job. */
+  createdAt?: string;
+}
 
 export interface ImageHeaderSize {
   width: number;
@@ -22,6 +25,10 @@ export interface StagedGradeStill {
 export interface GradeUploadCache {
   stage(userId: string, side: GradeSide, still: StagedGradeStill): string;
   get(userId: string, id: string, side: GradeSide): StagedGradeStill | undefined;
+  /** Drop a raw detect upload after grading finishes. */
+  release(userId: string, id: string): boolean;
+  /** Drop every staged still for this account (account deletion). */
+  releaseUser(userId: string): number;
 }
 
 export function isGradePhotoSide(value: string | undefined): value is GradeSide {
@@ -119,7 +126,11 @@ export function createGradeUploadCache(options?: {
     stage(userId, side, still) {
       sweep();
       const id = crypto.randomUUID();
-      entries.set(id, { userId, side, still, expiresAt: now() + ttlMs });
+      const cleaned: StagedGradeStill = {
+        mimeType: still.mimeType,
+        bytes: stripImageMetadata(still.bytes, still.mimeType),
+      };
+      entries.set(id, { userId, side, still: cleaned, expiresAt: now() + ttlMs });
       return id;
     },
     get(userId, id, side) {
@@ -127,6 +138,21 @@ export function createGradeUploadCache(options?: {
       const entry = entries.get(id);
       if (!entry || entry.userId !== userId || entry.side !== side) return undefined;
       return entry.still;
+    },
+    release(userId, id) {
+      const entry = entries.get(id);
+      if (!entry || entry.userId !== userId) return false;
+      entries.delete(id);
+      return true;
+    },
+    releaseUser(userId) {
+      let deleted = 0;
+      for (const [id, entry] of entries) {
+        if (entry.userId !== userId) continue;
+        entries.delete(id);
+        deleted += 1;
+      }
+      return deleted;
     },
   };
 }
@@ -243,4 +269,304 @@ function readU32BE(bytes: Uint8Array, offset: number): number {
 
 function readU24LE(bytes: Uint8Array, offset: number): number {
   return (bytes[offset] ?? 0) | ((bytes[offset + 1] ?? 0) << 8) | ((bytes[offset + 2] ?? 0) << 16);
+}
+
+function concatBytes(parts: Uint8Array[]): Uint8Array {
+  const total = parts.reduce((sum, part) => sum + part.length, 0);
+  const out = new Uint8Array(total);
+  let offset = 0;
+  for (const part of parts) {
+    out.set(part, offset);
+    offset += part.length;
+  }
+  return out;
+}
+
+function readU16(bytes: Uint8Array, offset: number, littleEndian: boolean): number {
+  return littleEndian
+    ? (bytes[offset] ?? 0) | ((bytes[offset + 1] ?? 0) << 8)
+    : ((bytes[offset] ?? 0) << 8) | (bytes[offset + 1] ?? 0);
+}
+
+function readU32(bytes: Uint8Array, offset: number, littleEndian: boolean): number {
+  return littleEndian
+    ? (bytes[offset] ?? 0) |
+        ((bytes[offset + 1] ?? 0) << 8) |
+        ((bytes[offset + 2] ?? 0) << 16) |
+        ((bytes[offset + 3] ?? 0) << 24)
+    : ((bytes[offset] ?? 0) << 24) |
+        ((bytes[offset + 1] ?? 0) << 16) |
+        ((bytes[offset + 2] ?? 0) << 8) |
+        (bytes[offset + 3] ?? 0);
+}
+
+function walkJpegSegments(
+  bytes: Uint8Array,
+  visit: (marker: number, start: number, segmentLength: number) => void,
+): void {
+  if (bytes.length < 4 || bytes[0] !== 0xff || bytes[1] !== 0xd8) return;
+  let index = 2;
+  while (index + 1 < bytes.length) {
+    if (bytes[index] !== 0xff) return;
+    const marker = bytes[index + 1] ?? 0;
+    if (marker === 0xda || marker === 0xd9) return;
+    if (marker === 0x01 || marker === 0x00 || marker === 0xff || (marker >= 0xd0 && marker <= 0xd8)) {
+      index += 2;
+      continue;
+    }
+    if (index + 3 >= bytes.length) return;
+    const segmentLength = ((bytes[index + 2] ?? 0) << 8) | (bytes[index + 3] ?? 0);
+    if (segmentLength < 2 || index + 2 + segmentLength > bytes.length) return;
+    visit(marker, index, segmentLength);
+    index += 2 + segmentLength;
+  }
+}
+
+function jpegApp1ExifPayloads(bytes: Uint8Array): Uint8Array[] {
+  const payloads: Uint8Array[] = [];
+  walkJpegSegments(bytes, (marker, start, segmentLength) => {
+    if (marker !== 0xe1 || segmentLength < 8) return;
+    const payload = bytes.subarray(start + 4, start + 2 + segmentLength);
+    if (
+      payload[0] === 0x45 &&
+      payload[1] === 0x78 &&
+      payload[2] === 0x69 &&
+      payload[3] === 0x66 &&
+      payload[4] === 0x00 &&
+      payload[5] === 0x00
+    ) {
+      payloads.push(payload.subarray(6));
+    }
+  });
+  return payloads;
+}
+
+function tiffHasGpsIfd(tiff: Uint8Array): boolean {
+  if (tiff.length < 8) return false;
+  const littleEndian = tiff[0] === 0x49 && tiff[1] === 0x49;
+  const bigEndian = tiff[0] === 0x4d && tiff[1] === 0x4d;
+  if (!littleEndian && !bigEndian) return false;
+  const ifdOffset = readU32(tiff, 4, littleEndian);
+  if (ifdOffset + 2 > tiff.length) return false;
+  const count = readU16(tiff, ifdOffset, littleEndian);
+  for (let entry = 0; entry < count; entry++) {
+    const offset = ifdOffset + 2 + entry * 12;
+    if (offset + 12 > tiff.length) break;
+    if (readU16(tiff, offset, littleEndian) === 0x8825) return true;
+  }
+  return false;
+}
+
+function dropJpegPrivacySegments(bytes: Uint8Array): Uint8Array {
+  if (bytes.length < 4 || bytes[0] !== 0xff || bytes[1] !== 0xd8) return bytes;
+  const parts: Uint8Array[] = [bytes.subarray(0, 2)];
+  let index = 2;
+  let changed = false;
+  while (index + 1 < bytes.length) {
+    if (bytes[index] !== 0xff) {
+      parts.push(bytes.subarray(index));
+      break;
+    }
+    const marker = bytes[index + 1] ?? 0;
+    if (marker === 0xda) {
+      parts.push(bytes.subarray(index));
+      break;
+    }
+    if (marker === 0xd9) {
+      parts.push(bytes.subarray(index, index + 2));
+      break;
+    }
+    if (marker === 0x01 || marker === 0x00 || marker === 0xff || (marker >= 0xd0 && marker <= 0xd8)) {
+      parts.push(bytes.subarray(index, index + 2));
+      index += 2;
+      continue;
+    }
+    if (index + 3 >= bytes.length) {
+      parts.push(bytes.subarray(index));
+      break;
+    }
+    const segmentLength = ((bytes[index + 2] ?? 0) << 8) | (bytes[index + 3] ?? 0);
+    if (segmentLength < 2 || index + 2 + segmentLength > bytes.length) {
+      parts.push(bytes.subarray(index));
+      break;
+    }
+    const drop = marker === 0xe1 || marker === 0xed || marker === 0xfe;
+    if (drop) changed = true;
+    else parts.push(bytes.subarray(index, index + 2 + segmentLength));
+    index += 2 + segmentLength;
+  }
+  return changed ? concatBytes(parts) : bytes;
+}
+
+const PNG_PRIVACY_CHUNKS = new Set(["eXIf", "tEXt", "zTXt", "iTXt", "tIME"]);
+
+function walkPngChunks(
+  bytes: Uint8Array,
+  visit: (type: string, start: number, length: number) => void,
+): void {
+  if (
+    bytes.length < 8 ||
+    bytes[0] !== 0x89 ||
+    bytes[1] !== 0x50 ||
+    bytes[2] !== 0x4e ||
+    bytes[3] !== 0x47
+  ) {
+    return;
+  }
+  let index = 8;
+  while (index + 12 <= bytes.length) {
+    const length = readU32BE(bytes, index);
+    const type = String.fromCharCode(
+      bytes[index + 4] ?? 0,
+      bytes[index + 5] ?? 0,
+      bytes[index + 6] ?? 0,
+      bytes[index + 7] ?? 0,
+    );
+    const chunkEnd = index + 12 + length;
+    if (length < 0 || chunkEnd > bytes.length) return;
+    visit(type, index, chunkEnd - index);
+    index = chunkEnd;
+    if (type === "IEND") return;
+  }
+}
+
+function dropPngPrivacyChunks(bytes: Uint8Array): Uint8Array {
+  if (bytes.length < 8) return bytes;
+  const parts: Uint8Array[] = [bytes.subarray(0, 8)];
+  let changed = false;
+  walkPngChunks(bytes, (type, start, length) => {
+    if (PNG_PRIVACY_CHUNKS.has(type)) {
+      changed = true;
+      return;
+    }
+    parts.push(bytes.subarray(start, start + length));
+  });
+  return changed ? concatBytes(parts) : bytes;
+}
+
+function webpChunkType(bytes: Uint8Array, offset: number): string {
+  return String.fromCharCode(
+    bytes[offset] ?? 0,
+    bytes[offset + 1] ?? 0,
+    bytes[offset + 2] ?? 0,
+    bytes[offset + 3] ?? 0,
+  );
+}
+
+function walkWebpChunks(
+  bytes: Uint8Array,
+  visit: (type: string, start: number, length: number, payload: Uint8Array) => void,
+): void {
+  if (
+    bytes.length < 12 ||
+    bytes[0] !== 0x52 ||
+    bytes[1] !== 0x49 ||
+    bytes[2] !== 0x46 ||
+    bytes[3] !== 0x46 ||
+    bytes[8] !== 0x57 ||
+    bytes[9] !== 0x45 ||
+    bytes[10] !== 0x42 ||
+    bytes[11] !== 0x50
+  ) {
+    return;
+  }
+  let index = 12;
+  while (index + 8 <= bytes.length) {
+    const size =
+      (bytes[index + 4] ?? 0) |
+      ((bytes[index + 5] ?? 0) << 8) |
+      ((bytes[index + 6] ?? 0) << 16) |
+      ((bytes[index + 7] ?? 0) << 24);
+    const padded = size + (size % 2);
+    const end = index + 8 + padded;
+    if (size < 0 || end > bytes.length) return;
+    visit(
+      webpChunkType(bytes, index),
+      index,
+      end - index,
+      bytes.subarray(index + 8, index + 8 + size),
+    );
+    index = end;
+  }
+}
+
+function dropWebpPrivacyChunks(bytes: Uint8Array): Uint8Array {
+  if (bytes.length < 12) return bytes;
+  const parts: Uint8Array[] = [];
+  let changed = false;
+  walkWebpChunks(bytes, (type, start, length, payload) => {
+    if (type === "EXIF" || type === "XMP ") {
+      changed = true;
+      return;
+    }
+    if (type === "VP8X" && payload.length >= 1) {
+      const flags = payload[0] ?? 0;
+      const cleaned = flags & ~0x30;
+      if (cleaned !== flags) {
+        changed = true;
+        const chunk = bytes.slice(start, start + length);
+        chunk[8] = cleaned;
+        parts.push(chunk);
+        return;
+      }
+    }
+    parts.push(bytes.subarray(start, start + length));
+  });
+  if (!changed) return bytes;
+  const body = concatBytes(parts);
+  const out = new Uint8Array(12 + body.length);
+  out.set(bytes.subarray(0, 12), 0);
+  out.set(body, 12);
+  const riffSize = out.length - 8;
+  out[4] = riffSize & 0xff;
+  out[5] = (riffSize >> 8) & 0xff;
+  out[6] = (riffSize >> 16) & 0xff;
+  out[7] = (riffSize >> 24) & 0xff;
+  return out;
+}
+
+/** True when the still still carries an EXIF APP1, PNG eXIf, or WebP EXIF chunk. */
+export function imageCarriesExif(bytes: Uint8Array): boolean {
+  if (jpegApp1ExifPayloads(bytes).length > 0) return true;
+  let pngExif = false;
+  walkPngChunks(bytes, (type) => {
+    if (type === "eXIf") pngExif = true;
+  });
+  if (pngExif) return true;
+  let webpExif = false;
+  walkWebpChunks(bytes, (type) => {
+    if (type === "EXIF") webpExif = true;
+  });
+  return webpExif;
+}
+
+/** True when EXIF includes a GPS IFD (tag 0x8825). */
+export function imageCarriesGps(bytes: Uint8Array): boolean {
+  if (jpegApp1ExifPayloads(bytes).some(tiffHasGpsIfd)) return true;
+  let found = false;
+  walkPngChunks(bytes, (type, start, length) => {
+    if (type !== "eXIf") return;
+    const payload = bytes.subarray(start + 8, start + length - 4);
+    if (tiffHasGpsIfd(payload)) found = true;
+  });
+  if (found) return true;
+  walkWebpChunks(bytes, (type, _start, _length, payload) => {
+    if (type === "EXIF" && tiffHasGpsIfd(payload)) found = true;
+  });
+  return found;
+}
+
+/**
+ * Second-line strip of EXIF/GPS/XMP/IPTC/COM. Pixel data is left alone so a
+ * still that was already re-encoded on the phone stays bit-identical.
+ */
+export function stripImageMetadata(
+  bytes: Uint8Array,
+  mimeType?: string | null,
+): Uint8Array {
+  const mime = mimeType ?? (bytes[0] === 0xff ? "image/jpeg" : bytes[0] === 0x89 ? "image/png" : "image/webp");
+  if (mime === "image/jpeg") return dropJpegPrivacySegments(bytes);
+  if (mime === "image/png") return dropPngPrivacyChunks(bytes);
+  if (mime === "image/webp") return dropWebpPrivacyChunks(bytes);
+  return bytes;
 }
