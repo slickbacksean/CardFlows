@@ -68,6 +68,7 @@ describe("Expo Go runtime guards", () => {
     const finder = readRepoFile("apps/mobile/components/ui/grade-card-finder.tsx");
     const flow = readRepoFile("apps/mobile/components/ui/photo-grade-flow.tsx");
     const photos = readRepoFile("apps/mobile/lib/grade-photos.ts");
+    const session = readRepoFile("apps/mobile/lib/grade-flow-session.ts");
     const mobilePackage = readRepoFile("apps/mobile/package.json");
     const rootPackage = readRepoFile("package.json");
 
@@ -79,6 +80,10 @@ describe("Expo Go runtime guards", () => {
     expect(photos).toContain('from "expo-image-picker"');
     expect(photos).toContain('from "expo-image-manipulator"');
     expect(photos).not.toMatch(/expo-sensors|@capacitor|@capgo/);
+    expect(session).toContain("createGradeFlowSession");
+    expect(session).not.toMatch(/expo-sensors|@capacitor|@capgo|cardflow-live-video/);
+    expect(flow).toContain("gradeFlowSession");
+    expect(flow).toContain("GRADE_FLOW_RETRY_LABEL");
     expect(mobilePackage).toContain("expo-image-manipulator");
     expect(mobilePackage).not.toMatch(/expo-sensors|@capacitor|@capgo/);
     expect(rootPackage).not.toMatch(/expo-sensors|@capacitor\/|@capgo\//);
