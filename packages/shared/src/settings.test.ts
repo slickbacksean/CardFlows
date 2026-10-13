@@ -98,6 +98,13 @@ describe("Settings stack labels", () => {
     liveVideoYolo: false,
     liveIdentityVisual: "openclip",
     gradeEstimate: "cardgrading",
+    gradeEngine: {
+      ok: true,
+      opencv: "4.10.0",
+      numpy: "2.2.0",
+      error: null,
+      checkedAt: "2026-10-13T00:00:00.000Z",
+    },
     slabPricing: "poketrace",
   };
 

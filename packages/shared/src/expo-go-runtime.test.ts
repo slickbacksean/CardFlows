@@ -81,6 +81,16 @@ describe("Expo Go runtime guards", () => {
     expect(mobilePackage).not.toMatch(/expo-sensors|@capacitor|@capgo/);
     expect(rootPackage).not.toMatch(/expo-sensors|@capacitor\/|@capgo\//);
 
+    const sentry = readRepoFile("apps/mobile/lib/sentry.ts");
+    const layout = readRepoFile("apps/mobile/app/_layout.tsx");
+    expect(layout).toContain("initMobileSentry");
+    expect(sentry).toContain("EXPO_PUBLIC_SENTRY_DSN");
+    expect(sentry).not.toMatch(/from\s+["']@sentry\/react-native["']/);
+    expect(sentry).toContain('require("@sentry/react-native")');
+    expect(sentry).toContain("enableNative: native");
+    expect(sentry).toContain("replaysSessionSampleRate: 0");
+    expect(sentry).toContain("attachScreenshot: false");
+
     const sources = walkSourceFiles(path.join(mobileRoot, "app"))
       .concat(walkSourceFiles(path.join(mobileRoot, "components")))
       .concat(walkSourceFiles(path.join(mobileRoot, "lib")));

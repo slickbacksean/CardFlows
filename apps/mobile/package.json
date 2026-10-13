@@ -12,9 +12,10 @@
   },
   "dependencies": {
     "@cardflow/shared": "workspace:*",
-    "cardflow-live-video": "file:./modules/cardflow-live-video",
     "@expo/metro-runtime": "~57.0.16",
     "@expo/vector-icons": "^15.0.3",
+    "@sentry/react-native": "~7.11.0",
+    "cardflow-live-video": "file:./modules/cardflow-live-video",
     "expo": "~57.0.24",
     "expo-camera": "~57.0.5",
     "expo-clipboard": "~57.0.2",

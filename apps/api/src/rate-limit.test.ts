@@ -73,7 +73,9 @@ describe("grader child process", () => {
     const status = await probe();
     expect(status.ok).toBe(false);
     expect(status.opencv).toBeNull();
-    expect(await probe()).toBe(status);
+    const again = await probe();
+    expect(again.ok).toBe(false);
+    expect(again).not.toBe(status);
   });
 });
 

@@ -32,6 +32,7 @@ import {
   type RecognitionScenario,
 } from "@cardflow/shared";
 import { Platform } from "react-native";
+import { createRequestId, rememberRequestId } from "./request-id";
 import { isPhysicalRuntime } from "./runtime-host";
 import { peekSessionToken, waitForSessionRestore } from "./session-token";
 
@@ -286,6 +287,9 @@ async function request<T>(
   if (!isFormData) headers["Content-Type"] = "application/json";
   const token = peekSessionToken();
   if (token) headers.Authorization = `Bearer ${token}`;
+  const requestId = createRequestId();
+  headers["x-request-id"] = requestId;
+  rememberRequestId(requestId);
 
   const url = `${apiUrl()}${path}`;
   const controller = new AbortController();

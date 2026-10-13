@@ -40,7 +40,9 @@ import {
   pricingProviderHealth,
   recognitionHealth,
   catalogHealth,
+  GRADE_ENGINE_STILL_RUNNING,
   healthMockProviders,
+  healthOk,
   emptyGradeEstimate,
   unavailableGradeEstimate,
   parseStoredGradeEstimate,
@@ -96,6 +98,8 @@ import {
 } from "./rate-limit";
 import type { CardgradingEngineStatus, ConcurrencyGate } from "./cardgrading-run";
 import { corsOriginsFromEnv } from "./cors-env";
+import { REQUEST_ID_HEADER, resolveRequestId } from "./request-id";
+import { captureApiException } from "./sentry";
 import {
   JSON_BODY_MAX_BYTES,
   LIVESTREAM_IDENTIFY_BODY_MAX_BYTES,
@@ -148,6 +152,7 @@ type AppEnv = {
   Variables: {
     userId: string;
     identity: InvitedIdentity;
+    requestId: string;
   };
 };
 
@@ -163,7 +168,7 @@ async function boundedProbe(
           ok: false,
           opencv: null,
           numpy: null,
-          error: "grader check still running",
+          error: GRADE_ENGINE_STILL_RUNNING,
           checkedAt: new Date().toISOString(),
         }),
       3_000,
@@ -295,7 +300,7 @@ export interface CreateAppOptions {
    * for the Grade tab. Null/omitted → the photo routes answer "unavailable".
    */
   cardgrading?: CardgradingRunner | null;
-  /** Real OpenCV import check for /health (cached). Omitted → `gradeEngine: null`. */
+  /** Real OpenCV import check for /health. Failed probes are re-run. Omitted → `gradeEngine: null`. */
   gradeEngineProbe?: (() => Promise<CardgradingEngineStatus>) | null;
   /** Grading route rate limit. Defaults to env (`CARD_FLOW_GRADE_RATE_*`); off in tests. */
   gradeRateLimit?: RateLimitConfig | null;
@@ -601,12 +606,24 @@ export function createApp(
   }
 
   const app = new Hono<AppEnv>();
+  app.use("*", async (c, next) => {
+    const requestId = resolveRequestId(c.req.header(REQUEST_ID_HEADER));
+    c.set("requestId", requestId);
+    c.header(REQUEST_ID_HEADER, requestId);
+    await next();
+    if (c.req.path !== "/health" && process.env.VITEST !== "true") {
+      console.log(`${c.req.method} ${c.req.path} ${c.res.status} ${requestId}`);
+    }
+  });
   app.onError((err, c) => {
+    const requestId = c.get("requestId") ?? resolveRequestId();
+    c.header(REQUEST_ID_HEADER, requestId);
     const message = err instanceof Error ? err.message : "";
     if (err instanceof SyntaxError || /JSON|Unexpected token|Malformed/i.test(message)) {
       return c.json({ ok: false, error: "Invalid request" }, 400);
     }
-    console.error(err);
+    captureApiException(err, { requestId });
+    console.error(`[${requestId}]`, err);
     return c.json({ ok: false, error: "Something went wrong" }, 500);
   });
   const allowedOrigins = new Set(options.corsOrigins ?? corsOriginsFromEnv());
@@ -614,6 +631,7 @@ export function createApp(
     "/*",
     cors({
       origin: (origin) => (allowedOrigins.has(origin) ? origin : undefined),
+      exposeHeaders: [REQUEST_ID_HEADER],
     }),
   );
 
@@ -666,26 +684,31 @@ export function createApp(
       gradeEstimate: gradeEstimateStatus,
       slabPricing: slabPricingStatus,
     });
-    return c.json({
-      ok: true,
-      service: "cardflow-api",
-      mock: mockProviders.length > 0,
-      mockProviders,
-      catalog: catalogStatus,
-      recognition: recognitionStatus,
-      pricingProvider: pricingProviderHealth(pricing.name),
-      livestreamIdentify,
-      liveVideoYolo: liveVideoObb() != null,
-      liveIdentityVisual: liveIdentityVisualHealth({
+    const gradeEngine = gradeEngineProbe ? await boundedProbe(gradeEngineProbe) : null;
+    const ok = healthOk(gradeEngine);
+    return c.json(
+      {
+        ok,
+        service: "cardflow-api",
+        mock: mockProviders.length > 0,
+        mockProviders,
+        catalog: catalogStatus,
+        recognition: recognitionStatus,
+        pricingProvider: pricingProviderHealth(pricing.name),
         livestreamIdentify,
-        openclipConfigured: liveIdentityOpenclip != null,
-        phashIndexLoaded: livestreamIdentityIndex != null,
-      }),
-      gradeEstimate: gradeEstimateStatus,
-      // Real `import cv2, numpy` in the grader Python (cached 5 min). null = no grader runner.
-      gradeEngine: gradeEngineProbe ? await boundedProbe(gradeEngineProbe) : null,
-      slabPricing: slabPricingStatus,
-    });
+        liveVideoYolo: liveVideoObb() != null,
+        liveIdentityVisual: liveIdentityVisualHealth({
+          livestreamIdentify,
+          openclipConfigured: liveIdentityOpenclip != null,
+          phashIndexLoaded: livestreamIdentityIndex != null,
+        }),
+        gradeEstimate: gradeEstimateStatus,
+        // Real `import cv2, numpy` in the grader Python. Failed probes are not cached.
+        gradeEngine,
+        slabPricing: slabPricingStatus,
+      },
+      ok ? 200 : 503,
+    );
   });
 
   app.get("/v1/catalog/search", async (c) => {
