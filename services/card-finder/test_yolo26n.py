@@ -7,6 +7,8 @@ import sys
 import unittest
 from pathlib import Path
 
+import numpy as np
+
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 
@@ -37,6 +39,19 @@ class Yolo26nRunnerTests(unittest.TestCase):
         self.assertAlmostEqual(pts[1, 0], 70)
         self.assertAlmostEqual(pts[2, 0], 70)
         self.assertAlmostEqual(pts[3, 0], 30)
+
+    def test_obb_corners_stay_cyclic_at_45_degrees(self) -> None:
+        """Same 45° case as score.order_corners: no collapsed/self-crossing quad."""
+        from score import order_corners
+
+        diamond = np.array([[100, 0], [200, 100], [100, 200], [0, 100]], float)
+        for perm in ([0, 1, 2, 3], [2, 0, 3, 1], [3, 2, 1, 0]):
+            q = order_corners(diamond[list(perm)])
+            self.assertEqual(len({tuple(p) for p in q}), 4)
+        pts = corners_from_xywhr(
+            100, 100, math.sqrt(2) * 100, math.sqrt(2) * 100, math.radians(45)
+        )
+        self.assertEqual(len({tuple(np.round(p, 6)) for p in pts}), 4)
 
     def test_card_like_aspect(self) -> None:
         self.assertTrue(card_like(200, 280, 640, 480))

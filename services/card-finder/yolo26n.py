@@ -56,24 +56,14 @@ def corners_from_xyxy(x1: float, y1: float, x2: float, y2: float) -> np.ndarray:
 
 def corners_from_xywhr(cx: float, cy: float, width: float, height: float, radians: float) -> np.ndarray:
     """YOLO OBB xywhr → four corners, then ordered TL, TR, BR, BL of the upright card."""
+    from score import order_corners
+
     hw, hh = width / 2.0, height / 2.0
     local = np.array([[-hw, -hh], [hw, -hh], [hw, hh], [-hw, hh]], dtype=np.float64)
     cos_a, sin_a = float(np.cos(radians)), float(np.sin(radians))
     rot = np.array([[cos_a, -sin_a], [sin_a, cos_a]], dtype=np.float64)
     pts = local @ rot.T + np.array([cx, cy], dtype=np.float64)
-    return order_tl_tr_br_bl(pts)
-
-
-def order_tl_tr_br_bl(points: np.ndarray) -> np.ndarray:
-    pts = np.asarray(points, dtype=np.float64).reshape(4, 2)
-    ordered = np.zeros((4, 2), dtype=np.float64)
-    total = pts.sum(axis=1)
-    diff = np.diff(pts, axis=1).reshape(-1)
-    ordered[0] = pts[np.argmin(total)]
-    ordered[2] = pts[np.argmax(total)]
-    ordered[1] = pts[np.argmin(diff)]
-    ordered[3] = pts[np.argmax(diff)]
-    return ordered
+    return order_corners(pts)
 
 
 def card_like(width: float, height: float, frame_w: int, frame_h: int) -> bool:
