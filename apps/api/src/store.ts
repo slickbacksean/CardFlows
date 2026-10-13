@@ -91,9 +91,10 @@ export interface InventoryItemRecord {
   condition: string | null;
   quantity: number | null;
   tags: string[];
-  workflowState: "acquired" | "watching" | "drafted" | "details_needed";
+  workflowState: "acquired" | "watching" | "drafted" | "details_needed" | "watchlist_closed";
   referencePriceAmount: string | null;
   targetMaxBuyAmount: string | null;
+  closedAt?: string | null;
   createdAt: string;
   purchase: {
     purchaseId: string;

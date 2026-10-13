@@ -166,6 +166,18 @@ function grainForIntent(intent: InventoryIntent): InventoryItemRecord["grain"] {
   return intent === "purchased" ? "physical_copy" : "interest_not_physical_copy";
 }
 
+function workflowStateFromRow(value: string): InventoryItemRecord["workflowState"] {
+  if (
+    value === "drafted" ||
+    value === "watching" ||
+    value === "details_needed" ||
+    value === "watchlist_closed"
+  ) {
+    return value;
+  }
+  return "acquired";
+}
+
 function asDraftStatus(value: string): ListingDraftStatus {
   return value === "ready_for_review" ? "ready_for_review" : "draft";
 }
@@ -895,16 +907,10 @@ export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStor
       condition: item.condition,
       quantity: item.quantity,
       tags: parseTags(item.tags),
-      workflowState:
-        item.workflowState === "drafted"
-          ? "drafted"
-          : item.workflowState === "watching"
-            ? "watching"
-            : item.workflowState === "details_needed"
-              ? "details_needed"
-              : "acquired",
+      workflowState: workflowStateFromRow(item.workflowState),
       referencePriceAmount: dollarsFromCents(item.referencePriceAmount),
       targetMaxBuyAmount: dollarsFromCents(item.targetMaxBuyAmount),
+      closedAt: item.closedAt ?? null,
       createdAt: item.createdAt,
       purchase: purchase ? purchaseFromRow(item, purchase) : null,
     };
@@ -1015,7 +1021,7 @@ export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStor
         workflowState: item.workflowState,
         targetMaxBuyAmount: optionalDollarsToCents(item.targetMaxBuyAmount),
         referencePriceAmount: optionalDollarsToCents(item.referencePriceAmount),
-        closedAt: null,
+        closedAt: item.closedAt ?? null,
         createdAt: item.createdAt,
         updatedAt: now,
       })
@@ -1029,6 +1035,7 @@ export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStor
           workflowState: item.workflowState,
           targetMaxBuyAmount: optionalDollarsToCents(item.targetMaxBuyAmount),
           referencePriceAmount: optionalDollarsToCents(item.referencePriceAmount),
+          closedAt: item.closedAt ?? null,
           updatedAt: now,
         },
       })

@@ -12,20 +12,40 @@ import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { playPurchasedSuccessHaptic } from "@/components/ui/hud-bubble";
 import { PrimaryButton } from "@/components/ui/primary-button";
 import { WatchlistSheet } from "@/components/ui/watchlist-sheet";
-import { getCard, getPriceEstimate, savePurchased, saveWatchlist } from "@/lib/api";
+import {
+  convertWatchlistToPurchased,
+  getCard,
+  getPriceEstimate,
+  savePurchased,
+  saveWatchlist,
+} from "@/lib/api";
 import { loadMaxBuyPreferences, peekMaxBuyPreferences } from "@/lib/preferences";
 import { colors, space } from "@/lib/theme";
 import { defaultVariantId, variantOptions } from "@/lib/variants";
 
 export default function DecideScreen() {
   const router = useRouter();
-  const { cardflowCardId, confirmationId, intent, referencePriceAmount } = useLocalSearchParams<{
+  const {
+    cardflowCardId,
+    confirmationId,
+    intent,
+    inventoryItemId,
+    referencePriceAmount,
+    selectedVariant: routeVariant,
+    targetMaxBuyAmount,
+    condition: routeCondition,
+  } = useLocalSearchParams<{
     cardflowCardId: string;
     confirmationId: string;
     intent?: string | string[];
+    inventoryItemId?: string | string[];
     referencePriceAmount?: string | string[];
+    selectedVariant?: string | string[];
+    targetMaxBuyAmount?: string | string[];
+    condition?: string | string[];
   }>();
   const [card, setCard] = useState<CardFlowCanonicalCard | null>(null);
   const [selectedVariant, setSelectedVariant] = useState("normal");
@@ -40,10 +60,13 @@ export default function DecideScreen() {
   const [preferences, setPreferences] = useState<MaxBuyPreferences>(
     peekMaxBuyPreferences,
   );
-  const [condition, setCondition] = useState<(typeof CONDITION_LABELS)[number]>("NM");
+  const [condition, setCondition] = useState<(typeof CONDITION_LABELS)[number]>(
+    () => conditionFromParam(routeCondition),
+  );
   const confirmationIdValue = Array.isArray(confirmationId)
     ? confirmationId[0]
     : confirmationId;
+  const watchlistItemId = firstSearchParam(inventoryItemId);
   const savedIntentRaw = Array.isArray(intent) ? intent[0] : intent;
   const savedIntent =
     savedIntentRaw === "watchlist" || savedIntentRaw === "purchased"
@@ -77,7 +100,10 @@ export default function DecideScreen() {
         if (cancelled) return;
         setCard(result.canonicalCard);
         setSelectedVariant(
-          defaultVariantId(result.canonicalCard.variants, result.canonicalCard.selectedVariant),
+          defaultVariantId(
+            result.canonicalCard.variants,
+            firstSearchParam(routeVariant) ?? result.canonicalCard.selectedVariant,
+          ),
         );
         setError(null);
       } catch (caught) {
@@ -90,7 +116,7 @@ export default function DecideScreen() {
     return () => {
       cancelled = true;
     };
-  }, [cardflowCardId]);
+  }, [cardflowCardId, routeVariant]);
 
   useEffect(() => {
     if (!card?.tcgdexId || !canCommitInventory) return;
@@ -177,6 +203,27 @@ export default function DecideScreen() {
       router.replace({
         pathname: "/(tabs)/collection",
         params: { segment: "purchased" },
+      });
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Save failed");
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  async function onWatchlistPurchased() {
+    if (!watchlistItemId) return;
+    setIsSaving(true);
+    setError(null);
+    try {
+      const saved = await convertWatchlistToPurchased(watchlistItemId);
+      await playPurchasedSuccessHaptic();
+      router.replace({
+        pathname: "/(tabs)/collection",
+        params: {
+          segment: "purchased",
+          purchasedUndoId: saved.item.inventoryItemId,
+        },
       });
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Save failed");
@@ -323,7 +370,24 @@ export default function DecideScreen() {
             ) : savedIntent === "watchlist" ? (
               <View style={styles.missing}>
                 <Text style={styles.body}>Watching. Cannot create a listing draft.</Text>
-                <Text style={styles.body}>Save as Purchased first to draft.</Text>
+                {maxBuy.maxBuyAmount ? (
+                  <Text style={styles.marketPrice}>Max Buy ${maxBuy.maxBuyAmount}</Text>
+                ) : firstSearchParam(targetMaxBuyAmount) ? (
+                  <Text style={styles.marketPrice}>
+                    Max Buy ${firstSearchParam(targetMaxBuyAmount)}
+                  </Text>
+                ) : (
+                  <Text style={styles.body}>No Max Buy snapshot on this Watchlist item.</Text>
+                )}
+                <Text style={styles.body}>
+                  Purchased keeps this card and Max Buy. Price is optional until Collection →
+                  Purchased.
+                </Text>
+                <PrimaryButton
+                  disabled={isSaving || !watchlistItemId}
+                  label={isSaving ? "Saving…" : "Purchased"}
+                  onPress={() => void onWatchlistPurchased()}
+                />
               </View>
             ) : null}
             <GhostButton
@@ -366,6 +430,14 @@ function parsedReference(value: string): string | null {
   const cents = parseDollarsToCents(value);
   if (cents === null) return null;
   return (cents / 100).toFixed(2);
+}
+
+function conditionFromParam(
+  value: string | string[] | undefined,
+): (typeof CONDITION_LABELS)[number] {
+  const raw = firstSearchParam(value);
+  const match = CONDITION_LABELS.find((label) => label === raw);
+  return match ?? CONDITION_LABELS[0];
 }
 
 function firstSearchParam(value: string | string[] | undefined): string | undefined {

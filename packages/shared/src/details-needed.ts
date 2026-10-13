@@ -2,8 +2,11 @@
 export const DETAILS_NEEDED_WORKFLOW_STATE = "details_needed" as const;
 export const DETAILS_NEEDED_LABEL = "Details needed";
 export const LIVESTREAM_SOURCE_TAG = "livestream";
+export const WATCHLIST_CLOSED_WORKFLOW_STATE = "watchlist_closed" as const;
+/** Purchased copies converted from Watchlist keep this tag plus `from_watchlist:{id}`. */
+export const WATCHLIST_SOURCE_TAG = "from_watchlist";
 export const DETAILS_NEEDED_DEBOUNCE_MS = 8_000;
-/** Livestream HUD Purchased toast. Undo within this window reverses the write. */
+/** Livestream HUD and Watchlist Purchased toast. Undo within this window reverses the write. */
 export const PURCHASED_UNDO_TOAST_MS = 5_000;
 export const PURCHASED_UNDO_TOAST_MESSAGE = "Marked Purchased · Undo";
 export const PURCHASED_UNDO_ACTION_LABEL = "Undo";
@@ -121,4 +124,36 @@ export function isRecentDetailsNeededDuplicate(input: {
   const nowMs = input.nowMs ?? Date.now();
   const windowMs = input.windowMs ?? DETAILS_NEEDED_DEBOUNCE_MS;
   return nowMs - createdMs < windowMs;
+}
+
+export function isClosedWatchlist(item: {
+  intent?: string | null;
+  workflowState?: string | null;
+  closedAt?: string | null;
+}): boolean {
+  if (item.intent !== "watchlist") return false;
+  if (item.workflowState === WATCHLIST_CLOSED_WORKFLOW_STATE) return true;
+  return Boolean(item.closedAt);
+}
+
+export function isOpenWatchlist(item: {
+  intent?: string | null;
+  workflowState?: string | null;
+  closedAt?: string | null;
+}): boolean {
+  return item.intent === "watchlist" && !isClosedWatchlist(item);
+}
+
+/** Tags on the new Purchased copy so Undo can reopen the Watchlist row. */
+export function watchlistConversionTags(watchlistItemId: string): string[] {
+  return ["raw", WATCHLIST_SOURCE_TAG, `${WATCHLIST_SOURCE_TAG}:${watchlistItemId}`];
+}
+
+export function watchlistSourceIdFromTags(tags: Iterable<string> | null | undefined): string | null {
+  if (!tags) return null;
+  const prefix = `${WATCHLIST_SOURCE_TAG}:`;
+  for (const tag of tags) {
+    if (tag.startsWith(prefix) && tag.length > prefix.length) return tag.slice(prefix.length);
+  }
+  return null;
 }
