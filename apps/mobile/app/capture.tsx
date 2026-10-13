@@ -18,11 +18,11 @@ import { DevScenarioPanel } from "@/components/ui/dev-scenario-panel";
 import { PrimaryButton } from "@/components/ui/primary-button";
 import { createScan } from "@/lib/api";
 import { getMockScenario } from "@/lib/mock-scenario";
-import { rememberScanCapture } from "@/lib/scan-capture";
+import { prepareScanStill, rememberScanCapture } from "@/lib/scan-capture";
 import { colors, space } from "@/lib/theme";
 
 const IS_NATIVE = Platform.OS === "ios" || Platform.OS === "android";
-const STILL_PHOTO = { quality: 0.8, imageType: "jpg" as const };
+const STILL_PHOTO = { quality: 1, imageType: "jpg" as const };
 
 export default function CaptureScreen() {
   const router = useRouter();
@@ -75,14 +75,23 @@ export default function CaptureScreen() {
     captureMethod: "camera_photo" | "manual_scan",
     imageUri: string | null,
     imageMimeType?: string | null,
+    size?: { width?: number; height?: number },
   ) {
+    let uploadUri = imageUri;
+    let uploadMime = imageMimeType ?? null;
+    if (imageUri) {
+      const prepared = await prepareScanStill(imageUri, imageMimeType, size);
+      if ("error" in prepared) throw new Error(prepared.error);
+      uploadUri = prepared.still.uri;
+      uploadMime = prepared.still.mimeType;
+    }
     const result = await createScan({
       captureMethod,
-      scenario: imageUri || !__DEV__ ? undefined : getMockScenario(),
-      imageUri,
-      imageMimeType,
+      scenario: uploadUri || !__DEV__ ? undefined : getMockScenario(),
+      imageUri: uploadUri,
+      imageMimeType: uploadMime,
     });
-    if (imageUri) rememberScanCapture(result.scan.scanId, imageUri);
+    if (uploadUri) rememberScanCapture(result.scan.scanId, uploadUri);
     router.push(`/scan/${result.scan.scanId}`);
   }
 
@@ -139,7 +148,9 @@ export default function CaptureScreen() {
         mediaTypes: ["images"],
         allowsEditing: false,
         allowsMultipleSelection: false,
-        quality: 0.8,
+        quality: 1,
+        preferredAssetRepresentationMode:
+          ImagePicker.UIImagePickerPreferredAssetRepresentationMode.Compatible,
       });
       if (picked.canceled) return;
       const asset = picked.assets[0];
@@ -149,7 +160,10 @@ export default function CaptureScreen() {
         return;
       }
       setIsSubmitting(true);
-      await postScan("manual_scan", uri, asset?.mimeType ?? null);
+      await postScan("manual_scan", uri, asset?.mimeType ?? null, {
+        width: asset?.width,
+        height: asset?.height,
+      });
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not open the photo library.");
     } finally {

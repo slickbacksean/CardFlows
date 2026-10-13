@@ -647,9 +647,15 @@ export {
   pregradeCopyViolations,
 } from "./pregrade-copy";
 export {
+  GRADE_STILL_MAX_LONG_EDGE_PX,
   GRADE_STILL_MIN_SHORT_SIDE_PX,
+  GRADE_STILL_TOO_LARGE_COPY,
   GRADE_STILL_TOO_SMALL_COPY,
+  GRADE_UPLOAD_EXPIRED_COPY,
+  gradeStillPixelRatio,
+  gradeStillResizeAction,
   largestPictureSize,
+  scaleToLongEdge,
   stillFromCameraCapture,
   type PickedGradeStill,
 } from "./grade-still";

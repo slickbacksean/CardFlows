@@ -144,6 +144,18 @@ describe("first-party scan stills", () => {
     );
     expect(oversize.status).toBe(413);
     expect(await oversize.json()).toMatchObject({ error: "Image must be 20 MB or smaller" });
+
+    const hugeHeader = Uint8Array.from([
+      0xff, 0xd8, 0xff, 0xc0, 0x00, 0x0b, 0x08, 0x1f, 0x40, 0x17, 0x70, 0x01, 0x01, 0x11, 0x00, 0xff, 0xd9,
+    ]);
+    const oversizedPixels = await postScanWithImage(
+      app,
+      new File([hugeHeader], "huge.jpg", { type: "image/jpeg" }),
+    );
+    expect(oversizedPixels.status).toBe(400);
+    expect(await oversizedPixels.json()).toMatchObject({
+      error: "That photo is too large. Long edge must be 4032 pixels or smaller.",
+    });
   });
 
   it("rejects extra JSON and multipart fields before identify", async () => {

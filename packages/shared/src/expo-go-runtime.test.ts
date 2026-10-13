@@ -77,7 +77,9 @@ describe("Expo Go runtime guards", () => {
     expect(flow).toContain("GradeCardFinder");
     expect(flow).not.toMatch(/cardflow-live-video|expo-sensors|@capacitor|@capgo/);
     expect(photos).toContain('from "expo-image-picker"');
+    expect(photos).toContain('from "expo-image-manipulator"');
     expect(photos).not.toMatch(/expo-sensors|@capacitor|@capgo/);
+    expect(mobilePackage).toContain("expo-image-manipulator");
     expect(mobilePackage).not.toMatch(/expo-sensors|@capacitor|@capgo/);
     expect(rootPackage).not.toMatch(/expo-sensors|@capacitor\/|@capgo\//);
 

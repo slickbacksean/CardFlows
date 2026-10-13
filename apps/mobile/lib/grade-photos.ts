@@ -4,13 +4,15 @@ import {
   GRADE_STILL_QUALITY,
   GRADE_STILL_MIN_SHORT_SIDE_PX,
   GRADE_STILL_TOO_SMALL_COPY,
+  gradeStillResizeAction,
   isGradeImageMime,
   largestPictureSize,
   stillFromCameraCapture,
   type PickedGradeStill,
 } from "@cardflow/shared";
+import { manipulateAsync, SaveFormat } from "expo-image-manipulator";
 import * as ImagePicker from "expo-image-picker";
-import { Alert, Platform } from "react-native";
+import { Alert, Image, Platform } from "react-native";
 
 export type { PickedGradeStill };
 export {
@@ -21,13 +23,16 @@ export {
   stillFromCameraCapture,
 };
 
+const CONVERTIBLE_MIME = new Set(["image/heic", "image/heif", "image/heic-sequence"]);
+
 const STILL_PICKER: ImagePicker.ImagePickerOptions = {
   mediaTypes: ["images"],
   allowsEditing: false,
   allowsMultipleSelection: false,
-  quality: GRADE_STILL_QUALITY,
-  // iOS library photos are often HEIC. The offline grader (OpenCV) reads
-  // JPEG/PNG/WebP only, so ask iOS for a compatible JPEG instead.
+  // Full pixels here; `prepareGradeStill` writes JPEG q=0.8 once (and strips EXIF).
+  quality: 1,
+  // iOS library photos are often HEIC. Compatible mode prefers JPEG; prep still
+  // converts whatever lands so Expo Go can upload a JPEG.
   preferredAssetRepresentationMode:
     ImagePicker.UIImagePickerPreferredAssetRepresentationMode.Compatible,
 };
@@ -37,10 +42,12 @@ function mimeFromPickerAsset(asset: ImagePicker.ImagePickerAsset): string | null
   if (mime === "image/jpg" || mime === "image/jpeg") return "image/jpeg";
   if (mime === "image/png") return "image/png";
   if (mime === "image/webp") return "image/webp";
+  if (CONVERTIBLE_MIME.has(mime)) return mime;
   const path = (asset.fileName ?? asset.uri).split("?")[0]?.toLowerCase() ?? "";
   if (path.endsWith(".jpg") || path.endsWith(".jpeg")) return "image/jpeg";
   if (path.endsWith(".png")) return "image/png";
   if (path.endsWith(".webp")) return "image/webp";
+  if (path.endsWith(".heic") || path.endsWith(".heif")) return "image/heic";
   return mime || null;
 }
 
@@ -61,15 +68,75 @@ export function validatePickedGradeStill(
     return { error: GRADE_STILL_TOO_SMALL_COPY };
   }
   const mimeType = mimeFromPickerAsset(asset);
-  if (mimeType && !isGradeImageMime(mimeType)) {
+  if (mimeType && !isGradeImageMime(mimeType) && !CONVERTIBLE_MIME.has(mimeType)) {
+    return { error: "Image must be jpeg, png, or webp" };
+  }
+  return {
+    still: {
+      uri: asset.uri,
+      mimeType,
+      width: asset.width,
+      height: asset.height,
+    },
+  };
+}
+
+async function stillDimensions(
+  uri: string,
+  width?: number,
+  height?: number,
+): Promise<{ width: number; height: number } | null> {
+  if (typeof width === "number" && typeof height === "number" && width > 0 && height > 0) {
+    return { width, height };
+  }
+  try {
+    return await new Promise((resolve, reject) => {
+      Image.getSize(uri, (w, h) => resolve({ width: w, height: h }), reject);
+    });
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Convert HEIC (and anything else the manipulator can open) to JPEG q=0.8,
+ * downscale long edge to 4032 px, and re-encode so EXIF/GPS are dropped.
+ * Uses expo-image-manipulator, which ships in Expo Go.
+ */
+export async function prepareGradeStill(input: {
+  uri: string;
+  mimeType?: string | null;
+  width?: number;
+  height?: number;
+}): Promise<{ still: PickedGradeStill } | { error: string }> {
+  if (!input.uri) return { error: "Could not read that photo. Try another." };
+  try {
+    const size = await stillDimensions(input.uri, input.width, input.height);
+    const resize = size ? gradeStillResizeAction(size.width, size.height) : null;
+    const result = await manipulateAsync(input.uri, resize ? [resize] : [], {
+      compress: GRADE_STILL_QUALITY,
+      format: SaveFormat.JPEG,
+    });
+    if (
+      result.width > 0 &&
+      result.height > 0 &&
+      Math.min(result.width, result.height) < GRADE_STILL_MIN_SHORT_SIDE_PX
+    ) {
+      return { error: GRADE_STILL_TOO_SMALL_COPY };
+    }
     return {
-      error:
-        mimeType === "image/heic" || mimeType === "image/heif"
-          ? "HEIC photos can't be graded. Take the photo in the app, or set Camera > Formats to Most Compatible."
-          : "Image must be jpeg, png, or webp",
+      still: {
+        uri: result.uri,
+        mimeType: "image/jpeg",
+        width: result.width,
+        height: result.height,
+      },
+    };
+  } catch {
+    return {
+      error: "Could not prepare that photo. Try another, or take it in the app.",
     };
   }
-  return { still: { uri: asset.uri, mimeType } };
 }
 
 async function pickFromLibrary(): Promise<ImagePicker.ImagePickerAsset | null> {
@@ -103,7 +170,9 @@ export async function pickGradeStill(
 ): Promise<{ still: PickedGradeStill } | { error: string } | null> {
   const asset = source === "camera" ? await pickFromCamera() : await pickFromLibrary();
   if (!asset) return null;
-  return validatePickedGradeStill(asset);
+  const validated = validatePickedGradeStill(asset);
+  if ("error" in validated) return validated;
+  return prepareGradeStill(validated.still);
 }
 
 export function promptGradeStillSource(
