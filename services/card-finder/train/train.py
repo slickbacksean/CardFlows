@@ -38,8 +38,9 @@ def build_model() -> torch.nn.Module:
 
 
 class SynthStream(IterableDataset):
-    def __init__(self, art: str, tex: str, seed: int, art_ids: set[str]):
+    def __init__(self, art: str, tex: str, seed: int, art_ids: set[str], real: list[Path] | None = None, real_frac: float = 0.0):
         self.art, self.tex, self.seed, self.art_ids = art, tex, seed, art_ids
+        self.real, self.real_frac = real or [], real_frac
 
     def __iter__(self):
         import cv2
@@ -50,8 +51,15 @@ class SynthStream(IterableDataset):
         wid = info.id if info else 0
         synth = Synth(self.art, self.tex, SIZE, seed=self.seed * 1000 + wid, art_ids=self.art_ids)
         np.random.seed(self.seed * 1000 + wid)
+        from real import RealSampler
+
+        real = RealSampler(self.real, "train", SIZE, seed=self.seed * 1000 + wid) if self.real else None
+        pick = np.random.default_rng(self.seed * 7 + wid)
         while True:
-            img, mask = synth.sample()
+            if real is not None and len(real) and pick.random() < self.real_frac:
+                img, mask, _ = real.sample()
+            else:
+                img, mask = synth.sample()
             x = ((img[..., ::-1].astype(np.float32) / 255 - MEAN) / STD).transpose(2, 0, 1)
             yield torch.from_numpy(x.copy()), torch.from_numpy(mask[None].astype(np.float32))
 
@@ -66,6 +74,8 @@ def main() -> None:
     ap.add_argument("--resume", type=Path)
     ap.add_argument("--lr", type=float, default=1e-3)
     ap.add_argument("--seed", type=int, default=1)
+    ap.add_argument("--real", type=Path, nargs="*", default=[], help="real-photo manifests (train split used)")
+    ap.add_argument("--real-frac", type=float, default=0.4)
     args = ap.parse_args()
     torch.manual_seed(0)
     torch.set_num_threads(5)
@@ -79,10 +89,11 @@ def main() -> None:
     ids = art_ids("train")
     config = {"model": "Unet/timm-mobilenetv3_large_100", "encoder_weights": None, "size": SIZE, "steps": args.steps,
               "batch": args.batch, "lr": args.lr, "loss": "bce+dice", "art_train_ids": len(ids), "seed": args.seed,
-              "resumed_from": str(args.resume) if args.resume else None}
+              "resumed_from": str(args.resume) if args.resume else None,
+              "real_manifests": [p.name for p in args.real], "real_frac": args.real_frac if args.real else 0.0}
     args.out.mkdir(parents=True, exist_ok=True)
     (args.out / "card-finder.config.json").write_text(json.dumps(config, indent=2) + "\n")
-    loader = DataLoader(SynthStream(args.art, args.tex, args.seed, ids), batch_size=args.batch, num_workers=3)
+    loader = DataLoader(SynthStream(args.art, args.tex, args.seed, ids, args.real, args.real_frac), batch_size=args.batch, num_workers=3)
     args.out.mkdir(parents=True, exist_ok=True)
     model.train()
     t0 = time.time()
