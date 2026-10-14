@@ -25,6 +25,7 @@ import {
   watchlistConversionTags,
   watchlistSourceIdFromTags,
 } from "./details-needed";
+import { readApiSource, readApiClientSource } from "./repo-sources";
 
 const repoRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 
@@ -145,8 +146,8 @@ describe("details-needed Purchased state", () => {
     const scanTab = readRepoFile("apps/mobile/app/(tabs)/scan-tab.tsx");
     const collection = readRepoFile("apps/mobile/app/(tabs)/collection.tsx");
     const tile = readRepoFile("apps/mobile/components/ui/card-tile.tsx");
-    const api = readRepoFile("apps/api/src/app.ts");
-    const client = readRepoFile("apps/mobile/lib/api.ts");
+    const api = readApiSource();
+    const client = readApiClientSource();
 
     expect(scanTab).toContain("saveLivestreamPurchase");
     expect(scanTab).toContain("streamUrl: chrome.pageUrl");
@@ -175,8 +176,8 @@ describe("details-needed Purchased state", () => {
     const bubble = readRepoFile("apps/mobile/components/ui/hud-bubble.tsx");
     const scanTab = readRepoFile("apps/mobile/app/(tabs)/scan-tab.tsx");
     const purchase = readRepoFile("apps/mobile/components/ui/purchase-sheet.tsx");
-    const client = readRepoFile("apps/mobile/lib/api.ts");
-    const api = readRepoFile("apps/api/src/app.ts");
+    const client = readApiClientSource();
+    const api = readApiSource();
 
     expect(PURCHASED_UNDO_TOAST_MS).toBe(5_000);
     expect(PURCHASED_UNDO_TOAST_MESSAGE).toBe("Marked Purchased · Undo");
@@ -222,9 +223,10 @@ describe("details-needed Purchased state", () => {
     const tile = readRepoFile("apps/mobile/components/ui/card-tile.tsx");
     const purchase = readRepoFile("apps/mobile/components/ui/purchase-sheet.tsx");
     const bubble = readRepoFile("apps/mobile/components/ui/hud-bubble.tsx");
-    const client = readRepoFile("apps/mobile/lib/api.ts");
-    const api = readRepoFile("apps/api/src/app.ts");
-    const convertClient = client.slice(client.indexOf("export function convertWatchlistToPurchased"));
+    const client = readApiClientSource();
+    const api = readApiSource();
+    const convertStart = client.indexOf("export function convertWatchlistToPurchased");
+    const convertClient = client.slice(convertStart, client.indexOf("\nexport ", convertStart + 1));
 
     expect(isOpenWatchlist({ intent: "watchlist", workflowState: "watching" })).toBe(true);
     expect(
@@ -257,7 +259,8 @@ describe("details-needed Purchased state", () => {
     expect(decide).not.toContain("confirmScan");
     expect(decide).not.toContain("PurchaseSheet");
 
-    expect(convertClient).toContain("/purchased");
+    expect(convertClient).toContain("apiContract.convertWatchlistToPurchased");
+    expect(client).toContain('path: "/v1/inventory/:inventoryItemId/purchased"');
     expect(convertClient).not.toContain("createScan");
     expect(convertClient).not.toContain("confirmScan");
     expect(client).toContain("convertWatchlistToPurchased");

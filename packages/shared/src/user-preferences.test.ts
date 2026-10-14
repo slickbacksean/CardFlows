@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import { INVITED_USERS } from "./identity";
 import { DEFAULT_MAX_BUY_PREFERENCES } from "./max-buy";
 import { createUserPreferencesStore } from "./user-preferences";
+import { readApiSource } from "./repo-sources";
 
 const repoRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 
@@ -50,7 +51,7 @@ describe("Preferences per invited user", () => {
 
   it("GET/PATCH /v1/preferences read and write the active user's rules", () => {
     const store = readRepoFile("apps/api/src/store.ts");
-    const api = readRepoFile("apps/api/src/app.ts");
+    const api = readApiSource();
 
     expect(store).toContain("createUserPreferencesStore()");
     expect(exportedFunctionBody(store, "getPreferences")).toContain(

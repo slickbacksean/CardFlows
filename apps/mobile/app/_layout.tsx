@@ -1,3 +1,4 @@
+import { QueryClientProvider } from "@tanstack/react-query";
 import { type ErrorBoundaryProps, Link, Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useEffect, useState } from "react";
@@ -5,6 +6,7 @@ import { StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { PrimaryButton } from "@/components/ui/primary-button";
 import { ensureIdentitySession } from "@/lib/identity";
+import { cardFlowQueryClient } from "@/lib/query-client";
 import { captureMobileException, initMobileSentry } from "@/lib/sentry";
 import { colors, space } from "@/lib/theme";
 
@@ -39,7 +41,7 @@ export default function RootLayout() {
   if (!ready) return null;
 
   return (
-    <>
+    <QueryClientProvider client={cardFlowQueryClient}>
       <Stack
         screenOptions={{
           headerStyle: { backgroundColor: colors.bg },
@@ -65,7 +67,7 @@ export default function RootLayout() {
         <Stack.Screen name="watch" options={{ headerShown: false }} />
       </Stack>
       <StatusBar style="light" />
-    </>
+    </QueryClientProvider>
   );
 }
 

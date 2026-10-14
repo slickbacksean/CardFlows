@@ -414,7 +414,10 @@ describe("PokéCollector catalog + pricing HTTP ports", () => {
       path.join(repoRoot, "apps/mobile/app/(tabs)/collection.tsx"),
       "utf8",
     );
-    expect(mobileApi).toContain("/v1/pricing/cards/");
+    expect(mobileApi).toContain("apiContract.getPriceEstimate");
+    expect(
+      readFileSync(path.join(repoRoot, "packages/shared/src/contract/catalog.ts"), "utf8"),
+    ).toContain('"/v1/pricing/cards/:tcgdexId"');
     expect(mobileApi).not.toMatch(/127\.0\.0\.1:8000|\/api\/cards|\/api\/health/);
     expect(mobileApi).not.toMatch(/CARD_FLOW_POKECOLLECTOR_TOKEN|JWT_SECRET/);
     expect(overlay).not.toMatch(/127\.0\.0\.1:8000|\/api\/cards|Authorization: Bearer/i);

@@ -890,7 +890,10 @@ describe("collection and portfolio read PokéCollector", () => {
     expect(collection).toContain(
       "showDraftCta={item.intent === \"purchased\" && !item.readOnly && !detailsNeeded}",
     );
-    expect(apiClient).toContain('"/v1/portfolio"');
+    expect(apiClient).toContain("apiContract.getPortfolio");
+    expect(
+      readFileSync(path.join(repoRoot, "packages/shared/src/contract/inventory.ts"), "utf8"),
+    ).toContain('"/v1/portfolio"');
     expect(apiClient).not.toMatch(/\/api\/collection|\/api\/wishlist|access_token/i);
   });
 

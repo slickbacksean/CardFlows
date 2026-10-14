@@ -12,6 +12,7 @@ import {
 import { identifyLiveVideo, mockLiveVideoFrame } from "./live-video-identity";
 import { createMockTcgdexCatalogProvider } from "./catalog";
 import { createMockPricingProvider, PRICE_ESTIMATE_REFERENCE_SOURCE } from "./pricing";
+import { readApiSource, readApiClientSource } from "./repo-sources";
 
 const repoRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 
@@ -97,10 +98,10 @@ describe("live overlay guess from catalog + estimate", () => {
   });
 
   it("does not write CRM or PokéCollector collection from the live guess path", () => {
-    const api = readRepoFile("apps/api/src/app.ts");
+    const api = readApiSource();
     const overlay = readRepoFile("apps/mobile/components/ui/screener-overlay.tsx");
     const scanTab = readRepoFile("apps/mobile/app/(tabs)/scan-tab.tsx");
-    const client = readRepoFile("apps/mobile/lib/api.ts");
+    const client = readApiClientSource();
     const routeStart = api.indexOf('app.get("/v1/livestream/guesses/:tcgdexId"');
     expect(routeStart).toBeGreaterThan(-1);
     const route = api.slice(routeStart, api.indexOf("app.post(\"/v1/sessions\"", routeStart));
