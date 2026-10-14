@@ -3,6 +3,10 @@ export const DETAILS_NEEDED_WORKFLOW_STATE = "details_needed" as const;
 export const DETAILS_NEEDED_LABEL = "Details needed";
 export const LIVESTREAM_SOURCE_TAG = "livestream";
 export const DETAILS_NEEDED_DEBOUNCE_MS = 8_000;
+/** Livestream HUD Purchased toast. Undo within this window reverses the write. */
+export const PURCHASED_UNDO_TOAST_MS = 5_000;
+export const PURCHASED_UNDO_TOAST_MESSAGE = "Marked Purchased · Undo";
+export const PURCHASED_UNDO_ACTION_LABEL = "Undo";
 
 export type DetailsNeededWorkflowState = typeof DETAILS_NEEDED_WORKFLOW_STATE;
 

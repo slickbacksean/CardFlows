@@ -785,6 +785,14 @@ export async function saveLivestreamPurchase(input: {
   });
 }
 
+/** Reverses a livestream details-needed Purchased write. Leaves no Purchased row. */
+export function undoLivestreamPurchase(inventoryItemId: string) {
+  return request<{ ok: true; deleted: true }>(
+    `/v1/inventory/${encodeURIComponent(inventoryItemId)}`,
+    { method: "DELETE" },
+  );
+}
+
 export function completePurchasedDetails(
   inventoryItemId: string,
   input: {

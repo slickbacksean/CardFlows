@@ -1,8 +1,12 @@
 import { Image } from "expo-image";
 import { useEffect, useRef, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { AccessibilityInfo, Pressable, StyleSheet, Text, View } from "react-native";
 import { WebView } from "react-native-webview";
-import { HudBubble } from "@/components/ui/hud-bubble";
+import {
+  HudBubble,
+  playPurchasedSuccessHaptic,
+  PurchasedUndoToast,
+} from "@/components/ui/hud-bubble";
 import { livestreamHudPageUrl, publishLivestreamHud } from "@/lib/huds";
 import { getLiveOverlayGuess } from "@/lib/api";
 import { overlayDollarLabel } from "@/lib/livestream";
@@ -15,6 +19,7 @@ import {
   livestreamHudOriginWhitelist,
   livestreamOverlayKind,
   livestreamOverlayUsesHud,
+  PURCHASED_UNDO_TOAST_MS,
   shouldAcceptLiveHudPurchaseTap,
   type LiveOverlayGuess,
   type LiveVideoIdentityResult,
@@ -25,7 +30,10 @@ export interface ScreenerOverlayProps {
   tabFocused?: boolean;
   unavailable?: boolean;
   liveIdentity?: LiveVideoIdentityResult | null;
-  onPurchased?: (guess: LiveOverlayGuess) => void | Promise<void>;
+  onPurchased?: (
+    guess: LiveOverlayGuess,
+  ) => void | Promise<void | { inventoryItemId: string }>;
+  onUndoPurchased?: (inventoryItemId: string) => void | Promise<void>;
 }
 
 export function ScreenerOverlay({
@@ -34,12 +42,16 @@ export function ScreenerOverlay({
   unavailable = false,
   liveIdentity = null,
   onPurchased,
+  onUndoPurchased,
 }: ScreenerOverlayProps) {
   const [hudReady, setHudReady] = useState(false);
   const [liveGuess, setLiveGuess] = useState<LiveOverlayGuess | null>(null);
   const [savingKey, setSavingKey] = useState("");
   const [savedKeys, setSavedKeys] = useState<string[]>([]);
-  const [toast, setToast] = useState<{ key: string; name: string } | null>(null);
+  const [toast, setToast] = useState<{ inventoryItemId: string; matchKey: string } | null>(
+    null,
+  );
+  const [undoing, setUndoing] = useState(false);
   const savingKeyRef = useRef("");
   const savedKeysRef = useRef<string[]>([]);
   const guessKey =
@@ -100,7 +112,8 @@ export function ScreenerOverlay({
 
   useEffect(() => {
     if (!toast) return;
-    const timer = setTimeout(() => setToast(null), 4000);
+    AccessibilityInfo.announceForAccessibility("Marked Purchased. Undo is available.");
+    const timer = setTimeout(() => setToast(null), PURCHASED_UNDO_TOAST_MS);
     return () => clearTimeout(timer);
   }, [toast]);
 
@@ -139,18 +152,34 @@ export function ScreenerOverlay({
     savingKeyRef.current = matchKey;
     setSavingKey(matchKey);
     try {
-      await onPurchased(buyGuess);
+      const result = await onPurchased(buyGuess);
+      await playPurchasedSuccessHaptic();
+      const inventoryItemId =
+        result && typeof result === "object" ? result.inventoryItemId : undefined;
+      if (!inventoryItemId) return;
       if (!savedKeysRef.current.includes(matchKey)) {
         savedKeysRef.current = [...savedKeysRef.current, matchKey];
         setSavedKeys(savedKeysRef.current);
       }
-      setToast({
-        key: `${buyGuess.tcgdexId}:${Date.now()}`,
-        name: buyGuess.name ?? buyGuess.tcgdexId,
-      });
+      setToast({ inventoryItemId, matchKey });
     } finally {
       savingKeyRef.current = "";
       setSavingKey("");
+    }
+  }
+
+  async function undoPurchase() {
+    if (!toast || !onUndoPurchased || undoing) return;
+    const pending = toast;
+    setUndoing(true);
+    try {
+      await onUndoPurchased(pending.inventoryItemId);
+      savedKeysRef.current = savedKeysRef.current.filter((key) => key !== pending.matchKey);
+      setSavedKeys(savedKeysRef.current);
+      setToast(null);
+      AccessibilityInfo.announceForAccessibility("Purchased undone");
+    } finally {
+      setUndoing(false);
     }
   }
 
@@ -164,11 +193,7 @@ export function ScreenerOverlay({
     ) : null;
   const confirmation =
     toast ? (
-      <View pointerEvents="none" style={styles.toast}>
-        <Text numberOfLines={1} style={styles.toastCopy}>
-          Saved {toast.name} — details needed
-        </Text>
-      </View>
+      <PurchasedUndoToast onUndo={() => void undoPurchase()} undoing={undoing} />
     ) : null;
 
   if (overlayKind === "unavailable") {
@@ -456,17 +481,6 @@ const styles = StyleSheet.create({
   },
   buyButtonDisabled: { opacity: 0.5 },
   buyLabel: { color: colors.bg, fontSize: 16, fontWeight: "800" },
-  toast: {
-    marginHorizontal: space.md,
-    marginBottom: space.sm,
-    backgroundColor: colors.elevated,
-    borderColor: colors.cardBorder,
-    borderWidth: 1,
-    borderRadius: 12,
-    paddingHorizontal: space.sm,
-    paddingVertical: 8,
-  },
-  toastCopy: { color: colors.text, fontSize: 13, fontWeight: "700" },
   figureValue: { color: colors.text, fontSize: 16, fontWeight: "800" },
   figureMeta: { color: colors.muted, fontSize: 12, lineHeight: 16 },
   caption: { color: colors.muted, fontSize: 12, lineHeight: 16 },
