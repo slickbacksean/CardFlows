@@ -795,3 +795,5 @@ export type {
   GradeFlowStep,
   GradeFlowStill,
 } from "./grade-flow-resilience";
+export * from "./set-name-map";
+export * from "./catalog-snapshot";
