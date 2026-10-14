@@ -734,3 +734,31 @@ export {
   stillFromCameraCapture,
   type PickedGradeStill,
 } from "./grade-still";
+export {
+  applyRetakeResult,
+  applyScoreResult,
+  applyUnavailableResult,
+  beginGradeSubmit,
+  canBeginGradeSubmit,
+  clearRetakeReasons,
+  createGradeFlowSession,
+  emptyGradeFlowState,
+  formatRetakeReasons,
+  gradeFlowCopyViolations,
+  gradeFlowHasBothPhotos,
+  GRADE_FLOW_RETAKE_HEADING,
+  GRADE_FLOW_RETRY_LABEL,
+  GRADE_FLOW_UNAVAILABLE_BODY,
+  persistGradeFlowOnLeave,
+  retryUnavailable,
+  retakeSideCopy,
+} from "./grade-flow-resilience";
+export type {
+  GradeFlowListener,
+  GradeFlowResultKind,
+  GradeFlowSession,
+  GradeFlowSide,
+  GradeFlowState,
+  GradeFlowStep,
+  GradeFlowStill,
+} from "./grade-flow-resilience";

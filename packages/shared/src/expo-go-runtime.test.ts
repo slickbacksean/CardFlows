@@ -68,6 +68,7 @@ describe("Expo Go runtime guards", () => {
     const finder = readRepoFile("apps/mobile/components/ui/grade-card-finder.tsx");
     const flow = readRepoFile("apps/mobile/components/ui/photo-grade-flow.tsx");
     const photos = readRepoFile("apps/mobile/lib/grade-photos.ts");
+    const session = readRepoFile("apps/mobile/lib/grade-flow-session.ts");
     const mobilePackage = readRepoFile("apps/mobile/package.json");
     const rootPackage = readRepoFile("package.json");
 
@@ -80,6 +81,10 @@ describe("Expo Go runtime guards", () => {
     expect(photos).toContain('from "expo-image-picker"');
     expect(photos).toContain('from "expo-image-manipulator"');
     expect(photos).not.toMatch(/expo-sensors|@capacitor|@capgo/);
+    expect(session).toContain("createGradeFlowSession");
+    expect(session).not.toMatch(/expo-sensors|@capacitor|@capgo|cardflow-live-video/);
+    expect(flow).toContain("gradeFlowSession");
+    expect(flow).toContain("GRADE_FLOW_RETRY_LABEL");
     // expo-sensors is listed for the motionPermission plugin (and PR 39 DeviceMotion).
     // JS must not import it at top level so Expo Go still loads when the native
     // module is missing. PR 39 reaches it only through lib/device-level.ts.
