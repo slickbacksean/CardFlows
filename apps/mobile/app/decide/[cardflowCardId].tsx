@@ -2,7 +2,21 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import {
   computeMaxBuy,
   CONDITION_LABELS,
+  CONFIDENCE_SCREEN_LABEL,
+  CONFIRM_TIPS,
+  HOW_THIS_WORKS_OPEN_LABEL,
+  MAX_BUY_ENTER_REFERENCE_COPY,
+  MAX_BUY_YOUR_RULE_LABEL,
+  PREGRADE_COPY,
+  PRICE_CHECKING_COPY,
+  PRICE_ESTIMATE_SCREEN_LABEL,
+  PRICE_ESTIMATE_UNAVAILABLE_COPY,
+  confidenceWord,
+  formatMaxBuyEstimateMeta,
+  formatPriceEstimateMeta,
   parseDollarsToCents,
+  priceSourceLabel,
+  resolvePriceSourceKind,
   type CardFlowCanonicalCard,
   type CardFlowPriceEstimate,
   type MaxBuyPreferences,
@@ -12,7 +26,9 @@ import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { HowThisWorksSheet } from "@/components/ui/how-this-works-sheet";
 import { playPurchasedSuccessHaptic } from "@/components/ui/hud-bubble";
+import { LabeledFigure } from "@/components/ui/labeled-figure";
 import { PrimaryButton } from "@/components/ui/primary-button";
 import { WatchlistSheet } from "@/components/ui/watchlist-sheet";
 import {
@@ -34,6 +50,7 @@ export default function DecideScreen() {
     intent,
     inventoryItemId,
     referencePriceAmount,
+    confidence,
     selectedVariant: routeVariant,
     targetMaxBuyAmount,
     condition: routeCondition,
@@ -43,6 +60,7 @@ export default function DecideScreen() {
     intent?: string | string[];
     inventoryItemId?: string | string[];
     referencePriceAmount?: string | string[];
+    confidence?: string | string[];
     selectedVariant?: string | string[];
     targetMaxBuyAmount?: string | string[];
     condition?: string | string[];
@@ -57,6 +75,12 @@ export default function DecideScreen() {
   const [watchlistOpen, setWatchlistOpen] = useState(false);
   const [marketEstimate, setMarketEstimate] = useState<CardFlowPriceEstimate | null>(null);
   const [marketState, setMarketState] = useState<"loading" | "ready">("loading");
+  const [priceProvider, setPriceProvider] = useState<string | null>(null);
+  const [priceFetchedAt, setPriceFetchedAt] = useState<string | null>(null);
+  const [howThisWorksOpen, setHowThisWorksOpen] = useState(false);
+  const [referenceFetchedAt, setReferenceFetchedAt] = useState<string | null>(
+    () => (firstSearchParam(referencePriceAmount) ? new Date().toISOString() : null),
+  );
   const [preferences, setPreferences] = useState<MaxBuyPreferences>(
     peekMaxBuyPreferences,
   );
@@ -79,6 +103,7 @@ export default function DecideScreen() {
   if (referenceSeedSeen !== referenceSeed) {
     setReferenceSeedSeen(referenceSeed);
     setReference(routeReference);
+    setReferenceFetchedAt(routeReference ? new Date().toISOString() : null);
   }
   const marketKey = `${canCommitInventory ? (card?.tcgdexId ?? "") : ""}:${selectedVariant}`;
   const [marketKeySeen, setMarketKeySeen] = useState(marketKey);
@@ -86,6 +111,8 @@ export default function DecideScreen() {
     setMarketKeySeen(marketKey);
     setMarketEstimate(null);
     setMarketState("loading");
+    setPriceProvider(null);
+    setPriceFetchedAt(null);
   }
 
   useEffect(() => {
@@ -125,11 +152,15 @@ export default function DecideScreen() {
       .then((result) => {
         if (cancelled) return;
         setMarketEstimate(result.estimate);
+        setPriceProvider(result.provider);
+        setPriceFetchedAt(result.estimate.fetchedAt ?? new Date().toISOString());
         setMarketState("ready");
       })
       .catch(() => {
         if (cancelled) return;
         setMarketEstimate(null);
+        setPriceProvider(null);
+        setPriceFetchedAt(null);
         setMarketState("ready");
       });
     return () => {
@@ -154,16 +185,34 @@ export default function DecideScreen() {
     }, []),
   );
 
+  const typedReference = parsedReference(reference);
+  const estimateReference = marketEstimate?.amount ?? null;
+  const maxBuyReference = typedReference ?? estimateReference;
   const maxBuy = useMemo(
     () =>
       computeMaxBuy({
-        referencePriceAmount: parsedReference(reference),
+        referencePriceAmount: maxBuyReference,
         condition,
         preferences,
       }),
-    [condition, preferences, reference],
+    [condition, maxBuyReference, preferences],
   );
   const hasReference = maxBuy.referencePriceCents !== null;
+  const matchConfidence = confidenceWord(firstSearchParam(confidence));
+  const vendorSourceKind = resolvePriceSourceKind({
+    provider: priceProvider,
+    source: marketEstimate?.source,
+    referenceSource: marketEstimate?.referenceSource,
+  });
+  const maxBuySourceKind = typedReference ? "your_price" : vendorSourceKind;
+  const vendorPriceMeta = formatPriceEstimateMeta({
+    sourceLabel: priceSourceLabel(vendorSourceKind),
+    fetchedAt: priceFetchedAt,
+  });
+  const maxBuyMeta = formatMaxBuyEstimateMeta({
+    sourceLabel: priceSourceLabel(maxBuySourceKind),
+    fetchedAt: typedReference ? referenceFetchedAt : priceFetchedAt,
+  });
 
   const variants = card ? variantOptions(card.variants) : [];
   const title = card ? `${card.name} #${card.localId}` : "";
@@ -187,7 +236,7 @@ export default function DecideScreen() {
     if (!confirmationIdValue) return;
     const marketPrice = marketEstimate?.amount;
     if (!marketPrice) {
-      setError("No market price for this card yet.");
+      setError(PRICE_ESTIMATE_UNAVAILABLE_COPY);
       return;
     }
     setIsSaving(true);
@@ -271,7 +320,15 @@ export default function DecideScreen() {
         <Text numberOfLines={1} style={styles.topTitle}>
           {title}
         </Text>
-        <View style={styles.iconButton} />
+        <Pressable
+          accessibilityLabel={HOW_THIS_WORKS_OPEN_LABEL}
+          accessibilityRole="button"
+          hitSlop={12}
+          onPress={() => setHowThisWorksOpen(true)}
+          style={styles.iconButton}
+        >
+          <Ionicons color={colors.text} name="help-circle-outline" size={26} />
+        </Pressable>
       </View>
 
       <ScrollView
@@ -322,19 +379,38 @@ export default function DecideScreen() {
             <Text style={styles.caption}>Catalog art — not your listing pic</Text>
 
             {canCommitInventory ? (
-              <View style={styles.missing}>
-                <Text style={styles.label}>Market price</Text>
-                {marketState === "loading" ? (
-                  <Text style={styles.body}>Checking current price…</Text>
-                ) : marketEstimate?.amount ? (
-                  <>
-                    <Text style={styles.marketPrice}>${marketEstimate.amount}</Text>
-                    <Text style={styles.body}>{marketEstimate.disclaimer}</Text>
-                  </>
-                ) : (
-                  <Text style={styles.body}>No market price for this card yet.</Text>
-                )}
-              </View>
+              <>
+                <LabeledFigure label={PRICE_ESTIMATE_SCREEN_LABEL} tip={CONFIRM_TIPS.priceSource}>
+                  {marketState === "loading" ? (
+                    <Text style={styles.body}>{PRICE_CHECKING_COPY}</Text>
+                  ) : marketEstimate?.amount ? (
+                    <>
+                      <Text style={styles.marketPrice}>${marketEstimate.amount}</Text>
+                      <Text style={styles.body}>{vendorPriceMeta}</Text>
+                      <Text style={styles.body}>{marketEstimate.disclaimer}</Text>
+                    </>
+                  ) : (
+                    <Text style={styles.body}>{PRICE_ESTIMATE_UNAVAILABLE_COPY}</Text>
+                  )}
+                </LabeledFigure>
+                <LabeledFigure label={MAX_BUY_YOUR_RULE_LABEL} tip={CONFIRM_TIPS.maxBuy}>
+                  {hasReference && maxBuy.maxBuyAmount ? (
+                    <>
+                      <Text style={styles.marketPrice}>${maxBuy.maxBuyAmount}</Text>
+                      <Text style={styles.body}>{maxBuyMeta}</Text>
+                      <Text style={styles.body}>{maxBuy.disclaimer}</Text>
+                    </>
+                  ) : (
+                    <Text style={styles.body}>{MAX_BUY_ENTER_REFERENCE_COPY}</Text>
+                  )}
+                </LabeledFigure>
+                <LabeledFigure label={CONFIDENCE_SCREEN_LABEL} tip={CONFIRM_TIPS.confidence}>
+                  <Text style={styles.body}>{matchConfidence ?? "—"}</Text>
+                </LabeledFigure>
+                <LabeledFigure label={PREGRADE_COPY.title} tip={CONFIRM_TIPS.estimate}>
+                  <Text style={styles.body}>{PREGRADE_COPY.disclaimer}</Text>
+                </LabeledFigure>
+              </>
             ) : null}
 
             {error && !watchlistOpen ? <Text style={styles.error}>{error}</Text> : null}
@@ -391,6 +467,10 @@ export default function DecideScreen() {
               </View>
             ) : null}
             <GhostButton
+              label={HOW_THIS_WORKS_OPEN_LABEL}
+              onPress={() => setHowThisWorksOpen(true)}
+            />
+            <GhostButton
               label="Edit Max Buy rules"
               onPress={() => router.push("/max-buy-rules")}
             />
@@ -403,11 +483,15 @@ export default function DecideScreen() {
           error={watchlistOpen ? error : null}
           isSaving={isSaving}
           disclaimer={maxBuy.disclaimer}
+          estimateMeta={hasReference ? maxBuyMeta : null}
           hasReference={hasReference}
           localId={card.localId}
           maxBuyAmount={maxBuy.maxBuyAmount}
           name={card.name}
-          onChangeReference={setReference}
+          onChangeReference={(value) => {
+            setReference(value);
+            setReferenceFetchedAt(new Date().toISOString());
+          }}
           onClose={() => {
             if (!isSaving) setWatchlistOpen(false);
           }}
@@ -422,6 +506,7 @@ export default function DecideScreen() {
           visible={watchlistOpen}
         />
       ) : null}
+      <HowThisWorksSheet onClose={() => setHowThisWorksOpen(false)} visible={howThisWorksOpen} />
     </SafeAreaView>
   );
 }

@@ -1,5 +1,5 @@
 import type { TcgdexVariants } from "@cardflow/shared";
-import { CONDITION_LABELS } from "@cardflow/shared";
+import { CONDITION_LABELS, MAX_BUY_YOUR_RULE_LABEL } from "@cardflow/shared";
 import { useState } from "react";
 import { Modal, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -19,6 +19,7 @@ export interface WatchlistSheetProps {
   maxBuyAmount: string | null;
   hasReference: boolean;
   disclaimer: string;
+  estimateMeta?: string | null;
   rulesLine: string;
   condition: string;
   onChangeCondition: (condition: (typeof CONDITION_LABELS)[number]) => void;
@@ -50,6 +51,7 @@ function WatchlistSheetForm({
   maxBuyAmount,
   hasReference,
   disclaimer,
+  estimateMeta,
   rulesLine,
   condition,
   onChangeCondition,
@@ -64,8 +66,8 @@ function WatchlistSheetForm({
   );
 
   const targetLine = maxBuyAmount
-    ? `Target Max Buy $${maxBuyAmount} (guidance)`
-    : "Target Max Buy (guidance)";
+    ? `${MAX_BUY_YOUR_RULE_LABEL} $${maxBuyAmount}`
+    : MAX_BUY_YOUR_RULE_LABEL;
 
   return (
     <Modal
@@ -91,7 +93,7 @@ function WatchlistSheetForm({
           <Text style={styles.body}>Not owned. No cost basis.</Text>
           <Text style={styles.body}>Cannot create a listing draft.</Text>
 
-          <Text style={styles.label}>Reference (USD, you typed)</Text>
+          <Text style={styles.label}>Reference (USD, your price)</Text>
           <TextInput
             accessibilityLabel="Reference price"
             keyboardType="decimal-pad"
@@ -104,6 +106,7 @@ function WatchlistSheetForm({
           {hasReference ? (
             <View style={styles.guidance}>
               <Text style={styles.guidanceValue}>{targetLine}</Text>
+              {estimateMeta ? <Text style={styles.body}>{estimateMeta}</Text> : null}
               <Text style={styles.body}>{rulesLine}</Text>
               <Text style={styles.body}>{disclaimer}</Text>
             </View>

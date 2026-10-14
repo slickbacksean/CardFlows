@@ -1,10 +1,14 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import {
   CATALOG_SEARCH_HINT,
+  CONFIDENCE_SCREEN_LABEL,
   CONFIRM_AMBIGUOUS_TITLE,
   CONFIRM_COULD_NOT_CONFIRM_MESSAGE,
   CONFIRM_SEARCH_FRAMES,
   CONFIRM_SEARCH_MANUALLY_LABEL,
+  CONFIRM_TIPS,
+  HOW_THIS_WORKS_OPEN_LABEL,
+  confidenceWord,
   confirmFailSoftBody,
   confirmFailSoftTitle,
   confirmFrameFromScan,
@@ -16,6 +20,8 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { HowThisWorksSheet } from "@/components/ui/how-this-works-sheet";
+import { LabeledFigure } from "@/components/ui/labeled-figure";
 import { PrimaryButton } from "@/components/ui/primary-button";
 import { confirmScan, getScan, rejectScan, searchCatalog, type ScanRecord } from "@/lib/api";
 import { getConfirmPictureUri } from "@/lib/scan-capture";
@@ -38,6 +44,7 @@ export default function ScanScreen() {
   const [searchCached, setSearchCached] = useState(false);
   const [searchNotice, setSearchNotice] = useState<string | null>(null);
   const [isSearching, setIsSearching] = useState(false);
+  const [howThisWorksOpen, setHowThisWorksOpen] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -157,6 +164,7 @@ export default function ScanScreen() {
           cardflowCardId: cardflowCardId as string,
           confirmationId: result.confirmation.confirmationId,
           scanId: result.scan.scanId,
+          confidence: scan.mapping.confidence,
         },
       });
     } catch (caught) {
@@ -223,7 +231,15 @@ export default function ScanScreen() {
           <Ionicons color={colors.text} name="close" size={28} />
         </Pressable>
         <Text style={styles.topTitle}>Confirm card</Text>
-        <View style={styles.iconButton} />
+        <Pressable
+          accessibilityLabel={HOW_THIS_WORKS_OPEN_LABEL}
+          accessibilityRole="button"
+          hitSlop={12}
+          onPress={() => setHowThisWorksOpen(true)}
+          style={styles.iconButton}
+        >
+          <Ionicons color={colors.text} name="help-circle-outline" size={26} />
+        </Pressable>
       </View>
 
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
@@ -241,6 +257,7 @@ export default function ScanScreen() {
           <HighConfirm
             captureUri={captureUri}
             card={selected}
+            confidence={scan.mapping.confidence}
             error={error}
             isConfirming={isConfirming}
             onConfirm={() => void onConfirm()}
@@ -252,6 +269,7 @@ export default function ScanScreen() {
           <AmbiguousConfirm
             captureUri={captureUri}
             cards={scan.mapping.candidates}
+            confidence={scan.mapping.confidence}
             error={error}
             isConfirming={isConfirming}
             onConfirm={() => void onConfirm()}
@@ -326,7 +344,15 @@ export default function ScanScreen() {
             onSecondary={leaveFlow}
           />
         ) : null}
+
+        {scan ? (
+          <GhostButton
+            label={HOW_THIS_WORKS_OPEN_LABEL}
+            onPress={() => setHowThisWorksOpen(true)}
+          />
+        ) : null}
       </ScrollView>
+      <HowThisWorksSheet onClose={() => setHowThisWorksOpen(false)} visible={howThisWorksOpen} />
     </SafeAreaView>
   );
 }
@@ -343,6 +369,7 @@ function variantLabel(card: CardFlowCanonicalCard): string {
 interface HighConfirmProps {
   captureUri: string | null;
   card: CardFlowCanonicalCard;
+  confidence: string;
   error: string | null;
   isConfirming: boolean;
   onConfirm: () => void;
@@ -352,6 +379,7 @@ interface HighConfirmProps {
 function HighConfirm({
   captureUri,
   card,
+  confidence,
   error,
   isConfirming,
   onConfirm,
@@ -370,6 +398,7 @@ function HighConfirm({
         </View>
       </View>
       <IdentityCopy card={card} />
+      <ConfidenceFigure value={confidence} />
       <Text style={styles.body}>Nothing is added until Confirm.</Text>
       {error ? <Text style={styles.error}>{error}</Text> : null}
       <PrimaryButton
@@ -385,6 +414,7 @@ function HighConfirm({
 interface AmbiguousConfirmProps {
   captureUri: string | null;
   cards: CardFlowCanonicalCard[];
+  confidence: string;
   selectedTcgdexId: string | null;
   isConfirming: boolean;
   error: string | null;
@@ -396,6 +426,7 @@ interface AmbiguousConfirmProps {
 function AmbiguousConfirm({
   captureUri,
   cards,
+  confidence,
   selectedTcgdexId,
   isConfirming,
   error,
@@ -423,6 +454,7 @@ function AmbiguousConfirm({
         ))}
       </ScrollView>
       {picked ? <IdentityCopy card={picked} /> : null}
+      <ConfidenceFigure value={confidence} />
       <Text style={styles.body}>{CONFIRM_COULD_NOT_CONFIRM_MESSAGE}</Text>
       {error ? <Text style={styles.error}>{error}</Text> : null}
       <PrimaryButton
@@ -547,6 +579,15 @@ function ManualCatalogSearch({
         </ScrollView>
       ) : null}
     </View>
+  );
+}
+
+function ConfidenceFigure({ value }: { value: string }) {
+  const word = confidenceWord(value);
+  return (
+    <LabeledFigure label={CONFIDENCE_SCREEN_LABEL} tip={CONFIRM_TIPS.confidence}>
+      <Text style={styles.metaLine}>{word ?? "—"}</Text>
+    </LabeledFigure>
   );
 }
 
