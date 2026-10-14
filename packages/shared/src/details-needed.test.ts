@@ -8,13 +8,22 @@ import {
   DETAILS_NEEDED_DEBOUNCE_MS,
   DETAILS_NEEDED_LABEL,
   DETAILS_NEEDED_WORKFLOW_STATE,
+  PURCHASED_UNDO_ACTION_LABEL,
+  PURCHASED_UNDO_TOAST_MESSAGE,
+  PURCHASED_UNDO_TOAST_MS,
+  WATCHLIST_CLOSED_WORKFLOW_STATE,
+  WATCHLIST_SOURCE_TAG,
   detailsNeededCostBasis,
+  isClosedWatchlist,
   isDetailsNeededPurchase,
+  isOpenWatchlist,
   isRecentDetailsNeededDuplicate,
   livestreamContextTags,
   purchasedAllInAmount,
   sanitizeLivestreamUrl,
   shouldAcceptLiveHudPurchaseTap,
+  watchlistConversionTags,
+  watchlistSourceIdFromTags,
 } from "./details-needed";
 
 const repoRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), "../../..");
@@ -159,5 +168,108 @@ describe("details-needed Purchased state", () => {
     expect(api).toContain('app.post("/v1/inventory/:inventoryItemId/purchase"');
     expect(client).toContain("detailsNeeded: true");
     expect(client).toContain("/purchase");
+  });
+
+  it("shows a 5-second VoiceOver/TalkBack Undo toast and haptic instead of a confirm dialog", () => {
+    const overlay = readRepoFile("apps/mobile/components/ui/screener-overlay.tsx");
+    const bubble = readRepoFile("apps/mobile/components/ui/hud-bubble.tsx");
+    const scanTab = readRepoFile("apps/mobile/app/(tabs)/scan-tab.tsx");
+    const purchase = readRepoFile("apps/mobile/components/ui/purchase-sheet.tsx");
+    const client = readRepoFile("apps/mobile/lib/api.ts");
+    const api = readRepoFile("apps/api/src/app.ts");
+
+    expect(PURCHASED_UNDO_TOAST_MS).toBe(5_000);
+    expect(PURCHASED_UNDO_TOAST_MESSAGE).toBe("Marked Purchased · Undo");
+    expect(PURCHASED_UNDO_ACTION_LABEL).toBe("Undo");
+
+    expect(overlay).toContain("PurchasedUndoToast");
+    expect(overlay).toContain("playPurchasedSuccessHaptic");
+    expect(overlay).toContain("PURCHASED_UNDO_TOAST_MS");
+    expect(overlay).toContain("announceForAccessibility");
+    expect(overlay).not.toContain("Alert.alert");
+    expect(overlay).not.toContain("PurchaseSheet");
+    expect(overlay).not.toContain("pointerEvents=\"none\"");
+
+    expect(bubble).toContain('from "expo-haptics"');
+    expect(bubble).toContain("notificationAsync");
+    expect(bubble).toContain("PurchasedUndoToast");
+    expect(bubble).toContain("PURCHASED_UNDO_TOAST_MESSAGE");
+    expect(bubble).toContain('accessibilityRole="alert"');
+    expect(bubble).toContain("accessibilityLiveRegion");
+    expect(bubble).toContain('accessibilityLabel={PURCHASED_UNDO_ACTION_LABEL}');
+    expect(bubble).toContain('accessibilityRole="button"');
+    expect(bubble).toContain("minHeight: 44");
+    expect(bubble).not.toContain("Alert.alert");
+
+    expect(scanTab).toContain("saveLivestreamPurchase");
+    expect(scanTab).toContain("undoLivestreamPurchase");
+    expect(scanTab).toContain("onUndoPurchased");
+    expect(scanTab).not.toContain("PurchaseSheet");
+    expect(scanTab).not.toContain("Alert.alert");
+
+    expect(purchase).not.toContain("Alert.alert");
+    expect(purchase).toContain("Livestream HUD one-tap Purchased never opens this");
+
+    expect(client).toContain("undoLivestreamPurchase");
+    expect(client).toContain("undoPurchased");
+    expect(client).toContain('method: "DELETE"');
+    expect(api).toContain('app.delete("/v1/inventory/:inventoryItemId"');
+  });
+
+  it("converts Watchlist to Purchased in one tap with identity and Max Buy, no rescan", () => {
+    const collection = readRepoFile("apps/mobile/app/(tabs)/collection.tsx");
+    const decide = readRepoFile("apps/mobile/app/decide/[cardflowCardId].tsx");
+    const tile = readRepoFile("apps/mobile/components/ui/card-tile.tsx");
+    const purchase = readRepoFile("apps/mobile/components/ui/purchase-sheet.tsx");
+    const bubble = readRepoFile("apps/mobile/components/ui/hud-bubble.tsx");
+    const client = readRepoFile("apps/mobile/lib/api.ts");
+    const api = readRepoFile("apps/api/src/app.ts");
+    const convertClient = client.slice(client.indexOf("export function convertWatchlistToPurchased"));
+
+    expect(isOpenWatchlist({ intent: "watchlist", workflowState: "watching" })).toBe(true);
+    expect(
+      isClosedWatchlist({
+        intent: "watchlist",
+        workflowState: WATCHLIST_CLOSED_WORKFLOW_STATE,
+      }),
+    ).toBe(true);
+    expect(watchlistConversionTags("wl-1")).toEqual([
+      "raw",
+      WATCHLIST_SOURCE_TAG,
+      `${WATCHLIST_SOURCE_TAG}:wl-1`,
+    ]);
+    expect(watchlistSourceIdFromTags(watchlistConversionTags("wl-1"))).toBe("wl-1");
+
+    expect(collection).toContain("convertWatchlistToPurchased");
+    expect(collection).toContain("playPurchasedSuccessHaptic");
+    expect(collection).toContain("PurchasedUndoToast");
+    expect(collection).toContain("PURCHASED_UNDO_TOAST_MS");
+    expect(collection).toContain("undoPurchased");
+    expect(collection).toContain('accessibilityLabel="Purchased"');
+    expect(collection).not.toContain("Alert.alert");
+    expect(collection).not.toContain("createScan");
+    expect(collection).not.toContain("confirmScan");
+
+    expect(decide).toContain("convertWatchlistToPurchased");
+    expect(decide).toContain("playPurchasedSuccessHaptic");
+    expect(decide).toContain("inventoryItemId");
+    expect(decide).not.toContain("createScan");
+    expect(decide).not.toContain("confirmScan");
+    expect(decide).not.toContain("PurchaseSheet");
+
+    expect(convertClient).toContain("/purchased");
+    expect(convertClient).not.toContain("createScan");
+    expect(convertClient).not.toContain("confirmScan");
+    expect(client).toContain("convertWatchlistToPurchased");
+
+    expect(api).toContain('app.post("/v1/inventory/:inventoryItemId/purchased"');
+    expect(api).toContain("watchlistConversionTags");
+    expect(api).toContain("WATCHLIST_CLOSED_WORKFLOW_STATE");
+    expect(api).toContain("isClosedWatchlist");
+    expect(api).toContain("watchlistSourceIdFromTags");
+
+    expect(bubble).toContain("Watchlist Purchased");
+    expect(purchase).toContain("Watchlist one-tap Purchased");
+    expect(tile).toContain("`Max ${targetMaxBuyDisplay}`");
   });
 });

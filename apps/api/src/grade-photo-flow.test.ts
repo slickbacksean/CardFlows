@@ -1,14 +1,18 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
+  GRADE_STILL_TOO_LARGE_COPY,
+  GRADE_UPLOAD_EXPIRED_COPY,
   PREGRADE_COPY,
   PREGRADE_DISCLAIMER,
   PREGRADE_LABEL,
+  PHOTO_PREGRADE_SOURCE,
   pregradeCopyViolations,
   PREGRADE_SURFACE_NULL_REASON,
   type DetectCropResult,
   type PhotoPregradeResult,
 } from "@cardflow/shared";
+import { createGradeUploadCache } from "./grade-image";
 import { createApp } from "./app";
 import { mapDetectReport, mapGradeCardReport, NOTHING_MEASURED_REASON } from "./cardgrading-map";
 import {
@@ -17,7 +21,7 @@ import {
   type CardgradingRunner,
 } from "./cardgrading-run";
 import { encodePngStill } from "./obb-phash-decode";
-import { createCardgradingProvider, pregradePhotoPair } from "./grade-photo-flow";
+import { createCardgradingProvider, pregradePhotoPair, rejectZeroGrade } from "./grade-photo-flow";
 
 const successReport = JSON.parse(
   readFileSync(new URL("./fixtures/cardgrading-success-report.json", import.meta.url), "utf8"),
@@ -102,6 +106,39 @@ describe("cardgrading mapper (GitHub contract)", () => {
     });
     expect(mapped).toMatchObject({ ok: false, status: "retake", reasons: [NOTHING_MEASURED_REASON] });
     expect("estimate" in mapped).toBe(false);
+  });
+
+  it("is a retake when nothing was measured, even if overall_grade is non-zero", () => {
+    const mapped = mapGradeCardReport({
+      ...successReport,
+      subgrades: { front: {}, back: {} },
+      centering: { front: {}, back: {} },
+      corners_edges: { front: {}, back: {} },
+      surface: { front: {}, back: {} },
+    });
+    expect(mapped).toMatchObject({ ok: false, status: "retake", reasons: [NOTHING_MEASURED_REASON] });
+    expect("estimate" in mapped).toBe(false);
+  });
+
+  it("strips a scored 0 at the flow boundary so no response can carry it", () => {
+    const leaked = rejectZeroGrade({
+      ok: true,
+      status: "scored",
+      label: PREGRADE_LABEL,
+      disclaimer: PREGRADE_DISCLAIMER,
+      source: PHOTO_PREGRADE_SOURCE,
+      estimate: 0,
+      subgrades: {
+        centering: { points: null, front: null, back: null },
+        corners: { points: null, front: null, back: null },
+        edges: { points: null, front: null, back: null },
+        surface: { points: null, front: null, back: null },
+      },
+      note: "",
+    });
+    expect(leaked).toMatchObject({ ok: false, status: "retake", reasons: [NOTHING_MEASURED_REASON] });
+    expect("estimate" in leaked).toBe(false);
+    expect(JSON.stringify(leaked)).not.toMatch(/\bAI\b|\bPSA\b|\bBGS\b|\bCGC\b/);
   });
 
   it("reports an undecodable photo as unreadable, not as card not found", () => {
@@ -239,6 +276,18 @@ describe("cardgrading runner env", () => {
 });
 
 describe("grade photo flow", () => {
+  it("turns a library 0.0 into a retake and never returns estimate 0", async () => {
+    const still = { bytes: solidPng(), mimeType: "image/png" as const };
+    const zeroed = {
+      ...successReport,
+      grade_estimate: { ...(successReport.grade_estimate as Record<string, unknown>), overall_grade: 0.0 },
+    };
+    const result = await pregradePhotoPair({ runner: fakeRunner(zeroed), front: still, back: still });
+    expect(result).toMatchObject({ ok: false, status: "retake", reasons: [NOTHING_MEASURED_REASON] });
+    expect("estimate" in result).toBe(false);
+    expect(JSON.stringify(result)).not.toMatch(/\bAI\b|\bPSA\b|\bBGS\b|\bCGC\b/);
+  });
+
   it("is unavailable, never a number, when the grader is missing or crashes", async () => {
     const still = { bytes: solidPng(), mimeType: "image/png" as const };
     const missing = await pregradePhotoPair({ runner: null, front: still, back: still });
@@ -346,5 +395,111 @@ describe("grade photo flow", () => {
         backImage: img,
       }),
     ).rejects.toThrow();
+  });
+
+  it("blocks duplicate in-flight submits so a double-tap runs the grader once", async () => {
+    let calls = 0;
+    let release!: () => void;
+    const hold = new Promise<void>((r) => {
+      release = r;
+    });
+    let began!: () => void;
+    const started = new Promise<void>((r) => {
+      began = r;
+    });
+    const runner = fakeRunner(successReport);
+    const original = runner.gradeCard.bind(runner);
+    runner.gradeCard = async (input) => {
+      calls += 1;
+      began();
+      await hold;
+      return original(input);
+    };
+    const still = { bytes: solidPng(), mimeType: "image/png" as const };
+    const first = pregradePhotoPair({ runner, front: still, back: still });
+    const second = pregradePhotoPair({ runner, front: still, back: still });
+    await started;
+    expect(calls).toBe(1);
+    release();
+    const results = await Promise.all([first, second]);
+    expect(results[0]).toEqual(results[1]);
+    expect(results[0]?.ok).toBe(true);
+    if (results[0]?.ok) expect(results[0].estimate).toBe(8.4);
+
+    const sequential = await pregradePhotoPair({ runner, front: still, back: still });
+    expect(calls).toBe(2);
+    expect(sequential.ok).toBe(true);
+  });
+});
+
+function jpegSof(width: number, height: number): Uint8Array {
+  return Uint8Array.from([
+    0xff, 0xd8, 0xff, 0xc0, 0x00, 0x0b, 0x08,
+    (height >> 8) & 0xff, height & 0xff,
+    (width >> 8) & 0xff, width & 0xff,
+    0x01, 0x01, 0x11, 0x00, 0xff, 0xd9,
+  ]);
+}
+
+describe("P0-02 single upload and header size reject", () => {
+  it("rejects an oversized JPEG from the header and never runs the grader", async () => {
+    const runner = fakeRunner(successReport);
+    const app = createApp(undefined, { cardgrading: runner, gradeUploads: createGradeUploadCache() });
+    const form = new FormData();
+    form.append("image", new File([jpegSof(8000, 6000)], "huge.jpg", { type: "image/jpeg" }));
+    const res = await app.request("/v1/grade/detect", { method: "POST", body: form });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({ ok: false, error: GRADE_STILL_TOO_LARGE_COPY });
+    expect(runner.calls).toEqual([]);
+  });
+
+  it("pregrades from detect upload ids without a second photo upload", async () => {
+    const runner = fakeRunner(successReport);
+    const app = createApp(undefined, { cardgrading: runner, gradeUploads: createGradeUploadCache() });
+    const frontForm = new FormData();
+    frontForm.append("image", pngFile("front.png"));
+    frontForm.append("side", "front");
+    const frontRes = await app.request("/v1/grade/detect", { method: "POST", body: frontForm });
+    const front = (await frontRes.json()) as DetectCropResult & { uploadId?: string };
+    expect(front).toMatchObject({ ok: true, uploadId: expect.any(String) });
+
+    const backForm = new FormData();
+    backForm.append("image", pngFile("back.png"));
+    backForm.append("side", "back");
+    const backRes = await app.request("/v1/grade/detect", { method: "POST", body: backForm });
+    const back = (await backRes.json()) as DetectCropResult & { uploadId?: string };
+    expect(back).toMatchObject({ ok: true, uploadId: expect.any(String) });
+
+    const grade = new FormData();
+    grade.append("frontUploadId", front.uploadId ?? "");
+    grade.append("backUploadId", back.uploadId ?? "");
+    const scored = await app.request("/v1/grade/pregrade", { method: "POST", body: grade });
+    expect(scored.status).toBe(200);
+    expect(await scored.json()).toMatchObject({
+      ok: true,
+      status: "scored",
+      estimate: 8.4,
+      label: "Pre-grade estimate",
+    });
+    expect(runner.calls).toEqual(["detect .png", "detect .png", "grade .png .png"]);
+
+    const retry = new FormData();
+    retry.append("frontUploadId", front.uploadId ?? "");
+    retry.append("backUploadId", back.uploadId ?? "");
+    const expired = await app.request("/v1/grade/pregrade", { method: "POST", body: retry });
+    expect(expired.status).toBe(400);
+    expect(await expired.json()).toMatchObject({ ok: false, error: GRADE_UPLOAD_EXPIRED_COPY });
+  });
+
+  it("rejects a stale upload id with a retake, not a grader call", async () => {
+    const runner = fakeRunner(successReport);
+    const app = createApp(undefined, { cardgrading: runner, gradeUploads: createGradeUploadCache() });
+    const grade = new FormData();
+    grade.append("frontUploadId", "11111111-1111-1111-1111-111111111111");
+    grade.append("backUploadId", "22222222-2222-2222-2222-222222222222");
+    const res = await app.request("/v1/grade/pregrade", { method: "POST", body: grade });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({ ok: false, error: GRADE_UPLOAD_EXPIRED_COPY });
+    expect(runner.calls).toEqual([]);
   });
 });

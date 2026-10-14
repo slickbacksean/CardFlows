@@ -1,0 +1,39 @@
+{
+  "pr35_warp_eval": "docs/livestream-warp-eval-2026-10-11.json",
+  "method": "32x32 grayscale NCC of warp.py 4-corner straighten vs canonical 63:88",
+  "ncc_match": 0.4,
+  "timing_stages": [
+    "decode",
+    "warp",
+    "embed",
+    "search",
+    "orb"
+  ],
+  "cards": 8,
+  "frames": 48,
+  "matched": 48,
+  "match_rate": 1.0,
+  "warped_frames": 26,
+  "vendor_calls": 8,
+  "vendor_calls_per_card": 1.0,
+  "warp_eval_levels": {
+    "upright": {
+      "frames": 32,
+      "matched": 32,
+      "match_rate": 1.0,
+      "warped": 8
+    },
+    "tilted": {
+      "frames": 32,
+      "matched": 32,
+      "match_rate": 1.0,
+      "warped": 32
+    },
+    "steep": {
+      "frames": 32,
+      "matched": 32,
+      "match_rate": 1.0,
+      "warped": 29
+    }
+  }
+}

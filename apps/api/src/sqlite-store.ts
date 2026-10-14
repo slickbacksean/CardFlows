@@ -8,6 +8,7 @@ import {
   computeMaxBuy,
   confirmIdentity,
   DEFAULT_MAX_BUY_PREFERENCES,
+  GRADE_SIDES,
   LISTING_AI_COPY_ENABLED,
   listInvitedIdentities,
   LOCKED_DISPLAY_CURRENCY,
@@ -31,6 +32,8 @@ import {
   type RecognitionScenario,
   type TitleTemplateId,
   type TcgdexVariants,
+  isGradePlan,
+  type GradePlan,
 } from "@cardflow/shared";
 import { catalogDisplayFromCard } from "./listing";
 import { applyMvpMigrations, isMemorySqlitePath } from "./db/migrate";
@@ -39,8 +42,10 @@ import {
   gradeImageStorageRef,
   isFirstPartyGradeImageRef,
   mimeFromGradeStorageRef,
+  stripImageMetadata,
   type GradeImageBytes,
 } from "./grade-image";
+import { isGradePhotoExpired, type PhotoPurgeResult } from "./photo-retention";
 import {
   isFirstPartyScanImageRef,
   mimeFromScanStorageRef,
@@ -56,7 +61,11 @@ import {
   crmGradingReturned,
   crmGradingSubmitted,
   gradeEstimateCache,
+  gradeAccounts,
+  gradePhotoObjects,
+  gradeQuotaUsage,
   portfolioValueSnapshots,
+  vendorQuotaUsage,
   crmInventoryItems,
   crmListingDrafts,
   crmPurchases,
@@ -76,6 +85,9 @@ import {
 import {
   inventoryItemWithLiveGuidance as overlayLiveMaxBuy,
   type ConfirmationRecord,
+  type GradeAccountRecord,
+  type GradeQuotaConsumeInput,
+  type GradeQuotaConsumeResult,
   type InventoryItemRecord,
   type PortfolioValueSnapshot,
   type ScanRecord,
@@ -163,6 +175,18 @@ function parseRecognition(raw: string): PersistedRecognitionEnvelope {
 
 function grainForIntent(intent: InventoryIntent): InventoryItemRecord["grain"] {
   return intent === "purchased" ? "physical_copy" : "interest_not_physical_copy";
+}
+
+function workflowStateFromRow(value: string): InventoryItemRecord["workflowState"] {
+  if (
+    value === "drafted" ||
+    value === "watching" ||
+    value === "details_needed" ||
+    value === "watchlist_closed"
+  ) {
+    return value;
+  }
+  return "acquired";
 }
 
 function asDraftStatus(value: string): ListingDraftStatus {
@@ -625,6 +649,12 @@ export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStor
     return scan;
   }
 
+  function unlinkStored(storageRef: string): void {
+    if (!sqliteDir) return;
+    const filePath = path.join(sqliteDir, storageRef);
+    if (existsSync(filePath)) unlinkSync(filePath);
+  }
+
   function saveScanImage(
     scanId: string,
     input: { bytes: Uint8Array; mimeType: ScanImageMimeType },
@@ -632,7 +662,7 @@ export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStor
     const record: ScanImageBytes = {
       storageRef: scanImageStorageRef(scanId, input.mimeType),
       mimeType: input.mimeType,
-      bytes: input.bytes,
+      bytes: stripImageMetadata(input.bytes, input.mimeType),
     };
     if (!sqliteDir) {
       memoryImages.set(scanId, record);
@@ -673,22 +703,37 @@ export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStor
     userId: string,
     inventoryItemId: string,
     side: GradeSide,
-    input: { bytes: Uint8Array; mimeType: ScanImageMimeType },
+    input: { bytes: Uint8Array; mimeType: ScanImageMimeType; createdAt?: string },
   ): GradeImageBytes | undefined {
     if (!getInventoryItem(userId, inventoryItemId)) return undefined;
+    const createdAt = input.createdAt ?? new Date().toISOString();
     const record: GradeImageBytes = {
       storageRef: gradeImageStorageRef(inventoryItemId, side, input.mimeType),
       mimeType: input.mimeType,
-      bytes: input.bytes,
+      bytes: stripImageMetadata(input.bytes, input.mimeType),
+      createdAt,
     };
     for (const candidate of gradeImageStorageCandidates(inventoryItemId, side)) {
       if (candidate === record.storageRef) continue;
       memoryGradeImages.delete(candidate);
-      if (sqliteDir) {
-        const stale = path.join(sqliteDir, candidate);
-        if (existsSync(stale)) unlinkSync(stale);
-      }
+      unlinkStored(candidate);
     }
+    db.insert(gradePhotoObjects)
+      .values({
+        userId,
+        inventoryItemId,
+        side,
+        storageRef: record.storageRef,
+        createdAt,
+      })
+      .onConflictDoUpdate({
+        target: [gradePhotoObjects.userId, gradePhotoObjects.inventoryItemId, gradePhotoObjects.side],
+        set: {
+          storageRef: record.storageRef,
+          createdAt,
+        },
+      })
+      .run();
     if (!sqliteDir) {
       memoryGradeImages.set(record.storageRef, record);
       return record;
@@ -716,13 +761,108 @@ export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStor
       }
       const filePath = path.join(sqliteDir, candidate);
       if (!existsSync(filePath)) continue;
+      const meta = db
+        .select()
+        .from(gradePhotoObjects)
+        .where(
+          and(
+            eq(gradePhotoObjects.userId, userId),
+            eq(gradePhotoObjects.inventoryItemId, inventoryItemId),
+            eq(gradePhotoObjects.side, side),
+          ),
+        )
+        .get();
       return {
         storageRef: candidate,
         mimeType,
         bytes: new Uint8Array(readFileSync(filePath)),
+        createdAt: meta?.createdAt,
       };
     }
     return undefined;
+  }
+
+  function deleteGradeEstimateCache(userId: string, inventoryItemId: string): void {
+    db.delete(gradeEstimateCache)
+      .where(
+        and(
+          eq(gradeEstimateCache.userId, userId),
+          eq(gradeEstimateCache.inventoryItemId, inventoryItemId),
+        ),
+      )
+      .run();
+  }
+
+  function deleteGradeImage(
+    userId: string,
+    inventoryItemId: string,
+    side: GradeSide,
+  ): boolean {
+    if (!getInventoryItem(userId, inventoryItemId)) return false;
+    let deleted = false;
+    for (const candidate of gradeImageStorageCandidates(inventoryItemId, side)) {
+      if (memoryGradeImages.delete(candidate)) deleted = true;
+      if (sqliteDir) {
+        const filePath = path.join(sqliteDir, candidate);
+        if (existsSync(filePath)) {
+          unlinkSync(filePath);
+          deleted = true;
+        }
+      }
+    }
+    const removed = db
+      .delete(gradePhotoObjects)
+      .where(
+        and(
+          eq(gradePhotoObjects.userId, userId),
+          eq(gradePhotoObjects.inventoryItemId, inventoryItemId),
+          eq(gradePhotoObjects.side, side),
+        ),
+      )
+      .run();
+    if (removed.changes > 0) deleted = true;
+    deleteGradeEstimateCache(userId, inventoryItemId);
+    return deleted;
+  }
+
+  function deleteScanImage(userId: string, scanId: string): boolean {
+    const scan = getScan(userId, scanId);
+    if (!scan) return false;
+    let deleted = false;
+    if (memoryImages.delete(scanId)) deleted = true;
+    if (scan.imageStorageRef) {
+      unlinkStored(scan.imageStorageRef);
+      deleted = true;
+    }
+    if (scan.imageStorageRef || scan.imageMimeType) {
+      persistScan({ ...scan, imageStorageRef: null, imageMimeType: null });
+      deleted = true;
+    }
+    return deleted;
+  }
+
+  function deleteUserPhotos(userId: string): PhotoPurgeResult {
+    let deleted = 0;
+    for (const item of listInventory(userId)) {
+      for (const side of GRADE_SIDES) {
+        if (deleteGradeImage(userId, item.inventoryItemId, side)) deleted += 1;
+      }
+    }
+    for (const scan of listScans(userId)) {
+      if (deleteScanImage(userId, scan.scanId)) deleted += 1;
+    }
+    return { deleted };
+  }
+
+  function purgeExpiredGradePhotos(now: Date = new Date()): PhotoPurgeResult {
+    const rows = db.select().from(gradePhotoObjects).all();
+    let deleted = 0;
+    for (const row of rows) {
+      if (!isGradePhotoExpired(row.createdAt, now)) continue;
+      if (row.side !== "front" && row.side !== "back") continue;
+      if (deleteGradeImage(row.userId, row.inventoryItemId, row.side)) deleted += 1;
+    }
+    return { deleted };
   }
 
   function confirmationFromRow(row: typeof crmConfirmations.$inferSelect): ConfirmationRecord {
@@ -894,16 +1034,10 @@ export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStor
       condition: item.condition,
       quantity: item.quantity,
       tags: parseTags(item.tags),
-      workflowState:
-        item.workflowState === "drafted"
-          ? "drafted"
-          : item.workflowState === "watching"
-            ? "watching"
-            : item.workflowState === "details_needed"
-              ? "details_needed"
-              : "acquired",
+      workflowState: workflowStateFromRow(item.workflowState),
       referencePriceAmount: dollarsFromCents(item.referencePriceAmount),
       targetMaxBuyAmount: dollarsFromCents(item.targetMaxBuyAmount),
+      closedAt: item.closedAt ?? null,
       createdAt: item.createdAt,
       purchase: purchase ? purchaseFromRow(item, purchase) : null,
     };
@@ -1014,7 +1148,7 @@ export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStor
         workflowState: item.workflowState,
         targetMaxBuyAmount: optionalDollarsToCents(item.targetMaxBuyAmount),
         referencePriceAmount: optionalDollarsToCents(item.referencePriceAmount),
-        closedAt: null,
+        closedAt: item.closedAt ?? null,
         createdAt: item.createdAt,
         updatedAt: now,
       })
@@ -1028,6 +1162,7 @@ export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStor
           workflowState: item.workflowState,
           targetMaxBuyAmount: optionalDollarsToCents(item.targetMaxBuyAmount),
           referencePriceAmount: optionalDollarsToCents(item.referencePriceAmount),
+          closedAt: item.closedAt ?? null,
           updatedAt: now,
         },
       })
@@ -1057,6 +1192,61 @@ export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStor
   function saveInventoryItem(item: InventoryItemRecord): InventoryItemRecord {
     persistInventoryItem(item);
     return item;
+  }
+
+  function deleteGradeImages(inventoryItemId: string): void {
+    for (const side of GRADE_SIDES) {
+      for (const candidate of gradeImageStorageCandidates(inventoryItemId, side)) {
+        memoryGradeImages.delete(candidate);
+        if (!sqliteDir) continue;
+        const filePath = path.join(sqliteDir, candidate);
+        if (existsSync(filePath)) unlinkSync(filePath);
+      }
+    }
+  }
+
+  /** Reverses a Purchased write. Leaves no inventory, purchase, or draft row behind. */
+  function deleteInventoryItem(userId: string, inventoryItemId: string): boolean {
+    const item = loadInventoryItem(userId, inventoryItemId);
+    if (!item) return false;
+    sqlite.transaction(() => {
+      db.delete(crmPurchases).where(eq(crmPurchases.inventoryItemId, inventoryItemId)).run();
+      db.delete(crmListingDrafts).where(eq(crmListingDrafts.inventoryItemId, inventoryItemId)).run();
+      db.delete(crmGradingSubmitted)
+        .where(
+          and(
+            eq(crmGradingSubmitted.userId, userId),
+            eq(crmGradingSubmitted.inventoryItemId, inventoryItemId),
+          ),
+        )
+        .run();
+      db.delete(crmGradingReturned)
+        .where(
+          and(
+            eq(crmGradingReturned.userId, userId),
+            eq(crmGradingReturned.inventoryItemId, inventoryItemId),
+          ),
+        )
+        .run();
+      db.delete(gradeEstimateCache)
+        .where(
+          and(
+            eq(gradeEstimateCache.userId, userId),
+            eq(gradeEstimateCache.inventoryItemId, inventoryItemId),
+          ),
+        )
+        .run();
+      db.delete(crmInventoryItems)
+        .where(
+          and(
+            eq(crmInventoryItems.inventoryItemId, inventoryItemId),
+            eq(crmInventoryItems.userId, userId),
+          ),
+        )
+        .run();
+    })();
+    deleteGradeImages(inventoryItemId);
+    return true;
   }
 
   function draftFromRow(
@@ -1434,6 +1624,121 @@ export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStor
     return snapshot;
   }
 
+  function getGradeAccount(userId: string): GradeAccountRecord {
+    const row = db.select().from(gradeAccounts).where(eq(gradeAccounts.userId, userId)).get();
+    if (!row) return { plan: "free", extraCredits: 0 };
+    return {
+      plan: isGradePlan(row.plan) ? row.plan : "free",
+      extraCredits: Math.max(0, row.extraCredits),
+    };
+  }
+
+  function ensureGradeAccount(userId: string, at: string): void {
+    db.insert(gradeAccounts)
+      .values({ userId, plan: "free", extraCredits: 0, updatedAt: at })
+      .onConflictDoNothing()
+      .run();
+  }
+
+  function setGradePlan(userId: string, plan: GradePlan, at: string): GradeAccountRecord {
+    const nextPlan = isGradePlan(plan) ? plan : "free";
+    ensureGradeAccount(userId, at);
+    db.update(gradeAccounts)
+      .set({ plan: nextPlan, updatedAt: at })
+      .where(eq(gradeAccounts.userId, userId))
+      .run();
+    return getGradeAccount(userId);
+  }
+
+  function addGradeCredits(userId: string, credits: number, at: string): GradeAccountRecord {
+    const add = Math.floor(credits);
+    if (!Number.isFinite(add) || add <= 0) return getGradeAccount(userId);
+    return sqlite.transaction(() => {
+      ensureGradeAccount(userId, at);
+      sqlite
+        .prepare(
+          `UPDATE grade_accounts SET extra_credits = extra_credits + ?, updated_at = ? WHERE user_id = ?`,
+        )
+        .run(add, at, userId);
+      return getGradeAccount(userId);
+    })();
+  }
+
+  function getGradeQuotaUsage(userId: string, monthKey: string): number {
+    const row = db
+      .select()
+      .from(gradeQuotaUsage)
+      .where(and(eq(gradeQuotaUsage.userId, userId), eq(gradeQuotaUsage.monthKey, monthKey)))
+      .get();
+    return row?.used ?? 0;
+  }
+
+  function consumeGradeQuota(userId: string, input: GradeQuotaConsumeInput): GradeQuotaConsumeResult {
+    return sqlite.transaction(() => {
+      ensureGradeAccount(userId, input.at);
+      db.insert(gradeQuotaUsage)
+        .values({ userId, monthKey: input.monthKey, used: 0 })
+        .onConflictDoNothing()
+        .run();
+      const monthly = sqlite
+        .prepare(
+          `UPDATE grade_quota_usage SET used = used + 1
+           WHERE user_id = ? AND month_key = ? AND used < ?`,
+        )
+        .run(userId, input.monthKey, input.monthlyLimit);
+      if (monthly.changes === 1) {
+        return {
+          ok: true as const,
+          source: "monthly" as const,
+          usedThisMonth: getGradeQuotaUsage(userId, input.monthKey),
+          extraCredits: getGradeAccount(userId).extraCredits,
+        };
+      }
+      const credit = sqlite
+        .prepare(
+          `UPDATE grade_accounts SET extra_credits = extra_credits - 1, updated_at = ?
+           WHERE user_id = ? AND extra_credits > 0`,
+        )
+        .run(input.at, userId);
+      const account = getGradeAccount(userId);
+      const usedThisMonth = getGradeQuotaUsage(userId, input.monthKey);
+      if (credit.changes === 1) {
+        return {
+          ok: true as const,
+          source: "credit" as const,
+          usedThisMonth,
+          extraCredits: account.extraCredits,
+        };
+      }
+      return { ok: false as const, usedThisMonth, extraCredits: account.extraCredits };
+    })();
+  }
+
+  function getVendorQuotaUsage(provider: string, monthKey: string): number {
+    const row = db
+      .select()
+      .from(vendorQuotaUsage)
+      .where(and(eq(vendorQuotaUsage.provider, provider), eq(vendorQuotaUsage.monthKey, monthKey)))
+      .get();
+    return row?.used ?? 0;
+  }
+
+  function consumeVendorQuota(provider: string, monthKey: string, cap: number): boolean {
+    return sqlite.transaction(() => {
+      db.insert(vendorQuotaUsage)
+        .values({ provider, monthKey, used: 0 })
+        .onConflictDoNothing()
+        .run();
+      const result = sqlite
+        .prepare(
+          `UPDATE vendor_quota_usage SET used = used + 1
+           WHERE provider = ? AND month_key = ? AND used < ?`,
+        )
+        .run(provider, monthKey, cap);
+      return result.changes === 1;
+    })();
+  }
+
   function listPortfolioSnapshots(
     userId: string,
     sinceDate?: string | null,
@@ -1481,8 +1786,12 @@ export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStor
     saveScanImage,
     readStoredScanImage,
     getScanImage,
+    deleteScanImage,
     saveGradeImage,
     getGradeImage,
+    deleteGradeImage,
+    deleteUserPhotos,
+    purgeExpiredGradePhotos,
     listInventory,
     confirmScan,
     rejectScan,
@@ -1496,6 +1805,7 @@ export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStor
     getDraftForInventoryItem,
     saveDraft,
     saveInventoryItem,
+    deleteInventoryItem,
     listGradingSubmitted,
     listGradingReturned,
     saveGradingSubmitted,
@@ -1506,5 +1816,12 @@ export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStor
     saveGradeEstimateCache,
     savePortfolioSnapshot,
     listPortfolioSnapshots,
+    getGradeAccount,
+    setGradePlan,
+    addGradeCredits,
+    getGradeQuotaUsage,
+    consumeGradeQuota,
+    getVendorQuotaUsage,
+    consumeVendorQuota,
   };
 }

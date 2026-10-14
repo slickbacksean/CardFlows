@@ -5,9 +5,13 @@ import { StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { PrimaryButton } from "@/components/ui/primary-button";
 import { ensureIdentitySession } from "@/lib/identity";
+import { captureMobileException, initMobileSentry } from "@/lib/sentry";
 import { colors, space } from "@/lib/theme";
 
+initMobileSentry();
+
 export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
+  captureMobileException(error);
   return (
     <SafeAreaView style={styles.safe}>
       <View style={styles.stack}>

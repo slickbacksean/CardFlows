@@ -16,6 +16,7 @@
   "dependencies": {
     "@cardflow/shared": "workspace:*",
     "@hono/node-server": "^1.19.0",
+    "@sentry/node": "^11.7.0",
     "@tcgdex/sdk": "^2.9.0",
     "better-sqlite3": "^13.0.3",
     "drizzle-orm": "^0.45.2",

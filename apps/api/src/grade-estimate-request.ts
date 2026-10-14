@@ -1,10 +1,13 @@
 import {
   GRADE_IMAGE_MAX_BYTES,
+  GRADE_UPLOAD_EXPIRED_COPY,
   isGradeImageMime,
   type GradeImageMimeType,
+  type GradeSide,
 } from "@cardflow/shared";
 import type { Context } from "hono";
 import { z } from "zod";
+import { oversizedImageHeaderError, stripImageMetadata, type StagedGradeStill } from "./grade-image";
 import { mimeFromFileName, mimeFromImageMagic, normalizeScanImageMime } from "./scan-image";
 
 const GRADE_ESTIMATE_JSON_SCHEMA = z.object({
@@ -16,10 +19,14 @@ export const GRADE_ANGLED_FIELDS = ["angled_0", "angled_1", "angled_2", "angled_
 /** Client capture info (EXIF zoom/lens/exposure, steadiness). Debug log only. */
 const captureMetaSchema = z.string().max(4000).optional();
 
+const uploadIdSchema = z.string().min(8).max(80).optional();
+
 const GRADE_ESTIMATE_FORM_SCHEMA = z
   .object({
     front: z.unknown().optional(),
     back: z.unknown().optional(),
+    frontUploadId: uploadIdSchema,
+    backUploadId: uploadIdSchema,
     reestimate: z.string().optional(),
     angled_0: z.unknown().optional(),
     angled_1: z.unknown().optional(),
@@ -46,6 +53,8 @@ export interface ParsedGradeEstimateRequest {
   /** Raking-light front photos, in shot order. Empty when skipped. */
   angledFront?: ParsedGradeStill[];
   captureMeta?: string | null;
+  frontUploadId?: string;
+  backUploadId?: string;
 }
 
 export interface GradeEstimateRequestError {
@@ -77,7 +86,9 @@ function validateStill(
   if (mimeFromImageMagic(bytes) !== mimeType) {
     return { error: "Image must be jpeg, png, or webp", status: 400 };
   }
-  return { bytes, mimeType };
+  const oversized = oversizedImageHeaderError(bytes);
+  if (oversized) return oversized;
+  return { bytes: stripImageMetadata(bytes, mimeType), mimeType };
 }
 
 async function stillFromFormValue(
@@ -116,7 +127,15 @@ export function parseGradeEstimateJson(
 export function parseGradeEstimateFormFields(
   body: Record<string, unknown>,
 ):
-  | { front: unknown; back: unknown; reestimate: boolean; angled: unknown[]; captureMeta: string | null }
+  | {
+      front: unknown;
+      back: unknown;
+      frontUploadId: string | undefined;
+      backUploadId: string | undefined;
+      reestimate: boolean;
+      angled: unknown[];
+      captureMeta: string | null;
+    }
   | GradeEstimateRequestError {
   const parsed = GRADE_ESTIMATE_FORM_SCHEMA.safeParse(body);
   if (!parsed.success) {
@@ -128,6 +147,8 @@ export function parseGradeEstimateFormFields(
   return {
     front: parsed.data.front,
     back: parsed.data.back,
+    frontUploadId: parsed.data.frontUploadId,
+    backUploadId: parsed.data.backUploadId,
     reestimate: parsed.data.reestimate === "true",
     angled: GRADE_ANGLED_FIELDS.map((field) => parsed.data[field]).filter(
       (value) => value !== undefined && value !== null && value !== "",
@@ -136,17 +157,46 @@ export function parseGradeEstimateFormFields(
   };
 }
 
+export interface GradeEstimateParseOptions {
+  userId?: string;
+  stagedStill?: (userId: string, id: string, side: GradeSide) => StagedGradeStill | undefined;
+}
+
+function stillFromUploadId(
+  userId: string | undefined,
+  id: string | undefined,
+  side: GradeSide,
+  stagedStill: GradeEstimateParseOptions["stagedStill"],
+): ParsedGradeStill | GradeEstimateRequestError | null {
+  if (!id) return null;
+  if (!userId || !stagedStill) {
+    return { error: GRADE_UPLOAD_EXPIRED_COPY, status: 400 };
+  }
+  const staged = stagedStill(userId, id, side);
+  if (!staged) return { error: GRADE_UPLOAD_EXPIRED_COPY, status: 400 };
+  return { bytes: staged.bytes, mimeType: staged.mimeType };
+}
+
 export async function parseGradeEstimateRequest(
   c: Context,
+  options: GradeEstimateParseOptions = {},
 ): Promise<ParsedGradeEstimateRequest | GradeEstimateRequestError> {
   const contentType = c.req.header("content-type") ?? "";
   if (contentType.toLowerCase().includes("multipart/form-data")) {
     const body = await c.req.parseBody();
     const fields = parseGradeEstimateFormFields(body);
     if ("error" in fields) return fields;
-    const front = await stillFromFormValue(fields.front);
+    const frontFile = await stillFromFormValue(fields.front);
+    if (frontFile && "error" in frontFile) return frontFile;
+    const backFile = await stillFromFormValue(fields.back);
+    if (backFile && "error" in backFile) return backFile;
+    const front =
+      frontFile ??
+      stillFromUploadId(options.userId, fields.frontUploadId, "front", options.stagedStill);
     if (front && "error" in front) return front;
-    const back = await stillFromFormValue(fields.back);
+    const back =
+      backFile ??
+      stillFromUploadId(options.userId, fields.backUploadId, "back", options.stagedStill);
     if (back && "error" in back) return back;
     const angledFront: ParsedGradeStill[] = [];
     for (const value of fields.angled) {
@@ -160,6 +210,8 @@ export async function parseGradeEstimateRequest(
       reestimate: fields.reestimate,
       angledFront,
       captureMeta: fields.captureMeta,
+      frontUploadId: fields.frontUploadId,
+      backUploadId: fields.backUploadId,
     };
   }
 

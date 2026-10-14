@@ -11,9 +11,14 @@ import {
   computeMaxBuy,
   DETAILS_NEEDED_WORKFLOW_STATE,
   detailsNeededCostBasis,
+  isClosedWatchlist,
   isDetailsNeededPurchase,
+  isOpenWatchlist,
   isRecentDetailsNeededDuplicate,
   livestreamContextTags,
+  WATCHLIST_CLOSED_WORKFLOW_STATE,
+  watchlistConversionTags,
+  watchlistSourceIdFromTags,
   keywordChips,
   LOCKED_DISPLAY_CURRENCY,
   mapRecognitionToCatalog,
@@ -40,7 +45,9 @@ import {
   pricingProviderHealth,
   recognitionHealth,
   catalogHealth,
+  GRADE_ENGINE_STILL_RUNNING,
   healthMockProviders,
+  healthOk,
   emptyGradeEstimate,
   unavailableGradeEstimate,
   parseStoredGradeEstimate,
@@ -79,6 +86,13 @@ import {
   type TitleTemplateId,
   createLiveScanTimingLog,
   type LiveScanSample,
+  GRADE_QUOTA_COPY,
+  calendarMonthKey,
+  gradeQuotaSnapshot,
+  isGradePlan,
+  monthlyLimitForPlan,
+  type GradePlan,
+  type GradeQuotaSnapshot,
 } from "@cardflow/shared";
 import { Hono, type Context as HonoContext } from "hono";
 import { cors } from "hono/cors";
@@ -94,8 +108,16 @@ import {
   trustProxyHopsFromEnv,
   type RateLimitConfig,
 } from "./rate-limit";
+import { APP_API_KEY_HEADER, appApiKeyFromEnv } from "./app-api-key";
+import {
+  gradeIapFromEnv,
+  gradeQuotaEnabledFromEnv,
+  premiumUserIdsFromEnv,
+} from "./grade-quota-env";
 import type { CardgradingEngineStatus, ConcurrencyGate } from "./cardgrading-run";
 import { corsOriginsFromEnv } from "./cors-env";
+import { REQUEST_ID_HEADER, resolveRequestId } from "./request-id";
+import { captureApiException } from "./sentry";
 import {
   JSON_BODY_MAX_BYTES,
   LIVESTREAM_IDENTIFY_BODY_MAX_BYTES,
@@ -108,7 +130,11 @@ import {
   type PokecollectorCollectionCopy,
 } from "./pokecollector-accounts";
 import { SCAN_IMAGE_MAX_BYTES, type ScanImageMimeType } from "./scan-image";
-import { isGradePhotoSide } from "./grade-image";
+import {
+  gradeUploadCache as defaultGradeUploadCache,
+  isGradePhotoSide,
+  type GradeUploadCache,
+} from "./grade-image";
 import {
   decideScanIdentify,
   skippedStillIdentifyResult,
@@ -148,6 +174,7 @@ type AppEnv = {
   Variables: {
     userId: string;
     identity: InvitedIdentity;
+    requestId: string;
   };
 };
 
@@ -163,7 +190,7 @@ async function boundedProbe(
           ok: false,
           opencv: null,
           numpy: null,
-          error: "grader check still running",
+          error: GRADE_ENGINE_STILL_RUNNING,
           checkedAt: new Date().toISOString(),
         }),
       3_000,
@@ -295,7 +322,7 @@ export interface CreateAppOptions {
    * for the Grade tab. Null/omitted → the photo routes answer "unavailable".
    */
   cardgrading?: CardgradingRunner | null;
-  /** Real OpenCV import check for /health (cached). Omitted → `gradeEngine: null`. */
+  /** Real OpenCV import check for /health. Failed probes are re-run. Omitted → `gradeEngine: null`. */
   gradeEngineProbe?: (() => Promise<CardgradingEngineStatus>) | null;
   /** Grading route rate limit. Defaults to env (`CARD_FLOW_GRADE_RATE_*`); off in tests. */
   gradeRateLimit?: RateLimitConfig | null;
@@ -303,6 +330,22 @@ export interface CreateAppOptions {
   detectRateLimit?: RateLimitConfig | null;
   /** Whole-instance grades per day. Defaults to `CARD_FLOW_GRADE_DAILY_CAP`; off in tests. */
   gradeDailyCap?: number | null;
+  /**
+   * Per-account monthly pre-grade quota. Defaults to env (`CARD_FLOW_GRADE_QUOTA`);
+   * off in tests unless set. Replaces a daily per-account cap.
+   */
+  gradeQuota?: boolean | null;
+  /** In-app purchase flag + stub grant. Defaults to `CARD_FLOW_IAP_*`. */
+  gradeIap?: { enabled: boolean; stub: boolean };
+  /** Overlay: these user ids are treated as premium even if the row says free. */
+  premiumUserIds?: string[];
+  /** Global CardSight identify budget. Defaults to `CARD_FLOW_CARDSIGHT_MONTHLY_BUDGET`; off in tests. */
+  cardSightMonthlyBudget?: number | null;
+  /**
+   * Speed-bump app key (`X-CardFlow-App-Key`). Defaults to `CARD_FLOW_APP_API_KEY`.
+   * Null/empty skips the check (tests and local unless configured).
+   */
+  appApiKey?: string | null;
   /** Grader slot gate; when full, grading routes answer 503 + Retry-After. */
   gradeGate?: Pick<ConcurrencyGate, "isFull"> | null;
   /** Trusted reverse-proxy hops for X-Forwarded-For. Defaults to `CARD_FLOW_TRUST_PROXY_HOPS` (0). */
@@ -315,6 +358,8 @@ export interface CreateAppOptions {
   corsOrigins?: string[];
   /** Clock for portfolio snapshots. Tests inject fixed days. */
   now?: () => Date;
+  /** Detect stills reused by pre-grade so each photo is uploaded once. */
+  gradeUploads?: GradeUploadCache;
 }
 
 /** Routes write through StorePort. Tests default to memory; local `pnpm dev:api` injects SQLite. */
@@ -335,6 +380,7 @@ export function createApp(
     getScan,
     getScanImage,
     getGradeImage,
+    deleteUserPhotos,
     getGradeEstimateCache,
     saveGradeEstimateCache,
     getSessionByToken,
@@ -344,6 +390,7 @@ export function createApp(
     listInventory,
     saveDraft,
     saveInventoryItem,
+    deleteInventoryItem,
     saveScan,
     rejectScan,
     saveScanImage,
@@ -358,8 +405,18 @@ export function createApp(
     moveGradingSubmittedToReturned,
     savePortfolioSnapshot,
     listPortfolioSnapshots,
+    getGradeAccount,
+    setGradePlan,
+    addGradeCredits,
+    getGradeQuotaUsage,
+    consumeGradeQuota,
   } = store;
   const now = options.now ?? (() => new Date());
+  const quotaEnabled =
+    options.gradeQuota === undefined ? gradeQuotaEnabledFromEnv() : Boolean(options.gradeQuota);
+  const gradeIap = options.gradeIap ?? gradeIapFromEnv();
+  const premiumUserIds = new Set(options.premiumUserIds ?? premiumUserIdsFromEnv());
+  const appApiKey = options.appApiKey === undefined ? appApiKeyFromEnv() : options.appApiKey;
   const devAutoSession = options.devAutoSession ?? resolveDevAutoSession();
   const catalog = options.catalog ?? mockTcgdexCatalogProvider;
   const pricing = options.pricing ?? offPricingProvider;
@@ -380,6 +437,7 @@ export function createApp(
   };
   const rateKeys = (c: Context) => {
     const ip = clientIp(c, trustProxyHops, socketAddress);
+    // Per-account product cap is monthly (grade quota). Per-IP (and burst) stay here for abuse.
     return [`user:${String(c.get("userId") ?? "anon")}`, ip ? `ip:${ip}` : null];
   };
   const gradeRateLimit = rateLimitMiddleware(
@@ -419,6 +477,7 @@ export function createApp(
     options.livestreamTiming ?? process.env.CARD_FLOW_LIVESTREAM_TIMING?.trim() === "1";
   const livestreamTimingLog = createLiveScanTimingLog(500);
   const liveVideoObb = options.liveVideoObb ?? (() => null);
+  const gradeUploads = options.gradeUploads ?? defaultGradeUploadCache;
 
   async function bindPokecollectorUser(identity: InvitedIdentity) {
     try {
@@ -601,12 +660,24 @@ export function createApp(
   }
 
   const app = new Hono<AppEnv>();
+  app.use("*", async (c, next) => {
+    const requestId = resolveRequestId(c.req.header(REQUEST_ID_HEADER));
+    c.set("requestId", requestId);
+    c.header(REQUEST_ID_HEADER, requestId);
+    await next();
+    if (c.req.path !== "/health" && process.env.VITEST !== "true") {
+      console.log(`${c.req.method} ${c.req.path} ${c.res.status} ${requestId}`);
+    }
+  });
   app.onError((err, c) => {
+    const requestId = c.get("requestId") ?? resolveRequestId();
+    c.header(REQUEST_ID_HEADER, requestId);
     const message = err instanceof Error ? err.message : "";
     if (err instanceof SyntaxError || /JSON|Unexpected token|Malformed/i.test(message)) {
       return c.json({ ok: false, error: "Invalid request" }, 400);
     }
-    console.error(err);
+    captureApiException(err, { requestId });
+    console.error(`[${requestId}]`, err);
     return c.json({ ok: false, error: "Something went wrong" }, 500);
   });
   const allowedOrigins = new Set(options.corsOrigins ?? corsOriginsFromEnv());
@@ -614,6 +685,7 @@ export function createApp(
     "/*",
     cors({
       origin: (origin) => (allowedOrigins.has(origin) ? origin : undefined),
+      exposeHeaders: [REQUEST_ID_HEADER],
     }),
   );
 
@@ -634,6 +706,69 @@ export function createApp(
     if (c.req.path === "/v1/livestream/identify") return identifyBodyLimit(c, next);
     return jsonBodyLimit(c, next);
   });
+
+  app.use("/v1/*", async (c, next) => {
+    if (!appApiKey) return next();
+    const presented = c.req.header(APP_API_KEY_HEADER) ?? "";
+    if (presented !== appApiKey) {
+      return c.json({ ok: false, error: "CardFlow could not authorize that request." }, 401);
+    }
+    return next();
+  });
+
+  function resolveAccountPlan(userId: string, stored: GradePlan): GradePlan {
+    return premiumUserIds.has(userId) ? "premium" : stored;
+  }
+
+  function quotaSnapshotFor(userId: string): GradeQuotaSnapshot {
+    const at = now();
+    const monthKey = calendarMonthKey(at);
+    const account = getGradeAccount(userId);
+    const plan = resolveAccountPlan(userId, account.plan);
+    return gradeQuotaSnapshot({
+      plan,
+      usedThisMonth: getGradeQuotaUsage(userId, monthKey),
+      extraCredits: account.extraCredits,
+      iapEnabled: gradeIap.enabled,
+      now: at,
+    });
+  }
+
+  function takeGradeAllowance(userId: string) {
+    if (!quotaEnabled) {
+      return { ok: true as const, quota: quotaSnapshotFor(userId) };
+    }
+    const at = now();
+    const monthKey = calendarMonthKey(at);
+    const account = getGradeAccount(userId);
+    const plan = resolveAccountPlan(userId, account.plan);
+    const consumed = consumeGradeQuota(userId, {
+      monthKey,
+      monthlyLimit: monthlyLimitForPlan(plan),
+      at: at.toISOString(),
+    });
+    const quota = gradeQuotaSnapshot({
+      plan,
+      usedThisMonth: consumed.usedThisMonth,
+      extraCredits: consumed.extraCredits,
+      iapEnabled: gradeIap.enabled,
+      now: at,
+    });
+    if (!consumed.ok) return { ok: false as const, quota };
+    return { ok: true as const, quota };
+  }
+
+  function outOfGradesResponse(c: Context, quota: GradeQuotaSnapshot) {
+    const retryAfterSeconds = Math.max(
+      1,
+      Math.ceil((Date.parse(quota.resetsAt) - now().getTime()) / 1000),
+    );
+    c.header("Retry-After", String(retryAfterSeconds));
+    return c.json(
+      { ok: false, error: GRADE_QUOTA_COPY.outOfGrades, quota },
+      429,
+    );
+  }
 
   app.use("/v1/*", async (c, next) => {
     if (isPublicV1Path(c.req.method, c.req.path)) return next();
@@ -666,26 +801,31 @@ export function createApp(
       gradeEstimate: gradeEstimateStatus,
       slabPricing: slabPricingStatus,
     });
-    return c.json({
-      ok: true,
-      service: "cardflow-api",
-      mock: mockProviders.length > 0,
-      mockProviders,
-      catalog: catalogStatus,
-      recognition: recognitionStatus,
-      pricingProvider: pricingProviderHealth(pricing.name),
-      livestreamIdentify,
-      liveVideoYolo: liveVideoObb() != null,
-      liveIdentityVisual: liveIdentityVisualHealth({
+    const gradeEngine = gradeEngineProbe ? await boundedProbe(gradeEngineProbe) : null;
+    const ok = healthOk(gradeEngine);
+    return c.json(
+      {
+        ok,
+        service: "cardflow-api",
+        mock: mockProviders.length > 0,
+        mockProviders,
+        catalog: catalogStatus,
+        recognition: recognitionStatus,
+        pricingProvider: pricingProviderHealth(pricing.name),
         livestreamIdentify,
-        openclipConfigured: liveIdentityOpenclip != null,
-        phashIndexLoaded: livestreamIdentityIndex != null,
-      }),
-      gradeEstimate: gradeEstimateStatus,
-      // Real `import cv2, numpy` in the grader Python (cached 5 min). null = no grader runner.
-      gradeEngine: gradeEngineProbe ? await boundedProbe(gradeEngineProbe) : null,
-      slabPricing: slabPricingStatus,
-    });
+        liveVideoYolo: liveVideoObb() != null,
+        liveIdentityVisual: liveIdentityVisualHealth({
+          livestreamIdentify,
+          openclipConfigured: liveIdentityOpenclip != null,
+          phashIndexLoaded: livestreamIdentityIndex != null,
+        }),
+        gradeEstimate: gradeEstimateStatus,
+        // Real `import cv2, numpy` in the grader Python. Failed probes are not cached.
+        gradeEngine,
+        slabPricing: slabPricingStatus,
+      },
+      ok ? 200 : 503,
+    );
   });
 
   app.get("/v1/catalog/search", async (c) => {
@@ -825,7 +965,7 @@ export function createApp(
     );
     let identityCropJpeg =
       typeof body.identityCropJpeg === "string" ? body.identityCropJpeg : null;
-    let cropFromServerYolo = false;
+    let identityCropQuad = normalizeIdentityCropQuad(body.identityCropQuad);
     const yolo = liveVideoObb();
     if (yolo && typeof body.videoFrameJpeg === "string") {
       const located = await locateLiveVideoCard(yolo, body.videoFrameJpeg);
@@ -833,12 +973,16 @@ export function createApp(
         cardDetected = false;
         identityHash = null;
         identityCropJpeg = null;
+        identityCropQuad = null;
       } else if (located?.found) {
         cardDetected = true;
-        identityHash = normalizeLiveVideoIdentityHash(located.identityHash);
-        identityCropJpeg = located.jpegBase64;
-        // The phone's corners describe its own crop, not the server YOLO crop.
-        cropFromServerYolo = true;
+        // Keep a phone crop that already has 4 corners so warp.py can straighten it.
+        // Android (no corners) and missed phone detects use the YOLO AABB + OBB quad.
+        if (!identityCropJpeg || !identityCropQuad) {
+          identityHash = normalizeLiveVideoIdentityHash(located.identityHash);
+          identityCropJpeg = located.jpegBase64;
+          identityCropQuad = normalizeIdentityCropQuad(located.identityCropQuad);
+        }
       }
     }
 
@@ -853,7 +997,7 @@ export function createApp(
       if (crop) {
         const sidecarStart = performance.now();
         const match = await liveIdentityOpenclip.matchCropJpeg(crop.bytes, crop.mimeType, {
-          quad: cropFromServerYolo ? null : normalizeIdentityCropQuad(body.identityCropQuad),
+          quad: identityCropQuad,
         });
         stages.sidecar = performance.now() - sidecarStart;
         if (match?.timings) {
@@ -1094,6 +1238,16 @@ export function createApp(
       token: created.token,
       identity: created.identity,
       invitedUsers: [created.identity],
+    });
+  });
+
+  app.post("/v1/account/delete", (c) => {
+    const userId = c.get("userId");
+    const photos = deleteUserPhotos(userId);
+    const staged = gradeUploads.releaseUser(userId);
+    return c.json({
+      ok: true,
+      photosDeleted: photos.deleted + staged,
     });
   });
 
@@ -1411,7 +1565,7 @@ export function createApp(
 
   app.get("/v1/inventory", async (c) => {
     const userId = c.get("userId");
-    const local = listInventory(userId);
+    const local = listInventory(userId).filter((item) => !isClosedWatchlist(item));
     if (pokecollectorAccounts.name === "off") {
       return c.json({
         ok: true,
@@ -1457,6 +1611,76 @@ export function createApp(
     });
   });
 
+  app.delete("/v1/inventory/:inventoryItemId", (c) => {
+    const userId = c.get("userId");
+    const inventoryItemId = c.req.param("inventoryItemId");
+    const item = getInventoryItem(userId, inventoryItemId);
+    if (!item) return c.json({ ok: false, error: "Inventory item not found" }, 404);
+    if (item.intent !== "purchased" || !isDetailsNeededPurchase(item)) {
+      return c.json(
+        { ok: false, error: "Only incomplete Purchased copies can be undone" },
+        409,
+      );
+    }
+    const sourceWatchlistId = watchlistSourceIdFromTags(item.tags);
+    if (!deleteInventoryItem(userId, inventoryItemId)) {
+      return c.json({ ok: false, error: "Inventory item not found" }, 404);
+    }
+    if (sourceWatchlistId) {
+      const watchlist = getInventoryItem(userId, sourceWatchlistId);
+      if (watchlist && watchlist.intent === "watchlist") {
+        updateInventoryItem(userId, sourceWatchlistId, {
+          workflowState: "watching",
+          closedAt: null,
+        });
+      }
+    }
+    return c.json({ ok: true, deleted: true });
+  });
+
+
+  app.get("/v1/grade/quota", (c) => {
+    const quota = quotaSnapshotFor(c.get("userId"));
+    return c.json({ ok: true, quota });
+  });
+
+  app.post("/v1/grade/credits/consume", async (c) => {
+    const userId = c.get("userId");
+    const body = await c.req.json<{ count?: number }>().catch(() => ({} as { count?: number }));
+    const count = Math.floor(Number(body.count ?? 1));
+    if (!Number.isFinite(count) || count < 1 || count > 10) {
+      return c.json({ ok: false, error: "That request was not valid." }, 400);
+    }
+    let quota = quotaSnapshotFor(userId);
+    for (let i = 0; i < count; i += 1) {
+      const taken = takeGradeAllowance(userId);
+      quota = taken.quota;
+      if (!taken.ok) return outOfGradesResponse(c, quota);
+    }
+    return c.json({ ok: true, quota });
+  });
+
+  app.post("/v1/grade/credits", async (c) => {
+    if (!gradeIap.enabled && !gradeIap.stub) {
+      return c.json({ ok: false, error: GRADE_QUOTA_COPY.iapUnavailable }, 503);
+    }
+    if (!gradeIap.stub) {
+      return c.json({ ok: false, error: GRADE_QUOTA_COPY.iapUnavailable }, 503);
+    }
+    const userId = c.get("userId");
+    const body = await c.req.json<{ credits?: number; plan?: string }>().catch(
+      () => ({} as { credits?: number; plan?: string }),
+    );
+    const at = now().toISOString();
+    if (body.plan && isGradePlan(body.plan)) {
+      setGradePlan(userId, body.plan, at);
+    }
+    const credits = Math.floor(Number(body.credits ?? 0));
+    if (Number.isFinite(credits) && credits > 0) {
+      addGradeCredits(userId, Math.min(credits, 1_000), at);
+    }
+    return c.json({ ok: true, quota: quotaSnapshotFor(userId) });
+  });
 
   app.post(
     "/v1/grade/detect",
@@ -1478,7 +1702,9 @@ export function createApp(
         captureMeta: parsed.captureMeta ?? null,
       });
       // Retake and unavailable are answers, not transport errors: 200 with ok:false.
-      return c.json(result);
+      if (!result.ok) return c.json(result);
+      const uploadId = gradeUploads.stage(c.get("userId"), parsed.side, parsed.still);
+      return c.json({ ...result, uploadId });
     },
   );
 
@@ -1492,13 +1718,18 @@ export function createApp(
       onError: gradeBodyTooLarge,
     }),
     async (c) => {
-      const parsed = await parseGradeEstimateRequest(c);
+      const parsed = await parseGradeEstimateRequest(c, {
+        userId: c.get("userId"),
+        stagedStill: (userId, id, side) => gradeUploads.get(userId, id, side),
+      });
       if ("error" in parsed) {
         return c.json({ ok: false, error: parsed.error }, parsed.status);
       }
       if (!parsed.frontImage || !parsed.backImage) {
         return c.json({ ok: false, error: "Front and back photos are required" }, 400);
       }
+      const taken = takeGradeAllowance(c.get("userId"));
+      if (!taken.ok) return outOfGradesResponse(c, taken.quota);
       const result = await pregradePhotoPair({
         runner: cardgrading,
         front: parsed.frontImage,
@@ -1506,7 +1737,10 @@ export function createApp(
         angledFront: parsed.angledFront ?? [],
         captureMeta: parsed.captureMeta ?? null,
       });
-      return c.json(result);
+      const userId = c.get("userId");
+      if (parsed.frontUploadId) gradeUploads.release(userId, parsed.frontUploadId);
+      if (parsed.backUploadId) gradeUploads.release(userId, parsed.backUploadId);
+      return c.json({ ...result, quota: taken.quota });
     },
   );
 
@@ -1527,16 +1761,26 @@ export function createApp(
         return c.json({ ok: false, error: WATCHLIST_CANNOT_SUBMIT_MESSAGE }, 400);
       }
 
-      const parsed = await parseGradeEstimateRequest(c);
+      const parsed = await parseGradeEstimateRequest(c, {
+        userId: c.get("userId"),
+        stagedStill: (userId, id, side) => gradeUploads.get(userId, id, side),
+      });
       if ("error" in parsed) {
         return c.json({ ok: false, error: parsed.error }, parsed.status);
       }
 
+      const createdAt = now().toISOString();
       if (parsed.frontImage) {
-        saveGradeImage(userId, item.inventoryItemId, "front", parsed.frontImage);
+        saveGradeImage(userId, item.inventoryItemId, "front", {
+          ...parsed.frontImage,
+          createdAt,
+        });
       }
       if (parsed.backImage) {
-        saveGradeImage(userId, item.inventoryItemId, "back", parsed.backImage);
+        saveGradeImage(userId, item.inventoryItemId, "back", {
+          ...parsed.backImage,
+          createdAt,
+        });
       }
 
       const frontImage =
@@ -1551,14 +1795,21 @@ export function createApp(
         const cached = getGradeEstimateCache(userId, item.inventoryItemId);
         const cachedEstimate =
           cached?.photoHash === photoHash ? parseStoredGradeEstimate(cached.estimateJson) : null;
-        if (cachedEstimate) {
+        // Never serve a cached 0 — that is a retake, not a pre-grade estimate.
+        if (cachedEstimate && cachedEstimate.overall != null && cachedEstimate.overall >= 1) {
+          if (parsed.frontUploadId) gradeUploads.release(userId, parsed.frontUploadId);
+          if (parsed.backUploadId) gradeUploads.release(userId, parsed.backUploadId);
           return c.json({
             ok: true,
             provider: gradeEstimateHealth(gradingProvider.name),
             estimate: cachedEstimate,
+            quota: quotaSnapshotFor(userId),
           });
         }
       }
+
+      const taken = takeGradeAllowance(userId);
+      if (!taken.ok) return outOfGradesResponse(c, taken.quota);
 
       let estimate = emptyGradeEstimate();
       try {
@@ -1571,18 +1822,21 @@ export function createApp(
         // A crashed or timed-out grader is "unavailable", never a silent empty estimate.
         estimate = unavailableGradeEstimate();
       }
-      // Cache only a real number. Retake / unavailable must re-run next time.
-      if (photoHash && estimate.overall != null) {
+      // Cache only a real 1.0–10.0 number. Retake / unavailable / 0 must re-run.
+      if (photoHash && estimate.overall != null && estimate.overall >= 1) {
         saveGradeEstimateCache(userId, item.inventoryItemId, {
           photoHash,
           estimateJson: JSON.stringify(estimate),
         });
       }
 
+      if (parsed.frontUploadId) gradeUploads.release(userId, parsed.frontUploadId);
+      if (parsed.backUploadId) gradeUploads.release(userId, parsed.backUploadId);
       return c.json({
         ok: true,
         provider: gradeEstimateHealth(gradingProvider.name),
         estimate,
+        quota: taken.quota,
       });
     },
   );
@@ -1862,6 +2116,74 @@ export function createApp(
       purchase: null,
     });
     return c.json({ ok: true, item, maxBuy }, 201);
+  });
+
+  app.post("/v1/inventory/:inventoryItemId/purchased", async (c) => {
+    const userId = c.get("userId");
+    const watchlistItemId = c.req.param("inventoryItemId");
+    const watchlist = getInventoryItem(userId, watchlistItemId);
+    if (!watchlist) return c.json({ ok: false, error: "Inventory item not found" }, 404);
+    if (watchlist.intent !== "watchlist") {
+      return c.json({ ok: false, error: "Only Watchlist items can convert to Purchased" }, 409);
+    }
+
+    const existing = listInventory(userId).find(
+      (row) =>
+        row.intent === "purchased" && watchlistSourceIdFromTags(row.tags) === watchlistItemId,
+    );
+    if (existing) {
+      if (isOpenWatchlist(watchlist)) {
+        updateInventoryItem(userId, watchlistItemId, {
+          workflowState: WATCHLIST_CLOSED_WORKFLOW_STATE,
+          closedAt: existing.createdAt,
+        });
+      }
+      return c.json({ ok: true, created: false, item: inventoryView(userId, existing) });
+    }
+    if (!isOpenWatchlist(watchlist)) {
+      return c.json({ ok: false, error: "This Watchlist item is already closed" }, 409);
+    }
+
+    const confirmation = getConfirmation(userId, watchlist.confirmationId);
+    if (!confirmation) {
+      return c.json({ ok: false, error: "Confirm the card before Purchased" }, 409);
+    }
+
+    const createdAt = new Date().toISOString();
+    const maxBuy = computeMaxBuy({
+      referencePriceAmount: watchlist.referencePriceAmount,
+      condition: watchlist.condition,
+      preferences: getPreferences(userId),
+    });
+    const item = saveInventoryItem({
+      inventoryItemId: crypto.randomUUID(),
+      userId,
+      cardflowCardId: confirmation.cardflowCardId,
+      confirmationId: confirmation.confirmationId,
+      scanId: confirmation.scanId,
+      intent: "purchased",
+      grain: "physical_copy",
+      selectedVariant: watchlist.selectedVariant ?? confirmation.selectedVariant,
+      condition: watchlist.condition,
+      quantity: 1,
+      tags: watchlistConversionTags(watchlistItemId),
+      workflowState: DETAILS_NEEDED_WORKFLOW_STATE,
+      referencePriceAmount: maxBuy.referencePriceAmount,
+      targetMaxBuyAmount: maxBuy.maxBuyAmount,
+      createdAt,
+      purchase: {
+        purchaseId: crypto.randomUUID(),
+        purchasedAt: createdAt,
+        currency: LOCKED_DISPLAY_CURRENCY,
+        costBasis: detailsNeededCostBasis(),
+        maxBuy,
+      },
+    });
+    updateInventoryItem(userId, watchlistItemId, {
+      workflowState: WATCHLIST_CLOSED_WORKFLOW_STATE,
+      closedAt: createdAt,
+    });
+    return c.json({ ok: true, created: true, item: inventoryView(userId, item) }, 201);
   });
 
   app.post("/v1/inventory/:inventoryItemId/purchase", async (c) => {

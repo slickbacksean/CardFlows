@@ -8,15 +8,20 @@ horizontal) measures ~1.40 and fails the hard aspect gate at ~95% off, even
 though the card was found cleanly. Upstream was built for scanner beds where
 the card is always placed upright. Phone photos are not.
 
-We do not loosen the gate. When the found quad is landscape and the aspect
-gate failed, we treat the same quad as a card turned 90 degrees and re-run
-every upstream gate on it, keeping whichever reading has fewer hard-gate
-failures. Every gate and threshold still applies unchanged.
+P0-04: rotate the found quad to portrait BEFORE the aspect check. A sideways
+card is ~95% off 63:88, so a looser 8% gate never saved those photos —
+rotation does. Aspect then runs on a portrait quad with the documented
+tolerances in calibration/thresholds.json:
+
+* 3% (`aspect_ratio_tolerance_pct`) — default after portrait correction.
+* 8% (`aspect_ratio_tolerance_upright_pct`) — only when tilt already passed,
+  for perspective foreshortening on a real rectangle (measured 3–8% on phone
+  captures; misdetections sit at 15–28%). Chosen pending the P0-20 frozen
+  set: tighten the 8% path only if false retakes stay at or below 2%.
 """
 
 from __future__ import annotations
 
-import cv2
 import numpy as np
 
 
@@ -29,36 +34,46 @@ def _quad_is_landscape(corners: np.ndarray | None) -> bool:
     return width > height
 
 
-def _aspect_failed(result) -> bool:
-    return any(g.name == "aspect_ratio" and not g.passed for g in result.gates)
+def portrait_corners(corners: np.ndarray) -> tuple[np.ndarray, bool]:
+    """Return (portrait-labelled quad, rotated).
+
+    `np.roll(..., 1)` is a 90-degree clockwise relabel:
+    [tl, tr, br, bl] → [bl, tl, tr, br]. No pixel rotate, no second search.
+    """
+    if not _quad_is_landscape(corners):
+        return corners, False
+    return np.roll(corners, 1, axis=0), True
 
 
 def detect_upright(image: np.ndarray, thresholds: dict, detect_module):
-    """Return (result, rotated) using upstream detect_and_normalize.
+    """Find the card, force portrait, then run capture gates.
 
-    When the found quad is landscape and its aspect gate failed, the same quad
-    is relabelled as a portrait card (equivalent to rotating the photo 90
-    degrees clockwise) and every upstream gate is re-run on it with upstream
-    functions. No second contour search, so this costs milliseconds.
+    Same gate sequence as upstream `detect_and_normalize`, with the 90-degree
+    portrait relabel inserted after the contour is found and before tilt /
+    aspect. Sideways photos therefore reach the aspect check as 63:88, not
+    88:63.
     """
-    result = detect_module.detect_and_normalize(image, thresholds)
-    if not (_aspect_failed(result) and _quad_is_landscape(result.contour)):
-        return result, False
-
     cap_cfg = thresholds["capture"]
-    corners = np.roll(result.contour, 1, axis=0)  # [bl, tl, tr, br] -> portrait
     gates = [detect_module.check_resolution(image, cap_cfg)]
+
+    corners = detect_module.find_card_contour(image)
+    if corners is None:
+        gates.append(detect_module.QualityGate("card_detection", False, "no card contour found"))
+        return detect_module.DetectResult(ok=False, warped=None, gates=gates, contour=None), False
+
     gates.append(detect_module.QualityGate("card_detection", True, "card contour found"))
+    corners, rotated = portrait_corners(corners)
+
     tilt_gate = detect_module.check_tilt(corners, cap_cfg)
     gates.append(tilt_gate)
     gates.append(detect_module.check_aspect_ratio(corners, cap_cfg, tilt_ok=tilt_gate.passed))
+
     size = (cap_cfg["canonical_width_px"], cap_cfg["canonical_height_px"])
     warped = detect_module.perspective_correct(image, corners, size)
     gates.append(detect_module.detect_glare(warped, cap_cfg["glare"]))
     gates.append(detect_module.detect_uneven_lighting(warped, cap_cfg["uneven_lighting"]))
-    rotated = detect_module.DetectResult(
+
+    result = detect_module.DetectResult(
         ok=all(g.passed for g in gates), warped=warped, gates=gates, contour=corners
     )
-    if len(rotated.hard_failures) < len(result.hard_failures):
-        return rotated, True
-    return result, False
+    return result, rotated

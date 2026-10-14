@@ -5,6 +5,7 @@ import {
 } from "@cardflow/shared";
 import type { Context } from "hono";
 import { z } from "zod";
+import { oversizedImageHeaderError, stripImageMetadata } from "./grade-image";
 import {
   SCAN_IMAGE_MAX_BYTES,
   mimeFromFileName,
@@ -83,7 +84,9 @@ function validateImageBytes(
   if (mimeFromImageMagic(bytes) !== mime.data) {
     return { error: "Image must be jpeg, png, or webp", status: 400 };
   }
-  return { bytes, mimeType: mime.data };
+  const oversized = oversizedImageHeaderError(bytes);
+  if (oversized) return oversized;
+  return { bytes: stripImageMetadata(bytes, mime.data), mimeType: mime.data };
 }
 
 export function parseScanCreateJson(

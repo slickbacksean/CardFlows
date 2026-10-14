@@ -1,5 +1,6 @@
 import { serve } from "@hono/node-server";
 import { loadLocalApiEnv } from "./local-env";
+import { initApiSentry } from "./sentry";
 import { createApp } from "./app";
 import { createCatalogFromEnv } from "./catalog-env";
 import { createPricingFromEnv, createPokecollectorAccountsFromEnv } from "./pokecollector-env";
@@ -7,6 +8,7 @@ import { createRecognitionFromEnv } from "./recognition-env";
 import { createGradeEstimateFromEnv, gradeEngineProbeFromEnv } from "./grade-estimate-env";
 import { createSlabPricingFromEnv } from "./poketrace-env";
 import { resolveDevAutoSession } from "./session";
+import { startPhotoRetentionJob } from "./photo-retention";
 import { createStoreFromEnv } from "./store-env";
 import { loadOptionalPhashIndex } from "./obb-phash-provider";
 import { resolveLiveIdentityOpenclipFromEnv } from "./live-identity-openclip";
@@ -14,6 +16,7 @@ import { resolveLiveVideoObbDetector } from "./live-video-obb";
 import type { ObbDetector } from "@cardflow/shared";
 
 loadLocalApiEnv();
+initApiSentry();
 
 const parsedPort = Number(process.env.PORT);
 const port = Number.isFinite(parsedPort) && parsedPort > 0 ? parsedPort : 3001;
@@ -46,6 +49,15 @@ const app = createApp(store, {
   liveVideoObb: () => liveVideoYoloHolder.detector,
   liveIdentifyEnabled: recognitionSelection.identifyEnabled,
 });
+startPhotoRetentionJob({
+  purge: (now) => store.purgeExpiredGradePhotos(now),
+  onPurge: (result) => {
+    if (result.deleted > 0) {
+      console.log(`Photo retention: deleted ${result.deleted} graded photo(s) older than 30 days`);
+    }
+  },
+});
+
 void resolveLiveVideoObbDetector().then((detector) => {
   liveVideoYoloHolder.detector = detector;
   console.log(

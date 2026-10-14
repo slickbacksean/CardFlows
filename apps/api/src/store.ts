@@ -13,6 +13,7 @@ import {
   type CardFlowCanonicalCard,
   type CardFlowNormalizedRecognitionResult,
   type CatalogMappingResult,
+  GRADE_SIDES,
   type GradeSide,
   type GradingReturnedCopy,
   type GradingSubmittedCopy,
@@ -22,14 +23,24 @@ import {
   type MaxBuyComputation,
   type MaxBuyPreferences,
   type RecognitionScenario,
+  decideGradeConsume,
+  isGradePlan,
+  type GradePlan,
+  type GradeQuotaConsumeSource,
 } from "@cardflow/shared";
 import {
   gradeImageStorageCandidates,
   gradeImageStorageRef,
   isFirstPartyGradeImageRef,
   mimeFromGradeStorageRef,
+  stripImageMetadata,
   type GradeImageBytes,
 } from "./grade-image";
+import {
+  isGradePhotoExpired,
+  type GradePhotoObject,
+  type PhotoPurgeResult,
+} from "./photo-retention";
 import {
   isFirstPartyScanImageRef,
   mimeFromScanStorageRef,
@@ -90,9 +101,10 @@ export interface InventoryItemRecord {
   condition: string | null;
   quantity: number | null;
   tags: string[];
-  workflowState: "acquired" | "watching" | "drafted" | "details_needed";
+  workflowState: "acquired" | "watching" | "drafted" | "details_needed" | "watchlist_closed";
   referencePriceAmount: string | null;
   targetMaxBuyAmount: string | null;
+  closedAt?: string | null;
   createdAt: string;
   purchase: {
     purchaseId: string;
@@ -109,6 +121,26 @@ export interface InventoryItemRecord {
     maxBuy: MaxBuyComputation;
   } | null;
 }
+
+export interface GradeAccountRecord {
+  plan: GradePlan;
+  extraCredits: number;
+}
+
+export interface GradeQuotaConsumeInput {
+  monthKey: string;
+  monthlyLimit: number;
+  at: string;
+}
+
+export type GradeQuotaConsumeResult =
+  | {
+      ok: true;
+      source: GradeQuotaConsumeSource;
+      usedThisMonth: number;
+      extraCredits: number;
+    }
+  | { ok: false; usedThisMonth: number; extraCredits: number };
 
 /** One recorded collection estimate for a local day. Recorded going forward, never backfilled. */
 export interface PortfolioValueSnapshot {
@@ -130,6 +162,7 @@ interface Store {
   scans: Map<string, ScanRecord>;
   scanImages: Map<string, ScanImageBytes>;
   gradeImages: Map<string, GradeImageBytes>;
+  gradePhotoMeta: Map<string, GradePhotoObject>;
   confirmations: Map<string, ConfirmationRecord>;
   canonicalByFingerprint: Map<string, CardFlowCanonicalCard>;
   inventory: InventoryItemRecord[];
@@ -147,6 +180,7 @@ const store: Store = {
   scans: new Map(),
   scanImages: new Map(),
   gradeImages: new Map(),
+  gradePhotoMeta: new Map(),
   confirmations: new Map(),
   canonicalByFingerprint: new Map(),
   inventory: [],
@@ -262,10 +296,25 @@ export function saveScanImage(
   const record: ScanImageBytes = {
     storageRef: scanImageStorageRef(scanId, input.mimeType),
     mimeType: input.mimeType,
-    bytes: input.bytes,
+    bytes: stripImageMetadata(input.bytes, input.mimeType),
   };
   store.scanImages.set(scanId, record);
   return record;
+}
+
+function gradePhotoMetaKey(userId: string, inventoryItemId: string, side: GradeSide): string {
+  return `${userId}\0${inventoryItemId}\0${side}`;
+}
+
+export function deleteScanImage(userId: string, scanId: string): boolean {
+  const scan = getScan(userId, scanId);
+  if (!scan) return false;
+  const had = store.scanImages.delete(scanId);
+  if (scan.imageStorageRef || scan.imageMimeType) {
+    store.scans.set(scanId, { ...scan, imageStorageRef: null, imageMimeType: null });
+    return true;
+  }
+  return had;
 }
 
 /** Re-read persisted still bytes by first-party `image_storage_ref`. */
@@ -292,18 +341,27 @@ export function saveGradeImage(
   userId: string,
   inventoryItemId: string,
   side: GradeSide,
-  input: { bytes: Uint8Array; mimeType: ScanImageMimeType },
+  input: { bytes: Uint8Array; mimeType: ScanImageMimeType; createdAt?: string },
 ): GradeImageBytes | undefined {
   if (!getInventoryItem(userId, inventoryItemId)) return undefined;
+  const createdAt = input.createdAt ?? new Date().toISOString();
   const record: GradeImageBytes = {
     storageRef: gradeImageStorageRef(inventoryItemId, side, input.mimeType),
     mimeType: input.mimeType,
-    bytes: input.bytes,
+    bytes: stripImageMetadata(input.bytes, input.mimeType),
+    createdAt,
   };
   for (const candidate of gradeImageStorageCandidates(inventoryItemId, side)) {
     store.gradeImages.delete(candidate);
   }
   store.gradeImages.set(record.storageRef, record);
+  store.gradePhotoMeta.set(gradePhotoMetaKey(userId, inventoryItemId, side), {
+    userId,
+    inventoryItemId,
+    side,
+    storageRef: record.storageRef,
+    createdAt,
+  });
   return record;
 }
 
@@ -318,9 +376,51 @@ export function getGradeImage(
     const mimeType = mimeFromGradeStorageRef(candidate);
     if (!mimeType) continue;
     const record = store.gradeImages.get(candidate);
-    if (record && record.storageRef === candidate) return record;
+    if (record && record.storageRef === candidate) {
+      const meta = store.gradePhotoMeta.get(gradePhotoMetaKey(userId, inventoryItemId, side));
+      return meta ? { ...record, createdAt: meta.createdAt } : record;
+    }
   }
   return undefined;
+}
+
+export function deleteGradeImage(
+  userId: string,
+  inventoryItemId: string,
+  side: GradeSide,
+): boolean {
+  if (!getInventoryItem(userId, inventoryItemId)) return false;
+  let deleted = false;
+  for (const candidate of gradeImageStorageCandidates(inventoryItemId, side)) {
+    if (store.gradeImages.delete(candidate)) deleted = true;
+  }
+  if (store.gradePhotoMeta.delete(gradePhotoMetaKey(userId, inventoryItemId, side))) {
+    deleted = true;
+  }
+  store.gradeEstimateCache.delete(gradeEstimateCacheKey(userId, inventoryItemId));
+  return deleted;
+}
+
+export function deleteUserPhotos(userId: string): PhotoPurgeResult {
+  let deleted = 0;
+  for (const item of listInventory(userId)) {
+    for (const side of GRADE_SIDES) {
+      if (deleteGradeImage(userId, item.inventoryItemId, side)) deleted += 1;
+    }
+  }
+  for (const scan of listScans(userId)) {
+    if (deleteScanImage(userId, scan.scanId)) deleted += 1;
+  }
+  return { deleted };
+}
+
+export function purgeExpiredGradePhotos(now: Date = new Date()): PhotoPurgeResult {
+  let deleted = 0;
+  for (const meta of [...store.gradePhotoMeta.values()]) {
+    if (!isGradePhotoExpired(meta.createdAt, now)) continue;
+    if (deleteGradeImage(meta.userId, meta.inventoryItemId, meta.side)) deleted += 1;
+  }
+  return { deleted };
 }
 
 export function listInventory(userId: string): InventoryItemRecord[] {
@@ -463,6 +563,35 @@ export function saveInventoryItem(item: InventoryItemRecord): InventoryItemRecor
   return item;
 }
 
+/** Reverses a Purchased write. Leaves no inventory, purchase, or draft row behind. */
+export function deleteInventoryItem(userId: string, inventoryItemId: string): boolean {
+  const item = getInventoryItem(userId, inventoryItemId);
+  if (!item) return false;
+  store.inventory = store.inventory.filter((row) => row.inventoryItemId !== inventoryItemId);
+  const draftId = store.draftIdByInventoryItemId.get(inventoryItemId);
+  if (draftId) {
+    store.drafts.delete(draftId);
+    store.draftIdByInventoryItemId.delete(inventoryItemId);
+  }
+  store.gradingSubmitted = store.gradingSubmitted.filter(
+    (row) => !(row.userId === userId && row.inventoryItemId === inventoryItemId),
+  );
+  store.gradingReturned = store.gradingReturned.filter(
+    (row) => !(row.userId === userId && row.inventoryItemId === inventoryItemId),
+  );
+  store.gradeEstimateCache.delete(gradeEstimateCacheKey(userId, inventoryItemId));
+  for (const side of GRADE_SIDES) {
+    for (const candidate of gradeImageStorageCandidates(inventoryItemId, side)) {
+      store.gradeImages.delete(candidate);
+    }
+  }
+  const scan = store.scans.get(item.scanId);
+  if (scan?.inventoryItemId === inventoryItemId) {
+    store.scans.set(item.scanId, { ...scan, inventoryItemId: null });
+  }
+  return true;
+}
+
 export function listGradingSubmitted(userId: string): GradingSubmittedCopy[] {
   return crmRowsForUser(store.gradingSubmitted, userId);
 }
@@ -568,8 +697,12 @@ export interface StorePort {
   saveScanImage: typeof saveScanImage;
   readStoredScanImage: typeof readStoredScanImage;
   getScanImage: typeof getScanImage;
+  deleteScanImage: typeof deleteScanImage;
   saveGradeImage: typeof saveGradeImage;
   getGradeImage: typeof getGradeImage;
+  deleteGradeImage: typeof deleteGradeImage;
+  deleteUserPhotos: typeof deleteUserPhotos;
+  purgeExpiredGradePhotos: typeof purgeExpiredGradePhotos;
   listInventory: typeof listInventory;
   confirmScan: typeof confirmScan;
   rejectScan: typeof rejectScan;
@@ -583,6 +716,7 @@ export interface StorePort {
   getDraftForInventoryItem: typeof getDraftForInventoryItem;
   saveDraft: typeof saveDraft;
   saveInventoryItem: typeof saveInventoryItem;
+  deleteInventoryItem: typeof deleteInventoryItem;
   listGradingSubmitted: typeof listGradingSubmitted;
   listGradingReturned: typeof listGradingReturned;
   saveGradingSubmitted: typeof saveGradingSubmitted;
@@ -593,9 +727,87 @@ export interface StorePort {
   saveGradeEstimateCache: typeof saveGradeEstimateCache;
   savePortfolioSnapshot: typeof savePortfolioSnapshot;
   listPortfolioSnapshots: typeof listPortfolioSnapshots;
+  getGradeAccount: (userId: string) => GradeAccountRecord;
+  setGradePlan: (userId: string, plan: GradePlan, at: string) => GradeAccountRecord;
+  addGradeCredits: (userId: string, credits: number, at: string) => GradeAccountRecord;
+  getGradeQuotaUsage: (userId: string, monthKey: string) => number;
+  consumeGradeQuota: (userId: string, input: GradeQuotaConsumeInput) => GradeQuotaConsumeResult;
+  getVendorQuotaUsage: (provider: string, monthKey: string) => number;
+  consumeVendorQuota: (provider: string, monthKey: string, cap: number) => boolean;
 }
 
+const DEFAULT_GRADE_ACCOUNT: GradeAccountRecord = { plan: "free", extraCredits: 0 };
+
 export function createMemoryStore(): StorePort {
+  const gradeAccounts = new Map<string, GradeAccountRecord>();
+  const gradeUsage = new Map<string, number>();
+  const vendorUsage = new Map<string, number>();
+
+  function usageKey(userId: string, monthKey: string): string {
+    return `${userId}\0${monthKey}`;
+  }
+
+  function vendorKey(provider: string, monthKey: string): string {
+    return `${provider}\0${monthKey}`;
+  }
+
+  function getGradeAccount(userId: string): GradeAccountRecord {
+    const row = gradeAccounts.get(userId);
+    return row ? { ...row } : { ...DEFAULT_GRADE_ACCOUNT };
+  }
+
+  function setGradePlan(userId: string, plan: GradePlan, _at: string): GradeAccountRecord {
+    const current = getGradeAccount(userId);
+    const next = { ...current, plan: isGradePlan(plan) ? plan : current.plan };
+    gradeAccounts.set(userId, next);
+    return { ...next };
+  }
+
+  function addGradeCredits(userId: string, credits: number, _at: string): GradeAccountRecord {
+    const add = Math.floor(credits);
+    if (!Number.isFinite(add) || add <= 0) return getGradeAccount(userId);
+    const current = getGradeAccount(userId);
+    const next = { ...current, extraCredits: current.extraCredits + add };
+    gradeAccounts.set(userId, next);
+    return { ...next };
+  }
+
+  function getGradeQuotaUsage(userId: string, monthKey: string): number {
+    return gradeUsage.get(usageKey(userId, monthKey)) ?? 0;
+  }
+
+  function consumeGradeQuota(userId: string, input: GradeQuotaConsumeInput): GradeQuotaConsumeResult {
+    const usedThisMonth = getGradeQuotaUsage(userId, input.monthKey);
+    const account = getGradeAccount(userId);
+    const decision = decideGradeConsume({
+      usedThisMonth,
+      monthlyLimit: input.monthlyLimit,
+      extraCredits: account.extraCredits,
+    });
+    if (!decision.ok) {
+      return { ok: false, usedThisMonth, extraCredits: account.extraCredits };
+    }
+    if (decision.source === "monthly") {
+      const used = usedThisMonth + 1;
+      gradeUsage.set(usageKey(userId, input.monthKey), used);
+      return { ok: true, source: "monthly", usedThisMonth: used, extraCredits: account.extraCredits };
+    }
+    const extraCredits = account.extraCredits - 1;
+    gradeAccounts.set(userId, { ...account, extraCredits });
+    return { ok: true, source: "credit", usedThisMonth, extraCredits };
+  }
+
+  function getVendorQuotaUsage(provider: string, monthKey: string): number {
+    return vendorUsage.get(vendorKey(provider, monthKey)) ?? 0;
+  }
+
+  function consumeVendorQuota(provider: string, monthKey: string, cap: number): boolean {
+    const used = getVendorQuotaUsage(provider, monthKey);
+    if (used >= cap) return false;
+    vendorUsage.set(vendorKey(provider, monthKey), used + 1);
+    return true;
+  }
+
   return {
     createSession,
     getSessionByToken,
@@ -611,8 +823,12 @@ export function createMemoryStore(): StorePort {
     saveScanImage,
     readStoredScanImage,
     getScanImage,
+    deleteScanImage,
     saveGradeImage,
     getGradeImage,
+    deleteGradeImage,
+    deleteUserPhotos,
+    purgeExpiredGradePhotos,
     listInventory,
     confirmScan,
     rejectScan,
@@ -626,6 +842,7 @@ export function createMemoryStore(): StorePort {
     getDraftForInventoryItem,
     saveDraft,
     saveInventoryItem,
+    deleteInventoryItem,
     listGradingSubmitted,
     listGradingReturned,
     saveGradingSubmitted,
@@ -636,5 +853,12 @@ export function createMemoryStore(): StorePort {
     saveGradeEstimateCache,
     savePortfolioSnapshot,
     listPortfolioSnapshots,
+    getGradeAccount,
+    setGradePlan,
+    addGradeCredits,
+    getGradeQuotaUsage,
+    consumeGradeQuota,
+    getVendorQuotaUsage,
+    consumeVendorQuota,
   };
 }
