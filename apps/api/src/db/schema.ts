@@ -309,6 +309,40 @@ export const portfolioValueSnapshots = sqliteTable(
   (table) => [primaryKey({ columns: [table.userId, table.snapshotDate] })],
 );
 
+/** Plan + purchased extra pre-grade credits. Monthly usage is in grade_quota_usage. */
+export const gradeAccounts = sqliteTable(
+  "grade_accounts",
+  {
+    userId: text("user_id").primaryKey(),
+    plan: text("plan").notNull().default("free"),
+    extraCredits: integer("extra_credits").notNull().default(0),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (table) => [check("grade_accounts_plan_chk", sql`${table.plan} in ('free', 'premium')`)],
+);
+
+/** Pre-grade estimates used in one UTC calendar month. */
+export const gradeQuotaUsage = sqliteTable(
+  "grade_quota_usage",
+  {
+    userId: text("user_id").notNull(),
+    monthKey: text("month_key").notNull(),
+    used: integer("used").notNull().default(0),
+  },
+  (table) => [primaryKey({ columns: [table.userId, table.monthKey] })],
+);
+
+/** Global vendor call budget (CardSight identify). */
+export const vendorQuotaUsage = sqliteTable(
+  "vendor_quota_usage",
+  {
+    provider: text("provider").notNull(),
+    monthKey: text("month_key").notNull(),
+    used: integer("used").notNull().default(0),
+  },
+  (table) => [primaryKey({ columns: [table.provider, table.monthKey] })],
+);
+
 export const schema = {
   cardflowCards,
   cardExternalIds,
@@ -325,4 +359,7 @@ export const schema = {
   gradeEstimateCache,
   gradePhotoObjects,
   portfolioValueSnapshots,
+  gradeAccounts,
+  gradeQuotaUsage,
+  vendorQuotaUsage,
 };

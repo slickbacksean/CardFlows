@@ -1,3 +1,4 @@
+import jpeg from "jpeg-js";
 import { describe, expect, it } from "vitest";
 import { createApp } from "./app";
 import { normalizeIdentityCropQuad } from "./live-identity-openclip";
@@ -82,5 +83,33 @@ describe("livestream timing + crop corners", () => {
     expect(body.summary.acceptRate).toBe(1);
     expect(body.summary.warpedRate).toBe(0.5);
     expect(body.summary.stages.embed).toMatchObject({ count: 2, p50: 40, p95: 40 });
+  });
+
+  it("keeps phone 4-corners when YOLO also finds a card, and uses YOLO corners when the phone has none", async () => {
+    const width = 40;
+    const height = 56;
+    const rgba = Buffer.alloc(width * height * 4, 180);
+    const videoFrameJpeg = jpeg.encode({ data: rgba, width, height }, 80).data.toString("base64");
+    const yolo = {
+      async detect() {
+        return [{ cx: 20, cy: 28, width: 24, height: 36, angle: 0.3, score: 0.91 }];
+      },
+    };
+    const phoneSeen: Array<number[] | null | undefined> = [];
+    const phoneApp = createApp(createMemoryStore(), {
+      liveVideoObb: () => yolo,
+      liveIdentityOpenclip: fakeOpenclip(phoneSeen),
+    });
+    await identify(phoneApp, { identityCropQuad: quad, videoFrameJpeg });
+    expect(phoneSeen).toEqual([quad]);
+
+    const yoloSeen: Array<number[] | null | undefined> = [];
+    const yoloApp = createApp(createMemoryStore(), {
+      liveVideoObb: () => yolo,
+      liveIdentityOpenclip: fakeOpenclip(yoloSeen),
+    });
+    await identify(yoloApp, { videoFrameJpeg, identityCropJpeg: undefined });
+    expect(yoloSeen[0]).toHaveLength(8);
+    expect(yoloSeen[0]?.every((n) => typeof n === "number" && Number.isFinite(n))).toBe(true);
   });
 });

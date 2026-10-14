@@ -21,6 +21,8 @@ export interface CardFlowPriceEstimate {
   notABid: true;
   display: string;
   disclaimer: string;
+  /** ISO time the estimate was fetched. Optional until the server cache (P1-03) always sends it. */
+  fetchedAt?: string | null;
 }
 
 export interface PriceEstimateRequest {

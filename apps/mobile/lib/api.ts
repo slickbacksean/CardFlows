@@ -4,6 +4,7 @@ import {
   cardFlowUnreachableMessage,
   resolveClientApiUrl,
   emptySlabEstimate,
+  GRADE_QUOTA_COPY,
   PREGRADE_DETECT_UNAVAILABLE_MESSAGE,
   PREGRADE_UNAVAILABLE_MESSAGE,
   unavailableGradeEstimate,
@@ -27,11 +28,13 @@ import {
   type LiveScanStage,
   type LiveVideoIdentityPlatform,
   type LiveVideoIdentityResult,
+  type GradeQuotaSnapshot,
   type MaxBuyPreferences,
   type RecognitionConfidence,
   type RecognitionScenario,
 } from "@cardflow/shared";
 import { Platform } from "react-native";
+import { createRequestId, rememberRequestId } from "./request-id";
 import { isPhysicalRuntime } from "./runtime-host";
 import { peekSessionToken, waitForSessionRestore } from "./session-token";
 
@@ -286,6 +289,11 @@ async function request<T>(
   if (!isFormData) headers["Content-Type"] = "application/json";
   const token = peekSessionToken();
   if (token) headers.Authorization = `Bearer ${token}`;
+  const appKey = process.env.EXPO_PUBLIC_CARD_FLOW_APP_KEY?.trim();
+  if (appKey) headers["X-CardFlow-App-Key"] = appKey;
+  const requestId = createRequestId();
+  headers["x-request-id"] = requestId;
+  rememberRequestId(requestId);
 
   const url = `${apiUrl()}${path}`;
   const controller = new AbortController();
@@ -328,8 +336,11 @@ async function request<T>(
   }
   if (!response.ok) {
     const error = new Error(cardFlowHttpErrorMessage(response.status, data.error));
-    (error as Error & { status?: number }).status = response.status;
-    throw error;
+    const extra = error as Error & { status?: number; quota?: GradeQuotaSnapshot };
+    extra.status = response.status;
+    const quota = (data as { quota?: GradeQuotaSnapshot }).quota;
+    if (quota) extra.quota = quota;
+    throw extra;
   }
   return data;
 }
@@ -658,13 +669,42 @@ export async function requestPhotoPregrade(input: {
     }
     return data;
   } catch (error) {
+    const extra = error as Error & { status?: number; quota?: GradeQuotaSnapshot };
+    if (extra.status === 429 && extra.message === GRADE_QUOTA_COPY.outOfGrades) {
+      return {
+        ok: false,
+        status: "out_of_grades",
+        code: "OUT_OF_GRADES",
+        message: extra.message,
+        quota: extra.quota,
+      };
+    }
     return {
       ok: false,
       status: "unavailable",
       code: "UNAVAILABLE",
-      message: error instanceof Error && error.message ? error.message : PREGRADE_UNAVAILABLE_MESSAGE,
+      message: extra instanceof Error && extra.message ? extra.message : PREGRADE_UNAVAILABLE_MESSAGE,
     };
   }
+}
+
+export function getGradeQuota() {
+  return request<{ ok: true; quota: GradeQuotaSnapshot }>("/v1/grade/quota");
+}
+
+export function consumeGradeCredits(count = 1) {
+  return request<{ ok: true; quota: GradeQuotaSnapshot }>("/v1/grade/credits/consume", {
+    method: "POST",
+    body: JSON.stringify({ count }),
+  });
+}
+
+/** IAP stub. Real StoreKit is not wired; the server returns a plain "not available" unless the stub flag is on. */
+export function grantGradeCredits(input: { credits?: number; plan?: "free" | "premium" }) {
+  return request<{ ok: true; quota: GradeQuotaSnapshot }>("/v1/grade/credits", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
 }
 
 export async function getSlabEstimates(tcgdexId: string): Promise<CardFlowSlabEstimate> {
@@ -789,11 +829,24 @@ export async function saveLivestreamPurchase(input: {
   });
 }
 
-/** Reverses a livestream details-needed Purchased write. Leaves no Purchased row. */
-export function undoLivestreamPurchase(inventoryItemId: string) {
+/** Reverses a details-needed Purchased write (livestream HUD or Watchlist). */
+export function undoPurchased(inventoryItemId: string) {
   return request<{ ok: true; deleted: true }>(
     `/v1/inventory/${encodeURIComponent(inventoryItemId)}`,
     { method: "DELETE" },
+  );
+}
+
+/** Reverses a livestream details-needed Purchased write. Leaves no Purchased row. */
+export function undoLivestreamPurchase(inventoryItemId: string) {
+  return undoPurchased(inventoryItemId);
+}
+
+/** One-tap Watchlist → Purchased. Carries identity and Max Buy; price stays optional. */
+export function convertWatchlistToPurchased(inventoryItemId: string) {
+  return request<{ ok: true; item: InventoryItem; created?: boolean }>(
+    `/v1/inventory/${encodeURIComponent(inventoryItemId)}/purchased`,
+    { method: "POST" },
   );
 }
 

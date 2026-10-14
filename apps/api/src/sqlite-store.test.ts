@@ -360,6 +360,49 @@ describe("SQLite store adapter", () => {
     expect(store.deleteInventoryItem(userId, incomplete.inventoryItemId)).toBe(false);
   });
 
+  it("persists a closed Watchlist row so convert-to-Purchased survives reopen", async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "cardflow-sqlite-"));
+    tempDirs.push(dir);
+    const sqlitePath = path.join(dir, "cardflow.sqlite");
+    const first = createSqliteStore({ sqlitePath });
+    const userId = DEFAULT_INVITED_USER_ID;
+    const { confirmation, canonicalCard } = first.confirmScan({
+      scan: first.saveScan(await makeScan(userId)),
+      selectedTcgdexId: "base1-58",
+    });
+    const watchlist = first.saveInventoryItem({
+      inventoryItemId: crypto.randomUUID(),
+      userId,
+      cardflowCardId: canonicalCard.cardflowCardId as string,
+      confirmationId: confirmation.confirmationId,
+      scanId: confirmation.scanId,
+      intent: "watchlist",
+      grain: "interest_not_physical_copy",
+      selectedVariant: "holo",
+      condition: "NM",
+      quantity: null,
+      tags: ["raw"],
+      workflowState: "watching",
+      referencePriceAmount: "8.00",
+      targetMaxBuyAmount: "5.57",
+      createdAt: new Date().toISOString(),
+      purchase: null,
+    });
+    first.updateInventoryItem(userId, watchlist.inventoryItemId, {
+      workflowState: "watchlist_closed",
+      closedAt: "2026-10-13T17:00:00.000Z",
+    });
+    first.close();
+
+    const second = createSqliteStore({ sqlitePath });
+    stores.push(second);
+    const loaded = second.getInventoryItem(userId, watchlist.inventoryItemId);
+    expect(loaded?.workflowState).toBe("watchlist_closed");
+    expect(loaded?.closedAt).toBe("2026-10-13T17:00:00.000Z");
+    expect(loaded?.selectedVariant).toBe("holo");
+    expect(loaded?.targetMaxBuyAmount).toBe("5.57");
+  });
+
   it("persists hashed session tokens across reopen and never stores the raw token", () => {
     const dir = mkdtempSync(path.join(tmpdir(), "cardflow-sqlite-"));
     tempDirs.push(dir);

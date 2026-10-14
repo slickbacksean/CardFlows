@@ -93,6 +93,121 @@ export const noCardObbDetector: ObbDetector = {
   },
 };
 
+/** Phone crop max edge; YOLO AABB crops match that so warp.py sees the same scale. */
+export const LIVE_WARP_CROP_MAX_EDGE = 448;
+const LIVE_WARP_CROP_INSET = 0.04;
+
+/** TL, TR, BR, BL of an OBB in image pixels. */
+export function obbCornersTlTrBrBl(box: ObbBox): { x: number; y: number }[] {
+  const cos = Math.cos(box.angle);
+  const sin = Math.sin(box.angle);
+  const hw = Math.abs(box.width) / 2;
+  const hh = Math.abs(box.height) / 2;
+  const local: Array<[number, number]> = [
+    [-hw, -hh],
+    [hw, -hh],
+    [hw, hh],
+    [-hw, hh],
+  ];
+  return local.map(([dx, dy]) => ({
+    x: box.cx + dx * cos - dy * sin,
+    y: box.cy + dx * sin + dy * cos,
+  }));
+}
+
+export function obbQuadTlTrBrBl(box: ObbBox): number[] {
+  return obbCornersTlTrBrBl(box).flatMap((point) => [point.x, point.y]);
+}
+
+/** Axis-aligned crop around the OBB (4% inset, like the phone crop) so warp.py can straighten. */
+export function axisAlignedInsetCrop(
+  box: ObbBox,
+  imageWidth: number,
+  imageHeight: number,
+  inset = LIVE_WARP_CROP_INSET,
+): { x: number; y: number; width: number; height: number } | null {
+  const corners = obbCornersTlTrBrBl(box);
+  let x0 = Math.min(...corners.map((corner) => corner.x));
+  let y0 = Math.min(...corners.map((corner) => corner.y));
+  let x1 = Math.max(...corners.map((corner) => corner.x));
+  let y1 = Math.max(...corners.map((corner) => corner.y));
+  const padX = (x1 - x0) * inset;
+  const padY = (y1 - y0) * inset;
+  x0 = Math.max(0, x0 + padX);
+  y0 = Math.max(0, y0 + padY);
+  x1 = Math.min(imageWidth, x1 - padX);
+  y1 = Math.min(imageHeight, y1 - padY);
+  const width = x1 - x0;
+  const height = y1 - y0;
+  if (width < 8 || height < 8) return null;
+  return { x: x0, y: y0, width, height };
+}
+
+export function cropRgbRect(
+  image: RgbBitmap,
+  rect: { x: number; y: number; width: number; height: number },
+): RgbBitmap {
+  const width = Math.max(1, Math.round(rect.width));
+  const height = Math.max(1, Math.round(rect.height));
+  const left = Math.round(rect.x);
+  const top = Math.round(rect.y);
+  const data = new Uint8Array(width * height * 3);
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const srcX = Math.max(0, Math.min(image.width - 1, left + x));
+      const srcY = Math.max(0, Math.min(image.height - 1, top + y));
+      const src = (srcY * image.width + srcX) * 3;
+      const dst = (y * width + x) * 3;
+      data[dst] = image.data[src] ?? 0;
+      data[dst + 1] = image.data[src + 1] ?? 0;
+      data[dst + 2] = image.data[src + 2] ?? 0;
+    }
+  }
+  return { width, height, data };
+}
+
+export function mapQuadIntoCrop(
+  quad: readonly number[],
+  crop: { x: number; y: number; width: number; height: number },
+  outWidth: number,
+  outHeight: number,
+): number[] {
+  const scaleX = crop.width > 0 ? outWidth / crop.width : 1;
+  const scaleY = crop.height > 0 ? outHeight / crop.height : 1;
+  const mapped: number[] = [];
+  for (let i = 0; i < 8; i += 2) {
+    mapped.push(((quad[i] ?? 0) - crop.x) * scaleX);
+    mapped.push(((quad[i + 1] ?? 0) - crop.y) * scaleY);
+  }
+  return mapped;
+}
+
+/**
+ * Axis-aligned detector crop plus the 4 OBB corners in that crop's pixels.
+ * The sidecar runs `warp.py` on these corners before embedding.
+ */
+export function liveWarpCropFromObb(
+  image: RgbBitmap,
+  box: ObbBox,
+  maxEdge = LIVE_WARP_CROP_MAX_EDGE,
+): { crop: RgbBitmap; quad: number[] } | null {
+  const bounds = axisAlignedInsetCrop(box, image.width, image.height);
+  if (!bounds) return null;
+  let crop = cropRgbRect(image, bounds);
+  const scale = Math.min(1, maxEdge / Math.max(crop.width, crop.height));
+  if (scale < 1) {
+    crop = resizeRgb(
+      crop,
+      Math.max(8, Math.round(crop.width * scale)),
+      Math.max(8, Math.round(crop.height * scale)),
+    );
+  }
+  return {
+    crop,
+    quad: mapQuadIntoCrop(obbQuadTlTrBrBl(box), bounds, crop.width, crop.height),
+  };
+}
+
 export function cropOrientedBox(image: RgbBitmap, box: ObbBox): RgbBitmap {
   const width = Math.max(1, Math.round(Math.abs(box.width)));
   const height = Math.max(1, Math.round(Math.abs(box.height)));

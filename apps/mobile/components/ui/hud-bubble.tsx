@@ -31,7 +31,7 @@ export interface PurchasedUndoToastProps {
   undoing?: boolean;
 }
 
-/** 5-second Undo control. Replaces any confirm dialog on livestream Purchased. */
+/** 5-second Undo control. Replaces any confirm dialog on livestream or Watchlist Purchased. */
 export function PurchasedUndoToast({ onUndo, undoing = false }: PurchasedUndoToastProps) {
   return (
     <View

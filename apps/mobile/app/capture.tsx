@@ -1,8 +1,15 @@
+import {
+  CAMERA_ALLOW_LABEL,
+  CAMERA_DENIED_BODY,
+  CAMERA_DENIED_TITLE,
+  CAMERA_PREPROMPT_BODY,
+  CAMERA_PREPROMPT_TITLE,
+  PHOTO_PICKER_UNAVAILABLE_COPY,
+} from "@cardflow/shared";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { CameraView, useCameraPermissions } from "expo-camera";
-import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
-import { useEffect, useRef, useState, type RefObject } from "react";
+import { useRef, useState, type RefObject } from "react";
 import {
   ActivityIndicator,
   Linking,
@@ -15,10 +22,11 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { DevScenarioPanel } from "@/components/ui/dev-scenario-panel";
-import { PrimaryButton } from "@/components/ui/primary-button";
+import { PermissionGate } from "@/components/ui/permission-gate";
 import { createScan } from "@/lib/api";
 import { getMockScenario } from "@/lib/mock-scenario";
 import { prepareScanStill, rememberScanCapture } from "@/lib/scan-capture";
+import { launchSystemImagePicker } from "@/lib/system-photo-picker";
 import { colors, space } from "@/lib/theme";
 
 const IS_NATIVE = Platform.OS === "ios" || Platform.OS === "android";
@@ -35,17 +43,15 @@ export default function CaptureScreen() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [flashlightOn, setFlashlightOn] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
+  const [showCameraPreprompt, setShowCameraPreprompt] = useState(false);
 
   const isDenied =
     devForceDenied || (IS_NATIVE && permission?.status === "denied");
-  const permissionPending =
-    IS_NATIVE &&
-    !devForceDenied &&
-    (permission == null || permission.status === "undetermined");
+  const permissionLoading = IS_NATIVE && !devForceDenied && permission == null;
   const showLivePreview =
     IS_NATIVE && !isDenied && permission?.granted === true && !cameraMountFailed;
   const waitingForCamera = showLivePreview && !cameraReady;
-  const shutterDisabled = isSubmitting || permissionPending || waitingForCamera;
+  const shutterDisabled = isSubmitting || permissionLoading || waitingForCamera;
   const cameraLive = showLivePreview;
   const [cameraLiveSeen, setCameraLiveSeen] = useState(cameraLive);
   if (cameraLiveSeen !== cameraLive) {
@@ -55,13 +61,6 @@ export default function CaptureScreen() {
       setCameraMountFailed(false);
     }
   }
-
-  useEffect(() => {
-    if (!IS_NATIVE || devForceDenied) return;
-    if (permission && !permission.granted && permission.canAskAgain) {
-      void requestPermission();
-    }
-  }, [devForceDenied, permission, requestPermission]);
 
   function leaveCapture() {
     if (router.canGoBack()) {
@@ -95,8 +94,27 @@ export default function CaptureScreen() {
     router.push(`/scan/${result.scan.scanId}`);
   }
 
+  async function confirmCameraPreprompt() {
+    setShowCameraPreprompt(false);
+    setError(null);
+    const result = await requestPermission();
+    if (!result.granted) return;
+  }
+
+  function onSearchByName() {
+    if (isSubmitting) return;
+    router.replace("/(tabs)/shop");
+  }
+
   async function onShutter() {
     if (shutterDisabled) return;
+    if (IS_NATIVE && !devForceDenied && permission && !permission.granted) {
+      if (permission.canAskAgain) {
+        setShowCameraPreprompt(true);
+        return;
+      }
+      return;
+    }
     setIsSubmitting(true);
     setError(null);
     try {
@@ -133,39 +151,25 @@ export default function CaptureScreen() {
   async function onChooseFromLibrary() {
     if (isSubmitting) return;
     setHelpOpen(false);
+    setShowCameraPreprompt(false);
     setError(null);
     try {
-      if (IS_NATIVE) {
-        const media = await ImagePicker.requestMediaLibraryPermissionsAsync();
-        if (!media.granted) {
-          setError(
-            "Photo library access is off. Enable it in system Settings, or take a still photo.",
-          );
-          return;
-        }
-      }
-      const picked = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ["images"],
-        allowsEditing: false,
-        allowsMultipleSelection: false,
-        quality: 1,
-        preferredAssetRepresentationMode:
-          ImagePicker.UIImagePickerPreferredAssetRepresentationMode.Compatible,
-      });
-      if (picked.canceled) return;
-      const asset = picked.assets[0];
-      const uri = asset?.uri ?? null;
+      const asset = await launchSystemImagePicker({ quality: 1 });
+      if (!asset) return;
+      const uri = asset.uri ?? null;
       if (!uri) {
         setError("Could not read that photo. Try another.");
         return;
       }
       setIsSubmitting(true);
-      await postScan("manual_scan", uri, asset?.mimeType ?? null, {
-        width: asset?.width,
-        height: asset?.height,
+      await postScan("manual_scan", uri, asset.mimeType ?? null, {
+        width: asset.width,
+        height: asset.height,
       });
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not open the photo library.");
+      setError(
+        caught instanceof Error ? caught.message : PHOTO_PICKER_UNAVAILABLE_COPY,
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -179,7 +183,7 @@ export default function CaptureScreen() {
     }
   }
 
-  const title = isDenied ? "Capture" : null;
+  const title = isDenied || showCameraPreprompt ? "Capture" : null;
 
   return (
     <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
@@ -200,7 +204,7 @@ export default function CaptureScreen() {
         ) : (
           <View style={styles.topTitleSpacer} />
         )}
-        {!isDenied ? (
+        {!isDenied && !showCameraPreprompt ? (
           <Pressable
             accessibilityLabel="Flashlight"
             accessibilityRole="button"
@@ -221,10 +225,23 @@ export default function CaptureScreen() {
       </View>
 
       {isDenied ? (
-        <PermissionDeniedSurface
+        <PermissionGate
+          body={CAMERA_DENIED_BODY}
           disabled={isSubmitting}
           onChoosePhoto={() => void onChooseFromLibrary()}
           onOpenSettings={() => void openSystemSettings()}
+          onSearchByName={onSearchByName}
+          title={CAMERA_DENIED_TITLE}
+        />
+      ) : showCameraPreprompt ? (
+        <PermissionGate
+          body={CAMERA_PREPROMPT_BODY}
+          continueLabel={CAMERA_ALLOW_LABEL}
+          disabled={isSubmitting}
+          onChoosePhoto={() => void onChooseFromLibrary()}
+          onContinue={() => void confirmCameraPreprompt()}
+          onSearchByName={onSearchByName}
+          title={CAMERA_PREPROMPT_TITLE}
         />
       ) : (
         <CameraSurface
@@ -255,6 +272,7 @@ export default function CaptureScreen() {
             accessibilityRole="button"
             onPress={() => {
               setDevForceDenied((current) => !current);
+              setShowCameraPreprompt(false);
               setHelpOpen(false);
               setError(null);
               setFlashlightOn(false);
@@ -268,7 +286,7 @@ export default function CaptureScreen() {
         </View>
       ) : null}
 
-      {!isDenied ? (
+      {!isDenied && !showCameraPreprompt ? (
         <View style={styles.toolbar}>
           <Pressable
             accessibilityLabel="Choose photo"
@@ -400,34 +418,6 @@ function CameraSurface({
   );
 }
 
-interface PermissionDeniedSurfaceProps {
-  disabled: boolean;
-  onOpenSettings: () => void;
-  onChoosePhoto: () => void;
-}
-
-function PermissionDeniedSurface({
-  disabled,
-  onOpenSettings,
-  onChoosePhoto,
-}: PermissionDeniedSurfaceProps) {
-  return (
-    <View style={styles.panelBody}>
-      <Text style={styles.title}>Camera access is off.</Text>
-      <Text style={styles.body}>
-        Enable it in system Settings, or pick a photo from the library.
-      </Text>
-      <PrimaryButton
-        disabled={disabled}
-        label="Open system Settings"
-        onPress={onOpenSettings}
-        tone="muted"
-      />
-      <PrimaryButton disabled={disabled} label="Choose photo" onPress={onChoosePhoto} />
-    </View>
-  );
-}
-
 const DIM = "rgba(0,0,0,0.55)";
 
 const styles = StyleSheet.create({
@@ -485,14 +475,6 @@ const styles = StyleSheet.create({
     paddingVertical: space.md,
     backgroundColor: DIM,
   },
-  panelBody: {
-    flex: 1,
-    paddingHorizontal: space.lg,
-    paddingTop: space.lg,
-    gap: space.md,
-  },
-  title: { color: colors.text, fontSize: 22, fontWeight: "800" },
-  body: { color: colors.muted, fontSize: 15, lineHeight: 22 },
   error: {
     color: colors.danger,
     fontSize: 14,

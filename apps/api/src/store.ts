@@ -23,6 +23,10 @@ import {
   type MaxBuyComputation,
   type MaxBuyPreferences,
   type RecognitionScenario,
+  decideGradeConsume,
+  isGradePlan,
+  type GradePlan,
+  type GradeQuotaConsumeSource,
 } from "@cardflow/shared";
 import {
   gradeImageStorageCandidates,
@@ -97,9 +101,10 @@ export interface InventoryItemRecord {
   condition: string | null;
   quantity: number | null;
   tags: string[];
-  workflowState: "acquired" | "watching" | "drafted" | "details_needed";
+  workflowState: "acquired" | "watching" | "drafted" | "details_needed" | "watchlist_closed";
   referencePriceAmount: string | null;
   targetMaxBuyAmount: string | null;
+  closedAt?: string | null;
   createdAt: string;
   purchase: {
     purchaseId: string;
@@ -116,6 +121,26 @@ export interface InventoryItemRecord {
     maxBuy: MaxBuyComputation;
   } | null;
 }
+
+export interface GradeAccountRecord {
+  plan: GradePlan;
+  extraCredits: number;
+}
+
+export interface GradeQuotaConsumeInput {
+  monthKey: string;
+  monthlyLimit: number;
+  at: string;
+}
+
+export type GradeQuotaConsumeResult =
+  | {
+      ok: true;
+      source: GradeQuotaConsumeSource;
+      usedThisMonth: number;
+      extraCredits: number;
+    }
+  | { ok: false; usedThisMonth: number; extraCredits: number };
 
 /** One recorded collection estimate for a local day. Recorded going forward, never backfilled. */
 export interface PortfolioValueSnapshot {
@@ -702,9 +727,87 @@ export interface StorePort {
   saveGradeEstimateCache: typeof saveGradeEstimateCache;
   savePortfolioSnapshot: typeof savePortfolioSnapshot;
   listPortfolioSnapshots: typeof listPortfolioSnapshots;
+  getGradeAccount: (userId: string) => GradeAccountRecord;
+  setGradePlan: (userId: string, plan: GradePlan, at: string) => GradeAccountRecord;
+  addGradeCredits: (userId: string, credits: number, at: string) => GradeAccountRecord;
+  getGradeQuotaUsage: (userId: string, monthKey: string) => number;
+  consumeGradeQuota: (userId: string, input: GradeQuotaConsumeInput) => GradeQuotaConsumeResult;
+  getVendorQuotaUsage: (provider: string, monthKey: string) => number;
+  consumeVendorQuota: (provider: string, monthKey: string, cap: number) => boolean;
 }
 
+const DEFAULT_GRADE_ACCOUNT: GradeAccountRecord = { plan: "free", extraCredits: 0 };
+
 export function createMemoryStore(): StorePort {
+  const gradeAccounts = new Map<string, GradeAccountRecord>();
+  const gradeUsage = new Map<string, number>();
+  const vendorUsage = new Map<string, number>();
+
+  function usageKey(userId: string, monthKey: string): string {
+    return `${userId}\0${monthKey}`;
+  }
+
+  function vendorKey(provider: string, monthKey: string): string {
+    return `${provider}\0${monthKey}`;
+  }
+
+  function getGradeAccount(userId: string): GradeAccountRecord {
+    const row = gradeAccounts.get(userId);
+    return row ? { ...row } : { ...DEFAULT_GRADE_ACCOUNT };
+  }
+
+  function setGradePlan(userId: string, plan: GradePlan, _at: string): GradeAccountRecord {
+    const current = getGradeAccount(userId);
+    const next = { ...current, plan: isGradePlan(plan) ? plan : current.plan };
+    gradeAccounts.set(userId, next);
+    return { ...next };
+  }
+
+  function addGradeCredits(userId: string, credits: number, _at: string): GradeAccountRecord {
+    const add = Math.floor(credits);
+    if (!Number.isFinite(add) || add <= 0) return getGradeAccount(userId);
+    const current = getGradeAccount(userId);
+    const next = { ...current, extraCredits: current.extraCredits + add };
+    gradeAccounts.set(userId, next);
+    return { ...next };
+  }
+
+  function getGradeQuotaUsage(userId: string, monthKey: string): number {
+    return gradeUsage.get(usageKey(userId, monthKey)) ?? 0;
+  }
+
+  function consumeGradeQuota(userId: string, input: GradeQuotaConsumeInput): GradeQuotaConsumeResult {
+    const usedThisMonth = getGradeQuotaUsage(userId, input.monthKey);
+    const account = getGradeAccount(userId);
+    const decision = decideGradeConsume({
+      usedThisMonth,
+      monthlyLimit: input.monthlyLimit,
+      extraCredits: account.extraCredits,
+    });
+    if (!decision.ok) {
+      return { ok: false, usedThisMonth, extraCredits: account.extraCredits };
+    }
+    if (decision.source === "monthly") {
+      const used = usedThisMonth + 1;
+      gradeUsage.set(usageKey(userId, input.monthKey), used);
+      return { ok: true, source: "monthly", usedThisMonth: used, extraCredits: account.extraCredits };
+    }
+    const extraCredits = account.extraCredits - 1;
+    gradeAccounts.set(userId, { ...account, extraCredits });
+    return { ok: true, source: "credit", usedThisMonth, extraCredits };
+  }
+
+  function getVendorQuotaUsage(provider: string, monthKey: string): number {
+    return vendorUsage.get(vendorKey(provider, monthKey)) ?? 0;
+  }
+
+  function consumeVendorQuota(provider: string, monthKey: string, cap: number): boolean {
+    const used = getVendorQuotaUsage(provider, monthKey);
+    if (used >= cap) return false;
+    vendorUsage.set(vendorKey(provider, monthKey), used + 1);
+    return true;
+  }
+
   return {
     createSession,
     getSessionByToken,
@@ -750,5 +853,12 @@ export function createMemoryStore(): StorePort {
     saveGradeEstimateCache,
     savePortfolioSnapshot,
     listPortfolioSnapshots,
+    getGradeAccount,
+    setGradePlan,
+    addGradeCredits,
+    getGradeQuotaUsage,
+    consumeGradeQuota,
+    getVendorQuotaUsage,
+    consumeVendorQuota,
   };
 }
