@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { and, asc, desc, eq, gte } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray } from "drizzle-orm";
+import type { ConfirmEvent } from "@cardflow/shared";
 import {
   catalogFingerprint,
   cachedCatalogCardMatches,
@@ -66,6 +67,7 @@ import {
   gradeQuotaUsage,
   portfolioValueSnapshots,
   vendorQuotaUsage,
+  scanConfirmEvents,
   crmInventoryItems,
   crmListingDrafts,
   crmPurchases,
@@ -1765,6 +1767,81 @@ export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStor
       }));
   }
 
+  function saveConfirmEvent(event: ConfirmEvent): void {
+    db.insert(scanConfirmEvents)
+      .values({
+        scanId: event.scanId,
+        userId: event.userId,
+        via: event.via,
+        shownTcgdexIdsJson: JSON.stringify(event.shownTcgdexIds),
+        chosenTcgdexId: event.chosenTcgdexId,
+        chosenRank: event.chosenRank,
+        selectedVariant: event.selectedVariant,
+        confidence: event.confidence,
+        recognitionProvider: event.recognitionProvider,
+        createdAt: event.at,
+      })
+      .run();
+  }
+
+  function rowToConfirmEvent(row: typeof scanConfirmEvents.$inferSelect): ConfirmEvent {
+    let shown: string[] = [];
+    try {
+      const parsed = JSON.parse(row.shownTcgdexIdsJson) as unknown;
+      if (Array.isArray(parsed)) shown = parsed.filter((x): x is string => typeof x === "string");
+    } catch {
+      shown = [];
+    }
+    return {
+      scanId: row.scanId,
+      userId: row.userId,
+      via: row.via as ConfirmEvent["via"],
+      shownTcgdexIds: shown,
+      chosenTcgdexId: row.chosenTcgdexId,
+      chosenRank: row.chosenRank ?? null,
+      selectedVariant: row.selectedVariant ?? null,
+      confidence: row.confidence ?? null,
+      recognitionProvider: row.recognitionProvider ?? null,
+      at: row.createdAt,
+    };
+  }
+
+  function listConfirmEvents(options: { since?: string; limit?: number } = {}): ConfirmEvent[] {
+    const base = db.select().from(scanConfirmEvents);
+    const filtered = options.since ? base.where(gte(scanConfirmEvents.createdAt, options.since)) : base;
+    const rows = filtered.orderBy(asc(scanConfirmEvents.createdAt), asc(scanConfirmEvents.eventId)).all();
+    const events = rows.map(rowToConfirmEvent);
+    return options.limit ? events.slice(-options.limit) : events;
+  }
+
+  function confirmCounts(tcgdexIds: readonly string[]): Map<string, number> {
+    const counts = new Map<string, number>();
+    const ids = [...new Set(tcgdexIds)].filter(Boolean);
+    if (ids.length === 0) return counts;
+    const rows = db
+      .select({ id: scanConfirmEvents.chosenTcgdexId })
+      .from(scanConfirmEvents)
+      .where(inArray(scanConfirmEvents.chosenTcgdexId, ids))
+      .all();
+    for (const row of rows) counts.set(row.id, (counts.get(row.id) ?? 0) + 1);
+    return counts;
+  }
+
+  function variantCounts(tcgdexId: string): Map<string, number> {
+    const counts = new Map<string, number>();
+    const rows = db
+      .select({ v: scanConfirmEvents.selectedVariant })
+      .from(scanConfirmEvents)
+      .where(eq(scanConfirmEvents.chosenTcgdexId, tcgdexId))
+      .all();
+    for (const row of rows) if (row.v) counts.set(row.v, (counts.get(row.v) ?? 0) + 1);
+    return counts;
+  }
+
+  function deleteUserConfirmEvents(userId: string): number {
+    return db.delete(scanConfirmEvents).where(eq(scanConfirmEvents.userId, userId)).run().changes;
+  }
+
   return {
     sqlitePath: options.sqlitePath,
     close() {
@@ -1823,5 +1900,10 @@ export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStor
     consumeGradeQuota,
     getVendorQuotaUsage,
     consumeVendorQuota,
+    saveConfirmEvent,
+    listConfirmEvents,
+    confirmCounts,
+    variantCounts,
+    deleteUserConfirmEvents,
   };
 }

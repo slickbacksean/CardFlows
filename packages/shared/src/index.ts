@@ -799,3 +799,4 @@ export type {
 export * from "./set-name-map";
 export * from "./catalog-snapshot";
 export * from "./scan-correction";
+export * from "./confirm-log";
