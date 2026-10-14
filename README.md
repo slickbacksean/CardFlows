@@ -1,7 +1,7 @@
 # CardFlow
 
 Private-beta monorepo for Pokémon card flipping: scan → confirm → Max Buy →
-inventory → grade (AI pre-grade estimate) → collection.
+inventory → grade (Pre-grade estimate) → collection.
 
 ## What the phone runs
 
@@ -44,7 +44,7 @@ python3 -m venv .venv
 
 `CARDFLOW_GRADE_CARD_PYTHON` overrides the interpreter. Missing Python means the
 grader reports "unavailable", never a made-up number. Results are labeled
-"AI pre-grade estimate. Not an official PSA, BGS, or CGC grade."
+"Pre-grade estimate" with "Estimate only. Not an official grade."
 
 `pnpm test` and `pnpm dev:api` do **not** require Docker. PokéCollector is
 unmodified GHCR images pinned in

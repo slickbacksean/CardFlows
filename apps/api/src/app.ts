@@ -11,9 +11,14 @@ import {
   computeMaxBuy,
   DETAILS_NEEDED_WORKFLOW_STATE,
   detailsNeededCostBasis,
+  isClosedWatchlist,
   isDetailsNeededPurchase,
+  isOpenWatchlist,
   isRecentDetailsNeededDuplicate,
   livestreamContextTags,
+  WATCHLIST_CLOSED_WORKFLOW_STATE,
+  watchlistConversionTags,
+  watchlistSourceIdFromTags,
   keywordChips,
   LOCKED_DISPLAY_CURRENCY,
   mapRecognitionToCatalog,
@@ -112,7 +117,11 @@ import {
   type PokecollectorCollectionCopy,
 } from "./pokecollector-accounts";
 import { SCAN_IMAGE_MAX_BYTES, type ScanImageMimeType } from "./scan-image";
-import { isGradePhotoSide } from "./grade-image";
+import {
+  gradeUploadCache as defaultGradeUploadCache,
+  isGradePhotoSide,
+  type GradeUploadCache,
+} from "./grade-image";
 import {
   decideScanIdentify,
   skippedStillIdentifyResult,
@@ -320,6 +329,8 @@ export interface CreateAppOptions {
   corsOrigins?: string[];
   /** Clock for portfolio snapshots. Tests inject fixed days. */
   now?: () => Date;
+  /** Detect stills reused by pre-grade so each photo is uploaded once. */
+  gradeUploads?: GradeUploadCache;
 }
 
 /** Routes write through StorePort. Tests default to memory; local `pnpm dev:api` injects SQLite. */
@@ -349,6 +360,7 @@ export function createApp(
     listInventory,
     saveDraft,
     saveInventoryItem,
+    deleteInventoryItem,
     saveScan,
     rejectScan,
     saveScanImage,
@@ -424,6 +436,7 @@ export function createApp(
     options.livestreamTiming ?? process.env.CARD_FLOW_LIVESTREAM_TIMING?.trim() === "1";
   const livestreamTimingLog = createLiveScanTimingLog(500);
   const liveVideoObb = options.liveVideoObb ?? (() => null);
+  const gradeUploads = options.gradeUploads ?? defaultGradeUploadCache;
 
   async function bindPokecollectorUser(identity: InvitedIdentity) {
     try {
@@ -848,7 +861,7 @@ export function createApp(
     );
     let identityCropJpeg =
       typeof body.identityCropJpeg === "string" ? body.identityCropJpeg : null;
-    let cropFromServerYolo = false;
+    let identityCropQuad = normalizeIdentityCropQuad(body.identityCropQuad);
     const yolo = liveVideoObb();
     if (yolo && typeof body.videoFrameJpeg === "string") {
       const located = await locateLiveVideoCard(yolo, body.videoFrameJpeg);
@@ -856,12 +869,16 @@ export function createApp(
         cardDetected = false;
         identityHash = null;
         identityCropJpeg = null;
+        identityCropQuad = null;
       } else if (located?.found) {
         cardDetected = true;
-        identityHash = normalizeLiveVideoIdentityHash(located.identityHash);
-        identityCropJpeg = located.jpegBase64;
-        // The phone's corners describe its own crop, not the server YOLO crop.
-        cropFromServerYolo = true;
+        // Keep a phone crop that already has 4 corners so warp.py can straighten it.
+        // Android (no corners) and missed phone detects use the YOLO AABB + OBB quad.
+        if (!identityCropJpeg || !identityCropQuad) {
+          identityHash = normalizeLiveVideoIdentityHash(located.identityHash);
+          identityCropJpeg = located.jpegBase64;
+          identityCropQuad = normalizeIdentityCropQuad(located.identityCropQuad);
+        }
       }
     }
 
@@ -876,7 +893,7 @@ export function createApp(
       if (crop) {
         const sidecarStart = performance.now();
         const match = await liveIdentityOpenclip.matchCropJpeg(crop.bytes, crop.mimeType, {
-          quad: cropFromServerYolo ? null : normalizeIdentityCropQuad(body.identityCropQuad),
+          quad: identityCropQuad,
         });
         stages.sidecar = performance.now() - sidecarStart;
         if (match?.timings) {
@@ -1434,7 +1451,7 @@ export function createApp(
 
   app.get("/v1/inventory", async (c) => {
     const userId = c.get("userId");
-    const local = listInventory(userId);
+    const local = listInventory(userId).filter((item) => !isClosedWatchlist(item));
     if (pokecollectorAccounts.name === "off") {
       return c.json({
         ok: true,
@@ -1480,6 +1497,33 @@ export function createApp(
     });
   });
 
+  app.delete("/v1/inventory/:inventoryItemId", (c) => {
+    const userId = c.get("userId");
+    const inventoryItemId = c.req.param("inventoryItemId");
+    const item = getInventoryItem(userId, inventoryItemId);
+    if (!item) return c.json({ ok: false, error: "Inventory item not found" }, 404);
+    if (item.intent !== "purchased" || !isDetailsNeededPurchase(item)) {
+      return c.json(
+        { ok: false, error: "Only incomplete Purchased copies can be undone" },
+        409,
+      );
+    }
+    const sourceWatchlistId = watchlistSourceIdFromTags(item.tags);
+    if (!deleteInventoryItem(userId, inventoryItemId)) {
+      return c.json({ ok: false, error: "Inventory item not found" }, 404);
+    }
+    if (sourceWatchlistId) {
+      const watchlist = getInventoryItem(userId, sourceWatchlistId);
+      if (watchlist && watchlist.intent === "watchlist") {
+        updateInventoryItem(userId, sourceWatchlistId, {
+          workflowState: "watching",
+          closedAt: null,
+        });
+      }
+    }
+    return c.json({ ok: true, deleted: true });
+  });
+
 
   app.post(
     "/v1/grade/detect",
@@ -1501,7 +1545,9 @@ export function createApp(
         captureMeta: parsed.captureMeta ?? null,
       });
       // Retake and unavailable are answers, not transport errors: 200 with ok:false.
-      return c.json(result);
+      if (!result.ok) return c.json(result);
+      const uploadId = gradeUploads.stage(c.get("userId"), parsed.side, parsed.still);
+      return c.json({ ...result, uploadId });
     },
   );
 
@@ -1515,7 +1561,10 @@ export function createApp(
       onError: gradeBodyTooLarge,
     }),
     async (c) => {
-      const parsed = await parseGradeEstimateRequest(c);
+      const parsed = await parseGradeEstimateRequest(c, {
+        userId: c.get("userId"),
+        stagedStill: (userId, id, side) => gradeUploads.get(userId, id, side),
+      });
       if ("error" in parsed) {
         return c.json({ ok: false, error: parsed.error }, parsed.status);
       }
@@ -1550,7 +1599,10 @@ export function createApp(
         return c.json({ ok: false, error: WATCHLIST_CANNOT_SUBMIT_MESSAGE }, 400);
       }
 
-      const parsed = await parseGradeEstimateRequest(c);
+      const parsed = await parseGradeEstimateRequest(c, {
+        userId: c.get("userId"),
+        stagedStill: (userId, id, side) => gradeUploads.get(userId, id, side),
+      });
       if ("error" in parsed) {
         return c.json({ ok: false, error: parsed.error }, parsed.status);
       }
@@ -1574,7 +1626,8 @@ export function createApp(
         const cached = getGradeEstimateCache(userId, item.inventoryItemId);
         const cachedEstimate =
           cached?.photoHash === photoHash ? parseStoredGradeEstimate(cached.estimateJson) : null;
-        if (cachedEstimate) {
+        // Never serve a cached 0 — that is a retake, not a pre-grade estimate.
+        if (cachedEstimate && cachedEstimate.overall != null && cachedEstimate.overall >= 1) {
           return c.json({
             ok: true,
             provider: gradeEstimateHealth(gradingProvider.name),
@@ -1594,8 +1647,8 @@ export function createApp(
         // A crashed or timed-out grader is "unavailable", never a silent empty estimate.
         estimate = unavailableGradeEstimate();
       }
-      // Cache only a real number. Retake / unavailable must re-run next time.
-      if (photoHash && estimate.overall != null) {
+      // Cache only a real 1.0–10.0 number. Retake / unavailable / 0 must re-run.
+      if (photoHash && estimate.overall != null && estimate.overall >= 1) {
         saveGradeEstimateCache(userId, item.inventoryItemId, {
           photoHash,
           estimateJson: JSON.stringify(estimate),
@@ -1885,6 +1938,74 @@ export function createApp(
       purchase: null,
     });
     return c.json({ ok: true, item, maxBuy }, 201);
+  });
+
+  app.post("/v1/inventory/:inventoryItemId/purchased", async (c) => {
+    const userId = c.get("userId");
+    const watchlistItemId = c.req.param("inventoryItemId");
+    const watchlist = getInventoryItem(userId, watchlistItemId);
+    if (!watchlist) return c.json({ ok: false, error: "Inventory item not found" }, 404);
+    if (watchlist.intent !== "watchlist") {
+      return c.json({ ok: false, error: "Only Watchlist items can convert to Purchased" }, 409);
+    }
+
+    const existing = listInventory(userId).find(
+      (row) =>
+        row.intent === "purchased" && watchlistSourceIdFromTags(row.tags) === watchlistItemId,
+    );
+    if (existing) {
+      if (isOpenWatchlist(watchlist)) {
+        updateInventoryItem(userId, watchlistItemId, {
+          workflowState: WATCHLIST_CLOSED_WORKFLOW_STATE,
+          closedAt: existing.createdAt,
+        });
+      }
+      return c.json({ ok: true, created: false, item: inventoryView(userId, existing) });
+    }
+    if (!isOpenWatchlist(watchlist)) {
+      return c.json({ ok: false, error: "This Watchlist item is already closed" }, 409);
+    }
+
+    const confirmation = getConfirmation(userId, watchlist.confirmationId);
+    if (!confirmation) {
+      return c.json({ ok: false, error: "Confirm the card before Purchased" }, 409);
+    }
+
+    const createdAt = new Date().toISOString();
+    const maxBuy = computeMaxBuy({
+      referencePriceAmount: watchlist.referencePriceAmount,
+      condition: watchlist.condition,
+      preferences: getPreferences(userId),
+    });
+    const item = saveInventoryItem({
+      inventoryItemId: crypto.randomUUID(),
+      userId,
+      cardflowCardId: confirmation.cardflowCardId,
+      confirmationId: confirmation.confirmationId,
+      scanId: confirmation.scanId,
+      intent: "purchased",
+      grain: "physical_copy",
+      selectedVariant: watchlist.selectedVariant ?? confirmation.selectedVariant,
+      condition: watchlist.condition,
+      quantity: 1,
+      tags: watchlistConversionTags(watchlistItemId),
+      workflowState: DETAILS_NEEDED_WORKFLOW_STATE,
+      referencePriceAmount: maxBuy.referencePriceAmount,
+      targetMaxBuyAmount: maxBuy.maxBuyAmount,
+      createdAt,
+      purchase: {
+        purchaseId: crypto.randomUUID(),
+        purchasedAt: createdAt,
+        currency: LOCKED_DISPLAY_CURRENCY,
+        costBasis: detailsNeededCostBasis(),
+        maxBuy,
+      },
+    });
+    updateInventoryItem(userId, watchlistItemId, {
+      workflowState: WATCHLIST_CLOSED_WORKFLOW_STATE,
+      closedAt: createdAt,
+    });
+    return c.json({ ok: true, created: true, item: inventoryView(userId, item) }, 201);
   });
 
   app.post("/v1/inventory/:inventoryItemId/purchase", async (c) => {

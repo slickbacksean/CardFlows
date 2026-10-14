@@ -7,7 +7,7 @@ import jpeg from "jpeg-js";
 import {
   bestObbBox,
   createYolo11NanoObbDetector,
-  cropOrientedBox,
+  liveWarpCropFromObb,
   rgbPerceptualHash,
   type ObbDetector,
   type RgbBitmap,
@@ -29,7 +29,7 @@ export async function resolveLiveVideoObbDetector(
 
 export type LiveVideoLocateResult =
   | { found: false }
-  | { found: true; jpegBase64: string; identityHash: string };
+  | { found: true; jpegBase64: string; identityHash: string; identityCropQuad: number[] };
 
 /** null when the frame cannot be decoded. `found: false` when YOLO sees no card. */
 export async function locateLiveVideoCard(
@@ -50,12 +50,13 @@ export async function locateLiveVideoCard(
   if (!box || box.width < 8 || box.height < 8) return { found: false };
   const fill = (Math.abs(box.width) * Math.abs(box.height)) / (image.width * image.height);
   if (fill < MIN_FILL || fill > MAX_FILL) return { found: false };
-  const crop = cropOrientedBox(image, box);
-  if (crop.width < 8 || crop.height < 8) return { found: false };
+  const warped = liveWarpCropFromObb(image, box);
+  if (!warped || warped.crop.width < 8 || warped.crop.height < 8) return { found: false };
   return {
     found: true,
-    jpegBase64: Buffer.from(encodeRgbJpeg(crop)).toString("base64"),
-    identityHash: rgbPerceptualHash(crop),
+    jpegBase64: Buffer.from(encodeRgbJpeg(warped.crop)).toString("base64"),
+    identityHash: rgbPerceptualHash(warped.crop),
+    identityCropQuad: warped.quad.map((value) => Math.round(value * 100) / 100),
   };
 }
 
