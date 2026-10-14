@@ -32,6 +32,8 @@ import {
   type RecognitionScenario,
   type TitleTemplateId,
   type TcgdexVariants,
+  isGradePlan,
+  type GradePlan,
 } from "@cardflow/shared";
 import { catalogDisplayFromCard } from "./listing";
 import { applyMvpMigrations, isMemorySqlitePath } from "./db/migrate";
@@ -57,7 +59,10 @@ import {
   crmGradingReturned,
   crmGradingSubmitted,
   gradeEstimateCache,
+  gradeAccounts,
+  gradeQuotaUsage,
   portfolioValueSnapshots,
+  vendorQuotaUsage,
   crmInventoryItems,
   crmListingDrafts,
   crmPurchases,
@@ -77,6 +82,9 @@ import {
 import {
   inventoryItemWithLiveGuidance as overlayLiveMaxBuy,
   type ConfirmationRecord,
+  type GradeAccountRecord,
+  type GradeQuotaConsumeInput,
+  type GradeQuotaConsumeResult,
   type InventoryItemRecord,
   type PortfolioValueSnapshot,
   type ScanRecord,
@@ -1497,6 +1505,121 @@ export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStor
     return snapshot;
   }
 
+  function getGradeAccount(userId: string): GradeAccountRecord {
+    const row = db.select().from(gradeAccounts).where(eq(gradeAccounts.userId, userId)).get();
+    if (!row) return { plan: "free", extraCredits: 0 };
+    return {
+      plan: isGradePlan(row.plan) ? row.plan : "free",
+      extraCredits: Math.max(0, row.extraCredits),
+    };
+  }
+
+  function ensureGradeAccount(userId: string, at: string): void {
+    db.insert(gradeAccounts)
+      .values({ userId, plan: "free", extraCredits: 0, updatedAt: at })
+      .onConflictDoNothing()
+      .run();
+  }
+
+  function setGradePlan(userId: string, plan: GradePlan, at: string): GradeAccountRecord {
+    const nextPlan = isGradePlan(plan) ? plan : "free";
+    ensureGradeAccount(userId, at);
+    db.update(gradeAccounts)
+      .set({ plan: nextPlan, updatedAt: at })
+      .where(eq(gradeAccounts.userId, userId))
+      .run();
+    return getGradeAccount(userId);
+  }
+
+  function addGradeCredits(userId: string, credits: number, at: string): GradeAccountRecord {
+    const add = Math.floor(credits);
+    if (!Number.isFinite(add) || add <= 0) return getGradeAccount(userId);
+    return sqlite.transaction(() => {
+      ensureGradeAccount(userId, at);
+      sqlite
+        .prepare(
+          `UPDATE grade_accounts SET extra_credits = extra_credits + ?, updated_at = ? WHERE user_id = ?`,
+        )
+        .run(add, at, userId);
+      return getGradeAccount(userId);
+    })();
+  }
+
+  function getGradeQuotaUsage(userId: string, monthKey: string): number {
+    const row = db
+      .select()
+      .from(gradeQuotaUsage)
+      .where(and(eq(gradeQuotaUsage.userId, userId), eq(gradeQuotaUsage.monthKey, monthKey)))
+      .get();
+    return row?.used ?? 0;
+  }
+
+  function consumeGradeQuota(userId: string, input: GradeQuotaConsumeInput): GradeQuotaConsumeResult {
+    return sqlite.transaction(() => {
+      ensureGradeAccount(userId, input.at);
+      db.insert(gradeQuotaUsage)
+        .values({ userId, monthKey: input.monthKey, used: 0 })
+        .onConflictDoNothing()
+        .run();
+      const monthly = sqlite
+        .prepare(
+          `UPDATE grade_quota_usage SET used = used + 1
+           WHERE user_id = ? AND month_key = ? AND used < ?`,
+        )
+        .run(userId, input.monthKey, input.monthlyLimit);
+      if (monthly.changes === 1) {
+        return {
+          ok: true as const,
+          source: "monthly" as const,
+          usedThisMonth: getGradeQuotaUsage(userId, input.monthKey),
+          extraCredits: getGradeAccount(userId).extraCredits,
+        };
+      }
+      const credit = sqlite
+        .prepare(
+          `UPDATE grade_accounts SET extra_credits = extra_credits - 1, updated_at = ?
+           WHERE user_id = ? AND extra_credits > 0`,
+        )
+        .run(input.at, userId);
+      const account = getGradeAccount(userId);
+      const usedThisMonth = getGradeQuotaUsage(userId, input.monthKey);
+      if (credit.changes === 1) {
+        return {
+          ok: true as const,
+          source: "credit" as const,
+          usedThisMonth,
+          extraCredits: account.extraCredits,
+        };
+      }
+      return { ok: false as const, usedThisMonth, extraCredits: account.extraCredits };
+    })();
+  }
+
+  function getVendorQuotaUsage(provider: string, monthKey: string): number {
+    const row = db
+      .select()
+      .from(vendorQuotaUsage)
+      .where(and(eq(vendorQuotaUsage.provider, provider), eq(vendorQuotaUsage.monthKey, monthKey)))
+      .get();
+    return row?.used ?? 0;
+  }
+
+  function consumeVendorQuota(provider: string, monthKey: string, cap: number): boolean {
+    return sqlite.transaction(() => {
+      db.insert(vendorQuotaUsage)
+        .values({ provider, monthKey, used: 0 })
+        .onConflictDoNothing()
+        .run();
+      const result = sqlite
+        .prepare(
+          `UPDATE vendor_quota_usage SET used = used + 1
+           WHERE provider = ? AND month_key = ? AND used < ?`,
+        )
+        .run(provider, monthKey, cap);
+      return result.changes === 1;
+    })();
+  }
+
   function listPortfolioSnapshots(
     userId: string,
     sinceDate?: string | null,
@@ -1570,5 +1693,12 @@ export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStor
     saveGradeEstimateCache,
     savePortfolioSnapshot,
     listPortfolioSnapshots,
+    getGradeAccount,
+    setGradePlan,
+    addGradeCredits,
+    getGradeQuotaUsage,
+    consumeGradeQuota,
+    getVendorQuotaUsage,
+    consumeVendorQuota,
   };
 }

@@ -86,6 +86,13 @@ import {
   type TitleTemplateId,
   createLiveScanTimingLog,
   type LiveScanSample,
+  GRADE_QUOTA_COPY,
+  calendarMonthKey,
+  gradeQuotaSnapshot,
+  isGradePlan,
+  monthlyLimitForPlan,
+  type GradePlan,
+  type GradeQuotaSnapshot,
 } from "@cardflow/shared";
 import { Hono, type Context as HonoContext } from "hono";
 import { cors } from "hono/cors";
@@ -101,6 +108,12 @@ import {
   trustProxyHopsFromEnv,
   type RateLimitConfig,
 } from "./rate-limit";
+import { APP_API_KEY_HEADER, appApiKeyFromEnv } from "./app-api-key";
+import {
+  gradeIapFromEnv,
+  gradeQuotaEnabledFromEnv,
+  premiumUserIdsFromEnv,
+} from "./grade-quota-env";
 import type { CardgradingEngineStatus, ConcurrencyGate } from "./cardgrading-run";
 import { corsOriginsFromEnv } from "./cors-env";
 import { REQUEST_ID_HEADER, resolveRequestId } from "./request-id";
@@ -317,6 +330,22 @@ export interface CreateAppOptions {
   detectRateLimit?: RateLimitConfig | null;
   /** Whole-instance grades per day. Defaults to `CARD_FLOW_GRADE_DAILY_CAP`; off in tests. */
   gradeDailyCap?: number | null;
+  /**
+   * Per-account monthly pre-grade quota. Defaults to env (`CARD_FLOW_GRADE_QUOTA`);
+   * off in tests unless set. Replaces a daily per-account cap.
+   */
+  gradeQuota?: boolean | null;
+  /** In-app purchase flag + stub grant. Defaults to `CARD_FLOW_IAP_*`. */
+  gradeIap?: { enabled: boolean; stub: boolean };
+  /** Overlay: these user ids are treated as premium even if the row says free. */
+  premiumUserIds?: string[];
+  /** Global CardSight identify budget. Defaults to `CARD_FLOW_CARDSIGHT_MONTHLY_BUDGET`; off in tests. */
+  cardSightMonthlyBudget?: number | null;
+  /**
+   * Speed-bump app key (`X-CardFlow-App-Key`). Defaults to `CARD_FLOW_APP_API_KEY`.
+   * Null/empty skips the check (tests and local unless configured).
+   */
+  appApiKey?: string | null;
   /** Grader slot gate; when full, grading routes answer 503 + Retry-After. */
   gradeGate?: Pick<ConcurrencyGate, "isFull"> | null;
   /** Trusted reverse-proxy hops for X-Forwarded-For. Defaults to `CARD_FLOW_TRUST_PROXY_HOPS` (0). */
@@ -375,8 +404,18 @@ export function createApp(
     moveGradingSubmittedToReturned,
     savePortfolioSnapshot,
     listPortfolioSnapshots,
+    getGradeAccount,
+    setGradePlan,
+    addGradeCredits,
+    getGradeQuotaUsage,
+    consumeGradeQuota,
   } = store;
   const now = options.now ?? (() => new Date());
+  const quotaEnabled =
+    options.gradeQuota === undefined ? gradeQuotaEnabledFromEnv() : Boolean(options.gradeQuota);
+  const gradeIap = options.gradeIap ?? gradeIapFromEnv();
+  const premiumUserIds = new Set(options.premiumUserIds ?? premiumUserIdsFromEnv());
+  const appApiKey = options.appApiKey === undefined ? appApiKeyFromEnv() : options.appApiKey;
   const devAutoSession = options.devAutoSession ?? resolveDevAutoSession();
   const catalog = options.catalog ?? mockTcgdexCatalogProvider;
   const pricing = options.pricing ?? offPricingProvider;
@@ -397,6 +436,7 @@ export function createApp(
   };
   const rateKeys = (c: Context) => {
     const ip = clientIp(c, trustProxyHops, socketAddress);
+    // Per-account product cap is monthly (grade quota). Per-IP (and burst) stay here for abuse.
     return [`user:${String(c.get("userId") ?? "anon")}`, ip ? `ip:${ip}` : null];
   };
   const gradeRateLimit = rateLimitMiddleware(
@@ -665,6 +705,69 @@ export function createApp(
     if (c.req.path === "/v1/livestream/identify") return identifyBodyLimit(c, next);
     return jsonBodyLimit(c, next);
   });
+
+  app.use("/v1/*", async (c, next) => {
+    if (!appApiKey) return next();
+    const presented = c.req.header(APP_API_KEY_HEADER) ?? "";
+    if (presented !== appApiKey) {
+      return c.json({ ok: false, error: "CardFlow could not authorize that request." }, 401);
+    }
+    return next();
+  });
+
+  function resolveAccountPlan(userId: string, stored: GradePlan): GradePlan {
+    return premiumUserIds.has(userId) ? "premium" : stored;
+  }
+
+  function quotaSnapshotFor(userId: string): GradeQuotaSnapshot {
+    const at = now();
+    const monthKey = calendarMonthKey(at);
+    const account = getGradeAccount(userId);
+    const plan = resolveAccountPlan(userId, account.plan);
+    return gradeQuotaSnapshot({
+      plan,
+      usedThisMonth: getGradeQuotaUsage(userId, monthKey),
+      extraCredits: account.extraCredits,
+      iapEnabled: gradeIap.enabled,
+      now: at,
+    });
+  }
+
+  function takeGradeAllowance(userId: string) {
+    if (!quotaEnabled) {
+      return { ok: true as const, quota: quotaSnapshotFor(userId) };
+    }
+    const at = now();
+    const monthKey = calendarMonthKey(at);
+    const account = getGradeAccount(userId);
+    const plan = resolveAccountPlan(userId, account.plan);
+    const consumed = consumeGradeQuota(userId, {
+      monthKey,
+      monthlyLimit: monthlyLimitForPlan(plan),
+      at: at.toISOString(),
+    });
+    const quota = gradeQuotaSnapshot({
+      plan,
+      usedThisMonth: consumed.usedThisMonth,
+      extraCredits: consumed.extraCredits,
+      iapEnabled: gradeIap.enabled,
+      now: at,
+    });
+    if (!consumed.ok) return { ok: false as const, quota };
+    return { ok: true as const, quota };
+  }
+
+  function outOfGradesResponse(c: Context, quota: GradeQuotaSnapshot) {
+    const retryAfterSeconds = Math.max(
+      1,
+      Math.ceil((Date.parse(quota.resetsAt) - now().getTime()) / 1000),
+    );
+    c.header("Retry-After", String(retryAfterSeconds));
+    return c.json(
+      { ok: false, error: GRADE_QUOTA_COPY.outOfGrades, quota },
+      429,
+    );
+  }
 
   app.use("/v1/*", async (c, next) => {
     if (isPublicV1Path(c.req.method, c.req.path)) return next();
@@ -1525,6 +1628,49 @@ export function createApp(
   });
 
 
+  app.get("/v1/grade/quota", (c) => {
+    const quota = quotaSnapshotFor(c.get("userId"));
+    return c.json({ ok: true, quota });
+  });
+
+  app.post("/v1/grade/credits/consume", async (c) => {
+    const userId = c.get("userId");
+    const body = await c.req.json<{ count?: number }>().catch(() => ({} as { count?: number }));
+    const count = Math.floor(Number(body.count ?? 1));
+    if (!Number.isFinite(count) || count < 1 || count > 10) {
+      return c.json({ ok: false, error: "That request was not valid." }, 400);
+    }
+    let quota = quotaSnapshotFor(userId);
+    for (let i = 0; i < count; i += 1) {
+      const taken = takeGradeAllowance(userId);
+      quota = taken.quota;
+      if (!taken.ok) return outOfGradesResponse(c, quota);
+    }
+    return c.json({ ok: true, quota });
+  });
+
+  app.post("/v1/grade/credits", async (c) => {
+    if (!gradeIap.enabled && !gradeIap.stub) {
+      return c.json({ ok: false, error: GRADE_QUOTA_COPY.iapUnavailable }, 503);
+    }
+    if (!gradeIap.stub) {
+      return c.json({ ok: false, error: GRADE_QUOTA_COPY.iapUnavailable }, 503);
+    }
+    const userId = c.get("userId");
+    const body = await c.req.json<{ credits?: number; plan?: string }>().catch(
+      () => ({} as { credits?: number; plan?: string }),
+    );
+    const at = now().toISOString();
+    if (body.plan && isGradePlan(body.plan)) {
+      setGradePlan(userId, body.plan, at);
+    }
+    const credits = Math.floor(Number(body.credits ?? 0));
+    if (Number.isFinite(credits) && credits > 0) {
+      addGradeCredits(userId, Math.min(credits, 1_000), at);
+    }
+    return c.json({ ok: true, quota: quotaSnapshotFor(userId) });
+  });
+
   app.post(
     "/v1/grade/detect",
     detectRateLimit,
@@ -1571,6 +1717,8 @@ export function createApp(
       if (!parsed.frontImage || !parsed.backImage) {
         return c.json({ ok: false, error: "Front and back photos are required" }, 400);
       }
+      const taken = takeGradeAllowance(c.get("userId"));
+      if (!taken.ok) return outOfGradesResponse(c, taken.quota);
       const result = await pregradePhotoPair({
         runner: cardgrading,
         front: parsed.frontImage,
@@ -1578,7 +1726,7 @@ export function createApp(
         angledFront: parsed.angledFront ?? [],
         captureMeta: parsed.captureMeta ?? null,
       });
-      return c.json(result);
+      return c.json({ ...result, quota: taken.quota });
     },
   );
 
@@ -1632,9 +1780,13 @@ export function createApp(
             ok: true,
             provider: gradeEstimateHealth(gradingProvider.name),
             estimate: cachedEstimate,
+            quota: quotaSnapshotFor(userId),
           });
         }
       }
+
+      const taken = takeGradeAllowance(userId);
+      if (!taken.ok) return outOfGradesResponse(c, taken.quota);
 
       let estimate = emptyGradeEstimate();
       try {
@@ -1659,6 +1811,7 @@ export function createApp(
         ok: true,
         provider: gradeEstimateHealth(gradingProvider.name),
         estimate,
+        quota: taken.quota,
       });
     },
   );

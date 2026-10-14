@@ -65,9 +65,12 @@ describe("MVP CRM schema", () => {
       "crm_purchases",
       "crm_scans",
       "crm_sessions",
+      "grade_accounts",
       "grade_estimate_cache",
+      "grade_quota_usage",
       "portfolio_value_snapshots",
       "user_preferences",
+      "vendor_quota_usage",
     ]);
   });
 
@@ -132,6 +135,12 @@ describe("MVP CRM schema", () => {
     );
     expect(readFileSync(path.join(apiRoot, "drizzle/0007_nullable_purchase_price.sql"), "utf8")).not.toContain(
       "`purchase_price` integer NOT NULL",
+    );
+    expect(readFileSync(path.join(apiRoot, "drizzle/0008_grade_quotas.sql"), "utf8")).toContain(
+      "`extra_credits`",
+    );
+    expect(readFileSync(path.join(apiRoot, "drizzle/0008_grade_quotas.sql"), "utf8")).toContain(
+      "grade_quota_usage",
     );
   });
 });
