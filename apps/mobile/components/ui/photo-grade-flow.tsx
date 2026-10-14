@@ -2,17 +2,21 @@ import {
   GRADE_FLOW_RETAKE_HEADING,
   GRADE_FLOW_RETRY_LABEL,
   GRADE_FLOW_UNAVAILABLE_BODY,
+  GRADE_QUOTA_COPY,
   PREGRADE_DISCLAIMER,
   PREGRADE_LABEL,
+  remainingGradesCaption,
   retakeSideCopy,
+  type GradeQuotaSnapshot,
   type PhotoPregradeSubgrade,
 } from "@cardflow/shared";
 import { Image } from "expo-image";
-import { useEffect, useRef, useState } from "react";
+import { useFocusEffect } from "expo-router";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { GradeCardFinder } from "@/components/ui/grade-card-finder";
 import { PrimaryButton } from "@/components/ui/primary-button";
-import { detectGradePhoto, requestPhotoPregrade } from "@/lib/api";
+import { detectGradePhoto, getGradeQuota, grantGradeCredits, requestPhotoPregrade } from "@/lib/api";
 import { gradeFlowSession } from "@/lib/grade-flow-session";
 import {
   CARD_ASPECT_RATIO,
@@ -85,6 +89,21 @@ export function PhotoGradeFlow({ onOpenPipeline }: PhotoGradeFlowProps) {
     checking,
     freezeUri,
   } = state;
+  const [quota, setQuota] = useState<GradeQuotaSnapshot | null>(null);
+  const [quotaNotice, setQuotaNotice] = useState<string | null>(null);
+
+  const refreshQuota = useCallback(() => {
+    void getGradeQuota()
+      .then((body) => setQuota(body.quota))
+      .catch(() => setQuota(null));
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      refreshQuota();
+    }, [refreshQuota]),
+  );
+
   const current = side === "front" ? front : back;
 
   function patch(next: Partial<typeof state>) {
@@ -94,7 +113,11 @@ export function PhotoGradeFlow({ onOpenPipeline }: PhotoGradeFlowProps) {
   function reset() {
     requestId.current += 1;
     gradeFlowSession.reset();
+    setQuotaNotice(null);
+    refreshQuota();
   }
+
+  const isOutOfGrades = (quota?.remainingGrades ?? 1) <= 0;
 
   function openFinder(nextSide: Side) {
     patch({
@@ -260,8 +283,15 @@ export function PhotoGradeFlow({ onOpenPipeline }: PhotoGradeFlowProps) {
       backUploadId: latest.back.uploadId,
     });
     if (!gradeFlowSession.isSubmitLocked()) return;
+    if (graded.quota) setQuota(graded.quota);
     if (!graded.ok && graded.status === "retake") {
       gradeFlowSession.applyRetake(graded.side === "back" ? "back" : "front", graded.reasons);
+      return;
+    }
+    if (!graded.ok && graded.status === "out_of_grades") {
+      if (graded.quota) setQuota(graded.quota);
+      gradeFlowSession.applyUnavailable(graded.message);
+      patch({ resultKind: "out_of_grades" });
       return;
     }
     if (!graded.ok) {
@@ -279,6 +309,20 @@ export function PhotoGradeFlow({ onOpenPipeline }: PhotoGradeFlowProps) {
   function handleRetry() {
     if (!gradeFlowSession.retryUnavailable()) return;
     void runScoreRequest();
+  }
+
+  async function handleGetExtra() {
+    setQuotaNotice(null);
+    try {
+      const result = await grantGradeCredits({ credits: 5 });
+      setQuota(result.quota);
+    } catch (caught) {
+      setQuotaNotice(
+        caught instanceof Error && caught.message
+          ? caught.message
+          : GRADE_QUOTA_COPY.iapUnavailable,
+      );
+    }
   }
 
   const sideLabel = side === "front" ? "Front" : "Back";
@@ -304,19 +348,44 @@ export function PhotoGradeFlow({ onOpenPipeline }: PhotoGradeFlowProps) {
       {step === "guidelines" ? (
         <View style={styles.block}>
           <Text style={styles.section}>Photo guidelines</Text>
-          {GUIDELINES.map((line) => (
-            <Text key={line} style={styles.body}>
-              {line}
+          {quota ? (
+            <Text
+              accessibilityRole="text"
+              style={isOutOfGrades ? styles.error : styles.body}
+            >
+              {remainingGradesCaption(quota)}
             </Text>
-          ))}
-          <PrimaryButton disabled={scoring} label="Take front photo" onPress={() => openFinder("front")} />
-          <PrimaryButton
-            disabled={scoring}
-            label="Choose a photo"
-            onPress={() => void takePhoto("front", "library")}
-            tone="muted"
-          />
-          <PipelineLink onPress={onOpenPipeline} />
+          ) : null}
+          {isOutOfGrades ? (
+            <View style={styles.block}>
+              <Text style={styles.section}>Out of grades</Text>
+              <Text style={styles.body}>{GRADE_QUOTA_COPY.outOfGrades}</Text>
+              <Text style={styles.caption}>{GRADE_QUOTA_COPY.outOfGradesHint}</Text>
+              {quotaNotice ? <Text style={styles.error}>{quotaNotice}</Text> : null}
+              <PrimaryButton
+                label={GRADE_QUOTA_COPY.getExtra}
+                onPress={() => void handleGetExtra()}
+                tone="muted"
+              />
+              <PipelineLink onPress={onOpenPipeline} />
+            </View>
+          ) : (
+            <>
+              {GUIDELINES.map((line) => (
+                <Text key={line} style={styles.body}>
+                  {line}
+                </Text>
+              ))}
+              <PrimaryButton disabled={scoring} label="Take front photo" onPress={() => openFinder("front")} />
+              <PrimaryButton
+                disabled={scoring}
+                label="Choose a photo"
+                onPress={() => void takePhoto("front", "library")}
+                tone="muted"
+              />
+              <PipelineLink onPress={onOpenPipeline} />
+            </>
+          )}
         </View>
       ) : null}
 
@@ -424,6 +493,7 @@ export function PhotoGradeFlow({ onOpenPipeline }: PhotoGradeFlowProps) {
                 {formatPregrade(result.estimate)}
               </Text>
               <Text style={styles.body}>{PREGRADE_DISCLAIMER}</Text>
+              {quota ? <Text style={styles.caption}>{remainingGradesCaption(quota)}</Text> : null}
               {result.warning ? <Text style={styles.warning}>{result.warning}</Text> : null}
               <View style={styles.pillar}>
                 {PILLARS.map((id) => (
@@ -434,6 +504,19 @@ export function PhotoGradeFlow({ onOpenPipeline }: PhotoGradeFlowProps) {
               </View>
               {result.note ? <Text style={styles.caption}>{`Note: ${result.note}.`}</Text> : null}
               <PrimaryButton disabled={scoring} label="Grade another card" onPress={reset} />
+            </>
+          ) : resultKind === "out_of_grades" ? (
+            <>
+              <Text style={styles.section}>Out of grades</Text>
+              <Text style={styles.body}>{GRADE_QUOTA_COPY.outOfGrades}</Text>
+              <Text style={styles.caption}>{GRADE_QUOTA_COPY.outOfGradesHint}</Text>
+              {quotaNotice ? <Text style={styles.error}>{quotaNotice}</Text> : null}
+              <PrimaryButton
+                label={GRADE_QUOTA_COPY.getExtra}
+                onPress={() => void handleGetExtra()}
+                tone="muted"
+              />
+              <PrimaryButton label="Grade another card" onPress={reset} tone="muted" />
             </>
           ) : (
             <>

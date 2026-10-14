@@ -4,6 +4,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { GRADE_ENGINE_STILL_RUNNING, type GradeEngineHealth } from "@cardflow/shared";
 
 /**
  * Runs the vendored, offline cardgrading library (apps/api/vendor/cardgrading,
@@ -118,27 +119,35 @@ export const CARDGRADING_CHILD_ENV_PASSTHROUGH = [
   "CARDFLOW_GRADE_MAX_PIXELS",
 ] as const;
 
-export interface CardgradingEngineStatus {
-  ok: boolean;
-  opencv: string | null;
-  numpy: string | null;
-  error: string | null;
-  checkedAt: string;
-}
+export type CardgradingEngineStatus = GradeEngineHealth;
+
+export { GRADE_ENGINE_STILL_RUNNING };
 
 const ENGINE_PROBE_TTL_MS = 5 * 60_000;
 const ENGINE_PROBE_TIMEOUT_MS = 5_000;
 const ENGINE_PROBE_SCRIPT =
   "import json, cv2, numpy; print(json.dumps({'opencv': cv2.__version__, 'numpy': numpy.__version__}))";
 
+export type EngineProbeExecute = (python: string) => Promise<{ opencv?: unknown; numpy?: unknown }>;
+
+function defaultEngineProbeExecute(python: string): Promise<{ opencv?: unknown; numpy?: unknown }> {
+  return runAdapter(python, ["-c", ENGINE_PROBE_SCRIPT], ENGINE_PROBE_TIMEOUT_MS, "cardgrading engine probe") as Promise<{
+    opencv?: unknown;
+    numpy?: unknown;
+  }>;
+}
+
 /**
  * Health probe that really imports cv2 and numpy in the grader's Python, so
  * /health can't say the grader is ready when OpenCV is missing or broken.
- * Cached for 5 minutes; concurrent callers share one in-flight probe.
+ * Successful results are cached for 5 minutes. Failed probes are not cached,
+ * so /health re-probes after a missing model or a broken OpenCV install.
+ * Concurrent callers share one in-flight probe.
  */
 export function createCardgradingEngineProbe(
   python: string,
   now: () => number = Date.now,
+  execute: EngineProbeExecute = defaultEngineProbeExecute,
 ): () => Promise<CardgradingEngineStatus> {
   let cached: { at: number; status: CardgradingEngineStatus } | null = null;
   let inFlight: Promise<CardgradingEngineStatus> | null = null;
@@ -148,12 +157,7 @@ export function createCardgradingEngineProbe(
     inFlight = (async () => {
       let status: CardgradingEngineStatus;
       try {
-        const out = (await runAdapter(
-          python,
-          ["-c", ENGINE_PROBE_SCRIPT],
-          ENGINE_PROBE_TIMEOUT_MS,
-          "cardgrading engine probe",
-        )) as { opencv?: unknown; numpy?: unknown };
+        const out = await execute(python);
         status = {
           ok: typeof out.opencv === "string",
           opencv: typeof out.opencv === "string" ? out.opencv : null,
@@ -170,7 +174,8 @@ export function createCardgradingEngineProbe(
           checkedAt: new Date(now()).toISOString(),
         };
       }
-      cached = { at: now(), status };
+      if (status.ok) cached = { at: now(), status };
+      else cached = null;
       inFlight = null;
       return status;
     })();

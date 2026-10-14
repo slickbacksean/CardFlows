@@ -1,5 +1,9 @@
 import {
+  CAMERA_OFF_PICKER_FALLBACK,
+  CAMERA_PREPROMPT_BODY,
+  CAMERA_PREPROMPT_TITLE,
   CARD_ASPECT_RATIO,
+  CHOOSE_PHOTO_LABEL,
   GRADE_IMAGE_MAX_BYTES,
   GRADE_STILL_QUALITY,
   GRADE_STILL_MIN_SHORT_SIDE_PX,
@@ -13,6 +17,7 @@ import {
 import { manipulateAsync, SaveFormat } from "expo-image-manipulator";
 import * as ImagePicker from "expo-image-picker";
 import { Alert, Image, Platform } from "react-native";
+import { launchSystemImagePicker } from "@/lib/system-photo-picker";
 
 export type { PickedGradeStill };
 export {
@@ -140,25 +145,13 @@ export async function prepareGradeStill(input: {
 }
 
 async function pickFromLibrary(): Promise<ImagePicker.ImagePickerAsset | null> {
-  if (Platform.OS === "ios" || Platform.OS === "android") {
-    const media = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!media.granted) {
-      throw new Error(
-        "Photo library access is off. Enable it in system Settings, or take a still photo.",
-      );
-    }
-  }
-  const picked = await ImagePicker.launchImageLibraryAsync(STILL_PICKER);
-  if (picked.canceled) return null;
-  return picked.assets[0] ?? null;
+  return launchSystemImagePicker(STILL_PICKER);
 }
 
 async function pickFromCamera(): Promise<ImagePicker.ImagePickerAsset | null> {
   const camera = await ImagePicker.requestCameraPermissionsAsync();
   if (!camera.granted) {
-    throw new Error(
-      "Camera access is off. Enable it in system Settings, or pick a photo from the library.",
-    );
+    throw new Error(CAMERA_OFF_PICKER_FALLBACK);
   }
   const taken = await ImagePicker.launchCameraAsync(STILL_PICKER);
   if (taken.canceled) return null;
@@ -182,9 +175,9 @@ export function promptGradeStillSource(
     onPick("library");
     return;
   }
-  Alert.alert("Add photo", "Library or camera still. Catalog art is never the grade photo.", [
+  Alert.alert(CAMERA_PREPROMPT_TITLE, CAMERA_PREPROMPT_BODY, [
     { text: "Take photo", onPress: () => onPick("camera") },
-    { text: "Choose photo", onPress: () => onPick("library") },
+    { text: CHOOSE_PHOTO_LABEL, onPress: () => onPick("library") },
     { text: "Cancel", style: "cancel" },
   ]);
 }

@@ -56,7 +56,10 @@ Android's Sobel detector has no corners, so Android stays on the upright crop.
 
 - `python scripts/test_warp.py` checks the warp.
 - `python scripts/eval_warp.py --index data/index --high data/eval/high` is a
-  synthetic before/after on tilted stream-style frames (not real stream data).
+  synthetic OpenCLIP before/after on tilted stream-style frames (PR 35).
+- `python scripts/eval_recorded_stream.py` is the P0-13 recorded-stream eval:
+  4-corner warp recovery on a multi-card stream, one match per card. It does
+  not need the OpenCLIP index. CI fails if the match rate is below 90%.
 
 ## Debug timing
 

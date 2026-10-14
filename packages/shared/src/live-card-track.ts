@@ -1,8 +1,7 @@
 /**
  * Phone-side change gate + simple IoU track for the livestream scanner.
  * One card at a time in most shows, so a single track is enough (no ByteTrack).
- * Match once per track; re-match on a new track, while the identity is not yet
- * stable, when the crop changes while unstable, or every `reconfirmMs`.
+ * One vendor/model match per tracked card. The same crop hash is never matched twice.
  */
 
 /** Normalized [0, 1] box, top-left origin. */
@@ -47,15 +46,13 @@ export interface LiveCardTrackOptions {
   iouThreshold?: number;
   /** Crop counts as unchanged when its pHash differs by at most this many bits (of 105). */
   hashUnchangedBits?: number;
-  /** Re-confirm a stable track this often. */
-  reconfirmMs?: number;
-  /** Server hits with the same id before a track counts as stable. */
-  stableHits?: number;
+  /** Remember this many crop hashes so a returning card does not rematch. */
+  seenHashCap?: number;
 }
 
 export type LiveTrackDecision =
-  | { action: "match"; reason: "new_track" | "unstable" | "reconfirm" | "no_box" }
-  | { action: "skip"; reason: "stable_track" | "unchanged_crop" };
+  | { action: "match"; reason: "new_track" | "no_box" }
+  | { action: "skip"; reason: "already_matched" | "same_crop"; tcgdexId: string | null };
 
 export interface LiveTrackFrame {
   box: LiveCardBox | null;
@@ -66,31 +63,57 @@ export interface LiveTrackFrame {
 export const LIVE_TRACK_DEFAULTS: Required<LiveCardTrackOptions> = {
   iouThreshold: 0.5,
   hashUnchangedBits: 6,
-  reconfirmMs: 2500,
-  stableHits: 2,
+  seenHashCap: 32,
 };
 
 interface TrackState {
   id: number;
   box: LiveCardBox | null;
   lastMatchedHash: string | null;
-  lastMatchMs: number;
+  matched: boolean;
   tcgdexId: string | null;
-  hits: number;
+}
+
+interface SeenCrop {
+  hash: string;
+  tcgdexId: string | null;
 }
 
 export function createLiveCardTracker(options: LiveCardTrackOptions = {}) {
   const opts = { ...LIVE_TRACK_DEFAULTS, ...options };
   let track: TrackState | null = null;
   let nextId = 1;
+  const seen: SeenCrop[] = [];
 
-  function stable(): boolean {
-    return Boolean(track?.tcgdexId) && (track?.hits ?? 0) >= opts.stableHits;
+  function lookupHash(hash: string | null): SeenCrop | null {
+    if (!hash) return null;
+    let best: SeenCrop | null = null;
+    let bestDist = opts.hashUnchangedBits;
+    for (const entry of seen) {
+      const dist = bitHashDistance(hash, entry.hash);
+      if (dist <= bestDist) {
+        best = entry;
+        bestDist = dist;
+      }
+    }
+    return best;
+  }
+
+  function remember(hash: string | null, tcgdexId: string | null) {
+    if (!hash) return;
+    const existing = lookupHash(hash);
+    if (existing) {
+      existing.tcgdexId = tcgdexId;
+      return;
+    }
+    seen.push({ hash, tcgdexId });
+    if (seen.length > opts.seenHashCap) seen.splice(0, seen.length - opts.seenHashCap);
   }
 
   return {
     /** Decide whether this detected-card frame needs a server match. */
     decide(frame: LiveTrackFrame): LiveTrackDecision {
+      const remembered = lookupHash(frame.hash);
       const sameTrack =
         track !== null &&
         (frame.box && track.box
@@ -102,49 +125,100 @@ export function createLiveCardTracker(options: LiveCardTrackOptions = {}) {
         track = {
           id: nextId++,
           box: frame.box,
-          lastMatchedHash: null,
-          lastMatchMs: 0,
-          tcgdexId: null,
-          hits: 0,
+          lastMatchedHash: remembered?.hash ?? null,
+          matched: Boolean(remembered),
+          tcgdexId: remembered?.tcgdexId ?? null,
         };
+        if (remembered) {
+          return { action: "skip", reason: "same_crop", tcgdexId: remembered.tcgdexId };
+        }
         return { action: "match", reason: frame.box ? "new_track" : "no_box" };
       }
       track.box = frame.box ?? track.box;
-      if (frame.nowMs - track.lastMatchMs >= opts.reconfirmMs) {
-        return { action: "match", reason: "reconfirm" };
+      if (track.matched) {
+        return { action: "skip", reason: "already_matched", tcgdexId: track.tcgdexId };
       }
-      if (stable()) return { action: "skip", reason: "stable_track" };
-      // A pending id (1 hit) needs its confirming match. Only a rejected crop
-      // that has not changed is skipped: re-sending it would get the same answer.
-      if (
-        !track.tcgdexId &&
-        bitHashDistance(frame.hash, track.lastMatchedHash) <= opts.hashUnchangedBits
-      ) {
-        return { action: "skip", reason: "unchanged_crop" };
+      if (remembered) {
+        track.matched = true;
+        track.tcgdexId = remembered.tcgdexId;
+        track.lastMatchedHash = remembered.hash;
+        return { action: "skip", reason: "same_crop", tcgdexId: remembered.tcgdexId };
       }
-      return { action: "match", reason: "unstable" };
+      return { action: "match", reason: frame.box ? "new_track" : "no_box" };
     },
-    /** Record the server's answer for the current track. */
+    /** Record the server's answer for the current track. Counts as the one match. */
     noteMatch(input: { hash: string | null; tcgdexId: string | null; nowMs: number }) {
       if (!track) return;
       track.lastMatchedHash = input.hash;
-      track.lastMatchMs = input.nowMs;
-      if (input.tcgdexId && input.tcgdexId === track.tcgdexId) {
-        track.hits += 1;
-      } else {
-        track.tcgdexId = input.tcgdexId;
-        track.hits = input.tcgdexId ? 1 : 0;
-      }
+      track.matched = true;
+      track.tcgdexId = input.tcgdexId;
+      remember(input.hash, input.tcgdexId);
     },
-    /** No card in view: end the track. */
+    /** No card in view: end the track. Crop hashes stay so the same crop is not rematched. */
     reset() {
       track = null;
     },
-    current(): Readonly<{ id: number; tcgdexId: string | null; hits: number; stable: boolean }> | null {
+    current(): Readonly<{ id: number; tcgdexId: string | null; matched: boolean }> | null {
       if (!track) return null;
-      return { id: track.id, tcgdexId: track.tcgdexId, hits: track.hits, stable: stable() };
+      return { id: track.id, tcgdexId: track.tcgdexId, matched: track.matched };
     },
   };
 }
 
 export type LiveCardTracker = ReturnType<typeof createLiveCardTracker>;
+
+export interface LiveStreamReplayFrame extends LiveTrackFrame {
+  expectedId: string | null;
+}
+
+export interface LiveStreamReplayResult {
+  matchCalls: number;
+  callsByTrack: Record<number, number>;
+  identified: number;
+  frames: number;
+  matchRate: number;
+  maxCallsPerTrack: number;
+}
+
+/**
+ * Replay a recorded stream of detector frames. Empty frames (no box, no hash) end the track.
+ * `identify` is the vendor/model call — it must run at most once per tracked card.
+ */
+export function replayLiveCardStream(
+  frames: readonly LiveStreamReplayFrame[],
+  identify: (frame: LiveStreamReplayFrame) => string | null,
+): LiveStreamReplayResult {
+  const tracker = createLiveCardTracker();
+  const callsByTrack: Record<number, number> = {};
+  let matchCalls = 0;
+  let identified = 0;
+  let scored = 0;
+  for (const frame of frames) {
+    if (!frame.box && !frame.hash) {
+      tracker.reset();
+      continue;
+    }
+    scored += 1;
+    const decision = tracker.decide(frame);
+    const trackId = tracker.current()?.id ?? 0;
+    let tcgdexId: string | null = null;
+    if (decision.action === "match") {
+      matchCalls += 1;
+      callsByTrack[trackId] = (callsByTrack[trackId] ?? 0) + 1;
+      tcgdexId = identify(frame);
+      tracker.noteMatch({ hash: frame.hash, tcgdexId, nowMs: frame.nowMs });
+    } else {
+      tcgdexId = decision.tcgdexId;
+    }
+    if (frame.expectedId && tcgdexId === frame.expectedId) identified += 1;
+  }
+  const callCounts = Object.values(callsByTrack);
+  return {
+    matchCalls,
+    callsByTrack,
+    identified,
+    frames: scored,
+    matchRate: scored ? identified / scored : 0,
+    maxCallsPerTrack: callCounts.length ? Math.max(...callCounts) : 0,
+  };
+}

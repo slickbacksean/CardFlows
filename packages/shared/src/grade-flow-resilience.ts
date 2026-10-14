@@ -10,7 +10,7 @@ import { pregradeCopyViolations } from "./pregrade-copy";
 
 export type GradeFlowStep = "guidelines" | "finder" | "capture" | "crop" | "scoring" | "result";
 export type GradeFlowSide = "front" | "back";
-export type GradeFlowResultKind = "score" | "unavailable";
+export type GradeFlowResultKind = "score" | "unavailable" | "out_of_grades";
 
 export interface GradeFlowStill {
   uri: string;

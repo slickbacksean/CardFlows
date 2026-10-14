@@ -25,8 +25,9 @@ function isTestEnv(env: Env): boolean {
 }
 
 /**
- * Per-user and per-client-IP limits. Grades (pregrade + estimate) default to 6/min and
- * 100/day; detect (crop check, called on every retake) has its own 20/min and 300/day.
+ * Per-user and per-client-IP abuse limits. Grades (pregrade + estimate) default to 6/min
+ * and 100/day; detect (crop check, called on every retake) has its own 20/min and 300/day.
+ * Product caps are monthly per account (`grade-quota-env.ts`), not daily.
  * Off under tests unless configured. CARD_FLOW_GRADE_RATE_LIMIT=false turns all off.
  */
 export function gradeRateLimitFromEnv(env: Env = process.env): RateLimitConfig | null {

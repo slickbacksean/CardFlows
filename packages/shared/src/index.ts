@@ -23,9 +23,11 @@ export {
 export type { EbayListingExportRow, TcgTraderExportRow } from "./collection-export";
 export {
   catalogHealth,
+  GRADE_ENGINE_STILL_RUNNING,
   gradeEstimateHealth,
   healthLeaksSecrets,
   healthMockProviders,
+  healthOk,
   livestreamIdentifyHealth,
   liveIdentityVisualHealth,
   pricingProviderHealth,
@@ -34,6 +36,7 @@ export {
 } from "./health";
 export type {
   CardFlowHealth,
+  GradeEngineHealth,
   HealthCatalog,
   HealthGradeEstimate,
   HealthLivestreamIdentify,
@@ -44,6 +47,7 @@ export type {
   HealthRecognition,
   HealthSlabPricing,
 } from "./health";
+export { scrubSentryEvent, REDACTED_EMAIL, REDACTED_IMAGE, REDACTED_VALUE } from "./sentry-scrub";
 export { catalogCardFromMapping, confirmIdentity } from "./confirm";
 export {
   CONFIRM_AMBIGUOUS_TITLE,
@@ -283,14 +287,20 @@ export {
   PURCHASED_UNDO_ACTION_LABEL,
   PURCHASED_UNDO_TOAST_MESSAGE,
   PURCHASED_UNDO_TOAST_MS,
+  WATCHLIST_CLOSED_WORKFLOW_STATE,
+  WATCHLIST_SOURCE_TAG,
   detailsNeededCostBasis,
+  isClosedWatchlist,
   isDetailsNeededPurchase,
+  isOpenWatchlist,
   isRecentDetailsNeededDuplicate,
   livestreamContextTags,
   normalizeLivestreamPlatform,
   purchasedAllInAmount,
   sanitizeLivestreamUrl,
   shouldAcceptLiveHudPurchaseTap,
+  watchlistConversionTags,
+  watchlistSourceIdFromTags,
 } from "./details-needed";
 export type { DetailsNeededInventoryCopy, LivestreamSourcePlatform } from "./details-needed";
 export {
@@ -461,10 +471,17 @@ export type {
   Yolo11ObbInference,
 } from "./obb-phash";
 export {
+  axisAlignedInsetCrop,
   bestObbBox,
   cropOrientedBox,
+  cropRgbRect,
   createYolo11ObbInferenceFromTensor,
   letterboxToYoloInput,
+  LIVE_WARP_CROP_MAX_EDGE,
+  liveWarpCropFromObb,
+  mapQuadIntoCrop,
+  obbCornersTlTrBrBl,
+  obbQuadTlTrBrBl,
   resizeRgb,
   yolo11ObbBoxesFromChannelsFirst,
   yolo11ObbChannelsFirstFromOnnx,
@@ -582,6 +599,7 @@ export type {
   PhotoPregradeSubgrades,
   PhotoPregradeSuccess,
   PhotoPregradeUnavailable,
+  PhotoPregradeOutOfGrades,
 } from "./photo-pregrade";
 export { RECOGNITION_SCENARIOS } from "./types";
 export type * from "./types";
@@ -602,9 +620,12 @@ export {
   createLiveCardTracker,
   LIVE_TRACK_DEFAULTS,
   normalizeLiveCardBox,
+  replayLiveCardStream,
   type LiveCardBox,
   type LiveCardTracker,
   type LiveCardTrackOptions,
+  type LiveStreamReplayFrame,
+  type LiveStreamReplayResult,
   type LiveTrackDecision,
   type LiveTrackFrame,
 } from "./live-card-track";
@@ -644,12 +665,56 @@ export type {
   GradeTilt,
 } from "./grade-capture-guide";
 export {
+  ANDROID_BLOCKED_PHOTO_PERMISSIONS,
+  CAMERA_ALLOW_LABEL,
+  CAMERA_DENIED_BODY,
+  CAMERA_DENIED_TITLE,
+  CAMERA_OFF_PICKER_FALLBACK,
+  CAMERA_PREPROMPT_BODY,
+  CAMERA_PREPROMPT_CONTINUE,
+  CAMERA_PREPROMPT_TITLE,
+  CAMERA_USAGE_DESCRIPTION,
+  CHOOSE_A_PHOTO_LABEL,
+  CHOOSE_PHOTO_LABEL,
+  GRADE_CAMERA_PREPROMPT_BODY,
+  GRADE_CAMERA_PREPROMPT_TITLE,
+  MOTION_USAGE_DESCRIPTION,
+  OPEN_SETTINGS_LABEL,
+  PHOTO_PICKER_UNAVAILABLE_COPY,
+  SEARCH_BY_NAME_LABEL,
+} from "./permission-copy";
+export {
   PREGRADE_BANNED_WORDS,
   PREGRADE_COPY,
   PREGRADE_DISCLAIMER_TEXT,
   PREGRADE_TITLE,
   pregradeCopyViolations,
 } from "./pregrade-copy";
+export {
+  CARDSIGHT_MONTHLY_BUDGET_DEFAULT,
+  calendarMonthKey,
+  decideGradeConsume,
+  extraCreditsLabel,
+  GRADE_PLAN_FREE,
+  GRADE_PLAN_PREMIUM,
+  GRADE_PLANS,
+  GRADE_QUOTA_COPY,
+  GRADE_QUOTA_FREE_PER_MONTH,
+  GRADE_QUOTA_PREMIUM_PER_MONTH,
+  gradeQuotaSnapshot,
+  isGradePlan,
+  isOutOfGradesStatus,
+  monthlyLimitForPlan,
+  nextMonthResetAt,
+  remainingGradesCaption,
+  remainingMonthlyLabel,
+} from "./grade-quota";
+export type {
+  GradePlan,
+  GradeQuotaConsumeDecision,
+  GradeQuotaConsumeSource,
+  GradeQuotaSnapshot,
+} from "./grade-quota";
 export {
   SHARE_CARD_COPY,
   shareCardEstimateLine,

@@ -19,9 +19,9 @@ import { createMemoryStore } from "./store";
 
 type App = ReturnType<typeof createApp>;
 
-async function json<T>(app: App, pathName: string) {
-  const response = await app.request(pathName);
-  return { status: response.status, body: (await response.json()) as T };
+async function json<T>(app: App, pathName: string, headers?: Record<string, string>) {
+  const response = await app.request(pathName, headers ? { headers } : undefined);
+  return { status: response.status, body: (await response.json()) as T, headers: response.headers };
 }
 
 function namedRecognition(name: CardRecognitionProvider["name"]): CardRecognitionProvider {
@@ -53,6 +53,7 @@ describe("GET /health", () => {
   it("reports catalog, recognition, pricing, and livestream identify without keys", async () => {
     const health = await json<Record<string, unknown>>(createApp(createMemoryStore()), "/health");
     expect(health.status).toBe(200);
+    expect(health.headers.get("x-request-id")).toMatch(/^[A-Za-z0-9._-]{8,128}$/);
     expect(health.body).toEqual({
       ok: true,
       service: "cardflow-api",
@@ -246,5 +247,51 @@ describe("GET /health", () => {
     });
     expect(healthLeaksSecrets(health.body)).toBe(false);
     expect(JSON.stringify(health.body)).not.toMatch(/api[_ -]?key|ANTHROPIC_|XAI_|POKETRACE_|Bearer/i);
+  });
+
+  it("echoes x-request-id and re-probes a failed grader instead of caching it", async () => {
+    const echoed = await json<Record<string, unknown>>(
+      createApp(createMemoryStore()),
+      "/health",
+      { "x-request-id": "client-req-99" },
+    );
+    expect(echoed.status).toBe(200);
+    expect(echoed.headers.get("x-request-id")).toBe("client-req-99");
+
+    let calls = 0;
+    const app = createApp(createMemoryStore(), {
+      gradeEngineProbe: async () => {
+        calls += 1;
+        if (calls === 1) {
+          return {
+            ok: false,
+            opencv: null,
+            numpy: null,
+            error: "cv2 missing",
+            checkedAt: "2026-10-13T00:00:00.000Z",
+          };
+        }
+        return {
+          ok: true,
+          opencv: "4.10.0",
+          numpy: "2.2.0",
+          error: null,
+          checkedAt: "2026-10-13T00:00:01.000Z",
+        };
+      },
+    });
+    const failed = await json<Record<string, unknown>>(app, "/health");
+    expect(failed.status).toBe(503);
+    expect(failed.body).toMatchObject({
+      ok: false,
+      gradeEngine: { ok: false, error: "cv2 missing" },
+    });
+    const recovered = await json<Record<string, unknown>>(app, "/health");
+    expect(recovered.status).toBe(200);
+    expect(recovered.body).toMatchObject({
+      ok: true,
+      gradeEngine: { ok: true, opencv: "4.10.0" },
+    });
+    expect(calls).toBe(2);
   });
 });

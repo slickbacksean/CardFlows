@@ -131,6 +131,7 @@ describe("pre-grade copy", () => {
       path.join(REPO, "apps", "mobile", "app", "(tabs)", "grading.tsx"),
       path.join(REPO, "apps", "api", "src", "cardgrading-map.ts"),
       path.join(REPO, "apps", "api", "src", "grade-photo-flow.ts"),
+      path.join(REPO, "packages", "shared", "src", "grade-quota.ts"),
       path.join(REPO, "packages", "shared", "src", "pregrade-copy.ts"),
       path.join(REPO, "packages", "shared", "src", "photo-pregrade.ts"),
       path.join(REPO, "packages", "shared", "src", "listing-draft.ts"),

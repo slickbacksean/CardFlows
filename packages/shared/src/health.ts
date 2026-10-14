@@ -28,8 +28,26 @@ export const HEALTH_MOCK_PROVIDERS = [
 ] as const;
 export type HealthMockProvider = (typeof HEALTH_MOCK_PROVIDERS)[number];
 
+/** OpenCV/NumPy import probe. `null` on /health means the real grader runner is not configured. */
+export interface GradeEngineHealth {
+  ok: boolean;
+  opencv: string | null;
+  numpy: string | null;
+  error: string | null;
+  checkedAt: string;
+}
+
+/** `/health` returns this while the OpenCV probe is still in flight (bounded to 3 s). */
+export const GRADE_ENGINE_STILL_RUNNING = "grader check still running";
+
+/** Process is up. False only when the configured grader probe finished and failed. */
+export function healthOk(gradeEngine: GradeEngineHealth | null): boolean {
+  if (!gradeEngine || gradeEngine.ok) return true;
+  return gradeEngine.error === GRADE_ENGINE_STILL_RUNNING;
+}
+
 export interface CardFlowHealth {
-  ok: true;
+  ok: boolean;
   service: "cardflow-api";
   mock: boolean;
   mockProviders: HealthMockProvider[];
@@ -42,6 +60,8 @@ export interface CardFlowHealth {
   /** Preferred livestream visual path. Never a token or sidecar URL. */
   liveIdentityVisual: HealthLiveIdentityVisual;
   gradeEstimate: HealthGradeEstimate;
+  /** Real `import cv2, numpy` in the grader Python. Null when no grader runner is configured. */
+  gradeEngine: GradeEngineHealth | null;
   slabPricing: HealthSlabPricing;
 }
 
