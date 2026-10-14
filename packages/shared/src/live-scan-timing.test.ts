@@ -20,6 +20,9 @@ describe("live scan timing", () => {
     expect(summary.acceptRate).toBe(0.5);
     expect(summary.warpedRate).toBe(0.5);
     expect(summary.stages.embed).toEqual({ count: 2, p50: 50, p95: 50, max: 50 });
+    expect(Object.keys(summary.stages)).toEqual(
+      expect.arrayContaining(["embed", "total", "detect"]),
+    );
     expect(summary.stages.total?.count).toBe(2);
     expect(summary.stages.detect?.count).toBe(1);
   });

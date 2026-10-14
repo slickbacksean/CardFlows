@@ -49,7 +49,9 @@ export function CardTile({
         : "Max buy"
       : allInAmount
         ? `$${allInAmount}`
-        : null;
+        : targetMaxBuyDisplay
+          ? `Max ${targetMaxBuyDisplay}`
+          : null;
   const showDraft = intent === "purchased" && (hasDraft || showDraftCta);
 
   return (

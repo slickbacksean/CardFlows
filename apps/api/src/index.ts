@@ -1,5 +1,6 @@
 import { serve } from "@hono/node-server";
 import { loadLocalApiEnv } from "./local-env";
+import { initApiSentry } from "./sentry";
 import { createApp } from "./app";
 import { createCatalogFromEnv } from "./catalog-env";
 import { createPricingFromEnv, createPokecollectorAccountsFromEnv } from "./pokecollector-env";
@@ -14,6 +15,7 @@ import { resolveLiveVideoObbDetector } from "./live-video-obb";
 import type { ObbDetector } from "@cardflow/shared";
 
 loadLocalApiEnv();
+initApiSentry();
 
 const parsedPort = Number(process.env.PORT);
 const port = Number.isFinite(parsedPort) && parsedPort > 0 ? parsedPort : 3001;

@@ -35,8 +35,11 @@ export const GRADE_IMAGE_MIME_TYPES = ["image/jpeg", "image/png", "image/webp"] 
 export type GradeImageMimeType = (typeof GRADE_IMAGE_MIME_TYPES)[number];
 
 export const GRADE_IMAGE_MAX_BYTES = 20 * 1024 * 1024;
-/** JPEG quality for grade stills. `1` means no extra compression before detect/grade. */
-export const GRADE_STILL_QUALITY = 1;
+/**
+ * JPEG quality of the uploaded still after phone-side prep (P0-02).
+ * Camera/library capture stays uncompressed until `prepareGradeStill` writes this once.
+ */
+export const GRADE_STILL_QUALITY = 0.8;
 /** Standard trading-card frame (width / height in mm). */
 export const CARD_ASPECT_RATIO = 63 / 88;
 

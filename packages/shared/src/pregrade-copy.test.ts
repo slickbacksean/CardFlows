@@ -18,6 +18,11 @@ import {
   renderListingTitle,
 } from "./listing-draft";
 import { PREGRADE_DISCLAIMER, PREGRADE_LABEL, PREGRADE_SURFACE_NULL_REASON } from "./photo-pregrade";
+import {
+  GRADE_FLOW_RETAKE_HEADING,
+  GRADE_FLOW_RETRY_LABEL,
+  GRADE_FLOW_UNAVAILABLE_BODY,
+} from "./grade-flow-resilience";
 import { PREGRADE_COPY, pregradeCopyViolations } from "./pregrade-copy";
 import { SHARE_CARD_COPY, shareCardVisibleCopy } from "./share-card-copy";
 
@@ -92,6 +97,9 @@ describe("pre-grade copy", () => {
       GRADE_ESTIMATE_NEEDS_BACK_COPY,
       GRADE_PHOTOS_HINT,
       GRADING_TAB_CONSTRAINT,
+      GRADE_FLOW_RETRY_LABEL,
+      GRADE_FLOW_UNAVAILABLE_BODY,
+      GRADE_FLOW_RETAKE_HEADING,
       ...Object.values(SHARE_CARD_COPY),
     ];
     for (const text of strings) expect(pregradeCopyViolations(text), text).toEqual([]);
@@ -128,6 +136,7 @@ describe("pre-grade copy", () => {
       path.join(REPO, "packages", "shared", "src", "confirm-copy.ts"),
       path.join(REPO, "apps", "api", "src", "cardgrading-map.ts"),
       path.join(REPO, "apps", "api", "src", "grade-photo-flow.ts"),
+      path.join(REPO, "packages", "shared", "src", "grade-quota.ts"),
       path.join(REPO, "packages", "shared", "src", "pregrade-copy.ts"),
       path.join(REPO, "packages", "shared", "src", "photo-pregrade.ts"),
       path.join(REPO, "packages", "shared", "src", "listing-draft.ts"),
