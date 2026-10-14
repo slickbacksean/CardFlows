@@ -4,6 +4,7 @@ import {
   PREGRADE_COPY,
   PREGRADE_DISCLAIMER,
   PREGRADE_LABEL,
+  PHOTO_PREGRADE_SOURCE,
   pregradeCopyViolations,
   PREGRADE_SURFACE_NULL_REASON,
   type DetectCropResult,
@@ -17,7 +18,7 @@ import {
   type CardgradingRunner,
 } from "./cardgrading-run";
 import { encodePngStill } from "./obb-phash-decode";
-import { createCardgradingProvider, pregradePhotoPair } from "./grade-photo-flow";
+import { createCardgradingProvider, pregradePhotoPair, rejectZeroGrade } from "./grade-photo-flow";
 
 const successReport = JSON.parse(
   readFileSync(new URL("./fixtures/cardgrading-success-report.json", import.meta.url), "utf8"),
@@ -102,6 +103,39 @@ describe("cardgrading mapper (GitHub contract)", () => {
     });
     expect(mapped).toMatchObject({ ok: false, status: "retake", reasons: [NOTHING_MEASURED_REASON] });
     expect("estimate" in mapped).toBe(false);
+  });
+
+  it("is a retake when nothing was measured, even if overall_grade is non-zero", () => {
+    const mapped = mapGradeCardReport({
+      ...successReport,
+      subgrades: { front: {}, back: {} },
+      centering: { front: {}, back: {} },
+      corners_edges: { front: {}, back: {} },
+      surface: { front: {}, back: {} },
+    });
+    expect(mapped).toMatchObject({ ok: false, status: "retake", reasons: [NOTHING_MEASURED_REASON] });
+    expect("estimate" in mapped).toBe(false);
+  });
+
+  it("strips a scored 0 at the flow boundary so no response can carry it", () => {
+    const leaked = rejectZeroGrade({
+      ok: true,
+      status: "scored",
+      label: PREGRADE_LABEL,
+      disclaimer: PREGRADE_DISCLAIMER,
+      source: PHOTO_PREGRADE_SOURCE,
+      estimate: 0,
+      subgrades: {
+        centering: { points: null, front: null, back: null },
+        corners: { points: null, front: null, back: null },
+        edges: { points: null, front: null, back: null },
+        surface: { points: null, front: null, back: null },
+      },
+      note: "",
+    });
+    expect(leaked).toMatchObject({ ok: false, status: "retake", reasons: [NOTHING_MEASURED_REASON] });
+    expect("estimate" in leaked).toBe(false);
+    expect(JSON.stringify(leaked)).not.toMatch(/\bAI\b|\bPSA\b|\bBGS\b|\bCGC\b/);
   });
 
   it("reports an undecodable photo as unreadable, not as card not found", () => {
@@ -239,6 +273,18 @@ describe("cardgrading runner env", () => {
 });
 
 describe("grade photo flow", () => {
+  it("turns a library 0.0 into a retake and never returns estimate 0", async () => {
+    const still = { bytes: solidPng(), mimeType: "image/png" as const };
+    const zeroed = {
+      ...successReport,
+      grade_estimate: { ...(successReport.grade_estimate as Record<string, unknown>), overall_grade: 0.0 },
+    };
+    const result = await pregradePhotoPair({ runner: fakeRunner(zeroed), front: still, back: still });
+    expect(result).toMatchObject({ ok: false, status: "retake", reasons: [NOTHING_MEASURED_REASON] });
+    expect("estimate" in result).toBe(false);
+    expect(JSON.stringify(result)).not.toMatch(/\bAI\b|\bPSA\b|\bBGS\b|\bCGC\b/);
+  });
+
   it("is unavailable, never a number, when the grader is missing or crashes", async () => {
     const still = { bytes: solidPng(), mimeType: "image/png" as const };
     const missing = await pregradePhotoPair({ runner: null, front: still, back: still });
@@ -346,5 +392,39 @@ describe("grade photo flow", () => {
         backImage: img,
       }),
     ).rejects.toThrow();
+  });
+
+  it("blocks duplicate in-flight submits so a double-tap runs the grader once", async () => {
+    let calls = 0;
+    let release!: () => void;
+    const hold = new Promise<void>((r) => {
+      release = r;
+    });
+    let began!: () => void;
+    const started = new Promise<void>((r) => {
+      began = r;
+    });
+    const runner = fakeRunner(successReport);
+    const original = runner.gradeCard.bind(runner);
+    runner.gradeCard = async (input) => {
+      calls += 1;
+      began();
+      await hold;
+      return original(input);
+    };
+    const still = { bytes: solidPng(), mimeType: "image/png" as const };
+    const first = pregradePhotoPair({ runner, front: still, back: still });
+    const second = pregradePhotoPair({ runner, front: still, back: still });
+    await started;
+    expect(calls).toBe(1);
+    release();
+    const results = await Promise.all([first, second]);
+    expect(results[0]).toEqual(results[1]);
+    expect(results[0]?.ok).toBe(true);
+    if (results[0]?.ok) expect(results[0].estimate).toBe(8.4);
+
+    const sequential = await pregradePhotoPair({ runner, front: still, back: still });
+    expect(calls).toBe(2);
+    expect(sequential.ok).toBe(true);
   });
 });
