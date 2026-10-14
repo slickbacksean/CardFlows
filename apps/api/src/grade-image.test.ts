@@ -4,12 +4,15 @@ import {
   createGradeUploadCache,
   gradeImageStorageCandidates,
   gradeImageStorageRef,
+  imageCarriesExif,
+  imageCarriesGps,
   isFirstPartyGradeImageRef,
   isGradePhotoSide,
   mimeFromGradeStorageRef,
   oversizedImageHeaderError,
   readImageHeaderSize,
   safeGradeInventoryId,
+  stripImageMetadata,
 } from "./grade-image";
 
 function jpegSof(width: number, height: number): Uint8Array {
@@ -112,5 +115,98 @@ describe("grade upload cache", () => {
     expect(cache.get("user-a", id, "back")).toBeUndefined();
     now = 2_001;
     expect(cache.get("user-a", id, "front")).toBeUndefined();
+  });
+
+  it("releases a staged still after grading and all stills for an account", () => {
+    const cache = createGradeUploadCache();
+    const still = { bytes: jpegSof(100, 100), mimeType: "image/jpeg" as const };
+    const front = cache.stage("user-a", "front", still);
+    const keep = cache.stage("user-b", "front", still);
+    expect(cache.release("user-a", front)).toBe(true);
+    expect(cache.get("user-a", front, "front")).toBeUndefined();
+    expect(cache.releaseUser("user-b")).toBe(1);
+    expect(cache.get("user-b", keep, "front")).toBeUndefined();
+  });
+});
+
+/** Big-endian TIFF with a GPS IFD pointer (tag 0x8825). */
+function gpsTiff(): number[] {
+  return [
+    0x4d, 0x4d, 0x00, 0x2a, 0x00, 0x00, 0x00, 0x08, 0x00, 0x01, 0x88, 0x25, 0x00, 0x04, 0x00,
+    0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x1a, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  ];
+}
+
+function jpegWithGpsExif(): Uint8Array {
+  const payload = [0x45, 0x78, 0x69, 0x66, 0x00, 0x00, ...gpsTiff()];
+  const length = payload.length + 2;
+  const sof = jpegSof(32, 32).subarray(2);
+  return Uint8Array.from([
+    0xff, 0xd8, 0xff, 0xe1, (length >> 8) & 0xff, length & 0xff, ...payload, ...sof,
+  ]);
+}
+
+function pngChunk(type: string, data: number[]): number[] {
+  const length = data.length;
+  const chars = [...type].map((ch) => ch.charCodeAt(0));
+  return [
+    (length >>> 24) & 0xff,
+    (length >>> 16) & 0xff,
+    (length >>> 8) & 0xff,
+    length & 0xff,
+    ...chars,
+    ...data,
+    0, 0, 0, 0,
+  ];
+}
+
+function pngWithExif(): Uint8Array {
+  return Uint8Array.from([
+    0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+    ...pngChunk("IHDR", [0, 0, 0, 8, 0, 0, 0, 8, 8, 2, 0, 0, 0]),
+    ...pngChunk("eXIf", gpsTiff()),
+    ...pngChunk("IEND", []),
+  ]);
+}
+
+function webpWithExif(): Uint8Array {
+  const vp8x = webpVp8x(8, 8).subarray(12);
+  const exif = [0x45, 0x58, 0x49, 0x46, gpsTiff().length, 0, 0, 0, ...gpsTiff()];
+  const body = [...vp8x, ...exif];
+  const riffSize = 4 + body.length;
+  return Uint8Array.from([
+    0x52, 0x49, 0x46, 0x46,
+    riffSize & 0xff, (riffSize >> 8) & 0xff, (riffSize >> 16) & 0xff, (riffSize >> 24) & 0xff,
+    0x57, 0x45, 0x42, 0x50,
+    ...body,
+  ]);
+}
+
+describe("server-side EXIF/GPS strip", () => {
+  it("drops JPEG EXIF and GPS without changing a clean still", () => {
+    const dirty = jpegWithGpsExif();
+    expect(imageCarriesExif(dirty)).toBe(true);
+    expect(imageCarriesGps(dirty)).toBe(true);
+    const clean = stripImageMetadata(dirty, "image/jpeg");
+    expect(imageCarriesExif(clean)).toBe(false);
+    expect(imageCarriesGps(clean)).toBe(false);
+    expect(readImageHeaderSize(clean)).toEqual({ width: 32, height: 32 });
+
+    const already = jpegSof(64, 48);
+    expect(stripImageMetadata(already, "image/jpeg")).toBe(already);
+  });
+
+  it("drops PNG eXIf and WebP EXIF chunks", () => {
+    const png = pngWithExif();
+    expect(imageCarriesExif(png)).toBe(true);
+    expect(imageCarriesGps(png)).toBe(true);
+    const pngClean = stripImageMetadata(png, "image/png");
+    expect(imageCarriesExif(pngClean)).toBe(false);
+    expect(imageCarriesGps(pngClean)).toBe(false);
+
+    const webp = webpWithExif();
+    expect(imageCarriesExif(webp)).toBe(true);
+    const webpClean = stripImageMetadata(webp, "image/webp");
+    expect(imageCarriesExif(webpClean)).toBe(false);
   });
 });

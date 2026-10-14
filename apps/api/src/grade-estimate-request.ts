@@ -7,7 +7,7 @@ import {
 } from "@cardflow/shared";
 import type { Context } from "hono";
 import { z } from "zod";
-import { oversizedImageHeaderError, type StagedGradeStill } from "./grade-image";
+import { oversizedImageHeaderError, stripImageMetadata, type StagedGradeStill } from "./grade-image";
 import { mimeFromFileName, mimeFromImageMagic, normalizeScanImageMime } from "./scan-image";
 
 const GRADE_ESTIMATE_JSON_SCHEMA = z.object({
@@ -53,6 +53,8 @@ export interface ParsedGradeEstimateRequest {
   /** Raking-light front photos, in shot order. Empty when skipped. */
   angledFront?: ParsedGradeStill[];
   captureMeta?: string | null;
+  frontUploadId?: string;
+  backUploadId?: string;
 }
 
 export interface GradeEstimateRequestError {
@@ -86,7 +88,7 @@ function validateStill(
   }
   const oversized = oversizedImageHeaderError(bytes);
   if (oversized) return oversized;
-  return { bytes, mimeType };
+  return { bytes: stripImageMetadata(bytes, mimeType), mimeType };
 }
 
 async function stillFromFormValue(
@@ -208,6 +210,8 @@ export async function parseGradeEstimateRequest(
       reestimate: fields.reestimate,
       angledFront,
       captureMeta: fields.captureMeta,
+      frontUploadId: fields.frontUploadId,
+      backUploadId: fields.backUploadId,
     };
   }
 

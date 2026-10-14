@@ -42,8 +42,10 @@ import {
   gradeImageStorageRef,
   isFirstPartyGradeImageRef,
   mimeFromGradeStorageRef,
+  stripImageMetadata,
   type GradeImageBytes,
 } from "./grade-image";
+import { isGradePhotoExpired, type PhotoPurgeResult } from "./photo-retention";
 import {
   isFirstPartyScanImageRef,
   mimeFromScanStorageRef,
@@ -60,6 +62,7 @@ import {
   crmGradingSubmitted,
   gradeEstimateCache,
   gradeAccounts,
+  gradePhotoObjects,
   gradeQuotaUsage,
   portfolioValueSnapshots,
   vendorQuotaUsage,
@@ -646,6 +649,12 @@ export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStor
     return scan;
   }
 
+  function unlinkStored(storageRef: string): void {
+    if (!sqliteDir) return;
+    const filePath = path.join(sqliteDir, storageRef);
+    if (existsSync(filePath)) unlinkSync(filePath);
+  }
+
   function saveScanImage(
     scanId: string,
     input: { bytes: Uint8Array; mimeType: ScanImageMimeType },
@@ -653,7 +662,7 @@ export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStor
     const record: ScanImageBytes = {
       storageRef: scanImageStorageRef(scanId, input.mimeType),
       mimeType: input.mimeType,
-      bytes: input.bytes,
+      bytes: stripImageMetadata(input.bytes, input.mimeType),
     };
     if (!sqliteDir) {
       memoryImages.set(scanId, record);
@@ -694,22 +703,37 @@ export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStor
     userId: string,
     inventoryItemId: string,
     side: GradeSide,
-    input: { bytes: Uint8Array; mimeType: ScanImageMimeType },
+    input: { bytes: Uint8Array; mimeType: ScanImageMimeType; createdAt?: string },
   ): GradeImageBytes | undefined {
     if (!getInventoryItem(userId, inventoryItemId)) return undefined;
+    const createdAt = input.createdAt ?? new Date().toISOString();
     const record: GradeImageBytes = {
       storageRef: gradeImageStorageRef(inventoryItemId, side, input.mimeType),
       mimeType: input.mimeType,
-      bytes: input.bytes,
+      bytes: stripImageMetadata(input.bytes, input.mimeType),
+      createdAt,
     };
     for (const candidate of gradeImageStorageCandidates(inventoryItemId, side)) {
       if (candidate === record.storageRef) continue;
       memoryGradeImages.delete(candidate);
-      if (sqliteDir) {
-        const stale = path.join(sqliteDir, candidate);
-        if (existsSync(stale)) unlinkSync(stale);
-      }
+      unlinkStored(candidate);
     }
+    db.insert(gradePhotoObjects)
+      .values({
+        userId,
+        inventoryItemId,
+        side,
+        storageRef: record.storageRef,
+        createdAt,
+      })
+      .onConflictDoUpdate({
+        target: [gradePhotoObjects.userId, gradePhotoObjects.inventoryItemId, gradePhotoObjects.side],
+        set: {
+          storageRef: record.storageRef,
+          createdAt,
+        },
+      })
+      .run();
     if (!sqliteDir) {
       memoryGradeImages.set(record.storageRef, record);
       return record;
@@ -737,13 +761,108 @@ export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStor
       }
       const filePath = path.join(sqliteDir, candidate);
       if (!existsSync(filePath)) continue;
+      const meta = db
+        .select()
+        .from(gradePhotoObjects)
+        .where(
+          and(
+            eq(gradePhotoObjects.userId, userId),
+            eq(gradePhotoObjects.inventoryItemId, inventoryItemId),
+            eq(gradePhotoObjects.side, side),
+          ),
+        )
+        .get();
       return {
         storageRef: candidate,
         mimeType,
         bytes: new Uint8Array(readFileSync(filePath)),
+        createdAt: meta?.createdAt,
       };
     }
     return undefined;
+  }
+
+  function deleteGradeEstimateCache(userId: string, inventoryItemId: string): void {
+    db.delete(gradeEstimateCache)
+      .where(
+        and(
+          eq(gradeEstimateCache.userId, userId),
+          eq(gradeEstimateCache.inventoryItemId, inventoryItemId),
+        ),
+      )
+      .run();
+  }
+
+  function deleteGradeImage(
+    userId: string,
+    inventoryItemId: string,
+    side: GradeSide,
+  ): boolean {
+    if (!getInventoryItem(userId, inventoryItemId)) return false;
+    let deleted = false;
+    for (const candidate of gradeImageStorageCandidates(inventoryItemId, side)) {
+      if (memoryGradeImages.delete(candidate)) deleted = true;
+      if (sqliteDir) {
+        const filePath = path.join(sqliteDir, candidate);
+        if (existsSync(filePath)) {
+          unlinkSync(filePath);
+          deleted = true;
+        }
+      }
+    }
+    const removed = db
+      .delete(gradePhotoObjects)
+      .where(
+        and(
+          eq(gradePhotoObjects.userId, userId),
+          eq(gradePhotoObjects.inventoryItemId, inventoryItemId),
+          eq(gradePhotoObjects.side, side),
+        ),
+      )
+      .run();
+    if (removed.changes > 0) deleted = true;
+    deleteGradeEstimateCache(userId, inventoryItemId);
+    return deleted;
+  }
+
+  function deleteScanImage(userId: string, scanId: string): boolean {
+    const scan = getScan(userId, scanId);
+    if (!scan) return false;
+    let deleted = false;
+    if (memoryImages.delete(scanId)) deleted = true;
+    if (scan.imageStorageRef) {
+      unlinkStored(scan.imageStorageRef);
+      deleted = true;
+    }
+    if (scan.imageStorageRef || scan.imageMimeType) {
+      persistScan({ ...scan, imageStorageRef: null, imageMimeType: null });
+      deleted = true;
+    }
+    return deleted;
+  }
+
+  function deleteUserPhotos(userId: string): PhotoPurgeResult {
+    let deleted = 0;
+    for (const item of listInventory(userId)) {
+      for (const side of GRADE_SIDES) {
+        if (deleteGradeImage(userId, item.inventoryItemId, side)) deleted += 1;
+      }
+    }
+    for (const scan of listScans(userId)) {
+      if (deleteScanImage(userId, scan.scanId)) deleted += 1;
+    }
+    return { deleted };
+  }
+
+  function purgeExpiredGradePhotos(now: Date = new Date()): PhotoPurgeResult {
+    const rows = db.select().from(gradePhotoObjects).all();
+    let deleted = 0;
+    for (const row of rows) {
+      if (!isGradePhotoExpired(row.createdAt, now)) continue;
+      if (row.side !== "front" && row.side !== "back") continue;
+      if (deleteGradeImage(row.userId, row.inventoryItemId, row.side)) deleted += 1;
+    }
+    return { deleted };
   }
 
   function confirmationFromRow(row: typeof crmConfirmations.$inferSelect): ConfirmationRecord {
@@ -1667,8 +1786,12 @@ export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStor
     saveScanImage,
     readStoredScanImage,
     getScanImage,
+    deleteScanImage,
     saveGradeImage,
     getGradeImage,
+    deleteGradeImage,
+    deleteUserPhotos,
+    purgeExpiredGradePhotos,
     listInventory,
     confirmScan,
     rejectScan,

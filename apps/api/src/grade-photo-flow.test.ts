@@ -482,6 +482,13 @@ describe("P0-02 single upload and header size reject", () => {
       label: "Pre-grade estimate",
     });
     expect(runner.calls).toEqual(["detect .png", "detect .png", "grade .png .png"]);
+
+    const retry = new FormData();
+    retry.append("frontUploadId", front.uploadId ?? "");
+    retry.append("backUploadId", back.uploadId ?? "");
+    const expired = await app.request("/v1/grade/pregrade", { method: "POST", body: retry });
+    expect(expired.status).toBe(400);
+    expect(await expired.json()).toMatchObject({ ok: false, error: GRADE_UPLOAD_EXPIRED_COPY });
   });
 
   it("rejects a stale upload id with a retake, not a grader call", async () => {

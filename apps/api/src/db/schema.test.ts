@@ -67,6 +67,7 @@ describe("MVP CRM schema", () => {
       "crm_sessions",
       "grade_accounts",
       "grade_estimate_cache",
+      "grade_photo_objects",
       "grade_quota_usage",
       "portfolio_value_snapshots",
       "user_preferences",
@@ -135,6 +136,12 @@ describe("MVP CRM schema", () => {
     );
     expect(readFileSync(path.join(apiRoot, "drizzle/0007_nullable_purchase_price.sql"), "utf8")).not.toContain(
       "`purchase_price` integer NOT NULL",
+    );
+    expect(readFileSync(path.join(apiRoot, "drizzle/0009_grade_photo_objects.sql"), "utf8")).toContain(
+      "grade_photo_objects",
+    );
+    expect(readFileSync(path.join(apiRoot, "drizzle/0009_grade_photo_objects.sql"), "utf8")).toContain(
+      "`created_at` text NOT NULL",
     );
     expect(readFileSync(path.join(apiRoot, "drizzle/0008_grade_quotas.sql"), "utf8")).toContain(
       "`extra_credits`",

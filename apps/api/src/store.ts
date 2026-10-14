@@ -33,8 +33,14 @@ import {
   gradeImageStorageRef,
   isFirstPartyGradeImageRef,
   mimeFromGradeStorageRef,
+  stripImageMetadata,
   type GradeImageBytes,
 } from "./grade-image";
+import {
+  isGradePhotoExpired,
+  type GradePhotoObject,
+  type PhotoPurgeResult,
+} from "./photo-retention";
 import {
   isFirstPartyScanImageRef,
   mimeFromScanStorageRef,
@@ -156,6 +162,7 @@ interface Store {
   scans: Map<string, ScanRecord>;
   scanImages: Map<string, ScanImageBytes>;
   gradeImages: Map<string, GradeImageBytes>;
+  gradePhotoMeta: Map<string, GradePhotoObject>;
   confirmations: Map<string, ConfirmationRecord>;
   canonicalByFingerprint: Map<string, CardFlowCanonicalCard>;
   inventory: InventoryItemRecord[];
@@ -173,6 +180,7 @@ const store: Store = {
   scans: new Map(),
   scanImages: new Map(),
   gradeImages: new Map(),
+  gradePhotoMeta: new Map(),
   confirmations: new Map(),
   canonicalByFingerprint: new Map(),
   inventory: [],
@@ -288,10 +296,25 @@ export function saveScanImage(
   const record: ScanImageBytes = {
     storageRef: scanImageStorageRef(scanId, input.mimeType),
     mimeType: input.mimeType,
-    bytes: input.bytes,
+    bytes: stripImageMetadata(input.bytes, input.mimeType),
   };
   store.scanImages.set(scanId, record);
   return record;
+}
+
+function gradePhotoMetaKey(userId: string, inventoryItemId: string, side: GradeSide): string {
+  return `${userId}\0${inventoryItemId}\0${side}`;
+}
+
+export function deleteScanImage(userId: string, scanId: string): boolean {
+  const scan = getScan(userId, scanId);
+  if (!scan) return false;
+  const had = store.scanImages.delete(scanId);
+  if (scan.imageStorageRef || scan.imageMimeType) {
+    store.scans.set(scanId, { ...scan, imageStorageRef: null, imageMimeType: null });
+    return true;
+  }
+  return had;
 }
 
 /** Re-read persisted still bytes by first-party `image_storage_ref`. */
@@ -318,18 +341,27 @@ export function saveGradeImage(
   userId: string,
   inventoryItemId: string,
   side: GradeSide,
-  input: { bytes: Uint8Array; mimeType: ScanImageMimeType },
+  input: { bytes: Uint8Array; mimeType: ScanImageMimeType; createdAt?: string },
 ): GradeImageBytes | undefined {
   if (!getInventoryItem(userId, inventoryItemId)) return undefined;
+  const createdAt = input.createdAt ?? new Date().toISOString();
   const record: GradeImageBytes = {
     storageRef: gradeImageStorageRef(inventoryItemId, side, input.mimeType),
     mimeType: input.mimeType,
-    bytes: input.bytes,
+    bytes: stripImageMetadata(input.bytes, input.mimeType),
+    createdAt,
   };
   for (const candidate of gradeImageStorageCandidates(inventoryItemId, side)) {
     store.gradeImages.delete(candidate);
   }
   store.gradeImages.set(record.storageRef, record);
+  store.gradePhotoMeta.set(gradePhotoMetaKey(userId, inventoryItemId, side), {
+    userId,
+    inventoryItemId,
+    side,
+    storageRef: record.storageRef,
+    createdAt,
+  });
   return record;
 }
 
@@ -344,9 +376,51 @@ export function getGradeImage(
     const mimeType = mimeFromGradeStorageRef(candidate);
     if (!mimeType) continue;
     const record = store.gradeImages.get(candidate);
-    if (record && record.storageRef === candidate) return record;
+    if (record && record.storageRef === candidate) {
+      const meta = store.gradePhotoMeta.get(gradePhotoMetaKey(userId, inventoryItemId, side));
+      return meta ? { ...record, createdAt: meta.createdAt } : record;
+    }
   }
   return undefined;
+}
+
+export function deleteGradeImage(
+  userId: string,
+  inventoryItemId: string,
+  side: GradeSide,
+): boolean {
+  if (!getInventoryItem(userId, inventoryItemId)) return false;
+  let deleted = false;
+  for (const candidate of gradeImageStorageCandidates(inventoryItemId, side)) {
+    if (store.gradeImages.delete(candidate)) deleted = true;
+  }
+  if (store.gradePhotoMeta.delete(gradePhotoMetaKey(userId, inventoryItemId, side))) {
+    deleted = true;
+  }
+  store.gradeEstimateCache.delete(gradeEstimateCacheKey(userId, inventoryItemId));
+  return deleted;
+}
+
+export function deleteUserPhotos(userId: string): PhotoPurgeResult {
+  let deleted = 0;
+  for (const item of listInventory(userId)) {
+    for (const side of GRADE_SIDES) {
+      if (deleteGradeImage(userId, item.inventoryItemId, side)) deleted += 1;
+    }
+  }
+  for (const scan of listScans(userId)) {
+    if (deleteScanImage(userId, scan.scanId)) deleted += 1;
+  }
+  return { deleted };
+}
+
+export function purgeExpiredGradePhotos(now: Date = new Date()): PhotoPurgeResult {
+  let deleted = 0;
+  for (const meta of [...store.gradePhotoMeta.values()]) {
+    if (!isGradePhotoExpired(meta.createdAt, now)) continue;
+    if (deleteGradeImage(meta.userId, meta.inventoryItemId, meta.side)) deleted += 1;
+  }
+  return { deleted };
 }
 
 export function listInventory(userId: string): InventoryItemRecord[] {
@@ -623,8 +697,12 @@ export interface StorePort {
   saveScanImage: typeof saveScanImage;
   readStoredScanImage: typeof readStoredScanImage;
   getScanImage: typeof getScanImage;
+  deleteScanImage: typeof deleteScanImage;
   saveGradeImage: typeof saveGradeImage;
   getGradeImage: typeof getGradeImage;
+  deleteGradeImage: typeof deleteGradeImage;
+  deleteUserPhotos: typeof deleteUserPhotos;
+  purgeExpiredGradePhotos: typeof purgeExpiredGradePhotos;
   listInventory: typeof listInventory;
   confirmScan: typeof confirmScan;
   rejectScan: typeof rejectScan;
@@ -745,8 +823,12 @@ export function createMemoryStore(): StorePort {
     saveScanImage,
     readStoredScanImage,
     getScanImage,
+    deleteScanImage,
     saveGradeImage,
     getGradeImage,
+    deleteGradeImage,
+    deleteUserPhotos,
+    purgeExpiredGradePhotos,
     listInventory,
     confirmScan,
     rejectScan,
