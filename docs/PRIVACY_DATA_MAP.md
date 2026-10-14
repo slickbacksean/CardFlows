@@ -218,14 +218,14 @@ Public GitHub product docs (`MVP_SCOPE.md`, `PRODUCT_OVERVIEW.md`, `NON_GOALS.md
 | Field | Value |
 | --- | --- |
 | **Data type** | Device / diagnostic data |
-| **Source** | App runtime, optional crash reporter (**Assumption:** none selected) |
-| **Purpose** | Debug, security, rate-limit |
-| **Storage location** | **Open:** vendor TBD (Sentry, Firebase, etc.) |
+| **Source** | App runtime and API. Crash reporter is **Sentry** (founder-approved, P0-12). Init only when `SENTRY_DSN` / `EXPO_PUBLIC_SENTRY_DSN` is set. |
+| **Purpose** | Debug crashes and unexpected errors. Request id (`x-request-id`) is attached on API events. |
+| **Storage location** | Sentry (US SaaS). See [SENTRY.md](./SENTRY.md). |
 | **Access permissions** | Engineering only |
 | **Retention proposal** | 30–90 days unless counsel says otherwise |
 | **User deletion behavior** | Best-effort vendor delete; disclose if not possible |
-| **Sent to CardSight / TCGdex / analytics?** | Not CardSight/TCGdex. Analytics/crash only if approved. |
-| **Never log?** | Strip tokens, emails, image paths with query secrets |
+| **Sent to CardSight / TCGdex / analytics?** | Not CardSight/TCGdex. Crash events go to Sentry only when a DSN is set. No session replay. |
+| **Never log?** | Strip tokens, emails, photos, image bytes, and Authorization headers. App Store privacy labels must list crash data. |
 
 ### 15. Support communications
 

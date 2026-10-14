@@ -23,9 +23,11 @@ export {
 export type { EbayListingExportRow, TcgTraderExportRow } from "./collection-export";
 export {
   catalogHealth,
+  GRADE_ENGINE_STILL_RUNNING,
   gradeEstimateHealth,
   healthLeaksSecrets,
   healthMockProviders,
+  healthOk,
   livestreamIdentifyHealth,
   liveIdentityVisualHealth,
   pricingProviderHealth,
@@ -34,6 +36,7 @@ export {
 } from "./health";
 export type {
   CardFlowHealth,
+  GradeEngineHealth,
   HealthCatalog,
   HealthGradeEstimate,
   HealthLivestreamIdentify,
@@ -44,6 +47,7 @@ export type {
   HealthRecognition,
   HealthSlabPricing,
 } from "./health";
+export { scrubSentryEvent, REDACTED_EMAIL, REDACTED_IMAGE, REDACTED_VALUE } from "./sentry-scrub";
 export { catalogCardFromMapping, confirmIdentity } from "./confirm";
 export {
   CONFIRM_AMBIGUOUS_TITLE,

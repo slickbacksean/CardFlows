@@ -13,7 +13,8 @@ Checked against `apps/api` (the hosting plan was written for the old `packages/a
 | Database | `CARD_FLOW_SQLITE_PATH` (image default `/data/cardflow.sqlite`, ephemeral unless a volume is mounted). Hosted DB choice is Sean's decision. |
 | CORS | `CARD_FLOW_CORS_ORIGINS` allowlist; empty allows no browser origin (native apps don't need CORS). |
 | Auth | Every `/v1/*` route except `POST /v1/sessions` needs a session token. Keep `CARD_FLOW_DEV_AUTO_SESSION` unset outside local dev. |
-| Health | `GET /health`; `gradeEngine` really imports `cv2` and `numpy` in the grader Python (5 s timeout, result cached 5 min; `/health` waits at most 3 s for it). |
+| Health | `GET /health`; `gradeEngine` really imports `cv2` and `numpy` in the grader Python (5 s timeout). Successful probes are cached 5 min; failed probes are re-run. `/health` waits at most 3 s. HTTP 503 when the configured grader finished and failed. Every response includes `x-request-id`. |
+| Crash reporting | Optional `SENTRY_DSN`. Unset is a no-op. Photos, image bytes, and emails are stripped. See [SENTRY.md](./SENTRY.md). |
 | Upload limits | 22 MB per request on the grading routes (checked before parsing; the 413 copy is derived from the cap), 20 MB per photo. The API reads width/height from the JPEG/PNG/WebP header and rejects a long edge over 4032 px before any decode. The grader still uses OpenCV's reduced decode as a second line of defense, then downsizes anything over 16 MP. |
 | Rate limit | Grades: 6/min and 100/day per user and per client IP; detect has its own 20/min and 300/day bucket; whole-instance cap of 1000 grades/day (`CARD_FLOW_GRADE_*`, `CARD_FLOW_DETECT_*`). Client IP is the TCP peer unless `CARD_FLOW_TRUST_PROXY_HOPS` is set to the number of proxies in front (set it to 1 behind a single platform proxy). In memory, so one instance only. |
 | Grader child env | Allowlist (PATH, LANG, HOME, TMPDIR/TMP/TEMP, OMP/OPENBLAS threads, grader flags); model keys forced empty. |
