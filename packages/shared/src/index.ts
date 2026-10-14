@@ -800,3 +800,4 @@ export * from "./set-name-map";
 export * from "./catalog-snapshot";
 export * from "./scan-correction";
 export * from "./confirm-log";
+export * from "./mapping-metrics";

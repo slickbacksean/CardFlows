@@ -68,3 +68,20 @@ describe("P1-26 confirm log", () => {
     );
   });
 });
+
+describe("P1-27 mapping metrics endpoint", () => {
+  it("reports confirms, corrections and manual search without user ids", async () => {
+    const app = createApp();
+    const a = await ambiguous(app);
+    const shown = a.body.scan.mapping.candidates.map((c) => c.tcgdexId);
+    await post(app, `/v1/scans/${a.body.scan.scanId}/confirm`, { tcgdexId: shown[0] });
+    const b = await ambiguous(app);
+    await post(app, `/v1/scans/${b.body.scan.scanId}/confirm`, { tcgdexId: "base4-4", via: "manual_search" });
+    const res = await app.request("/v1/metrics/mapping?days=7");
+    const body = (await res.json()) as { report: { confirms: number; manualSearchRate: number; top1Rate: number } };
+    expect(body.report).toMatchObject({ confirms: 2, manualSearchRate: 0.5, top1Rate: 0.5 });
+    expect(JSON.stringify(body)).not.toMatch(/userId|user_id/);
+    const md = await (await app.request("/v1/metrics/mapping?format=markdown")).text();
+    expect(md).toContain("# Mapping quality");
+  });
+});
