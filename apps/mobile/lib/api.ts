@@ -180,7 +180,15 @@ function postNativeForm(
 
 function unreachableError(error: unknown): Error {
   const detail = error instanceof Error ? error.message.trim() : "";
-  return new Error(cardFlowUnreachableMessage(__DEV__ ? `${apiUrl()} ${detail}`.trim() : null));
+  const wrapped = new Error(cardFlowUnreachableMessage(__DEV__ ? `${apiUrl()} ${detail}`.trim() : null));
+  (wrapped as Error & { unreachable?: boolean }).unreachable = true;
+  return wrapped;
+}
+
+/** HTTP status of a failed CardFlow call, or null when the server was never reached. */
+export function apiErrorStatus(error: unknown): number | null {
+  const status = (error as { status?: unknown } | null)?.status;
+  return typeof status === "number" ? status : null;
 }
 
 /**
@@ -192,7 +200,7 @@ const GRADE_PREGRADE_TIMEOUT_MS = 150_000;
 
 async function request<T>(
   path: string,
-  init?: RequestInit & { timeoutMs?: number },
+  init?: RequestInit & { timeoutMs?: number; extraHeaders?: Record<string, string> },
 ): Promise<T> {
   await waitForSessionRestore();
   const isFormData =
@@ -206,6 +214,7 @@ async function request<T>(
   if (appKey) headers["X-CardFlow-App-Key"] = appKey;
   const requestId = createRequestId();
   headers["x-request-id"] = requestId;
+  if (init?.extraHeaders) Object.assign(headers, init.extraHeaders);
   rememberRequestId(requestId);
 
   const url = `${apiUrl()}${path}`;
@@ -265,6 +274,8 @@ type CallInput<R extends ApiRoute> = {
   form?: FormData;
   timeoutMs?: number;
   signal?: AbortSignal;
+  /** P1-09: replays of a queued write reuse the same key so the server makes one row. */
+  idempotencyKey?: string;
 };
 
 /**
@@ -284,7 +295,10 @@ export async function callApi<R extends ApiRoute>(
     const checked = checkRequestBody(route, input.body);
     if (!checked.ok) console.warn(`[contract] ${route.method} ${route.path} request: ${checked.issues}`);
   }
-  const init: RequestInit & { timeoutMs?: number } = { method: route.method };
+  const init: RequestInit & { timeoutMs?: number; extraHeaders?: Record<string, string> } = {
+    method: route.method,
+  };
+  if (input.idempotencyKey) init.extraHeaders = { "Idempotency-Key": input.idempotencyKey };
   if (input.form) init.body = input.form;
   else if (input.body !== undefined) init.body = JSON.stringify(input.body);
   if (input.timeoutMs !== undefined) init.timeoutMs = input.timeoutMs;
@@ -645,9 +659,10 @@ export function savePurchased(input: {
   condition?: string | null;
   selectedVariant?: string | null;
   referencePriceAmount?: string | null;
-}) {
+}, idempotencyKey?: string) {
   return callApi(apiContract.savePurchased, {
     body: { ...input, currency: LOCKED_DISPLAY_CURRENCY },
+    idempotencyKey,
   });
 }
 
@@ -657,7 +672,7 @@ export async function saveLivestreamPurchase(input: {
   platform?: string | null;
   streamUrl?: string | null;
   selectedVariant?: string | null;
-}) {
+}, idempotencyKey?: string) {
   const created = await createScan({ captureMethod: "manual_scan" });
   const confirmed = await confirmScan(created.scan.scanId, {
     tcgdexId: input.tcgdexId,
@@ -671,6 +686,7 @@ export async function saveLivestreamPurchase(input: {
       streamUrl: input.streamUrl,
       selectedVariant: input.selectedVariant,
     },
+    idempotencyKey,
   });
 }
 
@@ -716,8 +732,8 @@ export function saveWatchlist(input: {
   referencePriceAmount?: string | null;
   targetMaxBuyAmount?: string | null;
   condition?: string | null;
-}) {
-  return callApi(apiContract.saveWatchlist, { body: input });
+}, idempotencyKey?: string) {
+  return callApi(apiContract.saveWatchlist, { body: input, idempotencyKey });
 }
 
 export const WATCHLIST_DRAFT_PATH = "/draft/watchlist" as const;
