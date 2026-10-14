@@ -47,3 +47,27 @@ describe("P1-17 ops metrics", () => {
     expect((await off.request("/ops/metrics")).status).toBe(404);
   });
 });
+
+describe("P1-18 device perf telemetry", () => {
+  it("accepts timings only and reports p95 per stage and device class", async () => {
+    const metrics = new OpsMetrics();
+    const app = createApp(undefined, { opsMetrics: metrics, opsToken: "t" });
+    const samples = Array.from({ length: 20 }, (_, i) => ({ stage: "grade_still_prep", ms: (i + 1) * 10 }));
+    const res = await app.request("/v1/telemetry/perf", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        deviceClass: "mid",
+        deviceModel: "iPhone 12",
+        os: "ios",
+        thermal: "serious",
+        samples: [...samples, { stage: "image", ms: 1, jpeg: "AAAA" }],
+      }),
+    });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ accepted: 20 });
+    const row = metrics.snapshot().devices[0]!;
+    expect(row).toMatchObject({ stage: "grade_still_prep", deviceClass: "mid", count: 20, p95Ms: 190, hotShare: 1 });
+    expect(JSON.stringify(metrics.snapshot())).not.toContain("AAAA");
+  });
+});

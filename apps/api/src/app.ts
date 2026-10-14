@@ -1,5 +1,6 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 import { routePath } from "hono/route";
+import { isHot, parsePerfBatch } from "@cardflow/shared";
 import { opsMetrics, type OpsMetrics } from "./ops-metrics";
 import {
   canMarkReadyForReview,
@@ -910,6 +911,16 @@ export function createApp(
       }
       throw error;
     }
+  });
+
+  // P1-18: sampled on-device timings. Timings only; unknown fields are dropped.
+  app.post("/v1/telemetry/perf", async (c) => {
+    const batch = parsePerfBatch(await c.req.json().catch(() => null));
+    if (!batch) return c.json({ ok: false, error: "Invalid request" }, 400);
+    for (const sample of batch.samples) {
+      metrics.recordDeviceStage(sample.stage, batch.deviceClass, sample.ms, isHot(batch.thermal));
+    }
+    return c.json({ ok: true, accepted: batch.samples.length });
   });
 
   app.get("/v1/pricing/cards/:tcgdexId", async (c) => {

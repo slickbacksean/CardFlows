@@ -966,3 +966,11 @@ export function patchPreferences(preferences: MaxBuyPreferences) {
     body: JSON.stringify(preferences),
   });
 }
+
+/** P1-18: sampled on-device timings (no images). */
+export function postPerfTelemetry(batch: import("@cardflow/shared").PerfBatch) {
+  return request<{ ok: true; accepted: number }>("/v1/telemetry/perf", {
+    method: "POST",
+    body: JSON.stringify(batch),
+  });
+}
