@@ -8,6 +8,7 @@ import {
   computeMaxBuy,
   confirmIdentity,
   DEFAULT_MAX_BUY_PREFERENCES,
+  GRADE_SIDES,
   LISTING_AI_COPY_ENABLED,
   listInvitedIdentities,
   LOCKED_DISPLAY_CURRENCY,
@@ -1179,6 +1180,61 @@ export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStor
     return item;
   }
 
+  function deleteGradeImages(inventoryItemId: string): void {
+    for (const side of GRADE_SIDES) {
+      for (const candidate of gradeImageStorageCandidates(inventoryItemId, side)) {
+        memoryGradeImages.delete(candidate);
+        if (!sqliteDir) continue;
+        const filePath = path.join(sqliteDir, candidate);
+        if (existsSync(filePath)) unlinkSync(filePath);
+      }
+    }
+  }
+
+  /** Reverses a Purchased write. Leaves no inventory, purchase, or draft row behind. */
+  function deleteInventoryItem(userId: string, inventoryItemId: string): boolean {
+    const item = loadInventoryItem(userId, inventoryItemId);
+    if (!item) return false;
+    sqlite.transaction(() => {
+      db.delete(crmPurchases).where(eq(crmPurchases.inventoryItemId, inventoryItemId)).run();
+      db.delete(crmListingDrafts).where(eq(crmListingDrafts.inventoryItemId, inventoryItemId)).run();
+      db.delete(crmGradingSubmitted)
+        .where(
+          and(
+            eq(crmGradingSubmitted.userId, userId),
+            eq(crmGradingSubmitted.inventoryItemId, inventoryItemId),
+          ),
+        )
+        .run();
+      db.delete(crmGradingReturned)
+        .where(
+          and(
+            eq(crmGradingReturned.userId, userId),
+            eq(crmGradingReturned.inventoryItemId, inventoryItemId),
+          ),
+        )
+        .run();
+      db.delete(gradeEstimateCache)
+        .where(
+          and(
+            eq(gradeEstimateCache.userId, userId),
+            eq(gradeEstimateCache.inventoryItemId, inventoryItemId),
+          ),
+        )
+        .run();
+      db.delete(crmInventoryItems)
+        .where(
+          and(
+            eq(crmInventoryItems.inventoryItemId, inventoryItemId),
+            eq(crmInventoryItems.userId, userId),
+          ),
+        )
+        .run();
+    })();
+    deleteGradeImages(inventoryItemId);
+    return true;
+  }
+
   function draftFromRow(
     row: typeof crmListingDrafts.$inferSelect,
     selectedVariant: string | null,
@@ -1620,6 +1676,7 @@ export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStor
     getDraftForInventoryItem,
     saveDraft,
     saveInventoryItem,
+    deleteInventoryItem,
     listGradingSubmitted,
     listGradingReturned,
     saveGradingSubmitted,
