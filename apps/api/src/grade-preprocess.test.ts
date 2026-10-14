@@ -7,8 +7,15 @@ import {
   noCardObbDetector,
   type ObbDetector,
 } from "@cardflow/shared";
-import { encodePngStill } from "./obb-phash-decode";
-import { preprocessGradeStill } from "./grade-preprocess";
+import { readFileSync } from "node:fs";
+import { encodePngStill, decodeScanStill } from "./obb-phash-decode";
+import {
+  GRADE_ASPECT_TOLERANCE_PCT,
+  GRADE_ASPECT_TOLERANCE_PERSPECTIVE_PCT,
+  ensurePortraitRgb,
+  preprocessGradeStill,
+  rotateRgb90Clockwise,
+} from "./grade-preprocess";
 
 function solidBitmap(width: number, height: number) {
   const data = new Uint8Array(width * height * 3);
@@ -50,5 +57,34 @@ describe("grade preprocess", () => {
     expect(cropped.usedObbCrop).toBe(true);
     expect(cropped.mimeType).toBe("image/png");
     expect(cropped.bytes).not.toEqual(png);
+  });
+
+  it("rotates a landscape still to portrait before OBB / aspect", async () => {
+    const landscape = solidBitmap(30, 20);
+    landscape.data[0] = 9;
+    const clockwise = rotateRgb90Clockwise(landscape);
+    expect(clockwise.width).toBe(20);
+    expect(clockwise.height).toBe(30);
+    expect(clockwise.data[19 * 3]).toBe(9);
+    expect(ensurePortraitRgb(landscape).rotated90).toBe(true);
+    expect(ensurePortraitRgb(solidBitmap(20, 30)).rotated90).toBe(false);
+
+    const original = { bytes: encodePngStill(landscape), mimeType: "image/png" as const };
+    const processed = await preprocessGradeStill(original, noCardObbDetector);
+    expect(processed.usedObbCrop).toBe(false);
+    expect(processed.rotated90).toBe(true);
+    const decoded = await decodeScanStill(processed.bytes, processed.mimeType);
+    expect(decoded?.width).toBe(20);
+    expect(decoded?.height).toBe(30);
+  });
+
+  it("documents the 3% / 8% aspect split after portrait correction", () => {
+    const thresholds = JSON.parse(
+      readFileSync(new URL("../vendor/cardgrading/calibration/thresholds.json", import.meta.url), "utf8"),
+    ) as { capture: { aspect_ratio_tolerance_pct: number; aspect_ratio_tolerance_upright_pct: number } };
+    expect(GRADE_ASPECT_TOLERANCE_PCT).toBe(3);
+    expect(GRADE_ASPECT_TOLERANCE_PERSPECTIVE_PCT).toBe(8);
+    expect(thresholds.capture.aspect_ratio_tolerance_pct).toBe(GRADE_ASPECT_TOLERANCE_PCT);
+    expect(thresholds.capture.aspect_ratio_tolerance_upright_pct).toBe(GRADE_ASPECT_TOLERANCE_PERSPECTIVE_PCT);
   });
 });

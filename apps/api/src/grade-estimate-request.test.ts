@@ -23,6 +23,8 @@ describe("grade estimate Zod validation", () => {
     expect(parseGradeEstimateFormFields({ front: "file", back: "file" })).toEqual({
       front: "file",
       back: "file",
+      frontUploadId: undefined,
+      backUploadId: undefined,
       reestimate: false,
       angled: [],
       captureMeta: null,
@@ -30,6 +32,8 @@ describe("grade estimate Zod validation", () => {
     expect(parseGradeEstimateFormFields({})).toEqual({
       front: undefined,
       back: undefined,
+      frontUploadId: undefined,
+      backUploadId: undefined,
       reestimate: false,
       angled: [],
       captureMeta: null,

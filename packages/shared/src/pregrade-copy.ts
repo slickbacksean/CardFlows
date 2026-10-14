@@ -38,8 +38,12 @@ export const PREGRADE_COPY = {
   smallInFrame: "Card is small in the photo",
 } as const;
 
-/** Words that must never reach a pre-grade screen or response. */
-export const PREGRADE_BANNED_WORDS = [/\bAI\b/, /\bPSA\b/, /\bBGS\b/, /\bCGC\b/] as const;
+/**
+ * Words that must never reach estimate copy: screens, API responses, listing
+ * drafts, share-card text, or App Store metadata. Slab price comparisons may
+ * still name companies. Matching is case-insensitive.
+ */
+export const PREGRADE_BANNED_WORDS = [/\bAI\b/i, /\bPSA\b/i, /\bBGS\b/i, /\bCGC\b/i] as const;
 
 export function pregradeCopyViolations(text: string): string[] {
   return PREGRADE_BANNED_WORDS.filter((word) => word.test(text)).map((word) => word.source);

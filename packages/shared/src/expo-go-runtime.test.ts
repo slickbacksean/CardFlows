@@ -78,11 +78,13 @@ describe("Expo Go runtime guards", () => {
     expect(flow).toContain("GradeCardFinder");
     expect(flow).not.toMatch(/cardflow-live-video|expo-sensors|@capacitor|@capgo/);
     expect(photos).toContain('from "expo-image-picker"');
+    expect(photos).toContain('from "expo-image-manipulator"');
     expect(photos).not.toMatch(/expo-sensors|@capacitor|@capgo/);
     // expo-sensors is listed for the motionPermission plugin (and PR 39 DeviceMotion).
     // JS must not import it at top level so Expo Go still loads when the native
     // module is missing. PR 39 reaches it only through lib/device-level.ts.
     expect(mobilePackage).toContain("expo-sensors");
+    expect(mobilePackage).toContain("expo-image-manipulator");
     expect(mobilePackage).not.toMatch(/@capacitor|@capgo/);
     expect(rootPackage).not.toMatch(/expo-sensors|@capacitor\/|@capgo\//);
 

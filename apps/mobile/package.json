@@ -12,9 +12,9 @@
   },
   "dependencies": {
     "@cardflow/shared": "workspace:*",
-    "cardflow-live-video": "file:./modules/cardflow-live-video",
     "@expo/metro-runtime": "~57.0.16",
     "@expo/vector-icons": "^15.0.3",
+    "cardflow-live-video": "file:./modules/cardflow-live-video",
     "expo": "~57.0.24",
     "expo-camera": "~57.0.5",
     "expo-clipboard": "~57.0.2",
@@ -24,6 +24,7 @@
     "expo-font": "~57.0.4",
     "expo-haptics": "~57.0.3",
     "expo-image": "~57.0.5",
+    "expo-image-manipulator": "~57.0.19",
     "expo-image-picker": "~57.0.19",
     "expo-linking": "~57.0.10",
     "expo-router": "~57.0.22",

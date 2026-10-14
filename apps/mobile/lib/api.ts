@@ -632,16 +632,20 @@ export async function detectGradePhoto(
 export async function requestPhotoPregrade(input: {
   frontUri: string;
   frontMimeType: string | null;
+  frontUploadId?: string | null;
   backUri: string;
   backMimeType: string | null;
+  backUploadId?: string | null;
 }): Promise<PhotoPregradeResult> {
   const form = new FormData();
   const frontMime =
     normalizeScanImageMime(input.frontMimeType) ?? mimeFromUri(input.frontUri) ?? "image/jpeg";
   const backMime =
     normalizeScanImageMime(input.backMimeType) ?? mimeFromUri(input.backUri) ?? "image/jpeg";
-  await appendGradeStill(form, "front", input.frontUri, frontMime);
-  await appendGradeStill(form, "back", input.backUri, backMime);
+  if (input.frontUploadId) form.append("frontUploadId", input.frontUploadId);
+  else await appendGradeStill(form, "front", input.frontUri, frontMime);
+  if (input.backUploadId) form.append("backUploadId", input.backUploadId);
+  else await appendGradeStill(form, "back", input.backUri, backMime);
   try {
     const data = await request<PhotoPregradeResult>("/v1/grade/pregrade", {
       method: "POST",
@@ -783,6 +787,14 @@ export async function saveLivestreamPurchase(input: {
       selectedVariant: input.selectedVariant,
     }),
   });
+}
+
+/** Reverses a livestream details-needed Purchased write. Leaves no Purchased row. */
+export function undoLivestreamPurchase(inventoryItemId: string) {
+  return request<{ ok: true; deleted: true }>(
+    `/v1/inventory/${encodeURIComponent(inventoryItemId)}`,
+    { method: "DELETE" },
+  );
 }
 
 export function completePurchasedDetails(

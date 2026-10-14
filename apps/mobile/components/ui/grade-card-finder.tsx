@@ -23,7 +23,6 @@ import {
 import { PrimaryButton } from "@/components/ui/primary-button";
 import {
   CARD_ASPECT_RATIO,
-  GRADE_STILL_QUALITY,
   largestPictureSize,
   stillFromCameraCapture,
   type PickedGradeStill,
@@ -79,7 +78,8 @@ export function GradeCardFinder({
     setError(null);
     try {
       const photo = await cameraRef.current?.takePictureAsync({
-        quality: GRADE_STILL_QUALITY,
+        // Full pixels; Photo grade prep writes JPEG q=0.8 once.
+        quality: 1,
         imageType: "jpg",
         skipProcessing: false,
       });
