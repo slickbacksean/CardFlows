@@ -833,7 +833,7 @@ export function createApp(
     );
     let identityCropJpeg =
       typeof body.identityCropJpeg === "string" ? body.identityCropJpeg : null;
-    let cropFromServerYolo = false;
+    let identityCropQuad = normalizeIdentityCropQuad(body.identityCropQuad);
     const yolo = liveVideoObb();
     if (yolo && typeof body.videoFrameJpeg === "string") {
       const located = await locateLiveVideoCard(yolo, body.videoFrameJpeg);
@@ -841,12 +841,16 @@ export function createApp(
         cardDetected = false;
         identityHash = null;
         identityCropJpeg = null;
+        identityCropQuad = null;
       } else if (located?.found) {
         cardDetected = true;
-        identityHash = normalizeLiveVideoIdentityHash(located.identityHash);
-        identityCropJpeg = located.jpegBase64;
-        // The phone's corners describe its own crop, not the server YOLO crop.
-        cropFromServerYolo = true;
+        // Keep a phone crop that already has 4 corners so warp.py can straighten it.
+        // Android (no corners) and missed phone detects use the YOLO AABB + OBB quad.
+        if (!identityCropJpeg || !identityCropQuad) {
+          identityHash = normalizeLiveVideoIdentityHash(located.identityHash);
+          identityCropJpeg = located.jpegBase64;
+          identityCropQuad = normalizeIdentityCropQuad(located.identityCropQuad);
+        }
       }
     }
 
@@ -861,7 +865,7 @@ export function createApp(
       if (crop) {
         const sidecarStart = performance.now();
         const match = await liveIdentityOpenclip.matchCropJpeg(crop.bytes, crop.mimeType, {
-          quad: cropFromServerYolo ? null : normalizeIdentityCropQuad(body.identityCropQuad),
+          quad: identityCropQuad,
         });
         stages.sidecar = performance.now() - sidecarStart;
         if (match?.timings) {

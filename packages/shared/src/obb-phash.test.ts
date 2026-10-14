@@ -4,7 +4,9 @@ import {
   createYolo11NanoObbDetector,
   fullFrameObb,
   letterboxToYoloInput,
+  liveWarpCropFromObb,
   noCardObbDetector,
+  obbQuadTlTrBrBl,
   yolo11ObbBoxesFromChannelsFirst,
   yolo11ObbLayoutFromDims,
   YOLO11_OBB_INPUT,
@@ -89,6 +91,25 @@ describe("RGB pHash still identify", () => {
 });
 
 describe("YOLO11 Nano OBB crop", () => {
+  it("maps 4 OBB corners into an axis-aligned crop for warp.py", () => {
+    const messy = composeMessyCiCardStill("base1-58");
+    const result = liveWarpCropFromObb(messy.bitmap, messy.box);
+    expect(result).not.toBeNull();
+    expect(result!.quad).toHaveLength(8);
+    expect(result!.quad.every((value) => Number.isFinite(value))).toBe(true);
+    expect(result!.crop.width).toBeGreaterThanOrEqual(8);
+    expect(result!.crop.height).toBeGreaterThanOrEqual(8);
+    const imageQuad = obbQuadTlTrBrBl(messy.box);
+    expect(imageQuad).toHaveLength(8);
+    // Corners sit inside the crop (small detector noise is fine).
+    for (let i = 0; i < 8; i += 2) {
+      expect(result!.quad[i]).toBeGreaterThan(-result!.crop.width * 0.2);
+      expect(result!.quad[i]).toBeLessThan(result!.crop.width * 1.2);
+      expect(result!.quad[i + 1]).toBeGreaterThan(-result!.crop.height * 0.2);
+      expect(result!.quad[i + 1]).toBeLessThan(result!.crop.height * 1.2);
+    }
+  });
+
   it("crops the best OBB before hashing", async () => {
     const card = ciStillBitmap("base1-58");
     const canvas = {
