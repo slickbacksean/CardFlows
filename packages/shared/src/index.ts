@@ -262,6 +262,7 @@ export {
   LISTING_AI_COPY_ENABLED,
   LISTING_DRAFTS_ENABLED,
   listPurchasedDraftsForCopy,
+  listingDraftEstimateChip,
   listingDraftStatusLabel,
   readyForReviewMissing,
   renderListingTitle,
@@ -646,6 +647,12 @@ export {
   PREGRADE_TITLE,
   pregradeCopyViolations,
 } from "./pregrade-copy";
+export {
+  SHARE_CARD_COPY,
+  shareCardEstimateLine,
+  shareCardFlipLine,
+  shareCardVisibleCopy,
+} from "./share-card-copy";
 export {
   GRADE_STILL_MIN_SHORT_SIDE_PX,
   GRADE_STILL_TOO_SMALL_COPY,
