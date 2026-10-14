@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { changeArrow, chartSummaryLabel, signedPercent } from "@cardflow/shared";
 import { Pressable, StyleSheet, Text, View, type LayoutChangeEvent } from "react-native";
 import type { PortfolioHistoryPoint, PortfolioHistoryRange } from "@/lib/api";
 import { colors, radii, space, type } from "@/lib/theme";
@@ -95,34 +96,48 @@ export function ValueHistoryChart({
   }
 
   return (
-    <View accessibilityLabel={currentDisplay ?? "Collection value"} style={styles.card}>
+    <View style={styles.card}>
+      <View
+        accessible
+        accessibilityLabel={chartSummaryLabel({
+          todayDisplay: latestCents !== null ? formatUsd(latestCents) : (currentDisplay ?? null),
+          changePct: hasHistory ? changePct : null,
+          rangeLabel: option.days ? `${option.days} days` : "all time",
+        })}
+      >
       <Text style={styles.label}>Collection value</Text>
-      <Text style={styles.value}>
+      <Text maxFontSizeMultiplier={1.5} style={styles.value}>
         {latestCents !== null ? formatUsd(latestCents) : loading ? "…" : "No estimate"}
       </Text>
+      </View>
 
       {hasHistory ? (
         <>
           <Text style={[styles.change, { color: changeColor }]}>
             {change === null
               ? `Not enough history for ${option.label} yet.`
-              : `${change > 0 ? "+" : ""}${formatUsd(change)}${
-                  changePct !== null ? ` (${change > 0 ? "+" : ""}${changePct.toFixed(1)}%)` : ""
+              : `${changeArrow(change)} ${change > 0 ? "+" : change < 0 ? "\u2212" : ""}${formatUsd(Math.abs(change))}${
+                  changePct !== null ? ` (${signedPercent(changePct)})` : ""
                 } · ${option.label}`}
           </Text>
 
-          <View onLayout={onLayout} style={styles.chart}>
+          <View
+            accessibilityElementsHidden
+            importantForAccessibility="no-hide-descendants"
+            onLayout={onLayout}
+            style={styles.chart}
+          >
             {chartWidth > 0 && visible.length >= 2 ? (
               <Line points={visible} width={chartWidth} />
             ) : null}
           </View>
           {first && last && visible.length >= 2 ? (
             <View style={styles.axis}>
-              <Text style={styles.axisLabel}>{shortDate(first.date)}</Text>
-              <Text style={styles.axisLabel}>
+              <Text maxFontSizeMultiplier={1.5} style={styles.axisLabel}>{shortDate(first.date)}</Text>
+              <Text maxFontSizeMultiplier={1.5} style={styles.axisLabel}>
                 {visible.length} days recorded
               </Text>
-              <Text style={styles.axisLabel}>{shortDate(last.date)}</Text>
+              <Text maxFontSizeMultiplier={1.5} style={styles.axisLabel}>{shortDate(last.date)}</Text>
             </View>
           ) : null}
 
@@ -131,7 +146,9 @@ export function ValueHistoryChart({
               const selected = entry.range === range;
               return (
                 <Pressable
+                  accessibilityLabel={entry.days ? `${entry.days} days` : "All time"}
                   accessibilityRole="tab"
+                  hitSlop={{ top: 12, bottom: 12, left: 4, right: 4 }}
                   accessibilityState={{ selected }}
                   key={entry.range}
                   onPress={() => setRange(entry.range)}

@@ -673,8 +673,11 @@ interface GhostButtonProps {
 function GhostButton({ label, onPress, disabled }: GhostButtonProps) {
   return (
     <Pressable
+      accessibilityLabel={label}
       accessibilityRole="button"
+      accessibilityState={{ disabled: Boolean(disabled) }}
       disabled={disabled}
+      hitSlop={8}
       onPress={onPress}
       style={[styles.ghost, disabled && styles.disabled]}
     >

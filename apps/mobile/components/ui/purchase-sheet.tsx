@@ -294,8 +294,10 @@ interface ChipProps {
 function Chip({ label, selected, onPress }: ChipProps) {
   return (
     <Pressable
+      accessibilityLabel={label}
       accessibilityRole="button"
       accessibilityState={{ selected }}
+      hitSlop={6}
       onPress={onPress}
       style={[styles.chip, selected && styles.chipSelected]}
     >

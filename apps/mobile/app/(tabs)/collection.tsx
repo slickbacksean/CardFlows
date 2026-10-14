@@ -513,6 +513,7 @@ interface SegmentButtonProps {
 function SegmentButton({ label, selected, onPress }: SegmentButtonProps) {
   return (
     <Pressable
+      accessibilityLabel={label}
       accessibilityRole="tab"
       accessibilityState={{ selected }}
       onPress={onPress}
@@ -600,6 +601,8 @@ const styles = StyleSheet.create({
   segment: {
     flex: 1,
     alignItems: "center",
+    justifyContent: "center",
+    minHeight: 44,
     borderRadius: radii.pill,
     paddingVertical: 8,
   },
