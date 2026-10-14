@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { scanCorrectionFor, type ScanCorrection } from "@cardflow/shared";
 import {
   canMarkReadyForReview,
   CatalogProviderError,
@@ -286,6 +287,8 @@ export interface CreateAppOptions {
   pricing?: CardPricingProvider;
   /** Recognition provider. Tests default to mock; live Capture uses `obb_phash`. */
   recognition?: CardRecognitionProvider;
+  /** P1-06: manual-search corrections land here (and in the log) for P1-26. */
+  scanCorrections?: ScanCorrection[];
   /**
    * When true, identify reads persisted stills (`image_storage_ref`).
    * JSON-only DEV chips stay on mock. Missing/oversize stills never run the model.
@@ -420,6 +423,12 @@ export function createApp(
   const devAutoSession = options.devAutoSession ?? resolveDevAutoSession();
   const catalog = options.catalog ?? mockTcgdexCatalogProvider;
   const pricing = options.pricing ?? offPricingProvider;
+  const scanCorrections = options.scanCorrections ?? [];
+  const recordScanCorrection = (correction: ScanCorrection) => {
+    scanCorrections.push(correction);
+    if (scanCorrections.length > 1000) scanCorrections.shift();
+    if (!process.env.VITEST) console.info(JSON.stringify({ event: "scan_correction", ...correction }));
+  };
   const pokecollectorAccounts = options.pokecollectorAccounts ?? offPokecollectorAccounts;
   const recognitionProvider = options.recognition ?? mockCardRecognitionProvider;
   const gradingProvider = options.grading ?? mockCardGradingProvider;
@@ -1493,6 +1502,7 @@ export function createApp(
     const body = await c.req.json<{
       tcgdexId?: string;
       selectedVariant?: string | null;
+      via?: string | null;
     }>();
     if (!body.tcgdexId) {
       return c.json({ ok: false, error: "tcgdexId is required" }, 400);
@@ -1530,6 +1540,16 @@ export function createApp(
         selectedVariant: body.selectedVariant,
         catalogCard,
       });
+      const correction = scanCorrectionFor({
+        scanId: scan.scanId,
+        userId: c.get("userId"),
+        via: body.via,
+        predictedTcgdexId: scan.mapping.tcgdexId ?? scan.mapping.canonicalCard?.tcgdexId ?? null,
+        candidateTcgdexIds: scan.mapping.candidates.map((card) => card.tcgdexId),
+        chosenTcgdexId: body.tcgdexId,
+        recognitionProvider: scan.mapping.provider,
+      });
+      if (correction) recordScanCorrection(correction);
       return c.json({
         ok: true,
         scan: result.scan,
