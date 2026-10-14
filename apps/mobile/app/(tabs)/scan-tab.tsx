@@ -12,7 +12,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { LivestreamBrowser, type LivestreamBrowserHandle } from "@/components/ui/livestream-browser";
 import { PrimaryButton } from "@/components/ui/primary-button";
 import { ScreenerOverlay } from "@/components/ui/screener-overlay";
-import { saveLivestreamPurchase } from "@/lib/api";
+import { saveLivestreamPurchase, undoLivestreamPurchase } from "@/lib/api";
 import {
   injectMockLiveVideoCard,
   startLiveVideoIdentify,
@@ -78,11 +78,16 @@ export default function ScanTabScreen() {
   }
 
   async function onPurchased(guess: LiveOverlayGuess) {
-    await saveLivestreamPurchase({
+    const saved = await saveLivestreamPurchase({
       tcgdexId: guess.tcgdexId,
       platform,
       streamUrl: chrome.pageUrl,
     });
+    return { inventoryItemId: saved.item.inventoryItemId };
+  }
+
+  async function onUndoPurchased(inventoryItemId: string) {
+    await undoLivestreamPurchase(inventoryItemId);
   }
 
   function toggleScanner() {
@@ -241,6 +246,7 @@ export default function ScanTabScreen() {
           <ScreenerOverlay
             liveIdentity={liveIdentity}
             onPurchased={(guess) => onPurchased(guess)}
+            onUndoPurchased={(inventoryItemId) => onUndoPurchased(inventoryItemId)}
             scannerOn={scannerOn}
             tabFocused={tabFocused}
             unavailable={scannerUnavailable}

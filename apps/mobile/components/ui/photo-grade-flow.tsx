@@ -40,7 +40,7 @@ const GUIDELINES = [
   "Use even light. No sleeve, glare, or fingers on the card.",
   "Take the front, then the back. Catalog art is not a grade photo.",
   "Hold the phone flat over the card. A tilted angle means a retake.",
-  "The result is a pre-grade estimate. Estimate only. Not an official grade.",
+  `The result is a ${PREGRADE_LABEL.toLowerCase()}. ${PREGRADE_DISCLAIMER}`,
 ];
 
 const PILLARS = ["centering", "corners", "edges", "surface"] as const;
@@ -417,7 +417,12 @@ export function PhotoGradeFlow({ onOpenPipeline }: PhotoGradeFlowProps) {
           <Text style={styles.section}>{PREGRADE_LABEL}</Text>
           {resultKind === "score" && result ? (
             <>
-              <Text style={styles.score}>{formatPregrade(result.estimate)}</Text>
+              <Text
+                accessibilityLabel={`${PREGRADE_LABEL}, ${formatPregrade(result.estimate)}`}
+                style={styles.score}
+              >
+                {formatPregrade(result.estimate)}
+              </Text>
               <Text style={styles.body}>{PREGRADE_DISCLAIMER}</Text>
               {result.warning ? <Text style={styles.warning}>{result.warning}</Text> : null}
               <View style={styles.pillar}>

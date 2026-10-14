@@ -1,5 +1,6 @@
 import { DETAILS_NEEDED_WORKFLOW_STATE } from "./details-needed";
 import { centsToDollarString, optionalDollarsToCents } from "./money";
+import { PREGRADE_COPY } from "./pregrade-copy";
 import type {
   ClipboardExport,
   CostToAskSpread,
@@ -243,6 +244,23 @@ export function buildClipboardExport(input: {
     includedFields: ["title", "description", "condition", "asking_price", "currency"],
     omittedPrivateNotes: true,
     omittedChannelNote: true,
+  };
+}
+
+/** Listing-draft estimate chip. Approved wording only — never a company name. */
+export function listingDraftEstimateChip(overall?: number | null): {
+  label: typeof PREGRADE_COPY.title;
+  disclaimer: typeof PREGRADE_COPY.disclaimer;
+  text: string;
+} {
+  const text =
+    overall == null || !Number.isFinite(overall)
+      ? PREGRADE_COPY.title
+      : `${PREGRADE_COPY.title} ${overall}`;
+  return {
+    label: PREGRADE_COPY.title,
+    disclaimer: PREGRADE_COPY.disclaimer,
+    text,
   };
 }
 

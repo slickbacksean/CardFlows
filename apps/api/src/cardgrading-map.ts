@@ -90,6 +90,11 @@ const DECODE_FAILURE_REASON = PREGRADE_COPY.unreadable;
 /** grade_card scores 0.0 when no sub-grade could be measured; that is not a grade. */
 export const NOTHING_MEASURED_REASON = PREGRADE_COPY.nothingMeasured;
 
+/** Pre-grade numbers are 1.0–10.0. 0 is a retake, never a score. */
+export function isScoredEstimate(estimate: number): boolean {
+  return Number.isFinite(estimate) && estimate >= 1 && estimate <= 10;
+}
+
 function hardGateReason(gate: LibraryGate): string {
   if (gate.detail === DECODE_FAILURE_DETAIL) return DECODE_FAILURE_REASON;
   if (typeof gate.name === "string") {
@@ -257,6 +262,7 @@ export function mapGradeCardReport(input: unknown): PhotoPregradeSuccess | Photo
   }
   const estimate = asFiniteNumber(asRecord(report.grade_estimate)?.overall_grade);
   if (estimate === null) return retake("front", [PREGRADE_COPY.notFound]);
+  // 0.0 / negative is the library's "nothing measurable" sentinel, not a grade.
 
   const centering = asRecord(report.centering);
   const cornersEdges = asRecord(report.corners_edges);
@@ -279,8 +285,11 @@ export function mapGradeCardReport(input: unknown): PhotoPregradeSuccess | Photo
 
   // scoring.py returns overall_grade 0.0 ("nothing measurable in this
   // capture") when every sub-grade is null. Never surface that as a number.
+  // P0-04: any result of 0, or nothing measured, is a retake — never a score.
   const nothingMeasured = [cf, cb, kf, kb, ef, eb, sf, sb].every((value) => value === null);
-  if (estimate < 1 || nothingMeasured) return retake("front", [NOTHING_MEASURED_REASON]);
+  if (!isScoredEstimate(estimate) || nothingMeasured) {
+    return retake("front", [NOTHING_MEASURED_REASON]);
+  }
 
   const surfaceNull = sf === null && sb === null;
   const noteParts: string[] = [];
