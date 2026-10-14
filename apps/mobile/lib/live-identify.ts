@@ -32,8 +32,8 @@ import {
 
 // Capture stays ahead of the match. OpenCLIP is ~630 ms, and a Whatnot lot
 // often sells in about 7 seconds, so the next frame is not queued behind it.
-// An IoU track + crop-hash gate (below) also skips frames of a card that is
-// already stable, so the faster poll does not add server load.
+// An IoU track + crop-hash gate (below) matches once per tracked card, so the
+// faster poll does not add server load.
 const FRAME_POLL_MS = 250;
 
 /**
@@ -42,7 +42,7 @@ const FRAME_POLL_MS = 250;
  */
 const TIMING_ENABLED = process.env.EXPO_PUBLIC_CARD_FLOW_LIVESTREAM_TIMING === "1";
 const timingLog = createLiveScanTimingLog(300);
-/** One IoU track; match on a new card, a pending/unstable id, or a re-confirm. */
+/** One IoU track; one vendor/model match per tracked card, with crop-hash dedupe. */
 const tracker = createLiveCardTracker();
 
 function nowMs(): number {
@@ -156,6 +156,26 @@ function keepSettledIdentity(key: string): boolean {
   );
 }
 
+function publishKnownIdentity(tcgdexId: string | null) {
+  if (!tcgdexId) {
+    if (latest.reason === "identified") publishResult(latest);
+    return;
+  }
+  const kind = classifier();
+  publishResult(
+    identifyLiveVideo({
+      scannerOn: running,
+      platform: liveVideoPlatform(),
+      frame: {
+        source: "live_video",
+        cardDetected: true,
+        classifiedTcgdexId: tcgdexId,
+      },
+      classifier: kind === "none" ? "mock" : kind,
+    }),
+  );
+}
+
 function drainIdentify() {
   if (identifyInFlight || !queuedFrame || !running) return;
   const next = queuedFrame;
@@ -165,7 +185,6 @@ function drainIdentify() {
 
 async function identifyFrame(frame: LiveVideoFrame, key: string, pullMs: number) {
   identifyInFlight = true;
-  const sendYolo = yoloDetect && Boolean(frame.videoFrameJpeg);
   const requestStart = nowMs();
   try {
     const response = await identifyLivestreamFrame({
@@ -175,13 +194,13 @@ async function identifyFrame(frame: LiveVideoFrame, key: string, pullMs: number)
       classifiedTcgdexId: frame.classifiedTcgdexId ?? null,
       identityHash: frame.identityHash ?? null,
       identityCropJpeg: frame.identityCropJpeg ?? null,
-      // Corners describe the phone crop; the server ignores them if YOLO re-crops.
+      // 4 corners in crop pixels; the sidecar warps with warp.py before matching.
       identityCropQuad: frame.identityCropQuad ?? null,
       videoFrameJpeg: yoloDetect ? (frame.videoFrameJpeg ?? null) : null,
     });
     const roundTripMs = nowMs() - requestStart;
     if (!running) return;
-    if (!sendYolo) {
+    if (frame.cardDetected) {
       tracker.noteMatch({
         hash: frame.identityHash ?? null,
         tcgdexId: response.identity.reason === "identified" ? response.identity.tcgdexId : null,
@@ -221,7 +240,9 @@ async function identifyFrame(frame: LiveVideoFrame, key: string, pullMs: number)
     publishResult(response.identity);
   } catch {
     noteTiming({ stages: { pull: pullMs, total: pullMs + nowMs() - requestStart }, outcome: "error" });
-    if (!sendYolo) tracker.noteMatch({ hash: null, tcgdexId: null, nowMs: Date.now() });
+    if (frame.cardDetected) {
+      tracker.noteMatch({ hash: frame.identityHash ?? null, tcgdexId: null, nowMs: Date.now() });
+    }
     if (!running || keepSettledIdentity(key)) return;
     publish({
       source: "live_video",
@@ -248,7 +269,8 @@ async function pollNativeFrame() {
   const pullMs = nowMs() - pullStart;
   if (!running) return;
   const yoloFrame = yoloDetect && frame?.videoFrameJpeg ? frame : null;
-  const key = yoloFrame ? frameKey(yoloFrame) : frame?.cardDetected ? frameKey(frame) : null;
+  const phoneCard = Boolean(frame?.cardDetected);
+  const key = yoloFrame ? frameKey(yoloFrame) : phoneCard && frame ? frameKey(frame) : null;
   if (!key) {
     missedCards += 1;
     if (latest.reason === "identified" && missedCards < MISS_LIMIT) {
@@ -260,7 +282,7 @@ async function pollNativeFrame() {
     publish(frame);
     return;
   }
-  if (!yoloFrame && frame) {
+  if (phoneCard && frame) {
     missedCards = 0;
     const decision = tracker.decide({
       box: frame.cardBox ?? null,
@@ -268,9 +290,10 @@ async function pollNativeFrame() {
       nowMs: Date.now(),
     });
     if (decision.action === "skip") {
-      // Same tracked card, already stable (or an unchanged rejected crop): send nothing.
+      // Same tracked card, already matched, or a crop hash we already sent: no vendor/model call.
       noteTiming({ stages: { detect: frame.detectMs ?? undefined, pull: pullMs }, outcome: "skipped" });
-      if (latest.reason === "identified") publishResult(latest);
+      if (decision.reason === "same_crop") publishKnownIdentity(decision.tcgdexId);
+      else if (latest.reason === "identified") publishResult(latest);
       return;
     }
   }

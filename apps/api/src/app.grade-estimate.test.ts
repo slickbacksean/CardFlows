@@ -436,7 +436,7 @@ describe("POST /v1/inventory/:id/grade-estimate", () => {
     expect(prepare).not.toMatch(/disabled=\{!canSubmit \|\|/);
     expect(prepare).toContain("Catalog art — display only");
     expect(prepare).not.toContain("launchCameraAsync");
-    expect(gradePhotos).toContain("launchImageLibraryAsync");
+    expect(gradePhotos).toContain("launchSystemImagePicker");
     expect(gradePhotos).toContain("launchCameraAsync");
     expect(gradePhotos).not.toContain("expo-camera");
     expect(gradePhotos).not.toContain("CameraView");

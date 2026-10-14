@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
@@ -73,19 +73,46 @@ describe("Expo Go runtime guards", () => {
 
     expect(finder).toContain('from "expo-camera"');
     expect(finder).toContain("CameraView");
-    expect(finder).not.toMatch(/cardflow-live-video|CardFlowLiveVideo|expo-sensors/);
+    expect(finder).not.toMatch(/cardflow-live-video|CardFlowLiveVideo/);
+    expect(finder).not.toMatch(/from\s+["']expo-sensors["']/);
     expect(flow).toContain("GradeCardFinder");
     expect(flow).not.toMatch(/cardflow-live-video|expo-sensors|@capacitor|@capgo/);
     expect(photos).toContain('from "expo-image-picker"');
+    expect(photos).toContain('from "expo-image-manipulator"');
     expect(photos).not.toMatch(/expo-sensors|@capacitor|@capgo/);
-    expect(mobilePackage).not.toMatch(/expo-sensors|@capacitor|@capgo/);
+    // expo-sensors is listed for the motionPermission plugin (and PR 39 DeviceMotion).
+    // JS must not import it at top level so Expo Go still loads when the native
+    // module is missing. PR 39 reaches it only through lib/device-level.ts.
+    expect(mobilePackage).toContain("expo-sensors");
+    expect(mobilePackage).toContain("expo-image-manipulator");
+    expect(mobilePackage).not.toMatch(/@capacitor|@capgo/);
     expect(rootPackage).not.toMatch(/expo-sensors|@capacitor\/|@capgo\//);
+
+    const sentry = readRepoFile("apps/mobile/lib/sentry.ts");
+    const layout = readRepoFile("apps/mobile/app/_layout.tsx");
+    expect(layout).toContain("initMobileSentry");
+    expect(sentry).toContain("EXPO_PUBLIC_SENTRY_DSN");
+    expect(sentry).not.toMatch(/from\s+["']@sentry\/react-native["']/);
+    expect(sentry).toContain('require("@sentry/react-native")');
+    expect(sentry).toContain("enableNative: native");
+    expect(sentry).toContain("replaysSessionSampleRate: 0");
+    expect(sentry).toContain("attachScreenshot: false");
 
     const sources = walkSourceFiles(path.join(mobileRoot, "app"))
       .concat(walkSourceFiles(path.join(mobileRoot, "components")))
       .concat(walkSourceFiles(path.join(mobileRoot, "lib")));
     expect(sources.length).toBeGreaterThan(20);
+    const deviceLevelPath = path.join(mobileRoot, "lib/device-level.ts");
+    if (existsSync(deviceLevelPath)) {
+      const deviceLevel = readRepoFile("apps/mobile/lib/device-level.ts");
+      expect(finder).toContain('from "@/lib/device-level"');
+      expect(deviceLevel).not.toMatch(/from\s+["']expo-sensors["']\s*;/);
+      expect(deviceLevel).toMatch(
+        /requireOptionalNativeModule\("ExponentDeviceMotion"\)[\s\S]*require\("expo-sensors"\)/,
+      );
+    }
     for (const file of sources) {
+      if (file.endsWith(path.join("lib", "device-level.ts"))) continue;
       const source = readFileSync(file, "utf8");
       expect(source, file).not.toMatch(FORBIDDEN_IMPORT);
     }

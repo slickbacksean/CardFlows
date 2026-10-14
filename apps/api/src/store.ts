@@ -13,6 +13,7 @@ import {
   type CardFlowCanonicalCard,
   type CardFlowNormalizedRecognitionResult,
   type CatalogMappingResult,
+  GRADE_SIDES,
   type GradeSide,
   type GradingReturnedCopy,
   type GradingSubmittedCopy,
@@ -94,9 +95,10 @@ export interface InventoryItemRecord {
   condition: string | null;
   quantity: number | null;
   tags: string[];
-  workflowState: "acquired" | "watching" | "drafted" | "details_needed";
+  workflowState: "acquired" | "watching" | "drafted" | "details_needed" | "watchlist_closed";
   referencePriceAmount: string | null;
   targetMaxBuyAmount: string | null;
+  closedAt?: string | null;
   createdAt: string;
   purchase: {
     purchaseId: string;
@@ -487,6 +489,35 @@ export function saveInventoryItem(item: InventoryItemRecord): InventoryItemRecor
   return item;
 }
 
+/** Reverses a Purchased write. Leaves no inventory, purchase, or draft row behind. */
+export function deleteInventoryItem(userId: string, inventoryItemId: string): boolean {
+  const item = getInventoryItem(userId, inventoryItemId);
+  if (!item) return false;
+  store.inventory = store.inventory.filter((row) => row.inventoryItemId !== inventoryItemId);
+  const draftId = store.draftIdByInventoryItemId.get(inventoryItemId);
+  if (draftId) {
+    store.drafts.delete(draftId);
+    store.draftIdByInventoryItemId.delete(inventoryItemId);
+  }
+  store.gradingSubmitted = store.gradingSubmitted.filter(
+    (row) => !(row.userId === userId && row.inventoryItemId === inventoryItemId),
+  );
+  store.gradingReturned = store.gradingReturned.filter(
+    (row) => !(row.userId === userId && row.inventoryItemId === inventoryItemId),
+  );
+  store.gradeEstimateCache.delete(gradeEstimateCacheKey(userId, inventoryItemId));
+  for (const side of GRADE_SIDES) {
+    for (const candidate of gradeImageStorageCandidates(inventoryItemId, side)) {
+      store.gradeImages.delete(candidate);
+    }
+  }
+  const scan = store.scans.get(item.scanId);
+  if (scan?.inventoryItemId === inventoryItemId) {
+    store.scans.set(item.scanId, { ...scan, inventoryItemId: null });
+  }
+  return true;
+}
+
 export function listGradingSubmitted(userId: string): GradingSubmittedCopy[] {
   return crmRowsForUser(store.gradingSubmitted, userId);
 }
@@ -607,6 +638,7 @@ export interface StorePort {
   getDraftForInventoryItem: typeof getDraftForInventoryItem;
   saveDraft: typeof saveDraft;
   saveInventoryItem: typeof saveInventoryItem;
+  deleteInventoryItem: typeof deleteInventoryItem;
   listGradingSubmitted: typeof listGradingSubmitted;
   listGradingReturned: typeof listGradingReturned;
   saveGradingSubmitted: typeof saveGradingSubmitted;
@@ -728,6 +760,7 @@ export function createMemoryStore(): StorePort {
     getDraftForInventoryItem,
     saveDraft,
     saveInventoryItem,
+    deleteInventoryItem,
     listGradingSubmitted,
     listGradingReturned,
     saveGradingSubmitted,

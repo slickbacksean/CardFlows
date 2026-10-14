@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
   catalogHealth,
+  GRADE_ENGINE_STILL_RUNNING,
   gradeEstimateHealth,
   healthLeaksSecrets,
   healthMockProviders,
+  healthOk,
   livestreamIdentifyHealth,
   pricingProviderHealth,
   recognitionHealth,
@@ -84,6 +86,37 @@ describe("CardFlow /health status", () => {
         slabPricing: "off",
       }),
     ).toEqual([]);
+  });
+
+  it("treats a failed grader probe as not ok and a pending probe as ok", () => {
+    expect(healthOk(null)).toBe(true);
+    expect(
+      healthOk({
+        ok: true,
+        opencv: "4.10.0",
+        numpy: "2.2.0",
+        error: null,
+        checkedAt: "2026-10-13T00:00:00.000Z",
+      }),
+    ).toBe(true);
+    expect(
+      healthOk({
+        ok: false,
+        opencv: null,
+        numpy: null,
+        error: GRADE_ENGINE_STILL_RUNNING,
+        checkedAt: "2026-10-13T00:00:00.000Z",
+      }),
+    ).toBe(true);
+    expect(
+      healthOk({
+        ok: false,
+        opencv: null,
+        numpy: null,
+        error: "cv2 missing",
+        checkedAt: "2026-10-13T00:00:00.000Z",
+      }),
+    ).toBe(false);
   });
 
   it("does not serialize keys or vendor secrets", () => {

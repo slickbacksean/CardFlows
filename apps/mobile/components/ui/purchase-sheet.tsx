@@ -17,6 +17,10 @@ import { defaultVariantId, variantOptions } from "@/lib/variants";
 import { colors, space } from "@/lib/theme";
 import { PrimaryButton } from "./primary-button";
 
+// Collection cost-details only. Livestream HUD one-tap Purchased never opens this
+// sheet; Watchlist one-tap Purchased also skips it. purchase_price stays optional
+// until Collection → Purchased. No confirm dialog.
+
 const PURCHASE_CONDITIONS = ["NM", "LP", "MP"] as const;
 
 export interface PurchaseSavePayload {

@@ -116,6 +116,8 @@ export interface DetectCropSuccess {
   /** Soft gates (glare, lighting, resolution). The photo can still be graded. */
   warnings: string[];
   capture?: PhotoCaptureMetrics;
+  /** Staged still from this detect. Pre-grade reuses it instead of a second upload. */
+  uploadId?: string;
 }
 
 export interface DetectCropRetake {

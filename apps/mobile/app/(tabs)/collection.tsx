@@ -3,13 +3,17 @@ import {
   collectionTileValue,
   DETAILS_NEEDED_LABEL,
   isDetailsNeededPurchase,
+  isOpenWatchlist,
+  PURCHASED_UNDO_TOAST_MS,
+  shouldAcceptLiveHudPurchaseTap,
   type CardFlowPortfolioSummary,
   type MaxBuyPreferences,
   type TcgdexVariants,
 } from "@cardflow/shared";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  AccessibilityInfo,
   ActivityIndicator,
   Pressable,
   ScrollView,
@@ -20,6 +24,10 @@ import {
   View,
 } from "react-native";
 import { CardTile } from "@/components/ui/card-tile";
+import {
+  playPurchasedSuccessHaptic,
+  PurchasedUndoToast,
+} from "@/components/ui/hud-bubble";
 import { PrimaryButton } from "@/components/ui/primary-button";
 import { PurchaseSheet, type PurchaseSavePayload } from "@/components/ui/purchase-sheet";
 import { ValueHistoryChart } from "@/components/ui/value-history-chart";
@@ -29,8 +37,10 @@ import {
   getPortfolioHistory,
   type PortfolioHistoryPoint,
   completePurchasedDetails,
+  convertWatchlistToPurchased,
   listInventory,
   openOrCreateDraft,
+  undoPurchased,
   type InventoryItem,
 } from "@/lib/api";
 import { loadMaxBuyPreferences, peekMaxBuyPreferences } from "@/lib/preferences";
@@ -40,9 +50,13 @@ type LoadState = "loading" | "ready" | "error";
 type Segment = "purchased" | "watchlist";
 
 function parseSegment(value: string | string[] | undefined): Segment | null {
-  const raw = Array.isArray(value) ? value[0] : value;
+  const raw = firstParam(value);
   if (raw === "watchlist" || raw === "purchased") return raw;
   return null;
+}
+
+function firstParam(value: string | string[] | undefined): string | undefined {
+  return Array.isArray(value) ? value[0] : value;
 }
 
 function collectionColumnCount(width: number): number {
@@ -69,7 +83,10 @@ export default function CollectionScreen() {
   const gridItemWidth = Math.floor(
     (width - space.lg * 2 - gridGap * (columns - 1)) / columns,
   );
-  const params = useLocalSearchParams<{ segment?: string | string[] }>();
+  const params = useLocalSearchParams<{
+    segment?: string | string[];
+    purchasedUndoId?: string | string[];
+  }>();
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [portfolio, setPortfolio] = useState<CardFlowPortfolioSummary | null>(null);
   const [history, setHistory] = useState<{ points: PortfolioHistoryPoint[]; today: string | null }>({
@@ -87,6 +104,10 @@ export default function CollectionScreen() {
   const [detailError, setDetailError] = useState<string | null>(null);
   const [isSavingDetails, setIsSavingDetails] = useState(false);
   const [preferences, setPreferences] = useState<MaxBuyPreferences>(peekMaxBuyPreferences);
+  const [undoing, setUndoing] = useState(false);
+  const [savingWatchlistId, setSavingWatchlistId] = useState<string | null>(null);
+  const savingWatchlistIdRef = useRef<string | null>(null);
+  const toastItemId = firstParam(params.purchasedUndoId) ?? null;
 
   const refreshInventory = useCallback(async () => {
     try {
@@ -136,11 +157,14 @@ export default function CollectionScreen() {
     [items],
   );
   const watchingCount = useMemo(
-    () => items.filter((item) => item.intent === "watchlist").length,
+    () => items.filter((item) => isOpenWatchlist(item)).length,
     [items],
   );
   const segmentedItems = useMemo(
-    () => items.filter((item) => item.intent === segment),
+    () =>
+      items.filter((item) =>
+        segment === "watchlist" ? isOpenWatchlist(item) : item.intent === segment,
+      ),
     [items, segment],
   );
   const visibleItems = useMemo(
@@ -155,15 +179,28 @@ export default function CollectionScreen() {
     [detailsNeededOnly, normalizedQuery, segment, segmentedItems],
   );
 
+  useEffect(() => {
+    if (!toastItemId) return;
+    AccessibilityInfo.announceForAccessibility("Marked Purchased. Undo is available.");
+    const timer = setTimeout(() => {
+      router.setParams({ purchasedUndoId: undefined });
+    }, PURCHASED_UNDO_TOAST_MS);
+    return () => clearTimeout(timer);
+  }, [router, toastItemId]);
+
   function openWatchlistDetail(item: InventoryItem) {
     router.push({
       pathname: "/decide/[cardflowCardId]",
       params: {
         cardflowCardId: item.cardflowCardId,
         intent: "watchlist",
+        inventoryItemId: item.inventoryItemId,
+        ...(item.selectedVariant ? { selectedVariant: item.selectedVariant } : {}),
         ...(item.referencePriceAmount
           ? { referencePriceAmount: item.referencePriceAmount }
           : {}),
+        ...(item.targetMaxBuyAmount ? { targetMaxBuyAmount: item.targetMaxBuyAmount } : {}),
+        ...(item.condition ? { condition: item.condition } : {}),
       },
     });
   }
@@ -216,6 +253,51 @@ export default function CollectionScreen() {
         return;
       }
       setActionError(caught instanceof Error ? caught.message : "Could not open draft");
+    }
+  }
+
+  async function onWatchlistPurchased(item: InventoryItem) {
+    if (
+      !shouldAcceptLiveHudPurchaseTap({
+        matchKey: item.inventoryItemId,
+        inFlightKey: savingWatchlistIdRef.current,
+      })
+    ) {
+      return;
+    }
+    savingWatchlistIdRef.current = item.inventoryItemId;
+    setSavingWatchlistId(item.inventoryItemId);
+    setActionError(null);
+    try {
+      const saved = await convertWatchlistToPurchased(item.inventoryItemId);
+      await playPurchasedSuccessHaptic();
+      setSegment("purchased");
+      router.setParams({
+        segment: "purchased",
+        purchasedUndoId: saved.item.inventoryItemId,
+      });
+      await refreshInventory();
+    } catch (caught) {
+      setActionError(caught instanceof Error ? caught.message : "Could not mark Purchased");
+    } finally {
+      savingWatchlistIdRef.current = null;
+      setSavingWatchlistId(null);
+    }
+  }
+
+  async function onUndoPurchased() {
+    if (!toastItemId || undoing) return;
+    setUndoing(true);
+    setActionError(null);
+    try {
+      await undoPurchased(toastItemId);
+      router.setParams({ purchasedUndoId: undefined });
+      AccessibilityInfo.announceForAccessibility("Purchased undone");
+      await refreshInventory();
+    } catch (caught) {
+      setActionError(caught instanceof Error ? caught.message : "Could not undo");
+    } finally {
+      setUndoing(false);
     }
   }
 
@@ -336,11 +418,14 @@ export default function CollectionScreen() {
                     workflowState: item.workflowState,
                     allInTotal: item.purchase?.costBasis.allInTotal ?? null,
                     referencePriceAmount: item.referencePriceAmount,
+                    targetMaxBuyAmount: item.targetMaxBuyAmount,
                     condition: item.condition,
                     purchase: item.purchase,
                   },
                   preferences,
                 );
+                const canConvertWatchlist =
+                  isOpenWatchlist(item) && !item.readOnly;
                 return (
                   <View key={item.inventoryItemId} style={[styles.gridItem, { width: gridItemWidth }]}>
                     <CardTile
@@ -362,6 +447,24 @@ export default function CollectionScreen() {
                       showDraftCta={item.intent === "purchased" && !item.readOnly && !detailsNeeded}
                       targetMaxBuyDisplay={tileValue.targetMaxBuyDisplay}
                     />
+                    {canConvertWatchlist ? (
+                      <Pressable
+                        accessibilityHint="Marks this Watchlist card Purchased without scanning again"
+                        accessibilityLabel="Purchased"
+                        accessibilityRole="button"
+                        accessibilityState={{
+                          disabled: savingWatchlistId === item.inventoryItemId,
+                          busy: savingWatchlistId === item.inventoryItemId,
+                        }}
+                        disabled={savingWatchlistId === item.inventoryItemId}
+                        onPress={() => void onWatchlistPurchased(item)}
+                        style={styles.purchasedTap}
+                      >
+                        <Text style={styles.purchasedTapLabel}>
+                          {savingWatchlistId === item.inventoryItemId ? "Saving…" : "Purchased"}
+                        </Text>
+                      </Pressable>
+                    ) : null}
                   </View>
                 );
               })}
@@ -384,6 +487,11 @@ export default function CollectionScreen() {
         variants={COLLECTION_PURCHASE_VARIANTS}
         visible={detailItem !== null}
       />
+      {toastItemId ? (
+        <View style={styles.toastWrap}>
+          <PurchasedUndoToast onUndo={() => void onUndoPurchased()} undoing={undoing} />
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -531,5 +639,25 @@ const styles = StyleSheet.create({
   gridItem: {
     flexGrow: 0,
     flexShrink: 0,
+  },
+  purchasedTap: {
+    marginTop: 6,
+    minHeight: 44,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.accent,
+    borderRadius: radii.pill,
+    paddingHorizontal: space.sm,
+  },
+  purchasedTapLabel: {
+    color: colors.accentText,
+    fontSize: 13,
+    fontWeight: "800",
+  },
+  toastWrap: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: space.md,
   },
 });

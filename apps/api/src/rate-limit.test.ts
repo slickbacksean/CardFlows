@@ -73,7 +73,9 @@ describe("grader child process", () => {
     const status = await probe();
     expect(status.ok).toBe(false);
     expect(status.opencv).toBeNull();
-    expect(await probe()).toBe(status);
+    const again = await probe();
+    expect(again.ok).toBe(false);
+    expect(again).not.toBe(status);
   });
 });
 
@@ -155,6 +157,6 @@ describe("hardening from the #30 review", () => {
       headers: { "content-type": "multipart/form-data; boundary=x", "content-length": String(big.byteLength) },
     });
     expect(response.status).toBe(413);
-    expect(((await response.json()) as { error: string }).error).toBe("Upload must be 31 MB or smaller");
+    expect(((await response.json()) as { error: string }).error).toBe("Upload must be 22 MB or smaller");
   });
 });

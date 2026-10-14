@@ -10,6 +10,7 @@ import {
   GRADING_PILLARS,
   keywordChips,
   LISTING_AI_COPY_ENABLED,
+  listingDraftEstimateChip,
   listPurchasedDraftsForCopy,
   readyForReviewMissing,
   renderListingTitle,
@@ -260,8 +261,16 @@ describe("disclosure and AI flag", () => {
     expect(appendSnippet(snippet, snippet)).toBe(snippet);
   });
 
-  it("keeps AI copy off", () => {
+  it("keeps generated listing copy off", () => {
     expect(LISTING_AI_COPY_ENABLED).toBe(false);
+  });
+
+  it("uses the standing pre-grade estimate wording on the draft chip", () => {
+    const chip = listingDraftEstimateChip(7.5);
+    expect(chip.label).toBe("Pre-grade estimate");
+    expect(chip.disclaimer).toBe("Estimate only. Not an official grade.");
+    expect(chip.text).toBe("Pre-grade estimate 7.5");
+    expect(listingDraftEstimateChip(null).text).toBe("Pre-grade estimate");
   });
 
   it("reuses listing-draft disclosure answers for grading pillars", () => {

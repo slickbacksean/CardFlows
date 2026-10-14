@@ -153,12 +153,20 @@ export function recomputeCopyMaxBuy(
   });
 }
 
+function dollarAmountLabel(value: string | number | null | undefined): string | null {
+  if (value == null || value === "") return null;
+  const amount = String(value).trim();
+  if (!amount) return null;
+  return amount.startsWith("$") ? amount : `$${amount}`;
+}
+
 export function collectionTileValue(
   copy: {
     intent: "purchased" | "watchlist";
     workflowState?: string | null;
     allInTotal?: string | null;
     referencePriceAmount?: string | number | null;
+    targetMaxBuyAmount?: string | number | null;
     condition?: string | null;
     purchase?: {
       costBasis?: { allInTotal?: string | null; purchasePrice?: string | null };
@@ -172,10 +180,10 @@ export function collectionTileValue(
   preferences: MaxBuyPreferences,
 ): { allInAmount: string | null; targetMaxBuyDisplay: string | null } {
   if (copy.intent === "purchased") {
-    return {
-      allInAmount: purchasedAllInAmount(copy),
-      targetMaxBuyDisplay: null,
-    };
+    const allInAmount = purchasedAllInAmount(copy);
+    if (allInAmount) return { allInAmount, targetMaxBuyDisplay: null };
+    const snapshot = dollarAmountLabel(copy.targetMaxBuyAmount);
+    return { allInAmount: null, targetMaxBuyDisplay: snapshot };
   }
   const amount = recomputeCopyMaxBuy(copy, preferences).maxBuyAmount;
   return {

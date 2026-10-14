@@ -90,6 +90,21 @@ describe("recompute Max Buy from current prefs + stored reference", () => {
       allInAmount: null,
       targetMaxBuyDisplay: null,
     });
+
+    expect(
+      collectionTileValue(
+        {
+          intent: "purchased",
+          workflowState: "details_needed",
+          targetMaxBuyAmount: "5.57",
+          allInTotal: null,
+        },
+        tighterMargin,
+      ),
+    ).toEqual({
+      allInAmount: null,
+      targetMaxBuyDisplay: "$5.57",
+    });
   });
 
   it("uses the condition Decide saved so the watchlist tile matches that Max Buy", () => {

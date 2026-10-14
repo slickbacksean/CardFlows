@@ -8,6 +8,7 @@ import {
   computeMaxBuy,
   confirmIdentity,
   DEFAULT_MAX_BUY_PREFERENCES,
+  GRADE_SIDES,
   LISTING_AI_COPY_ENABLED,
   listInvitedIdentities,
   LOCKED_DISPLAY_CURRENCY,
@@ -171,6 +172,18 @@ function parseRecognition(raw: string): PersistedRecognitionEnvelope {
 
 function grainForIntent(intent: InventoryIntent): InventoryItemRecord["grain"] {
   return intent === "purchased" ? "physical_copy" : "interest_not_physical_copy";
+}
+
+function workflowStateFromRow(value: string): InventoryItemRecord["workflowState"] {
+  if (
+    value === "drafted" ||
+    value === "watching" ||
+    value === "details_needed" ||
+    value === "watchlist_closed"
+  ) {
+    return value;
+  }
+  return "acquired";
 }
 
 function asDraftStatus(value: string): ListingDraftStatus {
@@ -902,16 +915,10 @@ export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStor
       condition: item.condition,
       quantity: item.quantity,
       tags: parseTags(item.tags),
-      workflowState:
-        item.workflowState === "drafted"
-          ? "drafted"
-          : item.workflowState === "watching"
-            ? "watching"
-            : item.workflowState === "details_needed"
-              ? "details_needed"
-              : "acquired",
+      workflowState: workflowStateFromRow(item.workflowState),
       referencePriceAmount: dollarsFromCents(item.referencePriceAmount),
       targetMaxBuyAmount: dollarsFromCents(item.targetMaxBuyAmount),
+      closedAt: item.closedAt ?? null,
       createdAt: item.createdAt,
       purchase: purchase ? purchaseFromRow(item, purchase) : null,
     };
@@ -1022,7 +1029,7 @@ export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStor
         workflowState: item.workflowState,
         targetMaxBuyAmount: optionalDollarsToCents(item.targetMaxBuyAmount),
         referencePriceAmount: optionalDollarsToCents(item.referencePriceAmount),
-        closedAt: null,
+        closedAt: item.closedAt ?? null,
         createdAt: item.createdAt,
         updatedAt: now,
       })
@@ -1036,6 +1043,7 @@ export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStor
           workflowState: item.workflowState,
           targetMaxBuyAmount: optionalDollarsToCents(item.targetMaxBuyAmount),
           referencePriceAmount: optionalDollarsToCents(item.referencePriceAmount),
+          closedAt: item.closedAt ?? null,
           updatedAt: now,
         },
       })
@@ -1065,6 +1073,61 @@ export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStor
   function saveInventoryItem(item: InventoryItemRecord): InventoryItemRecord {
     persistInventoryItem(item);
     return item;
+  }
+
+  function deleteGradeImages(inventoryItemId: string): void {
+    for (const side of GRADE_SIDES) {
+      for (const candidate of gradeImageStorageCandidates(inventoryItemId, side)) {
+        memoryGradeImages.delete(candidate);
+        if (!sqliteDir) continue;
+        const filePath = path.join(sqliteDir, candidate);
+        if (existsSync(filePath)) unlinkSync(filePath);
+      }
+    }
+  }
+
+  /** Reverses a Purchased write. Leaves no inventory, purchase, or draft row behind. */
+  function deleteInventoryItem(userId: string, inventoryItemId: string): boolean {
+    const item = loadInventoryItem(userId, inventoryItemId);
+    if (!item) return false;
+    sqlite.transaction(() => {
+      db.delete(crmPurchases).where(eq(crmPurchases.inventoryItemId, inventoryItemId)).run();
+      db.delete(crmListingDrafts).where(eq(crmListingDrafts.inventoryItemId, inventoryItemId)).run();
+      db.delete(crmGradingSubmitted)
+        .where(
+          and(
+            eq(crmGradingSubmitted.userId, userId),
+            eq(crmGradingSubmitted.inventoryItemId, inventoryItemId),
+          ),
+        )
+        .run();
+      db.delete(crmGradingReturned)
+        .where(
+          and(
+            eq(crmGradingReturned.userId, userId),
+            eq(crmGradingReturned.inventoryItemId, inventoryItemId),
+          ),
+        )
+        .run();
+      db.delete(gradeEstimateCache)
+        .where(
+          and(
+            eq(gradeEstimateCache.userId, userId),
+            eq(gradeEstimateCache.inventoryItemId, inventoryItemId),
+          ),
+        )
+        .run();
+      db.delete(crmInventoryItems)
+        .where(
+          and(
+            eq(crmInventoryItems.inventoryItemId, inventoryItemId),
+            eq(crmInventoryItems.userId, userId),
+          ),
+        )
+        .run();
+    })();
+    deleteGradeImages(inventoryItemId);
+    return true;
   }
 
   function draftFromRow(
@@ -1619,6 +1682,7 @@ export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStor
     getDraftForInventoryItem,
     saveDraft,
     saveInventoryItem,
+    deleteInventoryItem,
     listGradingSubmitted,
     listGradingReturned,
     saveGradingSubmitted,
