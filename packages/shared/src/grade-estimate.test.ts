@@ -255,8 +255,8 @@ describe("mock and off grading providers", () => {
 });
 
 describe("grade still capture", () => {
-  it("keeps full JPEG quality and a 63:88 card frame", () => {
-    expect(GRADE_STILL_QUALITY).toBe(1);
+  it("uploads JPEG at quality 0.8 in a 63:88 card frame", () => {
+    expect(GRADE_STILL_QUALITY).toBe(0.8);
     expect(CARD_ASPECT_RATIO).toBe(63 / 88);
   });
 });

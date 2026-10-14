@@ -1,6 +1,11 @@
+import {
+  PURCHASED_UNDO_ACTION_LABEL,
+  PURCHASED_UNDO_TOAST_MESSAGE,
+} from "@cardflow/shared";
+import * as Haptics from "expo-haptics";
 import { useRef, useState, type ReactNode } from "react";
 import { PanResponder, Pressable, StyleSheet, Text, View } from "react-native";
-import { colors, radii } from "@/lib/theme";
+import { colors, radii, space } from "@/lib/theme";
 
 interface HudBubbleProps {
   children: ReactNode;
@@ -11,6 +16,57 @@ interface HudBubbleProps {
 
 const EDGE = 12;
 const TAP_SLOP = 8;
+
+/** Success haptic on one-tap Purchased. expo-haptics works in Expo Go. */
+export async function playPurchasedSuccessHaptic() {
+  try {
+    await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+  } catch {
+    // Web, Expo Go without a Taptic Engine, and Reduce Motion still save.
+  }
+}
+
+export interface PurchasedUndoToastProps {
+  onUndo: () => void;
+  undoing?: boolean;
+}
+
+/** 5-second Undo control. Replaces any confirm dialog on livestream Purchased. */
+export function PurchasedUndoToast({ onUndo, undoing = false }: PurchasedUndoToastProps) {
+  return (
+    <View
+      accessibilityLiveRegion="polite"
+      importantForAccessibility="yes"
+      style={styles.toast}
+    >
+      <Text
+        accessibilityLabel={PURCHASED_UNDO_TOAST_MESSAGE}
+        accessibilityLiveRegion="polite"
+        accessibilityRole="alert"
+        numberOfLines={1}
+        style={styles.toastCopy}
+      >
+        Marked Purchased ·{" "}
+      </Text>
+      <Pressable
+        accessibilityHint="Removes this Purchased copy"
+        accessibilityLabel={PURCHASED_UNDO_ACTION_LABEL}
+        accessibilityRole="button"
+        accessibilityState={{ disabled: undoing, busy: undoing }}
+        accessible
+        disabled={undoing}
+        hitSlop={8}
+        importantForAccessibility="yes"
+        onPress={onUndo}
+        style={styles.undoButton}
+      >
+        <Text accessible={false} style={styles.undoLabel}>
+          {undoing ? "Undoing…" : PURCHASED_UNDO_ACTION_LABEL}
+        </Text>
+      </Pressable>
+    </View>
+  );
+}
 
 export function HudBubble({ children, title, subtitle, live = false }: HudBubbleProps) {
   const [expanded, setExpanded] = useState(false);
@@ -270,4 +326,26 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "700",
   },
+  toast: {
+    marginHorizontal: space.md,
+    marginBottom: space.sm,
+    minHeight: 44,
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: colors.elevated,
+    borderColor: colors.cardBorder,
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingLeft: space.sm,
+    paddingRight: 4,
+  },
+  toastCopy: { color: colors.text, fontSize: 13, fontWeight: "700", flexShrink: 1 },
+  undoButton: {
+    minHeight: 44,
+    minWidth: 44,
+    paddingHorizontal: space.sm,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  undoLabel: { color: colors.accent, fontSize: 13, fontWeight: "800" },
 });

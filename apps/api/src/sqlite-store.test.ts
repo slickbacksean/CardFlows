@@ -351,6 +351,13 @@ describe("SQLite store adapter", () => {
     expect(loaded?.purchase?.costBasis.allInTotal).toBe("11.75");
     expect(loaded?.referencePriceAmount).toBe("20.00");
     expect(store.getCanonical(item.cardflowCardId)?.tcgdexId).toBe("base1-58");
+
+    expect(store.deleteInventoryItem(userId, incomplete.inventoryItemId)).toBe(true);
+    expect(store.getInventoryItem(userId, incomplete.inventoryItemId)).toBeUndefined();
+    expect(store.getInventoryItem(userId, item.inventoryItemId)?.purchase?.costBasis.allInTotal).toBe(
+      "11.75",
+    );
+    expect(store.deleteInventoryItem(userId, incomplete.inventoryItemId)).toBe(false);
   });
 
   it("persists hashed session tokens across reopen and never stores the raw token", () => {
