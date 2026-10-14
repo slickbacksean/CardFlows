@@ -1,5 +1,10 @@
 import { createHash } from "node:crypto";
 import {
+  cachedPricingProvider,
+  createRecognitionCache,
+  serverCacheEnabledFromEnv,
+} from "./server-cache";
+import {
   canMarkReadyForReview,
   CatalogProviderError,
   CatalogSearchRequestError,
@@ -280,6 +285,8 @@ export interface CreateAppOptions {
   pricing?: CardPricingProvider;
   /** Recognition provider. Tests default to mock; live Capture uses `obb_phash`. */
   recognition?: CardRecognitionProvider;
+  /** P1-03 server caches (pricing + recognition). Defaults to CARD_FLOW_SERVER_CACHE (on). */
+  serverCache?: boolean;
   /**
    * When true, identify reads persisted stills (`image_storage_ref`).
    * JSON-only DEV chips stay on mock. Missing/oversize stills never run the model.
@@ -415,7 +422,10 @@ export function createApp(
   const appApiKey = options.appApiKey === undefined ? appApiKeyFromEnv() : options.appApiKey;
   const devAutoSession = options.devAutoSession ?? resolveDevAutoSession();
   const catalog = options.catalog ?? mockTcgdexCatalogProvider;
-  const pricing = options.pricing ?? offPricingProvider;
+  const serverCache = options.serverCache ?? serverCacheEnabledFromEnv();
+  const basePricing = options.pricing ?? offPricingProvider;
+  const pricing = serverCache ? cachedPricingProvider(basePricing) : basePricing;
+  const recognitionCache = serverCache ? createRecognitionCache() : null;
   const pokecollectorAccounts = options.pokecollectorAccounts ?? offPokecollectorAccounts;
   const recognitionProvider = options.recognition ?? mockCardRecognitionProvider;
   const gradingProvider = options.grading ?? mockCardGradingProvider;
@@ -1381,13 +1391,21 @@ export function createApp(
           image: identify.image,
           mimeType: identify.mimeType,
         };
-        recognition = await identifyLiveCaptureStill({
-          image: identify.image,
-          mimeType: identify.mimeType,
-          fallback: recognitionProvider,
-          openclip: liveIdentityOpenclip,
-          catalog,
-        });
+        const runLive = () =>
+          identifyLiveCaptureStill({
+            image: identify.image,
+            mimeType: identify.mimeType,
+            fallback: recognitionProvider,
+            openclip: liveIdentityOpenclip,
+            catalog,
+          });
+        recognition = recognitionCache
+          ? await recognitionCache.getOrIdentify(
+              { bytes: identify.image, mimeType: identify.mimeType },
+              recognitionProvider.name,
+              runLive,
+            )
+          : await runLive();
       } else {
         const identifyRequest: IdentifyCardRequest = {
           image: identify.image,
