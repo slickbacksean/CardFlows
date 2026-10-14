@@ -108,7 +108,11 @@ import {
   type PokecollectorCollectionCopy,
 } from "./pokecollector-accounts";
 import { SCAN_IMAGE_MAX_BYTES, type ScanImageMimeType } from "./scan-image";
-import { isGradePhotoSide } from "./grade-image";
+import {
+  gradeUploadCache as defaultGradeUploadCache,
+  isGradePhotoSide,
+  type GradeUploadCache,
+} from "./grade-image";
 import {
   decideScanIdentify,
   skippedStillIdentifyResult,
@@ -315,6 +319,8 @@ export interface CreateAppOptions {
   corsOrigins?: string[];
   /** Clock for portfolio snapshots. Tests inject fixed days. */
   now?: () => Date;
+  /** Detect stills reused by pre-grade so each photo is uploaded once. */
+  gradeUploads?: GradeUploadCache;
 }
 
 /** Routes write through StorePort. Tests default to memory; local `pnpm dev:api` injects SQLite. */
@@ -420,6 +426,7 @@ export function createApp(
     options.livestreamTiming ?? process.env.CARD_FLOW_LIVESTREAM_TIMING?.trim() === "1";
   const livestreamTimingLog = createLiveScanTimingLog(500);
   const liveVideoObb = options.liveVideoObb ?? (() => null);
+  const gradeUploads = options.gradeUploads ?? defaultGradeUploadCache;
 
   async function bindPokecollectorUser(identity: InvitedIdentity) {
     try {
@@ -1496,7 +1503,9 @@ export function createApp(
         captureMeta: parsed.captureMeta ?? null,
       });
       // Retake and unavailable are answers, not transport errors: 200 with ok:false.
-      return c.json(result);
+      if (!result.ok) return c.json(result);
+      const uploadId = gradeUploads.stage(c.get("userId"), parsed.side, parsed.still);
+      return c.json({ ...result, uploadId });
     },
   );
 
@@ -1510,7 +1519,10 @@ export function createApp(
       onError: gradeBodyTooLarge,
     }),
     async (c) => {
-      const parsed = await parseGradeEstimateRequest(c);
+      const parsed = await parseGradeEstimateRequest(c, {
+        userId: c.get("userId"),
+        stagedStill: (userId, id, side) => gradeUploads.get(userId, id, side),
+      });
       if ("error" in parsed) {
         return c.json({ ok: false, error: parsed.error }, parsed.status);
       }
@@ -1545,7 +1557,10 @@ export function createApp(
         return c.json({ ok: false, error: WATCHLIST_CANNOT_SUBMIT_MESSAGE }, 400);
       }
 
-      const parsed = await parseGradeEstimateRequest(c);
+      const parsed = await parseGradeEstimateRequest(c, {
+        userId: c.get("userId"),
+        stagedStill: (userId, id, side) => gradeUploads.get(userId, id, side),
+      });
       if ("error" in parsed) {
         return c.json({ ok: false, error: parsed.error }, parsed.status);
       }

@@ -1,4 +1,5 @@
 import { scanImageUri } from "./api";
+import { prepareGradeStill, type PickedGradeStill } from "./grade-photos";
 
 const urisByScanId = new Map<string, string>();
 
@@ -27,4 +28,21 @@ export function getConfirmPictureUri(
   const id = asScanId(scanId);
   if (id && imageStorageRef) return scanImageUri(id);
   return null;
+}
+
+/**
+ * Same phone-side prep as grade stills: HEIC→JPEG, long edge ≤4032, q=0.8, no EXIF.
+ * Capture and Confirm upload this JPEG once.
+ */
+export async function prepareScanStill(
+  uri: string,
+  mimeType?: string | null,
+  size?: { width?: number; height?: number },
+): Promise<{ still: PickedGradeStill } | { error: string }> {
+  return prepareGradeStill({
+    uri,
+    mimeType,
+    width: size?.width,
+    height: size?.height,
+  });
 }
