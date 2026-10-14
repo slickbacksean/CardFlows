@@ -10,7 +10,12 @@ import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from
 import { GradeCardFinder } from "@/components/ui/grade-card-finder";
 import { PrimaryButton } from "@/components/ui/primary-button";
 import { detectGradePhoto, requestPhotoPregrade } from "@/lib/api";
-import { CARD_ASPECT_RATIO, pickGradeStill, type PickedGradeStill } from "@/lib/grade-photos";
+import {
+  CARD_ASPECT_RATIO,
+  pickGradeStill,
+  prepareGradeStill,
+  type PickedGradeStill,
+} from "@/lib/grade-photos";
 import { colors, space } from "@/lib/theme";
 
 type Step = "guidelines" | "finder" | "capture" | "crop" | "scoring" | "result";
@@ -20,6 +25,7 @@ interface SideStill {
   uri: string;
   mimeType: string | null;
   cropUri: string | null;
+  uploadId: string | null;
 }
 
 interface PhotoGradeFlowProps {
@@ -104,16 +110,27 @@ export function PhotoGradeFlow({ onOpenPipeline }: PhotoGradeFlowProps) {
   }
 
   async function ingestStill(nextSide: Side, picked: PickedGradeStill, fromFinder: boolean) {
+    const prepared =
+      picked.mimeType === "image/jpeg" && !fromFinder
+        ? { still: picked }
+        : await prepareGradeStill(picked);
+    if ("error" in prepared) {
+      setSide(nextSide);
+      setNotice(prepared.error);
+      if (!fromFinder) setStep("capture");
+      return;
+    }
     const still: SideStill = {
-      uri: picked.uri,
-      mimeType: picked.mimeType,
+      uri: prepared.still.uri,
+      mimeType: prepared.still.mimeType,
       cropUri: null,
+      uploadId: null,
     };
     if (nextSide === "front") setFront(still);
     else setBack(still);
     setSide(nextSide);
     setDetected(false);
-    if (fromFinder) setFreezeUri(picked.uri);
+    if (fromFinder) setFreezeUri(still.uri);
     else setStep("crop");
     await runDetect(nextSide, still);
     if (fromFinder) {
@@ -173,7 +190,7 @@ export function PhotoGradeFlow({ onOpenPipeline }: PhotoGradeFlowProps) {
         return;
       }
       const cropUri = `data:${found.crop.mimeType};base64,${found.crop.base64}`;
-      const next = { ...still, cropUri };
+      const next = { ...still, cropUri, uploadId: found.uploadId ?? null };
       if (nextSide === "front") setFront(next);
       else setBack(next);
       setDetected(true);
@@ -205,8 +222,10 @@ export function PhotoGradeFlow({ onOpenPipeline }: PhotoGradeFlowProps) {
     const graded = await requestPhotoPregrade({
       frontUri: front.uri,
       frontMimeType: front.mimeType,
+      frontUploadId: front.uploadId,
       backUri: back.uri,
       backMimeType: back.mimeType,
+      backUploadId: back.uploadId,
     });
     if (id !== requestId.current) return;
     if (!graded.ok && graded.status === "retake") {

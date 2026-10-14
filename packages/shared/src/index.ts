@@ -467,10 +467,17 @@ export type {
   Yolo11ObbInference,
 } from "./obb-phash";
 export {
+  axisAlignedInsetCrop,
   bestObbBox,
   cropOrientedBox,
+  cropRgbRect,
   createYolo11ObbInferenceFromTensor,
   letterboxToYoloInput,
+  LIVE_WARP_CROP_MAX_EDGE,
+  liveWarpCropFromObb,
+  mapQuadIntoCrop,
+  obbCornersTlTrBrBl,
+  obbQuadTlTrBrBl,
   resizeRgb,
   yolo11ObbBoxesFromChannelsFirst,
   yolo11ObbChannelsFirstFromOnnx,
@@ -608,9 +615,12 @@ export {
   createLiveCardTracker,
   LIVE_TRACK_DEFAULTS,
   normalizeLiveCardBox,
+  replayLiveCardStream,
   type LiveCardBox,
   type LiveCardTracker,
   type LiveCardTrackOptions,
+  type LiveStreamReplayFrame,
+  type LiveStreamReplayResult,
   type LiveTrackDecision,
   type LiveTrackFrame,
 } from "./live-card-track";
@@ -650,6 +660,25 @@ export type {
   GradeTilt,
 } from "./grade-capture-guide";
 export {
+  ANDROID_BLOCKED_PHOTO_PERMISSIONS,
+  CAMERA_ALLOW_LABEL,
+  CAMERA_DENIED_BODY,
+  CAMERA_DENIED_TITLE,
+  CAMERA_OFF_PICKER_FALLBACK,
+  CAMERA_PREPROMPT_BODY,
+  CAMERA_PREPROMPT_CONTINUE,
+  CAMERA_PREPROMPT_TITLE,
+  CAMERA_USAGE_DESCRIPTION,
+  CHOOSE_A_PHOTO_LABEL,
+  CHOOSE_PHOTO_LABEL,
+  GRADE_CAMERA_PREPROMPT_BODY,
+  GRADE_CAMERA_PREPROMPT_TITLE,
+  MOTION_USAGE_DESCRIPTION,
+  OPEN_SETTINGS_LABEL,
+  PHOTO_PICKER_UNAVAILABLE_COPY,
+  SEARCH_BY_NAME_LABEL,
+} from "./permission-copy";
+export {
   PREGRADE_BANNED_WORDS,
   PREGRADE_COPY,
   PREGRADE_DISCLAIMER_TEXT,
@@ -663,9 +692,15 @@ export {
   shareCardVisibleCopy,
 } from "./share-card-copy";
 export {
+  GRADE_STILL_MAX_LONG_EDGE_PX,
   GRADE_STILL_MIN_SHORT_SIDE_PX,
+  GRADE_STILL_TOO_LARGE_COPY,
   GRADE_STILL_TOO_SMALL_COPY,
+  GRADE_UPLOAD_EXPIRED_COPY,
+  gradeStillPixelRatio,
+  gradeStillResizeAction,
   largestPictureSize,
+  scaleToLongEdge,
   stillFromCameraCapture,
   type PickedGradeStill,
 } from "./grade-still";
