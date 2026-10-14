@@ -283,14 +283,20 @@ export {
   PURCHASED_UNDO_ACTION_LABEL,
   PURCHASED_UNDO_TOAST_MESSAGE,
   PURCHASED_UNDO_TOAST_MS,
+  WATCHLIST_CLOSED_WORKFLOW_STATE,
+  WATCHLIST_SOURCE_TAG,
   detailsNeededCostBasis,
+  isClosedWatchlist,
   isDetailsNeededPurchase,
+  isOpenWatchlist,
   isRecentDetailsNeededDuplicate,
   livestreamContextTags,
   normalizeLivestreamPlatform,
   purchasedAllInAmount,
   sanitizeLivestreamUrl,
   shouldAcceptLiveHudPurchaseTap,
+  watchlistConversionTags,
+  watchlistSourceIdFromTags,
 } from "./details-needed";
 export type { DetailsNeededInventoryCopy, LivestreamSourcePlatform } from "./details-needed";
 export {

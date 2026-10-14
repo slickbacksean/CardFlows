@@ -789,11 +789,24 @@ export async function saveLivestreamPurchase(input: {
   });
 }
 
-/** Reverses a livestream details-needed Purchased write. Leaves no Purchased row. */
-export function undoLivestreamPurchase(inventoryItemId: string) {
+/** Reverses a details-needed Purchased write (livestream HUD or Watchlist). */
+export function undoPurchased(inventoryItemId: string) {
   return request<{ ok: true; deleted: true }>(
     `/v1/inventory/${encodeURIComponent(inventoryItemId)}`,
     { method: "DELETE" },
+  );
+}
+
+/** Reverses a livestream details-needed Purchased write. Leaves no Purchased row. */
+export function undoLivestreamPurchase(inventoryItemId: string) {
+  return undoPurchased(inventoryItemId);
+}
+
+/** One-tap Watchlist → Purchased. Carries identity and Max Buy; price stays optional. */
+export function convertWatchlistToPurchased(inventoryItemId: string) {
+  return request<{ ok: true; item: InventoryItem; created?: boolean }>(
+    `/v1/inventory/${encodeURIComponent(inventoryItemId)}/purchased`,
+    { method: "POST" },
   );
 }
 

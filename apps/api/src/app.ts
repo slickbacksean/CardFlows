@@ -11,9 +11,14 @@ import {
   computeMaxBuy,
   DETAILS_NEEDED_WORKFLOW_STATE,
   detailsNeededCostBasis,
+  isClosedWatchlist,
   isDetailsNeededPurchase,
+  isOpenWatchlist,
   isRecentDetailsNeededDuplicate,
   livestreamContextTags,
+  WATCHLIST_CLOSED_WORKFLOW_STATE,
+  watchlistConversionTags,
+  watchlistSourceIdFromTags,
   keywordChips,
   LOCKED_DISPLAY_CURRENCY,
   mapRecognitionToCatalog,
@@ -1423,7 +1428,7 @@ export function createApp(
 
   app.get("/v1/inventory", async (c) => {
     const userId = c.get("userId");
-    const local = listInventory(userId);
+    const local = listInventory(userId).filter((item) => !isClosedWatchlist(item));
     if (pokecollectorAccounts.name === "off") {
       return c.json({
         ok: true,
@@ -1480,8 +1485,18 @@ export function createApp(
         409,
       );
     }
+    const sourceWatchlistId = watchlistSourceIdFromTags(item.tags);
     if (!deleteInventoryItem(userId, inventoryItemId)) {
       return c.json({ ok: false, error: "Inventory item not found" }, 404);
+    }
+    if (sourceWatchlistId) {
+      const watchlist = getInventoryItem(userId, sourceWatchlistId);
+      if (watchlist && watchlist.intent === "watchlist") {
+        updateInventoryItem(userId, sourceWatchlistId, {
+          workflowState: "watching",
+          closedAt: null,
+        });
+      }
     }
     return c.json({ ok: true, deleted: true });
   });
@@ -1900,6 +1915,74 @@ export function createApp(
       purchase: null,
     });
     return c.json({ ok: true, item, maxBuy }, 201);
+  });
+
+  app.post("/v1/inventory/:inventoryItemId/purchased", async (c) => {
+    const userId = c.get("userId");
+    const watchlistItemId = c.req.param("inventoryItemId");
+    const watchlist = getInventoryItem(userId, watchlistItemId);
+    if (!watchlist) return c.json({ ok: false, error: "Inventory item not found" }, 404);
+    if (watchlist.intent !== "watchlist") {
+      return c.json({ ok: false, error: "Only Watchlist items can convert to Purchased" }, 409);
+    }
+
+    const existing = listInventory(userId).find(
+      (row) =>
+        row.intent === "purchased" && watchlistSourceIdFromTags(row.tags) === watchlistItemId,
+    );
+    if (existing) {
+      if (isOpenWatchlist(watchlist)) {
+        updateInventoryItem(userId, watchlistItemId, {
+          workflowState: WATCHLIST_CLOSED_WORKFLOW_STATE,
+          closedAt: existing.createdAt,
+        });
+      }
+      return c.json({ ok: true, created: false, item: inventoryView(userId, existing) });
+    }
+    if (!isOpenWatchlist(watchlist)) {
+      return c.json({ ok: false, error: "This Watchlist item is already closed" }, 409);
+    }
+
+    const confirmation = getConfirmation(userId, watchlist.confirmationId);
+    if (!confirmation) {
+      return c.json({ ok: false, error: "Confirm the card before Purchased" }, 409);
+    }
+
+    const createdAt = new Date().toISOString();
+    const maxBuy = computeMaxBuy({
+      referencePriceAmount: watchlist.referencePriceAmount,
+      condition: watchlist.condition,
+      preferences: getPreferences(userId),
+    });
+    const item = saveInventoryItem({
+      inventoryItemId: crypto.randomUUID(),
+      userId,
+      cardflowCardId: confirmation.cardflowCardId,
+      confirmationId: confirmation.confirmationId,
+      scanId: confirmation.scanId,
+      intent: "purchased",
+      grain: "physical_copy",
+      selectedVariant: watchlist.selectedVariant ?? confirmation.selectedVariant,
+      condition: watchlist.condition,
+      quantity: 1,
+      tags: watchlistConversionTags(watchlistItemId),
+      workflowState: DETAILS_NEEDED_WORKFLOW_STATE,
+      referencePriceAmount: maxBuy.referencePriceAmount,
+      targetMaxBuyAmount: maxBuy.maxBuyAmount,
+      createdAt,
+      purchase: {
+        purchaseId: crypto.randomUUID(),
+        purchasedAt: createdAt,
+        currency: LOCKED_DISPLAY_CURRENCY,
+        costBasis: detailsNeededCostBasis(),
+        maxBuy,
+      },
+    });
+    updateInventoryItem(userId, watchlistItemId, {
+      workflowState: WATCHLIST_CLOSED_WORKFLOW_STATE,
+      closedAt: createdAt,
+    });
+    return c.json({ ok: true, created: true, item: inventoryView(userId, item) }, 201);
   });
 
   app.post("/v1/inventory/:inventoryItemId/purchase", async (c) => {
