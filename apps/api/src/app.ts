@@ -1584,7 +1584,8 @@ export function createApp(
         const cached = getGradeEstimateCache(userId, item.inventoryItemId);
         const cachedEstimate =
           cached?.photoHash === photoHash ? parseStoredGradeEstimate(cached.estimateJson) : null;
-        if (cachedEstimate) {
+        // Never serve a cached 0 — that is a retake, not a pre-grade estimate.
+        if (cachedEstimate && cachedEstimate.overall != null && cachedEstimate.overall >= 1) {
           return c.json({
             ok: true,
             provider: gradeEstimateHealth(gradingProvider.name),
@@ -1604,8 +1605,8 @@ export function createApp(
         // A crashed or timed-out grader is "unavailable", never a silent empty estimate.
         estimate = unavailableGradeEstimate();
       }
-      // Cache only a real number. Retake / unavailable must re-run next time.
-      if (photoHash && estimate.overall != null) {
+      // Cache only a real 1.0–10.0 number. Retake / unavailable / 0 must re-run.
+      if (photoHash && estimate.overall != null && estimate.overall >= 1) {
         saveGradeEstimateCache(userId, item.inventoryItemId, {
           photoHash,
           estimateJson: JSON.stringify(estimate),
