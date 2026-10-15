@@ -812,6 +812,7 @@ export * from "./scan-correction";
 export * from "./confirm-log";
 export * from "./mapping-metrics";
 export * from "./reseller-pnl";
+export * from "./grade-history";
 export * from "./contract";
 export * from "./write-queue";
 export * from "./price-freshness";

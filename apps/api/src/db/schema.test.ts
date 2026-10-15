@@ -67,6 +67,7 @@ describe("MVP CRM schema", () => {
       "crm_sessions",
       "grade_accounts",
       "grade_estimate_cache",
+      "grade_estimate_history",
       "grade_photo_objects",
       "grade_quota_usage",
       "portfolio_value_snapshots",

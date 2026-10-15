@@ -18,6 +18,7 @@ import {
   convertWatchlistToPurchased,
   deleteSaleRemote,
   saveSaleRemote,
+  importGradeHistory,
   saveLivestreamPurchase,
   savePurchased,
   saveWatchlist,
@@ -37,6 +38,7 @@ type Payloads = {
   complete_details: { inventoryItemId: string; input: Parameters<typeof completePurchasedDetails>[1] };
   save_sale: { inventoryItemId: string; body: Parameters<typeof saveSaleRemote>[1] };
   delete_sale: { inventoryItemId: string };
+  import_grade_history: { inventoryItemId: string; entries: Parameters<typeof importGradeHistory>[1] };
 };
 
 type Results = {
@@ -47,6 +49,7 @@ type Results = {
   complete_details: Awaited<ReturnType<typeof completePurchasedDetails>>;
   save_sale: Awaited<ReturnType<typeof saveSaleRemote>>;
   delete_sale: Awaited<ReturnType<typeof deleteSaleRemote>>;
+  import_grade_history: Awaited<ReturnType<typeof importGradeHistory>>;
 };
 
 const EXECUTORS: { [K in QueuedWriteKind]: (payload: Payloads[K], key: string) => Promise<Results[K]> } = {
@@ -57,6 +60,7 @@ const EXECUTORS: { [K in QueuedWriteKind]: (payload: Payloads[K], key: string) =
   complete_details: (p) => completePurchasedDetails(p.inventoryItemId, p.input),
   save_sale: (p) => saveSaleRemote(p.inventoryItemId, p.body),
   delete_sale: (p) => deleteSaleRemote(p.inventoryItemId),
+  import_grade_history: (p) => importGradeHistory(p.inventoryItemId, p.entries),
 };
 
 /** Writes of one kind still waiting on the phone, oldest first (for optimistic overlays). */

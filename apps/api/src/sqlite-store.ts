@@ -39,6 +39,7 @@ import {
 } from "@cardflow/shared";
 import { catalogDisplayFromCard } from "./listing";
 import { createSqliteSalesStore } from "./sales-store";
+import { createSqliteGradeHistoryStore } from "./grade-history-store";
 import { applyMvpMigrations, isMemorySqlitePath } from "./db/migrate";
 import {
   gradeImageStorageCandidates,
@@ -1894,6 +1895,7 @@ export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStor
       sqlite.close();
     },
     sales: createSqliteSalesStore(db),
+    gradeHistory: createSqliteGradeHistoryStore(db),
     createSession,
     getSessionByToken,
     getPokecollectorUserMapping,

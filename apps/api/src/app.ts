@@ -137,6 +137,7 @@ import { corsOriginsFromEnv } from "./cors-env";
 import { registerGradeQuotaRoutes } from "./routes/grade-quota";
 import { registerPreferenceRoutes } from "./routes/preferences";
 import { registerSalesRoutes } from "./routes/sales";
+import { recordGradeEstimate, registerGradeHistoryRoutes } from "./routes/grade-history";
 import { REQUEST_ID_HEADER, resolveRequestId } from "./request-id";
 import { captureApiException } from "./sentry";
 import {
@@ -1352,10 +1353,12 @@ export function createApp(
     deleteUserPriceSnapshots(userId);
     const staged = gradeUploads.releaseUser(userId);
     const salesDeleted = store.sales.deleteUser(userId);
+    const gradeHistoryDeleted = store.gradeHistory.deleteUser(userId);
     return c.json({
       ok: true,
       photosDeleted: photos.deleted + staged,
       salesDeleted,
+      gradeHistoryDeleted,
     });
   });
 
@@ -1454,6 +1457,11 @@ export function createApp(
   registerPreferenceRoutes(app, { getPreferences, setPreferences });
   registerSalesRoutes(app, {
     sales: store.sales,
+    ownsInventoryItem: (userId, inventoryItemId) =>
+      getInventoryItem(userId, inventoryItemId)?.intent === "purchased",
+  });
+  registerGradeHistoryRoutes(app, {
+    gradeHistory: store.gradeHistory,
     ownsInventoryItem: (userId, inventoryItemId) =>
       getInventoryItem(userId, inventoryItemId)?.intent === "purchased",
   });
@@ -1756,6 +1764,7 @@ export function createApp(
       return c.json({ ok: false, error: "Inventory item not found" }, 404);
     }
     store.sales.delete(userId, inventoryItemId);
+    store.gradeHistory.deleteItem(userId, inventoryItemId);
     if (sourceWatchlistId) {
       const watchlist = getInventoryItem(userId, sourceWatchlistId);
       if (watchlist && watchlist.intent === "watchlist") {
@@ -1926,6 +1935,8 @@ export function createApp(
           estimateJson: JSON.stringify(estimate),
         });
       }
+      // P2-07: every fresh real estimate joins the card's history (cached repeats do not).
+      recordGradeEstimate(store.gradeHistory, userId, item.inventoryItemId, estimate, new Date().toISOString());
 
       if (parsed.frontUploadId) gradeUploads.release(userId, parsed.frontUploadId);
       if (parsed.backUploadId) gradeUploads.release(userId, parsed.backUploadId);
