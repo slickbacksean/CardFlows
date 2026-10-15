@@ -799,6 +799,7 @@ export type {
   GradeFlowStill,
 } from "./grade-flow-resilience";
 export * from "./a11y-copy";
+export * from "./practice-mode";
 export * from "./set-name-map";
 export * from "./catalog-snapshot";
 export * from "./scan-correction";
