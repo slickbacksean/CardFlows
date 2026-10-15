@@ -12,6 +12,7 @@ import { gradingRoutes } from "./grading";
 import { healthRoutes } from "./health";
 import { inventoryRoutes } from "./inventory";
 import { livestreamRoutes } from "./livestream";
+import { metricsRoutes } from "./metrics";
 import { scanRoutes } from "./scans";
 
 export const apiContract = {
@@ -23,6 +24,7 @@ export const apiContract = {
   ...gradeRoutes,
   ...gradingRoutes,
   ...livestreamRoutes,
+  ...metricsRoutes,
 } as const;
 
 export type ApiContract = typeof apiContract;

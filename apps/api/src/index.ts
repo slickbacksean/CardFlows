@@ -8,12 +8,15 @@ import { createRecognitionFromEnv } from "./recognition-env";
 import { createGradeEstimateFromEnv, gradeEngineProbeFromEnv } from "./grade-estimate-env";
 import { createSlabPricingFromEnv } from "./poketrace-env";
 import { resolveDevAutoSession } from "./session";
+import { installUnmappedSetNameLogger } from "./tcgdex-catalog";
 import { startPhotoRetentionJob } from "./photo-retention";
 import { createStoreFromEnv } from "./store-env";
 import { loadOptionalPhashIndex } from "./obb-phash-provider";
 import { resolveLiveIdentityOpenclipFromEnv } from "./live-identity-openclip";
 import { resolveLiveVideoObbDetector } from "./live-video-obb";
 import type { ObbDetector } from "@cardflow/shared";
+
+installUnmappedSetNameLogger();
 
 loadLocalApiEnv();
 initApiSentry();
