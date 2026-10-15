@@ -66,6 +66,7 @@ export default function RootLayout() {
         <Stack.Screen name="settings" options={{ headerShown: false }} />
         <Stack.Screen name="switch-tester" options={{ headerShown: false }} />
         <Stack.Screen name="about" options={{ headerShown: false }} />
+        <Stack.Screen name="practice" options={{ headerShown: false }} />
         <Stack.Screen name="max-buy-rules" options={{ headerShown: false }} />
         <Stack.Screen name="watch" options={{ headerShown: false }} />
       </Stack>

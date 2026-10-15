@@ -12,6 +12,7 @@ import { gradingRoutes } from "./grading";
 import { healthRoutes } from "./health";
 import { inventoryRoutes } from "./inventory";
 import { livestreamRoutes } from "./livestream";
+import { metricsRoutes } from "./metrics";
 import { salesRoutes } from "./sales";
 import { scanRoutes } from "./scans";
 
@@ -24,6 +25,7 @@ export const apiContract = {
   ...gradeRoutes,
   ...gradingRoutes,
   ...livestreamRoutes,
+  ...metricsRoutes,
   ...salesRoutes,
 } as const;
 

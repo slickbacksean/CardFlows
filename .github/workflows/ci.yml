@@ -37,6 +37,10 @@ jobs:
       - name: Test
         run: pnpm test
 
+      - name: Purchased lane smoke (livestream → Purchased → Undo → finish details)
+        if: ${{ !cancelled() }}
+        run: pnpm smoke:purchased
+
       - name: Typecheck
         if: ${{ !cancelled() }}
         run: pnpm typecheck

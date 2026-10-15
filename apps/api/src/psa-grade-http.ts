@@ -1,3 +1,4 @@
+import { recordVendorResponse } from "./ops-metrics";
 import {
   emptyGradeEstimate,
   gradeEstimateFromOverall,
@@ -116,6 +117,7 @@ export function createPsaGradeHttpProvider(
           body: form,
           signal: controller.signal,
         });
+        recordVendorResponse("psa_grade", response.status);
         if (!response.ok) return emptyGradeEstimate();
         return gradeEstimateFromPsaGradeResponse(await response.json());
       } catch {

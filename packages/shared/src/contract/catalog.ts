@@ -19,6 +19,16 @@ export interface CatalogSearchResponse {
   error: { code: string; message: string; retryable: boolean } | null;
 }
 
+const UserPriceSnapshotSchema = z.looseObject({
+  snapshotId: z.string(),
+  tcgdexId: z.string(),
+  variant: z.string().nullable(),
+  amount: z.string(),
+  currency: z.literal("USD"),
+  source: z.literal("you"),
+  enteredAt: z.string(),
+});
+
 const CatalogError = z.looseObject({ code: z.string(), message: z.string(), retryable: z.boolean() });
 
 export const CatalogSearchResponseSchema = typed<CatalogSearchResponse>(
@@ -86,5 +96,20 @@ export const catalogRoutes = {
     path: "/v1/cards/:tcgdexId/slab-estimates",
     bodyKind: "none",
     response: z.looseObject({ ok: z.literal(true), estimate: SlabEstimateSchema }),
+  }),
+  /** P1-12: your own reference prices for one card (newest first). */
+  listUserPriceSnapshots: defineRoute({
+    method: "GET",
+    path: "/v1/pricing/cards/:tcgdexId/yours",
+    bodyKind: "none",
+    query: z.looseObject({ variant: z.string().optional() }),
+    response: z.looseObject({ ok: z.literal(true), snapshots: z.array(UserPriceSnapshotSchema) }),
+  }),
+  saveUserPriceSnapshot: defineRoute({
+    method: "POST",
+    path: "/v1/pricing/cards/:tcgdexId/yours",
+    bodyKind: "json",
+    body: z.object({ amount: z.union([z.string(), z.number()]), variant: z.string().nullable().optional() }),
+    response: z.looseObject({ ok: z.literal(true), snapshot: UserPriceSnapshotSchema }),
   }),
 } as const;

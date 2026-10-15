@@ -377,7 +377,7 @@ export function rejectScan(scanId: string) {
 
 export function confirmScan(
   scanId: string,
-  input: { tcgdexId: string; selectedVariant?: string | null },
+  input: { tcgdexId: string; selectedVariant?: string | null; via?: "manual_search" },
 ) {
   return callApi(apiContract.confirmScan, { params: { scanId }, body: input });
 }
@@ -404,6 +404,21 @@ export function getPriceEstimate(tcgdexId: string, variant?: string) {
   return callApi(apiContract.getPriceEstimate, {
     params: { tcgdexId },
     query: { variant: variant?.trim() || undefined },
+  });
+}
+
+/** P1-12: your own reference prices for one card. */
+export function listUserPriceSnapshots(tcgdexId: string, variant?: string | null) {
+  return callApi(apiContract.listUserPriceSnapshots, {
+    params: { tcgdexId },
+    query: { variant: variant?.trim() || undefined },
+  });
+}
+
+export function saveUserPriceSnapshot(tcgdexId: string, amount: string, variant?: string | null) {
+  return callApi(apiContract.saveUserPriceSnapshot, {
+    params: { tcgdexId },
+    body: { amount, variant: variant ?? null },
   });
 }
 
@@ -812,3 +827,7 @@ export function patchPreferences(preferences: MaxBuyPreferences) {
 
 /** Typed list of every inventory item, for screens that hold one. */
 export type InventoryList = InventoryItem[];
+/** P1-18: sampled on-device timings (no images). */
+export function postPerfTelemetry(batch: import("@cardflow/shared").PerfBatch) {
+  return callApi(apiContract.postPerfTelemetry, { body: batch });
+}

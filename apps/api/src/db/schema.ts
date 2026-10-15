@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import {
   check,
+  index,
   integer,
   primaryKey,
   real,
@@ -343,6 +344,44 @@ export const vendorQuotaUsage = sqliteTable(
   (table) => [primaryKey({ columns: [table.provider, table.monthKey] })],
 );
 
+/** P1-26: what Confirm showed and what was picked. Metadata only, no photos. */
+export const scanConfirmEvents = sqliteTable(
+  "scan_confirm_events",
+  {
+    eventId: integer("event_id").primaryKey({ autoIncrement: true }),
+    scanId: text("scan_id").notNull(),
+    userId: text("user_id").notNull(),
+    via: text("via").notNull(),
+    shownTcgdexIdsJson: text("shown_tcgdex_ids_json").notNull(),
+    chosenTcgdexId: text("chosen_tcgdex_id").notNull(),
+    chosenRank: integer("chosen_rank"),
+    selectedVariant: text("selected_variant"),
+    confidence: text("confidence"),
+    recognitionProvider: text("recognition_provider"),
+    createdAt: text("created_at").notNull(),
+  },
+  (table) => [
+    index("scan_confirm_events_chosen_idx").on(table.chosenTcgdexId),
+    index("scan_confirm_events_created_idx").on(table.createdAt),
+    index("scan_confirm_events_user_idx").on(table.userId),
+  ],
+);
+
+/** P1-12: reference prices the user typed (source "you"). */
+export const userPriceSnapshots = sqliteTable(
+  "user_price_snapshots",
+  {
+    snapshotId: text("snapshot_id").primaryKey(),
+    userId: text("user_id").notNull(),
+    tcgdexId: text("tcgdex_id").notNull(),
+    variant: text("variant"),
+    amountCents: integer("amount_cents").notNull(),
+    currency: text("currency").notNull().default("USD"),
+    enteredAt: text("entered_at").notNull(),
+  },
+  (table) => [index("user_price_snapshots_card_idx").on(table.userId, table.tcgdexId, table.enteredAt)],
+);
+
 /** P2-03: per-user sale records for the P&L. Cents; fees optional. */
 export const userCardSales = sqliteTable(
   "user_card_sales",
@@ -376,5 +415,7 @@ export const schema = {
   gradeAccounts,
   gradeQuotaUsage,
   vendorQuotaUsage,
+  scanConfirmEvents,
+  userPriceSnapshots,
   userCardSales,
 };

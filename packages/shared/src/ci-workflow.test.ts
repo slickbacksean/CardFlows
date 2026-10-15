@@ -17,6 +17,7 @@ describe("CI workflow", () => {
     expect(workflow).toContain("pnpm install --frozen-lockfile");
     expect(workflow).toContain("pnpm test");
     expect(workflow).toContain("pnpm typecheck");
+    expect(workflow).toContain("pnpm smoke:purchased");
     expect(workflow).toContain("pnpm --filter @cardflow/mobile lint");
     expect(workflow).toMatch(/push:\s*\n\s*branches: \[main\]/);
     expect(workflow).toContain("pnpm test:legacy");
