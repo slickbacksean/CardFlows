@@ -75,8 +75,8 @@ describe("grade capture guide", () => {
   });
 
   it("waits out the hold before auto-capture", () => {
-    expect(gradeAutoCaptureHold({ autoCaptureReady: true, readySinceMs: 1000, nowMs: 1800 })).toBe(false);
-    expect(gradeAutoCaptureHold({ autoCaptureReady: true, readySinceMs: 1000, nowMs: 1900 })).toBe(true);
+    expect(gradeAutoCaptureHold({ autoCaptureReady: true, readySinceMs: 1000, nowMs: 1400 })).toBe(false);
+    expect(gradeAutoCaptureHold({ autoCaptureReady: true, readySinceMs: 1000, nowMs: 1500 })).toBe(true);
     expect(gradeAutoCaptureHold({ autoCaptureReady: false, readySinceMs: 1000, nowMs: 5000 })).toBe(false);
     expect(gradeAutoCaptureHold({ autoCaptureReady: true, readySinceMs: null, nowMs: 5000 })).toBe(false);
   });
