@@ -160,8 +160,8 @@ describe("Private-beta loop as the active invited user", () => {
     expect(api).toContain("searchCatalog(");
     expect(decide).toContain("canCommitInventory = Boolean(confirmationIdValue)");
     expect(decide).toContain("if (!confirmationIdValue) return");
-    expect(decide).toContain("savePurchased");
-    expect(decide).toContain("saveWatchlist");
+    expect(decide).toMatch(/savePurchased\(|runQueueableWrite\("save_purchased"/);
+    expect(decide).toMatch(/saveWatchlist\(|runQueueableWrite\("save_watchlist"/);
     expect(decide).toContain("computeMaxBuy");
 
     expect(listing).toContain("userId: input.item.userId");

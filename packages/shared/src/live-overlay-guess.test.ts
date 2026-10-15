@@ -121,7 +121,7 @@ describe("live overlay guess from catalog + estimate", () => {
     expect(overlay).toContain("getLiveOverlayGuess");
     expect(overlay).not.toContain("savePurchased");
     expect(overlay).toContain("Purchased");
-    expect(scanTab).toContain("saveLivestreamPurchase");
+    expect(scanTab).toMatch(/saveLivestreamPurchase\(|runQueueableWrite\("livestream_purchase"/);
     expect(scanTab).not.toContain("PurchaseSheet");
   });
 });
