@@ -43,6 +43,7 @@ describe("parseDollarsToCents", () => {
       },
     });
     expect(guidance.maxBuyAmount).not.toMatch(/NaN/);
-    expect(guidance.currentConditionFactor).toBe(1);
+    // A bad saved value falls back to the shared LP default (85%).
+    expect(guidance.currentConditionFactor).toBe(0.85);
   });
 });

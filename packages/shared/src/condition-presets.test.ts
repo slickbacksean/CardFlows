@@ -8,17 +8,31 @@ import { computeMaxBuy, DEFAULT_MAX_BUY_PREFERENCES, maxBuyPreferencesRangeError
 import { maxBuyBreakdown } from "./max-buy-breakdown";
 
 describe("condition presets (P1-14)", () => {
-  it("shows 100% everywhere until you set them, so nothing changes by default", () => {
-    expect(conditionPresetsToForm(null)).toEqual({ NM: "100", LP: "100", MP: "100", HP: "100", DMG: "100" });
+  it("uses NM 100 / LP 85 / MP 70 / HP 50 / DMG 30 until you customize", () => {
+    expect(conditionPresetsToForm(null)).toEqual({ NM: "100", LP: "85", MP: "70", HP: "50", DMG: "30" });
+    const ref = { referencePriceAmount: "10.00", preferences: DEFAULT_MAX_BUY_PREFERENCES };
+    expect(computeMaxBuy({ ...ref, condition: "NM" }).currentConditionFactor).toBe(1);
+    expect(computeMaxBuy({ ...ref, condition: "LP" }).currentConditionFactor).toBe(0.85);
+    expect(computeMaxBuy({ ...ref, condition: "DMG" }).currentConditionFactor).toBe(0.3);
+    expect(computeMaxBuy({ ...ref, condition: "Sealed" }).currentConditionFactor).toBe(1);
+    expect(computeMaxBuy({ ...ref, condition: null }).currentConditionFactor).toBe(1);
     expect(parseConditionPresetsForm(conditionPresetsToForm(null))).toEqual({ ok: true, conditionAdjustments: null });
     expect(DEFAULT_MAX_BUY_PREFERENCES.conditionAdjustments).toBeNull();
   });
 
-  it("round-trips the suggested presets", () => {
+  it("your saved value wins over the default", () => {
+    const prefs = { ...DEFAULT_MAX_BUY_PREFERENCES, conditionAdjustments: { LP: 1 } };
+    expect(computeMaxBuy({ referencePriceAmount: "10", condition: "LP", preferences: prefs }).currentConditionFactor).toBe(1);
+    expect(computeMaxBuy({ referencePriceAmount: "10", condition: "MP", preferences: prefs }).currentConditionFactor).toBe(0.7);
+    const all100 = parseConditionPresetsForm({ NM: "100", LP: "100", MP: "100", HP: "100", DMG: "100" });
+    expect(all100.ok && all100.conditionAdjustments).toEqual({ NM: 1, LP: 1, MP: 1, HP: 1, DMG: 1 });
+  });
+
+  it("round-trips the default presets (saved as 'follow defaults')", () => {
     const form = suggestedConditionPresetsForm();
     expect(form).toEqual({ NM: "100", LP: "85", MP: "70", HP: "50", DMG: "30" });
     const parsed = parseConditionPresetsForm(form);
-    expect(parsed).toEqual({ ok: true, conditionAdjustments: { NM: 1, LP: 0.85, MP: 0.7, HP: 0.5, DMG: 0.3 } });
+    expect(parsed).toEqual({ ok: true, conditionAdjustments: null });
   });
 
   it("rejects out-of-range or junk values", () => {

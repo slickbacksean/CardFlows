@@ -41,13 +41,13 @@ describe("computeMaxBuy", () => {
     expect(result.maxBuyAmountCents).toBe(dollarsToCents(8 * 0.8 * 0.87 * 0.85));
   });
 
-  it("defaults condition_factor to 1.0 when the map is missing", () => {
+  it("uses the shared default preset when the map is missing (HP = 50%)", () => {
     const result = computeMaxBuy({
       referencePriceAmount: "8.00",
       condition: "HP",
     });
-    expect(result.currentConditionFactor).toBe(1);
-    expect(result.maxBuyAmount).toBe("5.57");
+    expect(result.currentConditionFactor).toBe(0.5);
+    expect(result.maxBuyAmount).toBe("2.78");
   });
 
   it("still returns guidance metadata when reference is null", () => {
