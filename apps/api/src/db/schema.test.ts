@@ -70,7 +70,9 @@ describe("MVP CRM schema", () => {
       "grade_photo_objects",
       "grade_quota_usage",
       "portfolio_value_snapshots",
+      "scan_confirm_events",
       "user_preferences",
+      "user_price_snapshots",
       "vendor_quota_usage",
     ]);
   });

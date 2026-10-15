@@ -1,5 +1,6 @@
 import {
   MARKETPLACE_AUTOMATION_NO_ENABLE_COPY,
+  PRACTICE_COPY,
   SETTINGS_KICKER,
   SETTINGS_RESEARCH_FLAGS,
   SETTINGS_RESEARCH_SECTION_LABEL,
@@ -80,6 +81,11 @@ export default function SettingsScreen() {
         <JobRow
           label="Use a different invite code"
           onPress={() => router.push("/switch-tester")}
+        />
+
+        <JobRow
+          label={PRACTICE_COPY.entryLabel}
+          onPress={() => router.push("/practice")}
         />
 
         <JobRow

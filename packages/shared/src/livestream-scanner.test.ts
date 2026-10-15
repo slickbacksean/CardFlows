@@ -120,7 +120,7 @@ describe("Livestream in-house browser + scanner control", () => {
     expect(overlay).toContain("HudBubble");
     expect(overlay).toContain("Purchased");
     expect(overlay).toContain("shouldAcceptLiveHudPurchaseTap");
-    expect(scanTab).toContain("saveLivestreamPurchase");
+    expect(scanTab).toMatch(/saveLivestreamPurchase\(|runQueueableWrite\("livestream_purchase"/);
     expect(scanTab).not.toContain("PurchaseSheet");
   });
 });
