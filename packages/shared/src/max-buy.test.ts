@@ -12,6 +12,7 @@ import {
   parseMaxBuyRulesForm,
 } from "./max-buy";
 import { dollarsToCents } from "./money";
+import { readApiSource } from "./repo-sources";
 
 const repoRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 
@@ -172,7 +173,7 @@ describe("Invalid Max Buy save does not persist", () => {
       preferences.indexOf("patchPreferences(withLockedDisplayCurrency(preferences))"),
     );
 
-    const api = readRepoFile("apps/api/src/app.ts");
+    const api = readApiSource();
     expect(api).toContain("maxBuyPreferencesRangeError");
     expect(api.indexOf("maxBuyPreferencesRangeError(next)")).toBeLessThan(
       api.indexOf("setPreferences(userId, next)"),

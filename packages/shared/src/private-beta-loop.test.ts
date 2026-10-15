@@ -24,6 +24,7 @@ import {
 } from "./max-buy";
 import { identifyCardMock } from "./mock-recognition";
 import type { MaxBuyPreferences } from "./types";
+import { readApiSource } from "./repo-sources";
 
 const repoRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 
@@ -117,7 +118,7 @@ describe("Private-beta loop as the active invited user", () => {
   });
 
   it("wires the HTTP loop to the active invited user without scan-alone inventory", () => {
-    const api = readRepoFile("apps/api/src/app.ts");
+    const api = readApiSource();
     const store = readRepoFile("apps/api/src/store.ts");
     const capture = readRepoFile("apps/mobile/app/capture.tsx");
     const scan = readRepoFile("apps/mobile/app/scan/[scanId].tsx");
@@ -159,8 +160,8 @@ describe("Private-beta loop as the active invited user", () => {
     expect(api).toContain("searchCatalog(");
     expect(decide).toContain("canCommitInventory = Boolean(confirmationIdValue)");
     expect(decide).toContain("if (!confirmationIdValue) return");
-    expect(decide).toContain("savePurchased");
-    expect(decide).toContain("saveWatchlist");
+    expect(decide).toMatch(/savePurchased\(|runQueueableWrite\("save_purchased"/);
+    expect(decide).toMatch(/saveWatchlist\(|runQueueableWrite\("save_watchlist"/);
     expect(decide).toContain("computeMaxBuy");
 
     expect(listing).toContain("userId: input.item.userId");
@@ -171,7 +172,7 @@ describe("Private-beta loop as the active invited user", () => {
   });
 
   it("does not let account switch or Max Buy save mint inventory or copy notes", () => {
-    const api = readRepoFile("apps/api/src/app.ts");
+    const api = readApiSource();
     const identity = readRepoFile("apps/mobile/lib/identity.ts");
     const preferences = readRepoFile("apps/mobile/lib/preferences.ts");
 
@@ -181,7 +182,7 @@ describe("Private-beta loop as the active invited user", () => {
     );
     const patchIdentity = api.slice(
       api.indexOf('app.patch("/v1/identity"'),
-      api.indexOf('app.get("/v1/preferences"'),
+      api.indexOf('app.get("/v1/collection"'),
     );
     const patchPrefs = api.slice(
       api.indexOf('app.patch("/v1/preferences"'),
