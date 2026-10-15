@@ -1,3 +1,4 @@
+import { DEFAULT_MAX_BUY_PREFERENCES } from "./max-buy";
 import { centsToDollarString, parseDollarsToCents } from "./money";
 
 /**
@@ -17,7 +18,7 @@ export interface PnlInput {
   sale?: { price: string; fees?: string | null; soldAt?: string | null } | null;
   askingPrice?: string | null;
   referencePrice?: string | null;
-  /** Fee buffer for estimated rows, 0–50. */
+  /** Fee buffer for estimated rows as a fraction (0.13 = 13%), same as `MaxBuyPreferences`. Clamped 0–0.5. */
   feesBufferPct?: number;
 }
 
@@ -73,8 +74,8 @@ export function pnlRow(input: PnlInput): PnlRow {
     if (estimate !== null) {
       status = "estimated";
       priceCents = estimate;
-      const pct = Math.min(50, Math.max(0, input.feesBufferPct ?? 13));
-      feesCents = Math.round((estimate * pct) / 100);
+      const fraction = Math.min(0.5, Math.max(0, input.feesBufferPct ?? DEFAULT_MAX_BUY_PREFERENCES.feesBufferPct));
+      feesCents = Math.round(estimate * fraction);
     }
   }
   const netCents =
