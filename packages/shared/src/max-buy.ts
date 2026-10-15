@@ -1,3 +1,4 @@
+import { defaultConditionFactor } from "./condition-presets";
 import { purchasedAllInAmount } from "./details-needed";
 import {
   centsToDollarString,
@@ -50,10 +51,11 @@ export function resolveConditionFactor(
   condition: string | null | undefined,
   adjustments: Record<string, number> | null | undefined,
 ): number {
-  if (!condition || !adjustments) return 1;
-  const factor = adjustments[condition];
-  if (typeof factor !== "number" || !Number.isFinite(factor) || factor < 0) return 1;
-  return factor;
+  if (!condition) return 1;
+  // Your saved value wins; otherwise the shared default preset (Sean, 2026-10-14).
+  const factor = adjustments?.[condition];
+  if (typeof factor === "number" && Number.isFinite(factor) && factor >= 0) return factor;
+  return defaultConditionFactor(condition);
 }
 
 export function computeMaxBuy(input: ComputeMaxBuyInput): MaxBuyComputation {
