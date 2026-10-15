@@ -1,3 +1,4 @@
+import { defaultConditionFactor } from "./condition-presets";
 import { purchasedAllInAmount } from "./details-needed";
 import {
   centsToDollarString,
@@ -50,10 +51,11 @@ export function resolveConditionFactor(
   condition: string | null | undefined,
   adjustments: Record<string, number> | null | undefined,
 ): number {
-  if (!condition || !adjustments) return 1;
-  const factor = adjustments[condition];
-  if (typeof factor !== "number" || !Number.isFinite(factor) || factor < 0) return 1;
-  return factor;
+  if (!condition) return 1;
+  // Your saved value wins; otherwise the shared default preset (Sean, 2026-10-14).
+  const factor = adjustments?.[condition];
+  if (typeof factor === "number" && Number.isFinite(factor) && factor >= 0) return factor;
+  return defaultConditionFactor(condition);
 }
 
 export function computeMaxBuy(input: ComputeMaxBuyInput): MaxBuyComputation {
@@ -196,16 +198,19 @@ export function maxBuyRulesCopy(preferences = DEFAULT_MAX_BUY_PREFERENCES): stri
   return `Your rules: ${Math.round(preferences.targetMarginPct * 100)}% margin, ${Math.round(preferences.feesBufferPct * 100)}% fees buffer`;
 }
 
-export const MAX_BUY_MARGIN_INVALID_MESSAGE = "Margin must be between 0 and 99.";
+/** P1-13 bounds (D8: defaults 20% / 13%, user-editable). */
+export const MAX_BUY_MARGIN_MAX_PCT = 80;
+export const MAX_BUY_FEES_MAX_PCT = 50;
+export const MAX_BUY_MARGIN_INVALID_MESSAGE = `Margin must be between 0 and ${MAX_BUY_MARGIN_MAX_PCT}.`;
 export const MAX_BUY_FEES_BUFFER_INVALID_MESSAGE =
-  "Fees buffer must be between 0 and 99.";
+  `Fees buffer must be between 0 and ${MAX_BUY_FEES_MAX_PCT}.`;
 export const MAX_BUY_CONDITION_FACTOR_INVALID_MESSAGE =
   "Condition factor must be 0 or greater.";
 export const MAX_BUY_RESET_NOT_SAVED_NOTICE =
   "Defaults filled. Tap Save rules to persist.";
 
-function isStoredPercentInRange(value: number): boolean {
-  return Number.isFinite(value) && value >= 0 && value <= 0.99;
+function isStoredPercentInRange(value: number, maxPct: number): boolean {
+  return Number.isFinite(value) && value >= 0 && value <= maxPct / 100 + 1e-9;
 }
 
 export function maxBuyPreferencesRangeError(
@@ -213,10 +218,10 @@ export function maxBuyPreferencesRangeError(
     conditionAdjustments?: Record<string, unknown> | null;
   },
 ): string | null {
-  if (!isStoredPercentInRange(preferences.targetMarginPct)) {
+  if (!isStoredPercentInRange(preferences.targetMarginPct, MAX_BUY_MARGIN_MAX_PCT)) {
     return MAX_BUY_MARGIN_INVALID_MESSAGE;
   }
-  if (!isStoredPercentInRange(preferences.feesBufferPct)) {
+  if (!isStoredPercentInRange(preferences.feesBufferPct, MAX_BUY_FEES_MAX_PCT)) {
     return MAX_BUY_FEES_BUFFER_INVALID_MESSAGE;
   }
   const adjustments = preferences.conditionAdjustments;
@@ -256,11 +261,11 @@ export function parseMaxBuyRulesForm(input: {
   existingAdjustments?: Record<string, number> | null;
 }): { ok: true; preferences: MaxBuyPreferences } | { ok: false; error: string } {
   const marginDisplay = parsePercentDisplay(input.targetMarginDisplay);
-  if (marginDisplay === null || !isPercentInMarginRange(marginDisplay)) {
+  if (marginDisplay === null || !isPercentInRange(marginDisplay, MAX_BUY_MARGIN_MAX_PCT)) {
     return { ok: false, error: MAX_BUY_MARGIN_INVALID_MESSAGE };
   }
   const feesDisplay = parsePercentDisplay(input.feesBufferDisplay);
-  if (feesDisplay === null || !isPercentInMarginRange(feesDisplay)) {
+  if (feesDisplay === null || !isPercentInRange(feesDisplay, MAX_BUY_FEES_MAX_PCT)) {
     return { ok: false, error: MAX_BUY_FEES_BUFFER_INVALID_MESSAGE };
   }
   const nmFactor = parseConditionFactor(input.conditionFactorNmDisplay);
@@ -290,8 +295,8 @@ function parsePercentDisplay(value: string): number | null {
   return parsed;
 }
 
-function isPercentInMarginRange(displayPct: number): boolean {
-  return displayPct >= 0 && displayPct <= 99;
+function isPercentInRange(displayPct: number, maxPct: number): boolean {
+  return displayPct >= 0 && displayPct <= maxPct;
 }
 
 function parseConditionFactor(value: string): number | null {

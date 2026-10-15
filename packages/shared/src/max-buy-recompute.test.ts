@@ -10,6 +10,7 @@ import {
   recomputeCopyMaxBuy,
 } from "./max-buy";
 import type { MaxBuyPreferences } from "./types";
+import { readApiSource, readApiClientSource } from "./repo-sources";
 
 const repoRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 
@@ -166,7 +167,7 @@ describe("Detail, Watchlist, and Purchased surfaces recompute after Save", () =>
   });
 
   it("API overlays live guidance on GET and does not rewrite inventory on PATCH", () => {
-    const api = readRepoFile("apps/api/src/app.ts");
+    const api = readApiSource();
     const patchStart = api.indexOf('app.patch("/v1/preferences"');
     const patchEnd = api.indexOf("app.post", patchStart);
     const patch = api.slice(patchStart, patchEnd);
@@ -188,7 +189,7 @@ describe("Detail, Watchlist, and Purchased surfaces recompute after Save", () =>
     expect(watchlist).toContain("body.condition");
     expect(watchlist).toContain("condition,");
     expect(watchlist).not.toContain("condition: null");
-    const saveWatchlist = readRepoFile("apps/mobile/lib/api.ts");
+    const saveWatchlist = readApiClientSource();
     expect(saveWatchlist).toContain("condition?: string | null");
   });
 
