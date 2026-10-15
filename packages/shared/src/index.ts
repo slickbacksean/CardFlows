@@ -795,3 +795,4 @@ export type {
   GradeFlowStep,
   GradeFlowStill,
 } from "./grade-flow-resilience";
+export * from "./grade-history";
