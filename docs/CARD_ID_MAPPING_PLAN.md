@@ -262,3 +262,9 @@ On catalog outage: if `(language, tcgdex_id)` is already in CardFlow cache / pri
 
 **Version:** 2026-09-12  
 **Spike deliverable for review** — Mapping plan + mock fixtures only; no production tables.
+
+## Set-name table and phone snapshot (P1-04)
+
+- `packages/shared/src/set-name-map.ts` holds the curated set-name → TCGdex set-ID table, including vendor spellings and promo sets. Every ID was checked against `api.tcgdex.net/v2/en/sets/<id>`. Recognition mapping and catalog search use the table first and fall back to TCGdex name search.
+- A table miss is reported through `reportUnmappedSetName`. The API (`installUnmappedSetNameLogger` in `apps/api/src/tcgdex-catalog.ts`) logs each `unmapped_set_name` once per source, then counts repeats. Add the logged names to the table.
+- The phone keeps a snapshot of the cards it has seen in searches and scans (`apps/mobile/lib/catalog-snapshot.ts`, capped at 3000 cards and treated as stale after 7 days). Search falls back to the snapshot when the network fails.

@@ -5,6 +5,11 @@ import {
   GRADE_CAMERA_PREPROMPT_BODY,
   GRADE_CAMERA_PREPROMPT_TITLE,
   OPEN_SETTINGS_LABEL,
+  GRADE_GUIDE_COPY,
+  GRADE_LEVEL_NEAR_DEG,
+  GRADE_LEVEL_OK_DEG,
+  gradeCaptureReadiness,
+  type GradeCaptureReadiness,
 } from "@cardflow/shared";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { CameraView, useCameraPermissions } from "expo-camera";
@@ -28,9 +33,17 @@ import {
   type PickedGradeStill,
 } from "@/lib/grade-photos";
 import { TAB_CURVE_RADIUS } from "@/components/ui/tab-bar-metrics";
+import { useDeviceLevel, type DeviceLevel } from "@/lib/device-level";
 import { colors, space } from "@/lib/theme";
 
 const DIM = "rgba(0,0,0,0.55)";
+/** Guide colors by level: green within 2°, amber up to 6°, red beyond. */
+const GUIDE_COLORS = {
+  good: "#5BD178",
+  warn: "#F2B33D",
+  bad: "#F06A5B",
+  neutral: colors.accent,
+} as const;
 const IS_NATIVE = Platform.OS === "ios" || Platform.OS === "android";
 
 interface GradeCardFinderProps {
@@ -70,6 +83,15 @@ export function GradeCardFinder({
   const waitingForCamera = showLivePreview && (!cameraReady || !pictureSizeResolved);
   const shutterDisabled = detecting || waitingForCamera || capturing;
   const banner = error ?? notice ?? null;
+  // Tilt guide: feature-detected DeviceMotion; falls back to the static frame.
+  const level = useDeviceLevel(showLivePreview && !freezeUri);
+  const readiness = gradeCaptureReadiness({
+    sensorAvailable: level.available,
+    level: level.level,
+    steady: level.steady,
+    cardInFrame: null,
+  });
+  const guideColor = GUIDE_COLORS[readiness.tone];
 
   async function onShutter() {
     if (busyRef.current || shutterDisabled || !showLivePreview) return;
@@ -186,12 +208,17 @@ export function GradeCardFinder({
   return (
     <View style={styles.flex}>
       <FinderHeader onBack={detecting ? undefined : onBack} title={`${sideLabel} photo`} />
-      <Text style={styles.hint}>Fill the frame with the whole card. Keep the camera straight above.</Text>
+      <View style={styles.helper}>
+        <Text style={styles.helperMain}>{GRADE_GUIDE_COPY.lineUp}</Text>
+        <Text style={[styles.helperStatus, { color: guideColor }]}>{statusLine(readiness, level)}</Text>
+      </View>
       <CardFinderStage
         cameraRef={cameraRef}
         enableLivePreview={showLivePreview}
         freezeUri={freezeUri}
         detecting={detecting}
+        guideColor={guideColor}
+        level={level}
         pictureSize={pictureSize}
         onCameraReady={() => void onCameraReady()}
         onMountError={() => setCameraMountFailed(true)}
@@ -213,7 +240,7 @@ export function GradeCardFinder({
           accessibilityState={{ disabled: shutterDisabled }}
           disabled={shutterDisabled}
           onPress={() => void onShutter()}
-          style={[styles.shutterOuter, shutterDisabled && styles.disabled]}
+          style={[styles.shutterOuter, { borderColor: guideColor }, shutterDisabled && styles.disabled]}
         >
           {detecting || waitingForCamera ? (
             <ActivityIndicator color={colors.ctaText} />
@@ -225,6 +252,14 @@ export function GradeCardFinder({
       </View>
     </View>
   );
+}
+
+function statusLine(readiness: GradeCaptureReadiness, level: DeviceLevel): string {
+  if (!level.available || level.tiltDeg == null) return readiness.status;
+  if (readiness.status === GRADE_GUIDE_COPY.holdFlat) {
+    return `${GRADE_GUIDE_COPY.holdFlat} · ${level.tiltDeg.toFixed(1)}° off`;
+  }
+  return readiness.status;
 }
 
 function FinderHeader({ onBack, title }: { onBack?: () => void; title: string }) {
@@ -256,6 +291,8 @@ interface CardFinderStageProps {
   enableLivePreview: boolean;
   freezeUri: string | null;
   detecting: boolean;
+  guideColor: string;
+  level: DeviceLevel;
   pictureSize?: string;
   onCameraReady: () => void;
   onMountError: () => void;
@@ -266,6 +303,8 @@ function CardFinderStage({
   enableLivePreview,
   freezeUri,
   detecting,
+  guideColor,
+  level,
   pictureSize,
   onCameraReady,
   onMountError,
@@ -302,11 +341,33 @@ function CardFinderStage({
           <View style={styles.dimBand} />
           <View style={styles.frameRow}>
             <View style={styles.dimBand} />
-            <View style={[styles.frame, { width: frameWidth, height: frameHeight }]} />
+            <View style={{ width: frameWidth, height: frameHeight }}>
+              <View style={[styles.frame, { borderColor: guideColor }]} />
+              {(["tl", "tr", "bl", "br"] as const).map((corner) => (
+                <View
+                  key={corner}
+                  style={[
+                    styles.bracket,
+                    {
+                      borderColor: guideColor,
+                      top: corner[0] === "t" ? -BRACKET_THICKNESS / 2 : undefined,
+                      bottom: corner[0] === "b" ? -BRACKET_THICKNESS / 2 : undefined,
+                      left: corner[1] === "l" ? -BRACKET_THICKNESS / 2 : undefined,
+                      right: corner[1] === "r" ? -BRACKET_THICKNESS / 2 : undefined,
+                      borderTopWidth: corner[0] === "t" ? BRACKET_THICKNESS : 0,
+                      borderBottomWidth: corner[0] === "b" ? BRACKET_THICKNESS : 0,
+                      borderLeftWidth: corner[1] === "l" ? BRACKET_THICKNESS : 0,
+                      borderRightWidth: corner[1] === "r" ? BRACKET_THICKNESS : 0,
+                    },
+                  ]}
+                />
+              ))}
+            </View>
             <View style={styles.dimBand} />
           </View>
           <View style={styles.dimBand} />
         </View>
+        {!freezeUri && !detecting ? <LevelBubble color={guideColor} level={level} /> : null}
         {detecting ? (
           <View style={styles.detectScrim}>
             <ActivityIndicator color={colors.accent} />
@@ -314,6 +375,44 @@ function CardFinderStage({
           </View>
         ) : null}
       </View>
+    </View>
+  );
+}
+
+const BRACKET = 32;
+const BRACKET_THICKNESS = 5;
+const BUBBLE_RADIUS = 34;
+const DOT_RADIUS = 7;
+/** Pixels per degree: the outer ring is GRADE_LEVEL_NEAR_DEG + 2. */
+const PX_PER_DEG = (BUBBLE_RADIUS - DOT_RADIUS) / (GRADE_LEVEL_NEAR_DEG + 2);
+
+function LevelBubble({ level, color }: { level: DeviceLevel; color: string }) {
+  if (!level.available || level.pitchDeg == null || level.rollDeg == null) return null;
+  let dx = level.rollDeg * PX_PER_DEG;
+  let dy = -level.pitchDeg * PX_PER_DEG;
+  const max = BUBBLE_RADIUS - DOT_RADIUS;
+  const dist = Math.hypot(dx, dy);
+  if (dist > max) {
+    dx = (dx / dist) * max;
+    dy = (dy / dist) * max;
+  }
+  const target = Math.max(DOT_RADIUS + 2, GRADE_LEVEL_OK_DEG * PX_PER_DEG + DOT_RADIUS);
+  return (
+    <View
+      accessibilityLabel={`Tilt ${level.tiltDeg?.toFixed(1) ?? "unknown"} degrees`}
+      pointerEvents="none"
+      style={styles.bubble}
+    >
+      <View style={[styles.bubbleRing, { borderColor: color }]} />
+      <View
+        style={[
+          styles.bubbleTarget,
+          { width: target * 2, height: target * 2, borderRadius: target, marginLeft: -target, marginTop: -target },
+        ]}
+      />
+      <View
+        style={[styles.bubbleDot, { backgroundColor: color, transform: [{ translateX: dx }, { translateY: dy }] }]}
+      />
     </View>
   );
 }
@@ -333,14 +432,6 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontWeight: "700",
     textAlign: "center",
-  },
-  hint: {
-    color: colors.muted,
-    fontSize: 14,
-    lineHeight: 20,
-    textAlign: "center",
-    paddingHorizontal: space.lg,
-    paddingBottom: space.sm,
   },
   panel: {
     flex: 1,
@@ -376,11 +467,38 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   frame: {
+    ...StyleSheet.absoluteFill,
     borderRadius: 14,
     borderWidth: 2,
-    borderColor: colors.accent,
     backgroundColor: "transparent",
   },
+  bracket: { position: "absolute", width: BRACKET, height: BRACKET },
+  bubble: {
+    position: "absolute",
+    top: space.sm,
+    right: space.sm,
+    width: BUBBLE_RADIUS * 2,
+    height: BUBBLE_RADIUS * 2,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  bubbleRing: {
+    ...StyleSheet.absoluteFill,
+    borderRadius: BUBBLE_RADIUS,
+    borderWidth: 2,
+    backgroundColor: "rgba(0,0,0,0.35)",
+  },
+  bubbleTarget: {
+    position: "absolute",
+    left: "50%",
+    top: "50%",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.7)",
+  },
+  bubbleDot: { width: DOT_RADIUS * 2, height: DOT_RADIUS * 2, borderRadius: DOT_RADIUS },
+  helper: { alignItems: "center", gap: 2, paddingHorizontal: space.lg, paddingBottom: space.sm },
+  helperMain: { color: colors.text, fontSize: 15, fontWeight: "700", textAlign: "center" },
+  helperStatus: { fontSize: 14, fontWeight: "700", textAlign: "center" },
   detectScrim: {
     ...StyleSheet.absoluteFill,
     backgroundColor: "rgba(7, 9, 11, 0.55)",

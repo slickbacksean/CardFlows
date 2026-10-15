@@ -10,6 +10,7 @@ import {
   parseMaxBuyRulesForm,
   withLockedDisplayCurrency,
 } from "./max-buy";
+import { readApiSource } from "./repo-sources";
 
 const repoRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 
@@ -69,7 +70,7 @@ describe("Currency locked to USD", () => {
   });
 
   it("PATCH ignores client defaultCurrency and keeps USD", () => {
-    const api = readRepoFile("apps/api/src/app.ts");
+    const api = readApiSource();
     const patch = patchPreferencesHandler(api);
     expect(patch).toContain("LOCKED_DISPLAY_CURRENCY");
     expect(patch).not.toContain("body.defaultCurrency");

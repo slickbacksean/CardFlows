@@ -2,7 +2,17 @@ import {
   DEFAULT_MAX_BUY_PREFERENCES,
   LOCKED_DISPLAY_CURRENCY,
   MAX_BUY_FEES_BUFFER_INVALID_MESSAGE,
+  CONDITION_PRESET_LABELS,
+  CONDITION_PRESETS_HELP,
+  CONDITION_PRESETS_SECTION_LABEL,
+  CONDITION_PRESETS_SUGGESTED_LABEL,
+  conditionPresetsToForm,
+  parseConditionPresetsForm,
+  suggestedConditionPresetsForm,
+  type ConditionPresetForm,
   MAX_BUY_MARGIN_INVALID_MESSAGE,
+  MAX_BUY_MARGIN_MAX_PCT,
+  MAX_BUY_FEES_MAX_PCT,
   MAX_BUY_RESET_NOT_SAVED_NOTICE,
   maxBuyPreferencesToFormValues,
   parseMaxBuyRulesForm,
@@ -28,7 +38,9 @@ export default function MaxBuyRulesScreen() {
   const initial = maxBuyPreferencesToFormValues(peekMaxBuyPreferences());
   const [targetMargin, setTargetMargin] = useState(initial.targetMarginDisplay);
   const [feesBuffer, setFeesBuffer] = useState(initial.feesBufferDisplay);
-  const [conditionFactor, setConditionFactor] = useState(initial.conditionFactorNmDisplay);
+  const [presets, setPresets] = useState<ConditionPresetForm>(() =>
+    conditionPresetsToForm(peekMaxBuyPreferences().conditionAdjustments),
+  );
   const [existingAdjustments, setExistingAdjustments] = useState<
     Record<string, number> | null
   >(null);
@@ -40,7 +52,7 @@ export default function MaxBuyRulesScreen() {
     const values = maxBuyPreferencesToFormValues(preferences);
     setTargetMargin(values.targetMarginDisplay);
     setFeesBuffer(values.feesBufferDisplay);
-    setConditionFactor(values.conditionFactorNmDisplay);
+    setPresets(conditionPresetsToForm(preferences.conditionAdjustments));
     setExistingAdjustments(
       preferences.conditionAdjustments
         ? { ...preferences.conditionAdjustments }
@@ -80,7 +92,7 @@ export default function MaxBuyRulesScreen() {
     const parsed = parseMaxBuyRulesForm({
       targetMarginDisplay: targetMargin,
       feesBufferDisplay: feesBuffer,
-      conditionFactorNmDisplay: conditionFactor,
+      conditionFactorNmDisplay: "1",
       existingAdjustments,
     });
     if (!parsed.ok) {
@@ -88,6 +100,13 @@ export default function MaxBuyRulesScreen() {
       setError(parsed.error);
       return;
     }
+    const conditions = parseConditionPresetsForm(presets, existingAdjustments);
+    if (!conditions.ok) {
+      setNotice(null);
+      setError(conditions.error);
+      return;
+    }
+    parsed.preferences.conditionAdjustments = conditions.conditionAdjustments;
     setIsSaving(true);
     setError(null);
     setNotice(null);
@@ -125,6 +144,7 @@ export default function MaxBuyRulesScreen() {
           </Text>
         ) : null}
         <RuleRow
+          helper={`0–${MAX_BUY_MARGIN_MAX_PCT}%, default 20%`}
           label="Target margin"
           onChangeText={setTargetMargin}
           suffix="%"
@@ -137,6 +157,7 @@ export default function MaxBuyRulesScreen() {
         ) : null}
         <RuleRow
           accessibilityLabel="Fees buffer"
+          helper={`0–${MAX_BUY_FEES_MAX_PCT}%, default 13%`}
           label="Fees buffer"
           onChangeText={setFeesBuffer}
           suffix="%"
@@ -149,13 +170,27 @@ export default function MaxBuyRulesScreen() {
           </Text>
         </View>
 
-        <Text style={styles.section}>Condition factor (optional)</Text>
-        <RuleRow
-          accessibilityLabel="NM condition factor"
-          helper="(default if empty)"
-          label="NM"
-          onChangeText={setConditionFactor}
-          value={conditionFactor}
+        <Text style={styles.section}>{CONDITION_PRESETS_SECTION_LABEL}</Text>
+        <Text style={styles.body}>{CONDITION_PRESETS_HELP}</Text>
+        {CONDITION_PRESET_LABELS.map((label) => (
+          <RuleRow
+            accessibilityLabel={`${label} condition percent`}
+            key={label}
+            label={label}
+            onChangeText={(value) => setPresets((current) => ({ ...current, [label]: value }))}
+            suffix="%"
+            value={presets[label]}
+          />
+        ))}
+        <PrimaryButton
+          disabled={isSaving}
+          label={CONDITION_PRESETS_SUGGESTED_LABEL}
+          onPress={() => {
+            setPresets(suggestedConditionPresetsForm());
+            setError(null);
+            setNotice(MAX_BUY_RESET_NOT_SAVED_NOTICE);
+          }}
+          tone="muted"
         />
 
         <Text style={styles.body}>
