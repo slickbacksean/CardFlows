@@ -8,6 +8,7 @@ export const metricsRoutes = {
     path: "/v1/metrics/mapping",
     bodyKind: "none",
     query: z.object({ days: z.string().optional(), format: z.string().optional() }),
-    response: z.looseObject({ ok: z.literal(true), report: z.looseObject({}) }),
+    // JSON `{ ok, report }` or markdown text, so the body is not schema-checked.
+    response: null,
   }),
 } as const;
