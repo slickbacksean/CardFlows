@@ -6,6 +6,7 @@ import {
   type EbayListingExportRow,
   type TcgTraderExportRow,
 } from "@cardflow/shared";
+import { StatusBanner } from "@/components/ui/status-banner";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import * as Clipboard from "expo-clipboard";
 import { router, useFocusEffect } from "expo-router";
@@ -151,6 +152,7 @@ export default function ExportScreen() {
   return (
     <ScrollView contentContainerStyle={styles.content} style={styles.flex}>
       <Text style={styles.title}>Export</Text>
+      <StatusBanner />
       <Text style={styles.constraint}>
         Share purchased cards as a spreadsheet. You upload it. CardFlow does not list them.
       </Text>

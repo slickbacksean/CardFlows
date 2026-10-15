@@ -789,6 +789,11 @@ export function getDraftClipboard(draftId: string) {
   return callApi(apiContract.getDraftClipboard, { params: { draftId } });
 }
 
+/** P1-21 status banners. */
+export function getStatus() {
+  return callApi(apiContract.getStatus);
+}
+
 export function getHealth() {
   return callApi(apiContract.getHealth);
 }

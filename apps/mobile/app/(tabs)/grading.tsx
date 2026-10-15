@@ -12,6 +12,7 @@ import {
   type GradingReturnedCopy,
   type GradingSubmittedCopy,
 } from "@cardflow/shared";
+import { StatusBanner } from "@/components/ui/status-banner";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { Image } from "expo-image";
 import { router, useFocusEffect } from "expo-router";
@@ -276,6 +277,7 @@ export default function GradingScreen() {
         </Pressable>
         <View style={styles.titleRow}>
           <Text style={styles.title}>Grading</Text>
+          <StatusBanner />
           {segment === "prepare" ? (
             <View style={styles.searchBox}>
               <Ionicons color={colors.muted} name="search-outline" size={18} />

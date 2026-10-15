@@ -136,6 +136,7 @@ import { contractMiddleware } from "./contract-middleware";
 import { corsOriginsFromEnv } from "./cors-env";
 import { registerGradeQuotaRoutes } from "./routes/grade-quota";
 import { registerPreferenceRoutes } from "./routes/preferences";
+import { registerStatusRoutes } from "./routes/status";
 import { registerSalesRoutes } from "./routes/sales";
 import { recordGradeEstimate, registerGradeHistoryRoutes } from "./routes/grade-history";
 import { REQUEST_ID_HEADER, resolveRequestId } from "./request-id";
@@ -302,6 +303,8 @@ export interface CreateAppOptions {
   pricing?: CardPricingProvider;
   /** Recognition provider. Tests default to mock; live Capture uses `obb_phash`. */
   recognition?: CardRecognitionProvider;
+  /** P1-21: /v1/status cache window (ms). Default 30 s. */
+  statusCacheMs?: number;
   /** P1-17: defaults to the process-wide metrics. */
   opsMetrics?: OpsMetrics;
   /** P1-17: bearer token for GET /ops/metrics; defaults to CARD_FLOW_OPS_TOKEN. */
@@ -894,6 +897,19 @@ export function createApp(
       },
       ok ? 200 : 503,
     );
+  });
+
+  registerStatusRoutes(app, {
+    cacheMs: options.statusCacheMs,
+    inputs: async () => {
+      const engine = gradeEngineProbe ? await boundedProbe(gradeEngineProbe) : null;
+      return {
+        pricingProvider: pricingProviderHealth(pricing.name),
+        gradeEstimate: gradeEstimateHealth(gradingProvider.name),
+        gradeEngineOk: engine ? healthOk(engine) : null,
+        opsMessage: process.env.CARD_FLOW_STATUS_MESSAGE ?? null,
+      };
+    },
   });
 
   app.get("/v1/catalog/search", async (c) => {
