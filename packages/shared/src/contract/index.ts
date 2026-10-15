@@ -12,6 +12,7 @@ import { gradingRoutes } from "./grading";
 import { healthRoutes } from "./health";
 import { inventoryRoutes } from "./inventory";
 import { livestreamRoutes } from "./livestream";
+import { salesRoutes } from "./sales";
 import { scanRoutes } from "./scans";
 
 export const apiContract = {
@@ -23,6 +24,7 @@ export const apiContract = {
   ...gradeRoutes,
   ...gradingRoutes,
   ...livestreamRoutes,
+  ...salesRoutes,
 } as const;
 
 export type ApiContract = typeof apiContract;
@@ -33,5 +35,6 @@ export const apiContractRoutes: readonly ApiRoute[] = Object.values(apiContract)
 export * from "./core";
 export * from "./models";
 export * from "./records";
+export { CardSaleSchema, SaveSaleBodySchema, type CardSale } from "./sales";
 export type { CatalogSearchResponse } from "./catalog";
 export { CatalogSearchResponseSchema } from "./catalog";

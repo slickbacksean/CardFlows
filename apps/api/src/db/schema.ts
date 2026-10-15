@@ -343,6 +343,20 @@ export const vendorQuotaUsage = sqliteTable(
   (table) => [primaryKey({ columns: [table.provider, table.monthKey] })],
 );
 
+/** P2-03: per-user sale records for the P&L. Cents; fees optional. */
+export const userCardSales = sqliteTable(
+  "user_card_sales",
+  {
+    userId: text("user_id").notNull(),
+    inventoryItemId: text("inventory_item_id").notNull(),
+    salePriceCents: integer("sale_price_cents").notNull(),
+    saleFeesCents: integer("sale_fees_cents"),
+    saleAt: text("sale_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.userId, table.inventoryItemId] })],
+);
+
 export const schema = {
   cardflowCards,
   cardExternalIds,
@@ -362,4 +376,5 @@ export const schema = {
   gradeAccounts,
   gradeQuotaUsage,
   vendorQuotaUsage,
+  userCardSales,
 };

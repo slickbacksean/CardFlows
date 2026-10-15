@@ -39,3 +39,15 @@ describe("reseller P&L", () => {
     expect(screen).not.toMatch(/\bprofit\b|\bAI\b|PSA|BGS|CGC/i);
   });
 });
+
+describe("P&L sales sync", () => {
+  it("phone saves sales through the offline queue and migrates local records once", () => {
+    const sales = readFileSync(resolve(__dirname, "../../../apps/mobile/lib/sales.ts"), "utf8");
+    expect(sales).toContain('runQueueableWrite("save_sale"');
+    expect(sales).toContain('runQueueableWrite("delete_sale"');
+    expect(sales).toContain("onlyIfMissing: true");
+    expect(sales).toContain("migratedKey");
+    const screen = readFileSync(resolve(__dirname, "../../../apps/mobile/app/pnl.tsx"), "utf8");
+    expect(screen).toContain("migrateLocalSales");
+  });
+});

@@ -117,6 +117,7 @@ import { contractMiddleware } from "./contract-middleware";
 import { corsOriginsFromEnv } from "./cors-env";
 import { registerGradeQuotaRoutes } from "./routes/grade-quota";
 import { registerPreferenceRoutes } from "./routes/preferences";
+import { registerSalesRoutes } from "./routes/sales";
 import { REQUEST_ID_HEADER, resolveRequestId } from "./request-id";
 import { captureApiException } from "./sentry";
 import {
@@ -1242,9 +1243,11 @@ export function createApp(
     const userId = c.get("userId");
     const photos = deleteUserPhotos(userId);
     const staged = gradeUploads.releaseUser(userId);
+    const salesDeleted = store.sales.deleteUser(userId);
     return c.json({
       ok: true,
       photosDeleted: photos.deleted + staged,
+      salesDeleted,
     });
   });
 
@@ -1341,6 +1344,11 @@ export function createApp(
   });
 
   registerPreferenceRoutes(app, { getPreferences, setPreferences });
+  registerSalesRoutes(app, {
+    sales: store.sales,
+    ownsInventoryItem: (userId, inventoryItemId) =>
+      getInventoryItem(userId, inventoryItemId)?.intent === "purchased",
+  });
 
   app.post("/v1/scans", bodyLimit({
       maxSize: SCAN_IMAGE_MAX_BYTES,
@@ -1578,6 +1586,7 @@ export function createApp(
     if (!deleteInventoryItem(userId, inventoryItemId)) {
       return c.json({ ok: false, error: "Inventory item not found" }, 404);
     }
+    store.sales.delete(userId, inventoryItemId);
     if (sourceWatchlistId) {
       const watchlist = getInventoryItem(userId, sourceWatchlistId);
       if (watchlist && watchlist.intent === "watchlist") {

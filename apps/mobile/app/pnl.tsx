@@ -14,7 +14,7 @@ import { useCallback, useState } from "react";
 import { ActivityIndicator, Pressable, ScrollView, Share, StyleSheet, Text, TextInput, View } from "react-native";
 import { getDraft, listInventory } from "@/lib/api";
 import { peekMaxBuyPreferences } from "@/lib/preferences";
-import { loadSale, saveSale, type SaleRecord } from "@/lib/sales";
+import { loadSales, migrateLocalSales, saveSale, type SaleRecord } from "@/lib/sales";
 import { colors, radii, space } from "@/lib/theme";
 
 interface Entry {
@@ -22,13 +22,15 @@ interface Entry {
   sale: SaleRecord | null;
 }
 
-async function loadEntries(): Promise<Entry[]> {
+async function loadEntries(): Promise<{ entries: Entry[]; offline: boolean }> {
   const { items } = await listInventory();
   const feesBufferPct = peekMaxBuyPreferences().feesBufferPct;
   const purchased = items.filter((item) => item.intent === "purchased");
-  return Promise.all(
+  await migrateLocalSales(purchased.map((item) => item.inventoryItemId)).catch(() => 0);
+  const { sales, offline } = await loadSales();
+  const entries = await Promise.all(
     purchased.map(async (item) => {
-      const sale = await loadSale(item.inventoryItemId);
+      const sale = sales.get(item.inventoryItemId) ?? null;
       let askingPrice: string | null = null;
       if (!sale && item.draft?.draftId) {
         try {
@@ -49,6 +51,7 @@ async function loadEntries(): Promise<Entry[]> {
       return { row, sale };
     }),
   );
+  return { entries, offline };
 }
 
 export default function PnlScreen() {
@@ -59,8 +62,9 @@ export default function PnlScreen() {
 
   const refresh = useCallback(async () => {
     try {
-      setEntries(await loadEntries());
-      setError(null);
+      const loaded = await loadEntries();
+      setEntries(loaded.entries);
+      setError(loaded.offline ? "Offline. Showing sales saved on this phone; they sync when you reconnect." : null);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not load the collection");
     } finally {
