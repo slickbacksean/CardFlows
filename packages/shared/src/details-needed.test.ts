@@ -149,7 +149,7 @@ describe("details-needed Purchased state", () => {
     const api = readApiSource();
     const client = readApiClientSource();
 
-    expect(scanTab).toContain("saveLivestreamPurchase");
+    expect(scanTab).toMatch(/saveLivestreamPurchase\(|runQueueableWrite\("livestream_purchase"/);
     expect(scanTab).toContain("streamUrl: chrome.pageUrl");
     expect(scanTab).not.toContain("PurchaseSheet");
     expect(overlay).toContain("HudBubble");
@@ -202,7 +202,7 @@ describe("details-needed Purchased state", () => {
     expect(bubble).toContain("minHeight: 44");
     expect(bubble).not.toContain("Alert.alert");
 
-    expect(scanTab).toContain("saveLivestreamPurchase");
+    expect(scanTab).toMatch(/saveLivestreamPurchase\(|runQueueableWrite\("livestream_purchase"/);
     expect(scanTab).toContain("undoLivestreamPurchase");
     expect(scanTab).toContain("onUndoPurchased");
     expect(scanTab).not.toContain("PurchaseSheet");
@@ -242,7 +242,7 @@ describe("details-needed Purchased state", () => {
     ]);
     expect(watchlistSourceIdFromTags(watchlistConversionTags("wl-1"))).toBe("wl-1");
 
-    expect(collection).toContain("convertWatchlistToPurchased");
+    expect(collection).toMatch(/convertWatchlistToPurchased\(|runQueueableWrite\("watchlist_to_purchased"/);
     expect(collection).toContain("playPurchasedSuccessHaptic");
     expect(collection).toContain("PurchasedUndoToast");
     expect(collection).toContain("PURCHASED_UNDO_TOAST_MS");
@@ -252,7 +252,7 @@ describe("details-needed Purchased state", () => {
     expect(collection).not.toContain("createScan");
     expect(collection).not.toContain("confirmScan");
 
-    expect(decide).toContain("convertWatchlistToPurchased");
+    expect(decide).toMatch(/convertWatchlistToPurchased\(|runQueueableWrite\("watchlist_to_purchased"/);
     expect(decide).toContain("playPurchasedSuccessHaptic");
     expect(decide).toContain("inventoryItemId");
     expect(decide).not.toContain("createScan");

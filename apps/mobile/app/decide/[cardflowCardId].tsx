@@ -1,4 +1,5 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
+import { runQueueableWrite } from "@/lib/write-queue";
 import {
   computeMaxBuy,
   CONDITION_LABELS,
@@ -42,12 +43,9 @@ import { LabeledFigure } from "@/components/ui/labeled-figure";
 import { PrimaryButton } from "@/components/ui/primary-button";
 import { WatchlistSheet } from "@/components/ui/watchlist-sheet";
 import {
-  convertWatchlistToPurchased,
   getCard,
   listUserPriceSnapshots,
-  savePurchased,
   saveUserPriceSnapshot,
-  saveWatchlist,
 } from "@/lib/api";
 import { priceQueryOptions } from "@/lib/price-queries";
 import { loadMaxBuyPreferences, peekMaxBuyPreferences } from "@/lib/preferences";
@@ -252,7 +250,7 @@ export default function DecideScreen() {
     setIsSaving(true);
     setError(null);
     try {
-      await savePurchased({
+      await runQueueableWrite("save_purchased", {
         confirmationId: confirmationIdValue,
         purchasePrice: marketPrice,
         purchasedAt: new Date().toISOString(),
@@ -291,13 +289,15 @@ export default function DecideScreen() {
     setIsSaving(true);
     setError(null);
     try {
-      const saved = await convertWatchlistToPurchased(watchlistItemId);
+      const saved = await runQueueableWrite("watchlist_to_purchased", {
+        inventoryItemId: watchlistItemId,
+      });
       await playPurchasedSuccessHaptic();
       router.replace({
         pathname: "/(tabs)/collection",
         params: {
           segment: "purchased",
-          purchasedUndoId: saved.item.inventoryItemId,
+          purchasedUndoId: saved.queued ? saved.queuedId : saved.result.item.inventoryItemId,
         },
       });
     } catch (caught) {
@@ -312,7 +312,7 @@ export default function DecideScreen() {
     setIsSaving(true);
     setError(null);
     try {
-      await saveWatchlist({
+      await runQueueableWrite("save_watchlist", {
         confirmationId: confirmationIdValue,
         selectedVariant: variantId,
         referencePriceAmount: parsedReference(reference),

@@ -119,7 +119,7 @@ describe("Task 9 livestream device QA", () => {
     expect(overlay).toContain("Purchased");
     expect(overlay).toContain("shouldAcceptLiveHudPurchaseTap");
     expect(overlay).not.toContain("I bought this");
-    expect(scanTab).toContain("saveLivestreamPurchase");
+    expect(scanTab).toMatch(/saveLivestreamPurchase\(|runQueueableWrite\("livestream_purchase"/);
     expect(scanTab).not.toContain("PurchaseSheet");
     expect(client).toContain("/v1/livestream/identify");
     expect(client).not.toMatch(/saveInventoryItem|addPurchased/);

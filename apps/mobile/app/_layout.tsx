@@ -2,6 +2,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { type ErrorBoundaryProps, Link, Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useEffect, useState } from "react";
+import { startWriteQueue } from "@/lib/write-queue";
 import { StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { PrimaryButton } from "@/components/ui/primary-button";
@@ -37,6 +38,8 @@ export default function RootLayout() {
       .catch(() => undefined)
       .finally(() => setReady(true));
   }, []);
+
+  useEffect(() => (ready ? startWriteQueue() : undefined), [ready]);
 
   if (!ready) return null;
 
