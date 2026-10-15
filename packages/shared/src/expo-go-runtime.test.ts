@@ -74,8 +74,9 @@ describe("Expo Go runtime guards", () => {
 
     expect(finder).toContain('from "expo-camera"');
     expect(finder).toContain("CameraView");
-    expect(finder).not.toMatch(/cardflow-live-video|CardFlowLiveVideo/);
-    expect(finder).not.toMatch(/from\s+["']expo-sensors["']/);
+    expect(finder).not.toMatch(/cardflow-live-video|CardFlowLiveVideo|expo-sensors/);
+    // The tilt guide reaches expo-sensors only through the feature-detected loader.
+    expect(finder).toContain('from "@/lib/device-level"');
     expect(flow).toContain("GradeCardFinder");
     expect(flow).not.toMatch(/cardflow-live-video|expo-sensors|@capacitor|@capgo/);
     expect(photos).toContain('from "expo-image-picker"');
@@ -107,15 +108,12 @@ describe("Expo Go runtime guards", () => {
       .concat(walkSourceFiles(path.join(mobileRoot, "components")))
       .concat(walkSourceFiles(path.join(mobileRoot, "lib")));
     expect(sources.length).toBeGreaterThan(20);
-    const deviceLevelPath = path.join(mobileRoot, "lib/device-level.ts");
-    if (existsSync(deviceLevelPath)) {
-      const deviceLevel = readRepoFile("apps/mobile/lib/device-level.ts");
-      expect(finder).toContain('from "@/lib/device-level"');
-      expect(deviceLevel).not.toMatch(/from\s+["']expo-sensors["']\s*;/);
-      expect(deviceLevel).toMatch(
-        /requireOptionalNativeModule\("ExponentDeviceMotion"\)[\s\S]*require\("expo-sensors"\)/,
-      );
-    }
+    const deviceLevel = readRepoFile("apps/mobile/lib/device-level.ts");
+    expect(finder).toContain('from "@/lib/device-level"');
+    expect(deviceLevel).not.toMatch(/from\s+["']expo-sensors["']\s*;/);
+    expect(deviceLevel).toMatch(
+      /requireOptionalNativeModule\("ExponentDeviceMotion"\)[\s\S]*require\("expo-sensors"\)/,
+    );
     for (const file of sources) {
       if (file.endsWith(path.join("lib", "device-level.ts"))) continue;
       const source = readFileSync(file, "utf8");
