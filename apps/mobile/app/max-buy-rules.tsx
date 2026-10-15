@@ -3,6 +3,8 @@ import {
   LOCKED_DISPLAY_CURRENCY,
   MAX_BUY_FEES_BUFFER_INVALID_MESSAGE,
   MAX_BUY_MARGIN_INVALID_MESSAGE,
+  MAX_BUY_MARGIN_MAX_PCT,
+  MAX_BUY_FEES_MAX_PCT,
   MAX_BUY_RESET_NOT_SAVED_NOTICE,
   maxBuyPreferencesToFormValues,
   parseMaxBuyRulesForm,
@@ -125,6 +127,7 @@ export default function MaxBuyRulesScreen() {
           </Text>
         ) : null}
         <RuleRow
+          helper={`0–${MAX_BUY_MARGIN_MAX_PCT}%, default 20%`}
           label="Target margin"
           onChangeText={setTargetMargin}
           suffix="%"
@@ -137,6 +140,7 @@ export default function MaxBuyRulesScreen() {
         ) : null}
         <RuleRow
           accessibilityLabel="Fees buffer"
+          helper={`0–${MAX_BUY_FEES_MAX_PCT}%, default 13%`}
           label="Fees buffer"
           onChangeText={setFeesBuffer}
           suffix="%"

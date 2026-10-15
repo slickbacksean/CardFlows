@@ -39,6 +39,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { HowThisWorksSheet } from "@/components/ui/how-this-works-sheet";
 import { playPurchasedSuccessHaptic } from "@/components/ui/hud-bubble";
 import { LabeledFigure } from "@/components/ui/labeled-figure";
+import { MaxBuyBreakdownToggle } from "@/components/ui/max-buy-breakdown";
 import { PrimaryButton } from "@/components/ui/primary-button";
 import { WatchlistSheet } from "@/components/ui/watchlist-sheet";
 import {
@@ -480,6 +481,10 @@ export default function DecideScreen() {
                       <Text style={styles.marketPrice}>${maxBuy.maxBuyAmount}</Text>
                       <Text style={styles.body}>{maxBuyMeta}</Text>
                       <Text style={styles.body}>{maxBuy.disclaimer}</Text>
+                      <MaxBuyBreakdownToggle
+                        computation={maxBuy}
+                        onEditRule={() => router.push("/max-buy-rules")}
+                      />
                     </>
                   ) : (
                     <Text style={styles.body}>{MAX_BUY_ENTER_REFERENCE_COPY}</Text>
