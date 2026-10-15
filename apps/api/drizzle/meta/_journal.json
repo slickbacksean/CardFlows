@@ -71,6 +71,13 @@
       "when": 1790400000000,
       "tag": "0009_grade_photo_objects",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1790572800000,
+      "tag": "0011_user_price_snapshots",
+      "breakpoints": true
     }
   ]
 }

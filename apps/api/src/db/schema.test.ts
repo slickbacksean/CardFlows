@@ -71,6 +71,7 @@ describe("MVP CRM schema", () => {
       "grade_quota_usage",
       "portfolio_value_snapshots",
       "user_preferences",
+      "user_price_snapshots",
       "vendor_quota_usage",
     ]);
   });

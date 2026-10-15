@@ -797,3 +797,4 @@ export type {
 } from "./grade-flow-resilience";
 export * from "./contract";
 export * from "./price-freshness";
+export * from "./user-price";

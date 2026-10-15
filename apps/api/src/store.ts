@@ -1,3 +1,4 @@
+import type { UserPriceSnapshot } from "@cardflow/shared";
 import {
   catalogFingerprint,
   cachedCatalogCardMatches,
@@ -734,11 +735,32 @@ export interface StorePort {
   consumeGradeQuota: (userId: string, input: GradeQuotaConsumeInput) => GradeQuotaConsumeResult;
   getVendorQuotaUsage: (provider: string, monthKey: string) => number;
   consumeVendorQuota: (provider: string, monthKey: string, cap: number) => boolean;
+  /** P1-12 your own reference prices. */
+  saveUserPriceSnapshot: (userId: string, snapshot: UserPriceSnapshot) => UserPriceSnapshot;
+  listUserPriceSnapshots: (userId: string, tcgdexId: string, variant?: string | null) => UserPriceSnapshot[];
+  deleteUserPriceSnapshots: (userId: string) => number;
 }
 
 const DEFAULT_GRADE_ACCOUNT: GradeAccountRecord = { plan: "free", extraCredits: 0 };
 
+/** Keep the last N of your prices per card; older ones add nothing to Max Buy. */
+export const USER_PRICE_SNAPSHOTS_PER_CARD = 20;
+
+export function filterUserPriceSnapshots(
+  rows: readonly (UserPriceSnapshot & { userId: string })[],
+  userId: string,
+  tcgdexId: string,
+  variant?: string | null,
+): UserPriceSnapshot[] {
+  return rows
+    .filter((r) => r.userId === userId && r.tcgdexId === tcgdexId && (variant === undefined || (r.variant ?? null) === (variant ?? null)))
+    .map(({ userId: _u, ...s }) => s)
+    .sort((a, b) => b.enteredAt.localeCompare(a.enteredAt))
+    .slice(0, USER_PRICE_SNAPSHOTS_PER_CARD);
+}
+
 export function createMemoryStore(): StorePort {
+  const userPrices: (UserPriceSnapshot & { userId: string })[] = [];
   const gradeAccounts = new Map<string, GradeAccountRecord>();
   const gradeUsage = new Map<string, number>();
   const vendorUsage = new Map<string, number>();
@@ -860,5 +882,17 @@ export function createMemoryStore(): StorePort {
     consumeGradeQuota,
     getVendorQuotaUsage,
     consumeVendorQuota,
+    saveUserPriceSnapshot(userId: string, snapshot: UserPriceSnapshot) {
+      userPrices.push({ ...snapshot, userId });
+      return { ...snapshot };
+    },
+    listUserPriceSnapshots(userId: string, tcgdexId: string, variant?: string | null) {
+      return filterUserPriceSnapshots(userPrices, userId, tcgdexId, variant);
+    },
+    deleteUserPriceSnapshots(userId: string) {
+      let n = 0;
+      for (let i = userPrices.length - 1; i >= 0; i -= 1) if (userPrices[i]!.userId === userId) { userPrices.splice(i, 1); n += 1; }
+      return n;
+    },
   };
 }

@@ -1,3 +1,4 @@
+import { parseUserPriceAmount } from "@cardflow/shared";
 import { createHash } from "node:crypto";
 import {
   canMarkReadyForReview,
@@ -364,6 +365,9 @@ export function createApp(
   options: CreateAppOptions = {},
 ) {
   const {
+    saveUserPriceSnapshot,
+    listUserPriceSnapshots,
+    deleteUserPriceSnapshots,
     confirmScan,
     createSession,
     findCachedCanonicals,
@@ -887,6 +891,33 @@ export function createApp(
     }
   });
 
+  /** P1-12: your own reference prices. Works with pricing off. */
+  app.get("/v1/pricing/cards/:tcgdexId/yours", (c) => {
+    const tcgdexId = c.req.param("tcgdexId").trim();
+    if (!tcgdexId) return c.json({ ok: false, error: "tcgdexId is required" }, 400);
+    const variantRaw = c.req.query("variant");
+    const variant = variantRaw === undefined ? undefined : variantRaw.trim() || null;
+    return c.json({ ok: true, snapshots: listUserPriceSnapshots(c.get("userId"), tcgdexId, variant) });
+  });
+
+  app.post("/v1/pricing/cards/:tcgdexId/yours", async (c) => {
+    const tcgdexId = c.req.param("tcgdexId").trim();
+    if (!tcgdexId) return c.json({ ok: false, error: "tcgdexId is required" }, 400);
+    const body = await c.req.json<{ amount?: unknown; variant?: string | null }>().catch(() => ({}) as { amount?: unknown; variant?: string | null });
+    const amount = parseUserPriceAmount(body.amount);
+    if (!amount) return c.json({ ok: false, error: INVALID_DOLLAR_AMOUNT }, 400);
+    const snapshot = saveUserPriceSnapshot(c.get("userId"), {
+      snapshotId: crypto.randomUUID(),
+      tcgdexId,
+      variant: typeof body.variant === "string" && body.variant.trim() ? body.variant.trim() : null,
+      amount,
+      currency: "USD",
+      source: "you",
+      enteredAt: new Date().toISOString(),
+    });
+    return c.json({ ok: true, snapshot }, 201);
+  });
+
   app.get("/v1/pricing/cards/:tcgdexId", async (c) => {
     const tcgdexId = c.req.param("tcgdexId").trim();
     const estimate = await safePriceEstimate(
@@ -1241,6 +1272,7 @@ export function createApp(
   app.post("/v1/account/delete", (c) => {
     const userId = c.get("userId");
     const photos = deleteUserPhotos(userId);
+    deleteUserPriceSnapshots(userId);
     const staged = gradeUploads.releaseUser(userId);
     return c.json({
       ok: true,

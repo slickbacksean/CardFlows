@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import {
   check,
+  index,
   integer,
   primaryKey,
   real,
@@ -343,6 +344,21 @@ export const vendorQuotaUsage = sqliteTable(
   (table) => [primaryKey({ columns: [table.provider, table.monthKey] })],
 );
 
+/** P1-12: reference prices the user typed (source "you"). */
+export const userPriceSnapshots = sqliteTable(
+  "user_price_snapshots",
+  {
+    snapshotId: text("snapshot_id").primaryKey(),
+    userId: text("user_id").notNull(),
+    tcgdexId: text("tcgdex_id").notNull(),
+    variant: text("variant"),
+    amountCents: integer("amount_cents").notNull(),
+    currency: text("currency").notNull().default("USD"),
+    enteredAt: text("entered_at").notNull(),
+  },
+  (table) => [index("user_price_snapshots_card_idx").on(table.userId, table.tcgdexId, table.enteredAt)],
+);
+
 export const schema = {
   cardflowCards,
   cardExternalIds,
@@ -362,4 +378,5 @@ export const schema = {
   gradeAccounts,
   gradeQuotaUsage,
   vendorQuotaUsage,
+  userPriceSnapshots,
 };
