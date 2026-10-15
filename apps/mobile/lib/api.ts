@@ -347,6 +347,8 @@ export async function createScan(input: {
   scenario?: RecognitionScenario;
   imageUri?: string | null;
   imageMimeType?: string | null;
+  /** P1-10: replayed offline scans reuse one key so the server makes one scan. */
+  idempotencyKey?: string;
 }) {
   if (input.imageUri) {
     const mime =
@@ -357,7 +359,7 @@ export async function createScan(input: {
     form.append("captureMethod", input.captureMethod);
     if (input.scenario) form.append("scenario", input.scenario);
     await appendScanStill(form, input.imageUri, mime);
-    return callApi(apiContract.createScan, { form });
+    return callApi(apiContract.createScan, { form, idempotencyKey: input.idempotencyKey });
   }
   return callApi(apiContract.createScan, {
     body: {

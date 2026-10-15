@@ -6,6 +6,7 @@ import {
   CAMERA_PREPROMPT_TITLE,
   PHOTO_PICKER_UNAVAILABLE_COPY,
 } from "@cardflow/shared";
+import { isOfflineScanError, queueOfflineScan } from "@/lib/scan-queue";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { useRouter } from "expo-router";
@@ -84,12 +85,26 @@ export default function CaptureScreen() {
       uploadUri = prepared.still.uri;
       uploadMime = prepared.still.mimeType;
     }
-    const result = await createScan({
-      captureMethod,
-      scenario: uploadUri || !__DEV__ ? undefined : getMockScenario(),
-      imageUri: uploadUri,
-      imageMimeType: uploadMime,
-    });
+    let result: Awaited<ReturnType<typeof createScan>>;
+    try {
+      result = await createScan({
+        captureMethod,
+        scenario: uploadUri || !__DEV__ ? undefined : getMockScenario(),
+        imageUri: uploadUri,
+        imageMimeType: uploadMime,
+      });
+    } catch (caught) {
+      // P1-10: offline → keep the still and match it when the phone is back online.
+      if (
+        uploadUri &&
+        isOfflineScanError(caught) &&
+        queueOfflineScan({ imageUri: uploadUri, mimeType: uploadMime ?? "image/jpeg", captureMethod })
+      ) {
+        router.replace("/(tabs)/collection");
+        return;
+      }
+      throw caught;
+    }
     if (uploadUri) rememberScanCapture(result.scan.scanId, uploadUri);
     router.push(`/scan/${result.scan.scanId}`);
   }
