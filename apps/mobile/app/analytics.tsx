@@ -2,7 +2,7 @@ import { PRODUCT_ANALYTICS_LABEL, PRODUCT_ANALYTICS_NOTE } from "@cardflow/share
 import { useEffect, useState } from "react";
 import { ScrollView, StyleSheet, Switch, Text, View } from "react-native";
 import { PreferencesScreenHeader } from "@/components/ui/preferences-screen-header";
-import { loadAnalyticsPreference, setAnalyticsEnabled } from "@/lib/product-events";
+import { loadAnalyticsPreference, recentProductEvents, setAnalyticsEnabled } from "@/lib/product-events";
 import { colors, space } from "@/lib/theme";
 
 /** P1-19: opt-in for privacy-safe usage events. Off by default; turning it off stops all events. */
@@ -28,6 +28,9 @@ export default function AnalyticsScreen() {
           />
         </View>
         <Text style={styles.body}>{PRODUCT_ANALYTICS_NOTE}</Text>
+        {__DEV__ ? (
+          <Text style={styles.body}>Dev only: {recentProductEvents().length} events recorded on this phone.</Text>
+        ) : null}
       </ScrollView>
     </View>
   );
