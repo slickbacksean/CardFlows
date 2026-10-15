@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { STATUS_BANNER_COPY, statusBanners } from "./status-banner";
+import { STATUS_BANNER_COPY, statusBanners, statusCopyViolations } from "./status-banner";
 
 describe("P1-21 status banners", () => {
   it("shows pricing delayed when the pricing flag is off and clears when healthy", () => {
@@ -19,5 +19,15 @@ describe("P1-21 status banners", () => {
     const banner = readFileSync(resolve(__dirname, "../../../apps/mobile/components/ui/status-banner.tsx"), "utf8");
     expect(banner).toContain("getStatus");
     expect(banner).toContain("STATUS_POLL_MS");
+  });
+
+  it("drops an operator note that breaks the copy rule", () => {
+    const base = { pricingProvider: "pokecollector", gradeEstimate: "cardgrading", gradeEngineOk: true } as const;
+    for (const bad of ["New AI grading is live", "PSA 10 odds look great", "BGS and CGC pricing back", "Guaranteed profit on every flip", "Earn $50 per card"]) {
+      expect(statusCopyViolations(bad).length).toBeGreaterThan(0);
+      expect(statusBanners({ ...base, opsMessage: bad })).toEqual([]);
+    }
+    expect(statusBanners({ ...base, opsMessage: "Maintenance at 9 PM PT" })).toHaveLength(1);
+    for (const copy of Object.values(STATUS_BANNER_COPY)) expect(statusCopyViolations(copy)).toEqual([]);
   });
 });

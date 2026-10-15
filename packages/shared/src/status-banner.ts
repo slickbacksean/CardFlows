@@ -17,6 +17,20 @@ export const STATUS_BANNER_COPY: Record<Exclude<StatusBannerId, "ops_notice">, s
   identify_degraded: "Card matching is slower right now. You can search by name or number.",
 };
 
+/**
+ * Copy rule for operator notes (and our own banners): no "AI", no grading-company names,
+ * no profit promises. A note that breaks the rule is dropped, never shown.
+ */
+export function statusCopyViolations(copy: string): string[] {
+  const out: string[] = [];
+  if (/\bA\.?I\b\.?|artificial intelligence/i.test(copy)) out.push("ai_claim");
+  if (/\b(PSA|BGS|CGC|Beckett|SGC)\b/i.test(copy)) out.push("grading_company");
+  if (/\b(guarantee[ds]?|profits?|risk[- ]free|sure thing|you will (make|earn))\b/i.test(copy) || /\b(make|earn) \$\d/i.test(copy)) {
+    out.push("profit_promise");
+  }
+  return out;
+}
+
 export const STATUS_POLL_MS = 60_000;
 
 export interface StatusInputs {
@@ -44,6 +58,6 @@ export function statusBanners(input: StatusInputs): StatusBanner[] {
     out.push({ id: "identify_degraded", message: STATUS_BANNER_COPY.identify_degraded, severity: "info" });
   }
   const ops = input.opsMessage?.trim();
-  if (ops) out.push({ id: "ops_notice", message: ops.slice(0, 140), severity: "info" });
+  if (ops && statusCopyViolations(ops).length === 0) out.push({ id: "ops_notice", message: ops.slice(0, 140), severity: "info" });
   return out;
 }

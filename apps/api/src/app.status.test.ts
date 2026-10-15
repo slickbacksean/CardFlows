@@ -22,3 +22,20 @@ describe("P1-21 GET /v1/status", () => {
     expect(await ids()).not.toContain("pregrade_unavailable");
   });
 });
+
+describe("P1-21 ops_notice copy rule on the server", () => {
+  it("never serves an operator note naming a grader, AI, or promising profit", async () => {
+    const prev = process.env.CARD_FLOW_STATUS_MESSAGE;
+    try {
+      process.env.CARD_FLOW_STATUS_MESSAGE = "AI says PSA 10 — guaranteed profit";
+      const bad = (await (await createApp(undefined, { statusCacheMs: 0 }).request("/v1/status")).json()) as { banners: Array<{ id: string }> };
+      expect(bad.banners.map((b) => b.id)).not.toContain("ops_notice");
+      process.env.CARD_FLOW_STATUS_MESSAGE = "Maintenance at 9 PM PT";
+      const ok = (await (await createApp(undefined, { statusCacheMs: 0 }).request("/v1/status")).json()) as { banners: Array<{ id: string; message: string }> };
+      expect(ok.banners.find((b) => b.id === "ops_notice")?.message).toBe("Maintenance at 9 PM PT");
+    } finally {
+      if (prev === undefined) delete process.env.CARD_FLOW_STATUS_MESSAGE;
+      else process.env.CARD_FLOW_STATUS_MESSAGE = prev;
+    }
+  });
+});
