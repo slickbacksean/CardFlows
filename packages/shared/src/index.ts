@@ -811,6 +811,7 @@ export * from "./catalog-snapshot";
 export * from "./scan-correction";
 export * from "./confirm-log";
 export * from "./mapping-metrics";
+export * from "./reseller-pnl";
 export * from "./contract";
 export * from "./write-queue";
 export * from "./price-freshness";

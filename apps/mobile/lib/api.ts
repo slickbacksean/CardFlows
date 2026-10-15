@@ -801,6 +801,22 @@ export function createSession(inviteCode: string) {
   return callApi(apiContract.createSession, { body: { inviteCode } });
 }
 
+/** P2-03 sale records (server, per user). */
+export function listSales() {
+  return callApi(apiContract.listSales);
+}
+
+export function saveSaleRemote(
+  inventoryItemId: string,
+  body: { price: string; fees?: string | null; soldAt?: string; onlyIfMissing?: boolean },
+) {
+  return callApi(apiContract.saveSale, { params: { inventoryItemId }, body });
+}
+
+export function deleteSaleRemote(inventoryItemId: string) {
+  return callApi(apiContract.deleteSale, { params: { inventoryItemId } });
+}
+
 export function getPreferences() {
   return callApi(apiContract.getPreferences);
 }

@@ -1,5 +1,6 @@
 import type { ConfirmEvent } from "@cardflow/shared";
 import type { UserPriceSnapshot } from "@cardflow/shared";
+import { createMemorySalesStore, type SalesStore } from "./sales-store";
 import {
   catalogFingerprint,
   cachedCatalogCardMatches,
@@ -685,6 +686,8 @@ export function moveGradingSubmittedToReturned(copy: GradingReturnedCopy): void 
 
 /** Route-facing CRM port. CRM reads/writes take request-scoped userId. */
 export interface StorePort {
+  /** P2-03 sale records. */
+  sales: SalesStore;
   createSession: typeof createSession;
   getSessionByToken: typeof getSessionByToken;
   getPokecollectorUserMapping: typeof getPokecollectorUserMapping;
@@ -871,6 +874,7 @@ export function createMemoryStore(): StorePort {
   }
 
   return {
+    sales: createMemorySalesStore(),
     createSession,
     getSessionByToken,
     getPokecollectorUserMapping,

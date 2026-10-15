@@ -382,6 +382,20 @@ export const userPriceSnapshots = sqliteTable(
   (table) => [index("user_price_snapshots_card_idx").on(table.userId, table.tcgdexId, table.enteredAt)],
 );
 
+/** P2-03: per-user sale records for the P&L. Cents; fees optional. */
+export const userCardSales = sqliteTable(
+  "user_card_sales",
+  {
+    userId: text("user_id").notNull(),
+    inventoryItemId: text("inventory_item_id").notNull(),
+    salePriceCents: integer("sale_price_cents").notNull(),
+    saleFeesCents: integer("sale_fees_cents"),
+    saleAt: text("sale_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.userId, table.inventoryItemId] })],
+);
+
 export const schema = {
   cardflowCards,
   cardExternalIds,
@@ -403,4 +417,5 @@ export const schema = {
   vendorQuotaUsage,
   scanConfirmEvents,
   userPriceSnapshots,
+  userCardSales,
 };
