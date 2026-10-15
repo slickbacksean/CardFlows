@@ -377,7 +377,7 @@ export function rejectScan(scanId: string) {
 
 export function confirmScan(
   scanId: string,
-  input: { tcgdexId: string; selectedVariant?: string | null },
+  input: { tcgdexId: string; selectedVariant?: string | null; via?: "manual_search" },
 ) {
   return callApi(apiContract.confirmScan, { params: { scanId }, body: input });
 }

@@ -56,6 +56,7 @@ export {
   CONFIRM_FAIL_SOFT_TITLE,
   CONFIRM_FRAMES,
   CONFIRM_SEARCH_FRAMES,
+  CONFIRM_NOT_THIS_CARD_LABEL,
   CONFIRM_SEARCH_MANUALLY_LABEL,
   CONFIRM_TIPS,
   HOW_THIS_WORKS_CLOSE_LABEL,
@@ -797,6 +798,7 @@ export type {
 } from "./grade-flow-resilience";
 export * from "./set-name-map";
 export * from "./catalog-snapshot";
+export * from "./scan-correction";
 export * from "./contract";
 export * from "./write-queue";
 export * from "./price-freshness";
