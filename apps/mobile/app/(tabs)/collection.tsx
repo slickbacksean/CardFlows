@@ -1,4 +1,6 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
+import { SyncPending } from "@/components/ui/sync-pending";
+import { cancelQueuedWrite, isQueuedId, runQueueableWrite } from "@/lib/write-queue";
 import {
   collectionTileValue,
   DETAILS_NEEDED_LABEL,
@@ -37,7 +39,6 @@ import {
   getPortfolioHistory,
   type PortfolioHistoryPoint,
   completePurchasedDetails,
-  convertWatchlistToPurchased,
   listInventory,
   openOrCreateDraft,
   undoPurchased,
@@ -269,12 +270,14 @@ export default function CollectionScreen() {
     setSavingWatchlistId(item.inventoryItemId);
     setActionError(null);
     try {
-      const saved = await convertWatchlistToPurchased(item.inventoryItemId);
+      const saved = await runQueueableWrite("watchlist_to_purchased", {
+        inventoryItemId: item.inventoryItemId,
+      });
       await playPurchasedSuccessHaptic();
       setSegment("purchased");
       router.setParams({
         segment: "purchased",
-        purchasedUndoId: saved.item.inventoryItemId,
+        purchasedUndoId: saved.queued ? saved.queuedId : saved.result.item.inventoryItemId,
       });
       await refreshInventory();
     } catch (caught) {
@@ -290,7 +293,8 @@ export default function CollectionScreen() {
     setUndoing(true);
     setActionError(null);
     try {
-      await undoPurchased(toastItemId);
+      if (isQueuedId(toastItemId)) cancelQueuedWrite(toastItemId);
+      else await undoPurchased(toastItemId);
       router.setParams({ purchasedUndoId: undefined });
       AccessibilityInfo.announceForAccessibility("Purchased undone");
       await refreshInventory();
@@ -396,6 +400,7 @@ export default function CollectionScreen() {
               today={history.today}
             />
           ) : null}
+          <SyncPending />
           {actionError ? <Text style={styles.error}>{actionError}</Text> : null}
           {loadState === "loading" && items.length === 0 ? (
             <ActivityIndicator
