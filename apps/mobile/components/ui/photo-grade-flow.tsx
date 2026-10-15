@@ -559,7 +559,13 @@ function RetakeReasons({ reasons, side }: { reasons: string[]; side: Side }) {
 
 function PipelineLink({ onPress }: { onPress: () => void }) {
   return (
-    <Pressable accessibilityRole="button" onPress={onPress} style={styles.linkHit}>
+    <Pressable
+      accessibilityLabel="Prepare, Submitted, Returned"
+      accessibilityRole="button"
+      hitSlop={8}
+      onPress={onPress}
+      style={styles.linkHit}
+    >
       <Text style={styles.link}>Prepare, Submitted, Returned</Text>
     </Pressable>
   );

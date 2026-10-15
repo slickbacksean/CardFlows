@@ -269,6 +269,7 @@ export default function CaptureScreen() {
         <View style={styles.devPanel}>
           <DevScenarioPanel />
           <Pressable
+            accessibilityLabel={devForceDenied ? "Developer: back to camera" : "Developer: preview camera access off"}
             accessibilityRole="button"
             onPress={() => {
               setDevForceDenied((current) => !current);

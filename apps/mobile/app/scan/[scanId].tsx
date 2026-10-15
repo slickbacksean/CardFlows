@@ -316,6 +316,7 @@ export default function ScanScreen() {
             </View>
           ) : (
             <Pressable
+              accessibilityLabel={CONFIRM_NOT_THIS_CARD_LABEL}
               accessibilityRole="button"
               hitSlop={8}
               onPress={() => setSearchOpen(true)}
@@ -734,8 +735,11 @@ interface GhostButtonProps {
 function GhostButton({ label, onPress, disabled }: GhostButtonProps) {
   return (
     <Pressable
+      accessibilityLabel={label}
       accessibilityRole="button"
+      accessibilityState={{ disabled: Boolean(disabled) }}
       disabled={disabled}
+      hitSlop={8}
       onPress={onPress}
       style={[styles.ghost, disabled && styles.disabled]}
     >
