@@ -266,7 +266,12 @@ export default function GradingScreen() {
   return (
     <View style={styles.flex}>
       <View style={styles.toolbar}>
-        <Pressable accessibilityRole="button" onPress={() => setPane("photo")}>
+        <Pressable
+          accessibilityLabel="Photo grade"
+          accessibilityRole="button"
+          hitSlop={10}
+          onPress={() => setPane("photo")}
+        >
           <Text style={styles.photoLink}>Photo grade</Text>
         </Pressable>
         <View style={styles.titleRow}>
@@ -430,12 +435,13 @@ interface SegmentButtonProps {
 function SegmentButton({ label, selected, onPress }: SegmentButtonProps) {
   return (
     <Pressable
+      accessibilityLabel={label}
       accessibilityRole="tab"
       accessibilityState={{ selected }}
       onPress={onPress}
       style={[styles.segment, selected && styles.segmentSelected]}
     >
-      <Text numberOfLines={1} style={[styles.segmentLabel, selected && styles.segmentLabelSelected]}>
+      <Text style={[styles.segmentLabel, selected && styles.segmentLabelSelected]}>
         {label}
       </Text>
     </Pressable>
@@ -686,6 +692,8 @@ const styles = StyleSheet.create({
   segment: {
     flex: 1,
     alignItems: "center",
+    justifyContent: "center",
+    minHeight: 44,
     borderRadius: radii.pill,
     paddingVertical: 8,
   },

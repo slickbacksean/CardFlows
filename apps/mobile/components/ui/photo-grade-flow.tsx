@@ -1,5 +1,6 @@
 import {
   GRADE_FLOW_RETAKE_HEADING,
+  PHONE_CHECK_COPY,
   GRADE_FLOW_RETRY_LABEL,
   GRADE_FLOW_UNAVAILABLE_BODY,
   GRADE_QUOTA_COPY,
@@ -13,6 +14,7 @@ import {
 import { Image } from "expo-image";
 import { useFocusEffect } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { checkGradeStillOnPhone } from "@/lib/phone-photo-check";
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { GradeCardFinder } from "@/components/ui/grade-card-finder";
 import { PrimaryButton } from "@/components/ui/primary-button";
@@ -90,6 +92,8 @@ export function PhotoGradeFlow({ onOpenPipeline }: PhotoGradeFlowProps) {
     freezeUri,
   } = state;
   const [quota, setQuota] = useState<GradeQuotaSnapshot | null>(null);
+  /** P1-16: a photo the phone flagged; "Check anyway" sends it to the server. */
+  const [phoneFlag, setPhoneFlag] = useState<{ side: Side; still: SideStill } | null>(null);
   const [quotaNotice, setQuotaNotice] = useState<string | null>(null);
 
   const refreshQuota = useCallback(() => {
@@ -169,7 +173,7 @@ export function PhotoGradeFlow({ onOpenPipeline }: PhotoGradeFlowProps) {
       freezeUri: fromFinder ? still.uri : gradeFlowSession.getState().freezeUri,
       step: fromFinder ? gradeFlowSession.getState().step : "crop",
     });
-    await runDetect(nextSide, still);
+    await runDetect(nextSide, still, { fromGuide: fromFinder });
     if (fromFinder) patch({ freezeUri: null, step: "crop" });
   }
 
@@ -211,8 +215,13 @@ export function PhotoGradeFlow({ onOpenPipeline }: PhotoGradeFlowProps) {
     await ingestStill(nextSide, picked.still, false);
   }
 
-  async function runDetect(nextSide: Side, still: SideStill) {
+  async function runDetect(
+    nextSide: Side,
+    still: SideStill,
+    phone: { fromGuide: boolean; skip?: boolean } = { fromGuide: false },
+  ) {
     const id = ++requestId.current;
+    setPhoneFlag(null);
     patch({
       notice: null,
       warnings: [],
@@ -220,6 +229,16 @@ export function PhotoGradeFlow({ onOpenPipeline }: PhotoGradeFlowProps) {
       checking: true,
       retakeReasons: [],
     });
+    if (!phone.skip) {
+      // P1-16: catch clearly bad photos before upload. The server still decides.
+      const local = await checkGradeStillOnPhone(still.uri, { fromGuide: phone.fromGuide });
+      if (id !== requestId.current) return;
+      if (local && !local.ok) {
+        setPhoneFlag({ side: nextSide, still });
+        patch({ detected: false, checking: false, retakeReasons: local.reasons, notice: null });
+        return;
+      }
+    }
     try {
       const found = await detectGradePhoto(still.uri, still.mimeType, nextSide);
       if (id !== requestId.current) return;
@@ -398,6 +417,17 @@ export function PhotoGradeFlow({ onOpenPipeline }: PhotoGradeFlowProps) {
               : "Keep the whole card in frame."}
           </Text>
           <RetakeReasons reasons={retakeReasons} side={side} />
+          {phoneFlag && phoneFlag.side === side && retakeReasons.length > 0 ? (
+            <>
+              <Text style={styles.caption}>{PHONE_CHECK_COPY.phoneFlagNote}</Text>
+              <PrimaryButton
+                disabled={scoring}
+                label={PHONE_CHECK_COPY.checkAnyway}
+                onPress={() => void runDetect(phoneFlag.side, phoneFlag.still, { fromGuide: false, skip: true })}
+                tone="muted"
+              />
+            </>
+          ) : null}
           {notice ? <Text style={styles.error}>{notice}</Text> : null}
           <PrimaryButton
             disabled={scoring}
@@ -450,6 +480,17 @@ export function PhotoGradeFlow({ onOpenPipeline }: PhotoGradeFlowProps) {
             </Text>
           ) : null}
           <RetakeReasons reasons={retakeReasons} side={side} />
+          {phoneFlag && phoneFlag.side === side && retakeReasons.length > 0 ? (
+            <>
+              <Text style={styles.caption}>{PHONE_CHECK_COPY.phoneFlagNote}</Text>
+              <PrimaryButton
+                disabled={scoring}
+                label={PHONE_CHECK_COPY.checkAnyway}
+                onPress={() => void runDetect(phoneFlag.side, phoneFlag.still, { fromGuide: false, skip: true })}
+                tone="muted"
+              />
+            </>
+          ) : null}
           {!checking && notice ? <Text style={styles.error}>{notice}</Text> : null}
           {!checking && detected ? (
             <PrimaryButton disabled={scoring} label="Use this crop" onPress={confirmCrop} />
@@ -559,7 +600,13 @@ function RetakeReasons({ reasons, side }: { reasons: string[]; side: Side }) {
 
 function PipelineLink({ onPress }: { onPress: () => void }) {
   return (
-    <Pressable accessibilityRole="button" onPress={onPress} style={styles.linkHit}>
+    <Pressable
+      accessibilityLabel="Prepare, Submitted, Returned"
+      accessibilityRole="button"
+      hitSlop={8}
+      onPress={onPress}
+      style={styles.linkHit}
+    >
       <Text style={styles.link}>Prepare, Submitted, Returned</Text>
     </Pressable>
   );

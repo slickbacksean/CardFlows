@@ -1,6 +1,10 @@
 import {
   CONDITION_LABELS,
   GRADE_ESTIMATE_EMPTY_COPY,
+  GRADE_HISTORY_NOTE,
+  GRADE_HISTORY_TITLE,
+  gradeHistoryLines,
+  type GradeHistoryEntry,
   GRADE_ESTIMATE_UNAVAILABLE_COPY,
   GRADE_PHOTOS_HINT,
   GRADE_SIDES,
@@ -50,6 +54,7 @@ import {
   type PickedGradeStill,
 } from "@/lib/grade-photos";
 import { getConfirmPictureUri } from "@/lib/scan-capture";
+import { loadGradeHistory, recordGradeHistory } from "@/lib/grade-history";
 import { PrimaryButton } from "./primary-button";
 
 export interface PrepareMovePayload {
@@ -127,6 +132,7 @@ function PrepareSheetForm({
   const hasFront = Boolean(frontUri);
 
   const photoKey = `${pickedFront?.uri ?? ""}|${pickedBack?.uri ?? ""}|${captureFrontUri ?? ""}`;
+  const [gradeHistory, setGradeHistory] = useState<GradeHistoryEntry[]>([]);
   const [photoKeySeen, setPhotoKeySeen] = useState(photoKey);
   if (photoKeySeen !== photoKey) {
     setPhotoKeySeen(photoKey);
@@ -146,7 +152,11 @@ function PrepareSheetForm({
       backMimeType: pickedBack?.mimeType,
     })
       .then((result) => {
-        if (!cancelled) setFetchedEstimate(result);
+        if (cancelled) return;
+        setFetchedEstimate(result);
+        void recordGradeHistory(itemId, result).then((next) => {
+          if (!cancelled) setGradeHistory(next);
+        });
       })
       .catch(() => {
         if (!cancelled) setFetchedEstimate(unavailableGradeEstimate());
@@ -155,6 +165,17 @@ function PrepareSheetForm({
       cancelled = true;
     };
   }, [captureFrontUri, estimate, hasFront, imageStorageRef, itemId, pickedBack, pickedFront, visible]);
+
+  useEffect(() => {
+    if (!visible || !itemId) return;
+    let cancelled = false;
+    void loadGradeHistory(itemId).then((history) => {
+      if (!cancelled) setGradeHistory(history);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [itemId, visible]);
 
   useEffect(() => {
     if (!visible || !tcgdexId) return;
@@ -197,7 +218,10 @@ function PrepareSheetForm({
       backMimeType: pickedBack?.mimeType,
       reestimate: true,
     })
-      .then((result) => setFetchedEstimate(result))
+      .then((result) => {
+        setFetchedEstimate(result);
+        void recordGradeHistory(itemId, result).then(setGradeHistory);
+      })
       .catch(() => setFetchedEstimate(unavailableGradeEstimate()));
   }
 
@@ -280,6 +304,17 @@ function PrepareSheetForm({
               <View style={styles.guidance}>
                 <Text style={styles.section}>{PREGRADE_LABEL}</Text>
                 <Text style={styles.caption}>{gradeEstimate.disclaimer}</Text>
+                {gradeHistory.length > 0 ? (
+                  <View accessibilityLabel={GRADE_HISTORY_TITLE} accessible>
+                    <Text style={styles.body}>{GRADE_HISTORY_TITLE}</Text>
+                    {gradeHistoryLines(gradeHistory).map((line, index) => (
+                      <Text key={`${index}-${line}`} style={styles.caption}>
+                        {line}
+                      </Text>
+                    ))}
+                    <Text style={styles.caption}>{GRADE_HISTORY_NOTE}</Text>
+                  </View>
+                ) : null}
                 {gradeEstimate.overall == null ? (
                   <Text style={styles.body}>
                     {gradeEstimate.display === GRADE_ESTIMATE_UNAVAILABLE_COPY
