@@ -24,7 +24,8 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { HowThisWorksSheet } from "@/components/ui/how-this-works-sheet";
 import { LabeledFigure } from "@/components/ui/labeled-figure";
 import { PrimaryButton } from "@/components/ui/primary-button";
-import { confirmScan, getScan, rejectScan, searchCatalog, type ScanRecord } from "@/lib/api";
+import { confirmScan, getScan, rejectScan, type ScanRecord } from "@/lib/api";
+import { rememberCatalogCards, searchCatalogWithSnapshot } from "@/lib/catalog-snapshot";
 import { prefetchCandidatePrices } from "@/lib/price-queries";
 import { getConfirmPictureUri } from "@/lib/scan-capture";
 import { colors, space } from "@/lib/theme";
@@ -60,6 +61,11 @@ export default function ScanScreen() {
         const data = await getScan(scanId);
         if (cancelled) return;
         setScan(data.scan);
+        void rememberCatalogCards(
+          data.scan.mapping.canonicalCard
+            ? [data.scan.mapping.canonicalCard, ...data.scan.mapping.candidates]
+            : data.scan.mapping.candidates,
+        );
         prefetchCandidatePrices(queryClient, [
           ...(data.scan.mapping.canonicalCard ? [data.scan.mapping.canonicalCard] : []),
           ...data.scan.mapping.candidates,
@@ -120,7 +126,7 @@ export default function ScanScreen() {
     setIsSearching(true);
     setError(null);
     try {
-      const result = await searchCatalog({ set: searchSet, number: searchNumber });
+      const result = await searchCatalogWithSnapshot({ set: searchSet, number: searchNumber });
       setSearchCards(result.cards);
       setSearchCached(result.cached);
       setSearchNotice(
