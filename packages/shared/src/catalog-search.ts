@@ -12,6 +12,7 @@ import {
   type TcgdexCard,
 } from "./catalog";
 import type { CardFlowCanonicalCard, CatalogError } from "./types";
+import { tcgdexSetIdForName } from "./set-name-map";
 
 export interface CatalogSearchQuery {
   set?: string | null;
@@ -143,6 +144,11 @@ async function lookupCatalogCards(
   catalog: CardCatalogProvider,
   query: ParsedCatalogSearchQuery,
 ): Promise<TcgdexCard[]> {
+  const curatedSetId = tcgdexSetIdForName(query.set);
+  if (curatedSetId && query.number) {
+    const byCurated = await catalog.getCardBySetAndLocalId(curatedSetId, query.number, query.language);
+    if (byCurated) return [byCurated];
+  }
   if (query.set && query.number) {
     const bySetId = await catalog.getCardBySetAndLocalId(query.set, query.number, query.language);
     if (bySetId) return [bySetId];
@@ -161,8 +167,8 @@ async function lookupCatalogCards(
 
   return catalog.listCards({
     language: query.language,
-    setName: query.set && !looksLikeSetId(query.set) ? query.set : null,
-    setId: query.set && looksLikeSetId(query.set) ? query.set : null,
+    setName: query.set && !curatedSetId && !looksLikeSetId(query.set) ? query.set : null,
+    setId: curatedSetId ?? (query.set && looksLikeSetId(query.set) ? query.set : null),
     localId: query.number,
     name: query.name,
   });

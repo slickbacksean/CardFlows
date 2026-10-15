@@ -13,6 +13,8 @@ export const CONFIRM_COULD_NOT_IDENTIFY_TITLE = "Could not identify";
 export const CONFIRM_AMBIGUOUS_TITLE = "Ambiguous — pick the print.";
 
 export const CONFIRM_SEARCH_MANUALLY_LABEL = "Search manually";
+/** P1-06: shown under a recognized card so a miss never strands the user. */
+export const CONFIRM_NOT_THIS_CARD_LABEL = "Not this card? Search";
 
 export const CONFIRM_FRAMES = [
   "high",

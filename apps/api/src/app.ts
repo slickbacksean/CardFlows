@@ -1,6 +1,22 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 import { routePath } from "hono/route";
 import { opsMetrics, type OpsMetrics } from "./ops-metrics";
+import { parseUserPriceAmount } from "@cardflow/shared";
+import {
+  cachedPricingProvider,
+  createRecognitionCache,
+  serverCacheEnabledFromEnv,
+} from "./server-cache";
+import {
+  computeMappingMetrics,
+  confirmEventFor,
+  mappingMetricsMarkdown,
+  weeklyWindow,
+  rerankItemsByConfirms,
+  scanCorrectionFor,
+  suggestVariants,
+  type ScanCorrection,
+} from "@cardflow/shared";
 import {
   canMarkReadyForReview,
   CatalogProviderError,
@@ -24,7 +40,6 @@ import {
   keywordChips,
   LOCKED_DISPLAY_CURRENCY,
   mapRecognitionToCatalog,
-  maxBuyPreferencesRangeError,
   parseDollarsToCents,
   INVALID_DOLLAR_AMOUNT,
   mockCardRecognitionProvider,
@@ -81,7 +96,6 @@ import {
   type HealthLivestreamIdentify,
   type LiveVideoIdentityPlatform,
   type ObbDetector,
-  type MaxBuyPreferences,
   type PhashIndex,
   type RecognitionConfidence,
   type TcgdexCard,
@@ -91,7 +105,6 @@ import {
   GRADE_QUOTA_COPY,
   calendarMonthKey,
   gradeQuotaSnapshot,
-  isGradePlan,
   monthlyLimitForPlan,
   type GradePlan,
   type GradeQuotaSnapshot,
@@ -117,7 +130,11 @@ import {
   premiumUserIdsFromEnv,
 } from "./grade-quota-env";
 import type { CardgradingEngineStatus, ConcurrencyGate } from "./cardgrading-run";
+import type { AppEnv } from "./app-env";
+import { contractMiddleware } from "./contract-middleware";
 import { corsOriginsFromEnv } from "./cors-env";
+import { registerGradeQuotaRoutes } from "./routes/grade-quota";
+import { registerPreferenceRoutes } from "./routes/preferences";
 import { REQUEST_ID_HEADER, resolveRequestId } from "./request-id";
 import { captureApiException } from "./sentry";
 import {
@@ -125,6 +142,7 @@ import {
   LIVESTREAM_IDENTIFY_BODY_MAX_BYTES,
   GRADE_ROUTE_BODY_MAX_BYTES,
 } from "./request-limits";
+import { unmappedSetNameCounts } from "./tcgdex-catalog";
 import { createMemoryStore, type InventoryItemRecord, type StorePort } from "./store";
 import {
   offPokecollectorAccounts,
@@ -172,13 +190,6 @@ import {
   portfolioRangeStartDate,
 } from "./portfolio-history";
 
-type AppEnv = {
-  Variables: {
-    userId: string;
-    identity: InvitedIdentity;
-    requestId: string;
-  };
-};
 
 /** /health never waits more than 3 s on the OpenCV probe (which itself times out at 5 s). */
 async function boundedProbe(
@@ -292,6 +303,10 @@ export interface CreateAppOptions {
   opsMetrics?: OpsMetrics;
   /** P1-17: bearer token for GET /ops/metrics; defaults to CARD_FLOW_OPS_TOKEN. */
   opsToken?: string | null;
+  /** P1-06: manual-search corrections land here (and in the log) for P1-26. */
+  scanCorrections?: ScanCorrection[];
+  /** P1-03 server caches (pricing + recognition). Defaults to CARD_FLOW_SERVER_CACHE (on). */
+  serverCache?: boolean;
   /**
    * When true, identify reads persisted stills (`image_storage_ref`).
    * JSON-only DEV chips stay on mock. Missing/oversize stills never run the model.
@@ -343,6 +358,8 @@ export interface CreateAppOptions {
   gradeQuota?: boolean | null;
   /** In-app purchase flag + stub grant. Defaults to `CARD_FLOW_IAP_*`. */
   gradeIap?: { enabled: boolean; stub: boolean };
+  /** Contract checks fail loudly (500) instead of logging. Defaults to on under Vitest. */
+  contractStrict?: boolean;
   /** Overlay: these user ids are treated as premium even if the row says free. */
   premiumUserIds?: string[];
   /** Global CardSight identify budget. Defaults to `CARD_FLOW_CARDSIGHT_MONTHLY_BUDGET`; off in tests. */
@@ -374,6 +391,14 @@ export function createApp(
   options: CreateAppOptions = {},
 ) {
   const {
+    saveConfirmEvent,
+    listConfirmEvents,
+    confirmCounts,
+    variantCounts,
+    deleteUserConfirmEvents,
+    saveUserPriceSnapshot,
+    listUserPriceSnapshots,
+    deleteUserPriceSnapshots,
     confirmScan,
     createSession,
     findCachedCanonicals,
@@ -425,7 +450,24 @@ export function createApp(
   const appApiKey = options.appApiKey === undefined ? appApiKeyFromEnv() : options.appApiKey;
   const devAutoSession = options.devAutoSession ?? resolveDevAutoSession();
   const catalog = options.catalog ?? mockTcgdexCatalogProvider;
-  const pricing = options.pricing ?? offPricingProvider;
+  const scanCorrections = options.scanCorrections ?? [];
+  const variantSuggestionsFor = (mapping: {
+    canonicalCard: CardFlowCanonicalCard | null;
+    candidates: CardFlowCanonicalCard[];
+  }) => {
+    const card = mapping.canonicalCard ?? mapping.candidates[0] ?? null;
+    if (!card) return [];
+    return suggestVariants({ variants: card.variants, pickedVariantCounts: variantCounts(card.tcgdexId) });
+  };
+  const recordScanCorrection = (correction: ScanCorrection) => {
+    scanCorrections.push(correction);
+    if (scanCorrections.length > 1000) scanCorrections.shift();
+    if (!process.env.VITEST) console.info(JSON.stringify({ event: "scan_correction", ...correction }));
+  };
+  const serverCache = options.serverCache ?? serverCacheEnabledFromEnv();
+  const basePricing = options.pricing ?? offPricingProvider;
+  const pricing = serverCache ? cachedPricingProvider(basePricing) : basePricing;
+  const recognitionCache = serverCache ? createRecognitionCache() : null;
   const pokecollectorAccounts = options.pokecollectorAccounts ?? offPokecollectorAccounts;
   const recognitionProvider = options.recognition ?? mockCardRecognitionProvider;
   const gradingProvider = options.grading ?? mockCardGradingProvider;
@@ -681,6 +723,7 @@ export function createApp(
       console.log(`${c.req.method} ${c.req.path} ${c.res.status} ${requestId}`);
     }
   });
+  app.use("*", contractMiddleware(options.contractStrict === undefined ? {} : { strict: options.contractStrict }));
   app.onError((err, c) => {
     const requestId = c.get("requestId") ?? resolveRequestId();
     c.header(REQUEST_ID_HEADER, requestId);
@@ -910,6 +953,33 @@ export function createApp(
       }
       throw error;
     }
+  });
+
+  /** P1-12: your own reference prices. Works with pricing off. */
+  app.get("/v1/pricing/cards/:tcgdexId/yours", (c) => {
+    const tcgdexId = c.req.param("tcgdexId").trim();
+    if (!tcgdexId) return c.json({ ok: false, error: "tcgdexId is required" }, 400);
+    const variantRaw = c.req.query("variant");
+    const variant = variantRaw === undefined ? undefined : variantRaw.trim() || null;
+    return c.json({ ok: true, snapshots: listUserPriceSnapshots(c.get("userId"), tcgdexId, variant) });
+  });
+
+  app.post("/v1/pricing/cards/:tcgdexId/yours", async (c) => {
+    const tcgdexId = c.req.param("tcgdexId").trim();
+    if (!tcgdexId) return c.json({ ok: false, error: "tcgdexId is required" }, 400);
+    const body = await c.req.json<{ amount?: unknown; variant?: string | null }>().catch(() => ({}) as { amount?: unknown; variant?: string | null });
+    const amount = parseUserPriceAmount(body.amount);
+    if (!amount) return c.json({ ok: false, error: INVALID_DOLLAR_AMOUNT }, 400);
+    const snapshot = saveUserPriceSnapshot(c.get("userId"), {
+      snapshotId: crypto.randomUUID(),
+      tcgdexId,
+      variant: typeof body.variant === "string" && body.variant.trim() ? body.variant.trim() : null,
+      amount,
+      currency: "USD",
+      source: "you",
+      enteredAt: new Date().toISOString(),
+    });
+    return c.json({ ok: true, snapshot }, 201);
   });
 
   app.get("/v1/pricing/cards/:tcgdexId", async (c) => {
@@ -1266,6 +1336,8 @@ export function createApp(
   app.post("/v1/account/delete", (c) => {
     const userId = c.get("userId");
     const photos = deleteUserPhotos(userId);
+    deleteUserConfirmEvents(userId);
+    deleteUserPriceSnapshots(userId);
     const staged = gradeUploads.releaseUser(userId);
     return c.json({
       ok: true,
@@ -1365,52 +1437,7 @@ export function createApp(
     });
   });
 
-  app.get("/v1/preferences", (c) =>
-    c.json({ ok: true, preferences: getPreferences(c.get("userId")) }),
-  );
-
-  app.patch("/v1/preferences", async (c) => {
-    const body = await c.req.json<Partial<MaxBuyPreferences>>();
-    const userId = c.get("userId");
-    const current = getPreferences(userId);
-    const next: MaxBuyPreferences = {
-      targetMarginPct:
-        body.targetMarginPct === undefined ? current.targetMarginPct : body.targetMarginPct,
-      feesBufferPct:
-        body.feesBufferPct === undefined ? current.feesBufferPct : body.feesBufferPct,
-      defaultCurrency: LOCKED_DISPLAY_CURRENCY,
-      conditionAdjustments:
-        body.conditionAdjustments === undefined
-          ? current.conditionAdjustments
-          : body.conditionAdjustments,
-    };
-    const rangeError = maxBuyPreferencesRangeError(next);
-    if (rangeError) {
-      return c.json({ ok: false, error: rangeError }, 400);
-    }
-    return c.json({ ok: true, preferences: setPreferences(userId, next) });
-  });
-
-  app.post("/v1/max-buy", async (c) => {
-    const body = await c.req.json<{
-      referencePriceAmount?: string | number | null;
-      condition?: string | null;
-    }>();
-    const maxBuyReference = body.referencePriceAmount ?? null;
-    if (
-      maxBuyReference !== null &&
-      maxBuyReference !== "" &&
-      parseDollarsToCents(maxBuyReference) === null
-    ) {
-      return c.json({ ok: false, error: INVALID_DOLLAR_AMOUNT }, 400);
-    }
-    const maxBuy = computeMaxBuy({
-      referencePriceAmount: maxBuyReference,
-      condition: body.condition,
-      preferences: getPreferences(c.get("userId")),
-    });
-    return c.json({ ok: true, maxBuy });
-  });
+  registerPreferenceRoutes(app, { getPreferences, setPreferences });
 
   app.post("/v1/scans", bodyLimit({
       maxSize: SCAN_IMAGE_MAX_BYTES,
@@ -1451,13 +1478,21 @@ export function createApp(
           image: identify.image,
           mimeType: identify.mimeType,
         };
-        recognition = await identifyLiveCaptureStill({
-          image: identify.image,
-          mimeType: identify.mimeType,
-          fallback: recognitionProvider,
-          openclip: liveIdentityOpenclip,
-          catalog,
-        });
+        const runLive = () =>
+          identifyLiveCaptureStill({
+            image: identify.image,
+            mimeType: identify.mimeType,
+            fallback: recognitionProvider,
+            openclip: liveIdentityOpenclip,
+            catalog,
+          });
+        recognition = recognitionCache
+          ? await recognitionCache.getOrIdentify(
+              { bytes: identify.image, mimeType: identify.mimeType },
+              recognitionProvider.name,
+              runLive,
+            )
+          : await runLive();
       } else {
         const identifyRequest: IdentifyCardRequest = {
           image: identify.image,
@@ -1468,7 +1503,19 @@ export function createApp(
           liveIdentifyEnabled ? mockCardRecognitionProvider : recognitionProvider;
         recognition = await mockProvider.identifyCard(identifyRequest);
       }
-      const mapping = await mapRecognitionToCatalog(recognition, catalog);
+      const mapped = await mapRecognitionToCatalog(recognition, catalog);
+      // P1-26: cards users keep confirming move up the candidate list.
+      const mapping =
+        mapped.candidates.length > 1
+          ? {
+              ...mapped,
+              candidates: rerankItemsByConfirms(
+                mapped.candidates,
+                (card) => card.tcgdexId,
+                confirmCounts(mapped.candidates.map((card) => card.tcgdexId)),
+              ),
+            }
+          : mapped;
       const scan = saveScan({
         scanId,
         userId,
@@ -1484,7 +1531,7 @@ export function createApp(
         recognition,
         mapping,
       });
-      return c.json({ ok: true, scan }, 201);
+      return c.json({ ok: true, scan, variantSuggestions: variantSuggestionsFor(scan.mapping) }, 201);
     },
   );
 
@@ -1506,7 +1553,7 @@ export function createApp(
   app.get("/v1/scans/:scanId", (c) => {
     const scan = getScan(c.get("userId"), c.req.param("scanId"));
     if (!scan) return c.json({ ok: false, error: "Scan not found" }, 404);
-    return c.json({ ok: true, scan });
+    return c.json({ ok: true, scan, variantSuggestions: variantSuggestionsFor(scan.mapping) });
   });
 
   app.post("/v1/scans/:scanId/confirm", async (c) => {
@@ -1515,6 +1562,7 @@ export function createApp(
     const body = await c.req.json<{
       tcgdexId?: string;
       selectedVariant?: string | null;
+      via?: string | null;
     }>();
     if (!body.tcgdexId) {
       return c.json({ ok: false, error: "tcgdexId is required" }, 400);
@@ -1552,6 +1600,30 @@ export function createApp(
         selectedVariant: body.selectedVariant,
         catalogCard,
       });
+      const correction = scanCorrectionFor({
+        scanId: scan.scanId,
+        userId: c.get("userId"),
+        via: body.via,
+        predictedTcgdexId: scan.mapping.tcgdexId ?? scan.mapping.canonicalCard?.tcgdexId ?? null,
+        candidateTcgdexIds: scan.mapping.candidates.map((card) => card.tcgdexId),
+        chosenTcgdexId: body.tcgdexId,
+        recognitionProvider: scan.mapping.provider,
+      });
+      if (correction) recordScanCorrection(correction);
+      const shown = scan.mapping.candidates.map((card) => card.tcgdexId);
+      const predicted = scan.mapping.tcgdexId ?? scan.mapping.canonicalCard?.tcgdexId ?? null;
+      saveConfirmEvent(
+        confirmEventFor({
+          scanId: scan.scanId,
+          userId: c.get("userId"),
+          via: body.via,
+          shownTcgdexIds: shown.length > 0 ? shown : predicted ? [predicted] : [],
+          chosenTcgdexId: body.tcgdexId,
+          selectedVariant: body.selectedVariant ?? null,
+          confidence: scan.mapping.confidence ?? null,
+          recognitionProvider: scan.mapping.provider,
+        }),
+      );
       return c.json({
         ok: true,
         scan: result.scan,
@@ -1567,6 +1639,22 @@ export function createApp(
         400,
       );
     }
+  });
+
+  /** P1-27: weekly mapping-quality report (aggregates only, no user ids). */
+  app.get("/v1/metrics/mapping", (c) => {
+    const daysRaw = Number(c.req.query("days") ?? 7);
+    const days = Number.isFinite(daysRaw) ? Math.min(Math.max(Math.floor(daysRaw), 1), 90) : 7;
+    const window = weeklyWindow(new Date(), days);
+    const report = computeMappingMetrics({
+      events: listConfirmEvents({ since: window.from }),
+      ...window,
+      unmappedSetNames: unmappedSetNameCounts(),
+    });
+    if (c.req.query("format") === "markdown") {
+      return c.text(mappingMetricsMarkdown(report), 200, { "content-type": "text/markdown; charset=utf-8" });
+    }
+    return c.json({ ok: true, report });
   });
 
   app.post("/v1/scans/:scanId/reject", (c) => {
@@ -1661,47 +1749,14 @@ export function createApp(
   });
 
 
-  app.get("/v1/grade/quota", (c) => {
-    const quota = quotaSnapshotFor(c.get("userId"));
-    return c.json({ ok: true, quota });
-  });
-
-  app.post("/v1/grade/credits/consume", async (c) => {
-    const userId = c.get("userId");
-    const body = await c.req.json<{ count?: number }>().catch(() => ({} as { count?: number }));
-    const count = Math.floor(Number(body.count ?? 1));
-    if (!Number.isFinite(count) || count < 1 || count > 10) {
-      return c.json({ ok: false, error: "That request was not valid." }, 400);
-    }
-    let quota = quotaSnapshotFor(userId);
-    for (let i = 0; i < count; i += 1) {
-      const taken = takeGradeAllowance(userId);
-      quota = taken.quota;
-      if (!taken.ok) return outOfGradesResponse(c, quota);
-    }
-    return c.json({ ok: true, quota });
-  });
-
-  app.post("/v1/grade/credits", async (c) => {
-    if (!gradeIap.enabled && !gradeIap.stub) {
-      return c.json({ ok: false, error: GRADE_QUOTA_COPY.iapUnavailable }, 503);
-    }
-    if (!gradeIap.stub) {
-      return c.json({ ok: false, error: GRADE_QUOTA_COPY.iapUnavailable }, 503);
-    }
-    const userId = c.get("userId");
-    const body = await c.req.json<{ credits?: number; plan?: string }>().catch(
-      () => ({} as { credits?: number; plan?: string }),
-    );
-    const at = now().toISOString();
-    if (body.plan && isGradePlan(body.plan)) {
-      setGradePlan(userId, body.plan, at);
-    }
-    const credits = Math.floor(Number(body.credits ?? 0));
-    if (Number.isFinite(credits) && credits > 0) {
-      addGradeCredits(userId, Math.min(credits, 1_000), at);
-    }
-    return c.json({ ok: true, quota: quotaSnapshotFor(userId) });
+  registerGradeQuotaRoutes(app, {
+    quotaSnapshotFor,
+    takeGradeAllowance,
+    outOfGradesResponse,
+    gradeIap,
+    setGradePlan,
+    addGradeCredits,
+    now,
   });
 
   app.post(
