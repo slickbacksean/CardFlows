@@ -22,7 +22,6 @@ import {
   keywordChips,
   LOCKED_DISPLAY_CURRENCY,
   mapRecognitionToCatalog,
-  maxBuyPreferencesRangeError,
   parseDollarsToCents,
   INVALID_DOLLAR_AMOUNT,
   mockCardRecognitionProvider,
@@ -79,7 +78,6 @@ import {
   type HealthLivestreamIdentify,
   type LiveVideoIdentityPlatform,
   type ObbDetector,
-  type MaxBuyPreferences,
   type PhashIndex,
   type RecognitionConfidence,
   type TcgdexCard,
@@ -89,7 +87,6 @@ import {
   GRADE_QUOTA_COPY,
   calendarMonthKey,
   gradeQuotaSnapshot,
-  isGradePlan,
   monthlyLimitForPlan,
   type GradePlan,
   type GradeQuotaSnapshot,
@@ -115,7 +112,11 @@ import {
   premiumUserIdsFromEnv,
 } from "./grade-quota-env";
 import type { CardgradingEngineStatus, ConcurrencyGate } from "./cardgrading-run";
+import type { AppEnv } from "./app-env";
+import { contractMiddleware } from "./contract-middleware";
 import { corsOriginsFromEnv } from "./cors-env";
+import { registerGradeQuotaRoutes } from "./routes/grade-quota";
+import { registerPreferenceRoutes } from "./routes/preferences";
 import { REQUEST_ID_HEADER, resolveRequestId } from "./request-id";
 import { captureApiException } from "./sentry";
 import {
@@ -170,13 +171,6 @@ import {
   portfolioRangeStartDate,
 } from "./portfolio-history";
 
-type AppEnv = {
-  Variables: {
-    userId: string;
-    identity: InvitedIdentity;
-    requestId: string;
-  };
-};
 
 /** /health never waits more than 3 s on the OpenCV probe (which itself times out at 5 s). */
 async function boundedProbe(
@@ -337,6 +331,8 @@ export interface CreateAppOptions {
   gradeQuota?: boolean | null;
   /** In-app purchase flag + stub grant. Defaults to `CARD_FLOW_IAP_*`. */
   gradeIap?: { enabled: boolean; stub: boolean };
+  /** Contract checks fail loudly (500) instead of logging. Defaults to on under Vitest. */
+  contractStrict?: boolean;
   /** Overlay: these user ids are treated as premium even if the row says free. */
   premiumUserIds?: string[];
   /** Global CardSight identify budget. Defaults to `CARD_FLOW_CARDSIGHT_MONTHLY_BUDGET`; off in tests. */
@@ -669,6 +665,7 @@ export function createApp(
       console.log(`${c.req.method} ${c.req.path} ${c.res.status} ${requestId}`);
     }
   });
+  app.use("*", contractMiddleware(options.contractStrict === undefined ? {} : { strict: options.contractStrict }));
   app.onError((err, c) => {
     const requestId = c.get("requestId") ?? resolveRequestId();
     c.header(REQUEST_ID_HEADER, requestId);
@@ -1343,52 +1340,7 @@ export function createApp(
     });
   });
 
-  app.get("/v1/preferences", (c) =>
-    c.json({ ok: true, preferences: getPreferences(c.get("userId")) }),
-  );
-
-  app.patch("/v1/preferences", async (c) => {
-    const body = await c.req.json<Partial<MaxBuyPreferences>>();
-    const userId = c.get("userId");
-    const current = getPreferences(userId);
-    const next: MaxBuyPreferences = {
-      targetMarginPct:
-        body.targetMarginPct === undefined ? current.targetMarginPct : body.targetMarginPct,
-      feesBufferPct:
-        body.feesBufferPct === undefined ? current.feesBufferPct : body.feesBufferPct,
-      defaultCurrency: LOCKED_DISPLAY_CURRENCY,
-      conditionAdjustments:
-        body.conditionAdjustments === undefined
-          ? current.conditionAdjustments
-          : body.conditionAdjustments,
-    };
-    const rangeError = maxBuyPreferencesRangeError(next);
-    if (rangeError) {
-      return c.json({ ok: false, error: rangeError }, 400);
-    }
-    return c.json({ ok: true, preferences: setPreferences(userId, next) });
-  });
-
-  app.post("/v1/max-buy", async (c) => {
-    const body = await c.req.json<{
-      referencePriceAmount?: string | number | null;
-      condition?: string | null;
-    }>();
-    const maxBuyReference = body.referencePriceAmount ?? null;
-    if (
-      maxBuyReference !== null &&
-      maxBuyReference !== "" &&
-      parseDollarsToCents(maxBuyReference) === null
-    ) {
-      return c.json({ ok: false, error: INVALID_DOLLAR_AMOUNT }, 400);
-    }
-    const maxBuy = computeMaxBuy({
-      referencePriceAmount: maxBuyReference,
-      condition: body.condition,
-      preferences: getPreferences(c.get("userId")),
-    });
-    return c.json({ ok: true, maxBuy });
-  });
+  registerPreferenceRoutes(app, { getPreferences, setPreferences });
 
   app.post("/v1/scans", bodyLimit({
       maxSize: SCAN_IMAGE_MAX_BYTES,
@@ -1639,47 +1591,14 @@ export function createApp(
   });
 
 
-  app.get("/v1/grade/quota", (c) => {
-    const quota = quotaSnapshotFor(c.get("userId"));
-    return c.json({ ok: true, quota });
-  });
-
-  app.post("/v1/grade/credits/consume", async (c) => {
-    const userId = c.get("userId");
-    const body = await c.req.json<{ count?: number }>().catch(() => ({} as { count?: number }));
-    const count = Math.floor(Number(body.count ?? 1));
-    if (!Number.isFinite(count) || count < 1 || count > 10) {
-      return c.json({ ok: false, error: "That request was not valid." }, 400);
-    }
-    let quota = quotaSnapshotFor(userId);
-    for (let i = 0; i < count; i += 1) {
-      const taken = takeGradeAllowance(userId);
-      quota = taken.quota;
-      if (!taken.ok) return outOfGradesResponse(c, quota);
-    }
-    return c.json({ ok: true, quota });
-  });
-
-  app.post("/v1/grade/credits", async (c) => {
-    if (!gradeIap.enabled && !gradeIap.stub) {
-      return c.json({ ok: false, error: GRADE_QUOTA_COPY.iapUnavailable }, 503);
-    }
-    if (!gradeIap.stub) {
-      return c.json({ ok: false, error: GRADE_QUOTA_COPY.iapUnavailable }, 503);
-    }
-    const userId = c.get("userId");
-    const body = await c.req.json<{ credits?: number; plan?: string }>().catch(
-      () => ({} as { credits?: number; plan?: string }),
-    );
-    const at = now().toISOString();
-    if (body.plan && isGradePlan(body.plan)) {
-      setGradePlan(userId, body.plan, at);
-    }
-    const credits = Math.floor(Number(body.credits ?? 0));
-    if (Number.isFinite(credits) && credits > 0) {
-      addGradeCredits(userId, Math.min(credits, 1_000), at);
-    }
-    return c.json({ ok: true, quota: quotaSnapshotFor(userId) });
+  registerGradeQuotaRoutes(app, {
+    quotaSnapshotFor,
+    takeGradeAllowance,
+    outOfGradesResponse,
+    gradeIap,
+    setGradePlan,
+    addGradeCredits,
+    now,
   });
 
   app.post(

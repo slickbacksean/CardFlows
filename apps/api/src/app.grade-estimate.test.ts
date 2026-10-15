@@ -416,12 +416,15 @@ describe("POST /v1/inventory/:id/grade-estimate", () => {
     );
 
     expect(mobileApi).toContain("requestGradeEstimate");
-    expect(mobileApi).toContain("/v1/inventory/${inventoryItemId}/grade-estimate");
+    expect(mobileApi).toContain("apiContract.requestGradeEstimate");
+    expect(
+      readFileSync(path.join(repoRoot, "packages/shared/src/contract/grade.ts"), "utf8"),
+    ).toContain('"/v1/inventory/:inventoryItemId/grade-estimate"');
     expect(mobileApi).toContain("gradePhotoUri");
-    expect(mobileApi).toContain("/v1/inventory/${inventoryItemId}/grade-photos/${side}");
+    expect(mobileApi).toContain("apiContract.getGradePhoto.path, { inventoryItemId, side }");
     expect(mobileApi).toContain("isLocalGradeStillUri");
     expect(mobileApi).toContain("getSlabEstimates");
-    expect(mobileApi).toContain("/v1/cards/${encodeURIComponent(tcgdexId)}/slab-estimates");
+    expect(mobileApi).toContain("apiContract.getSlabEstimates, { params: { tcgdexId } }");
     expect(mobileApi).not.toMatch(/api\.casecomp|anthropic|ANTHROPIC_|XAI_|POKETRACE_/i);
     expect(prepare).toContain("requestGradeEstimate");
     expect(prepare).toContain("emptyGradeEstimate()");
