@@ -12,7 +12,8 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { LivestreamBrowser, type LivestreamBrowserHandle } from "@/components/ui/livestream-browser";
 import { PrimaryButton } from "@/components/ui/primary-button";
 import { ScreenerOverlay } from "@/components/ui/screener-overlay";
-import { saveLivestreamPurchase, undoLivestreamPurchase } from "@/lib/api";
+import { undoLivestreamPurchase } from "@/lib/api";
+import { cancelQueuedWrite, isQueuedId, runQueueableWrite } from "@/lib/write-queue";
 import {
   injectMockLiveVideoCard,
   startLiveVideoIdentify,
@@ -78,15 +79,20 @@ export default function ScanTabScreen() {
   }
 
   async function onPurchased(guess: LiveOverlayGuess) {
-    const saved = await saveLivestreamPurchase({
+    const saved = await runQueueableWrite("livestream_purchase", {
       tcgdexId: guess.tcgdexId,
       platform,
       streamUrl: chrome.pageUrl,
     });
-    return { inventoryItemId: saved.item.inventoryItemId };
+    // Offline: the tap is queued and synced later; Undo drops it from the queue.
+    return { inventoryItemId: saved.queued ? saved.queuedId : saved.result.item.inventoryItemId };
   }
 
   async function onUndoPurchased(inventoryItemId: string) {
+    if (isQueuedId(inventoryItemId)) {
+      cancelQueuedWrite(inventoryItemId);
+      return;
+    }
     await undoLivestreamPurchase(inventoryItemId);
   }
 

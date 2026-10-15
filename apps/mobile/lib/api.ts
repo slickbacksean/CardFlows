@@ -10,28 +10,29 @@ import {
   unavailableGradeEstimate,
   LOCKED_DISPLAY_CURRENCY,
   type CaptureMethod,
-  type CardFlowCanonicalCard,
   type CardFlowGradeEstimate,
-  type CardFlowHealth,
-  type CardFlowPortfolioSummary,
-  type CardFlowPriceEstimate,
-  type ClipboardExport,
-  type CostToAskSpread,
   type CardFlowSlabEstimate,
   type DetectCropResult,
   type PhotoPregradeResult,
-  type GradingReturnedCopy,
-  type GradingSubmittedCopy,
-  type InvitedIdentity,
-  type ListingDraft,
-  type LiveOverlayGuess,
-  type LiveScanStage,
-  type LiveVideoIdentityPlatform,
-  type LiveVideoIdentityResult,
   type GradeQuotaSnapshot,
-  type MaxBuyPreferences,
-  type RecognitionConfidence,
   type RecognitionScenario,
+  apiContract,
+  buildPath,
+  buildQuery,
+  checkRequestBody,
+  checkResponse,
+  type ApiRoute,
+  type BodyOf,
+  type DraftView,
+  type InventoryItem,
+  type QueryOf,
+  type ResponseOf,
+  type ListingDraft,
+  type LiveVideoIdentityPlatform,
+  type MaxBuyPreferences,
+  type PortfolioHistoryRange,
+  type RecognitionConfidence,
+  type ScanImageMimeType,
 } from "@cardflow/shared";
 import { Platform } from "react-native";
 import { createRequestId, rememberRequestId } from "./request-id";
@@ -54,8 +55,16 @@ export function apiUrl(): string {
   });
 }
 
-const SCAN_IMAGE_MIME_TYPES = ["image/jpeg", "image/png", "image/webp"] as const;
-export type ScanImageMimeType = (typeof SCAN_IMAGE_MIME_TYPES)[number];
+export type {
+  CatalogSearchResponse,
+  ConfirmationRecord,
+  DraftView,
+  InventoryItem,
+  PortfolioHistoryPoint,
+  PortfolioHistoryRange,
+  ScanImageMimeType,
+  ScanRecord,
+} from "@cardflow/shared";
 
 function normalizeScanImageMime(value: string | null | undefined): ScanImageMimeType | null {
   if (!value) return null;
@@ -81,14 +90,14 @@ function stillFileName(mimeType: ScanImageMimeType): string {
 }
 
 export function scanImageUri(scanId: string): string {
-  return `${apiUrl()}/v1/scans/${scanId}/image`;
+  return `${apiUrl()}${buildPath(apiContract.getScanImage.path, { scanId })}`;
 }
 
 export function gradePhotoUri(
   inventoryItemId: string,
   side: "front" | "back",
 ): string {
-  return `${apiUrl()}/v1/inventory/${inventoryItemId}/grade-photos/${side}`;
+  return `${apiUrl()}${buildPath(apiContract.getGradePhoto.path, { inventoryItemId, side })}`;
 }
 
 export function firstPartyStillSource(uri: string): { uri: string; headers?: Record<string, string> } {
@@ -103,102 +112,6 @@ function isLocalGradeStillUri(uri: string): boolean {
   if (!uri) return false;
   if (uri.startsWith(apiUrl())) return false;
   return !/^https?:\/\//i.test(uri);
-}
-
-export interface ScanRecord {
-  scanId: string;
-  userId: string;
-  captureMethod: CaptureMethod;
-  scenario: RecognitionScenario;
-  preInventoryState: string;
-  cardflowCardId: string | null;
-  confirmationId: string | null;
-  inventoryItemId: string | null;
-  imageStorageRef: string | null;
-  imageMimeType: ScanImageMimeType | null;
-  recognition: {
-    ok: boolean;
-    detections: Array<{
-      name: string | null;
-      setName: string | null;
-      number: string | null;
-      confidence: string;
-      candidates: Array<{
-        name: string | null;
-        setName: string | null;
-        number: string | null;
-        vendorCardId: string | null;
-      }>;
-    }>;
-    error: { code: string; message: string; retryable: boolean } | null;
-  };
-  mapping: {
-    ok: boolean;
-    confidence: string;
-    status: string;
-    tcgdexId: string | null;
-    cardflowCardId: string | null;
-    matchedOn: string[];
-    canonicalCard: CardFlowCanonicalCard | null;
-    candidates: CardFlowCanonicalCard[];
-    userConfirmation: { recommendedUx: string };
-    error: { message: string } | null;
-  };
-}
-
-export interface ConfirmationRecord {
-  confirmationId: string;
-  scanId: string;
-  cardflowCardId: string;
-  tcgdexId: string;
-  selectedVariant: string | null;
-  matchMethod: string;
-}
-
-export interface InventoryItem {
-  inventoryItemId: string;
-  userId: string;
-  cardflowCardId: string;
-  scanId?: string | null;
-  imageStorageRef?: string | null;
-  gradePhotos?: { front: boolean; back: boolean } | null;
-  intent: "purchased" | "watchlist";
-  workflowState: string;
-  quantity: number | null;
-  tags: string[];
-  selectedVariant?: string | null;
-  condition?: string | null;
-  referencePriceAmount: string | null;
-  targetMaxBuyAmount: string | null;
-  purchase: {
-    costBasis: { allInTotal: string | null; purchasePrice: string | null };
-    maxBuy: { maxBuyAmount: string | null; display: string };
-  } | null;
-  card?: {
-    name: string;
-    setName: string;
-    localId: string;
-    tcgdexId: string;
-    language?: string;
-    imageUrl?: string | null;
-  } | null;
-  draft?: { draftId: string; status: string; title?: string | null } | null;
-  createdAt: string;
-  readOnly?: boolean;
-}
-
-export interface DraftView {
-  ok: true;
-  draft: ListingDraft;
-  costToAsk: CostToAskSpread | null;
-  allInTotal?: string | null;
-  readyForReview: {
-    required: string[];
-    missing: string[];
-    canMark: boolean;
-  };
-  keywordChips?: string[];
-  created?: boolean;
 }
 
 interface HttpResult {
@@ -267,7 +180,15 @@ function postNativeForm(
 
 function unreachableError(error: unknown): Error {
   const detail = error instanceof Error ? error.message.trim() : "";
-  return new Error(cardFlowUnreachableMessage(__DEV__ ? `${apiUrl()} ${detail}`.trim() : null));
+  const wrapped = new Error(cardFlowUnreachableMessage(__DEV__ ? `${apiUrl()} ${detail}`.trim() : null));
+  (wrapped as Error & { unreachable?: boolean }).unreachable = true;
+  return wrapped;
+}
+
+/** HTTP status of a failed CardFlow call, or null when the server was never reached. */
+export function apiErrorStatus(error: unknown): number | null {
+  const status = (error as { status?: unknown } | null)?.status;
+  return typeof status === "number" ? status : null;
 }
 
 /**
@@ -279,7 +200,7 @@ const GRADE_PREGRADE_TIMEOUT_MS = 150_000;
 
 async function request<T>(
   path: string,
-  init?: RequestInit & { timeoutMs?: number },
+  init?: RequestInit & { timeoutMs?: number; extraHeaders?: Record<string, string> },
 ): Promise<T> {
   await waitForSessionRestore();
   const isFormData =
@@ -293,6 +214,7 @@ async function request<T>(
   if (appKey) headers["X-CardFlow-App-Key"] = appKey;
   const requestId = createRequestId();
   headers["x-request-id"] = requestId;
+  if (init?.extraHeaders) Object.assign(headers, init.extraHeaders);
   rememberRequestId(requestId);
 
   const url = `${apiUrl()}${path}`;
@@ -345,6 +267,50 @@ async function request<T>(
   return data;
 }
 
+type CallInput<R extends ApiRoute> = {
+  params?: Record<string, string>;
+  query?: QueryOf<R>;
+  body?: BodyOf<R>;
+  form?: FormData;
+  timeoutMs?: number;
+  signal?: AbortSignal;
+  /** P1-09: replays of a queued write reuse the same key so the server makes one row. */
+  idempotencyKey?: string;
+};
+
+/**
+ * The typed client (P1-01). Every CardFlow API call goes through here: the
+ * path, method and response type come from `apiContract` in @cardflow/shared.
+ * The response is checked against the contract in development; a mismatch is
+ * logged, never thrown, and the original data is returned unchanged.
+ */
+export async function callApi<R extends ApiRoute>(
+  route: R,
+  input: CallInput<R> = {},
+): Promise<ResponseOf<R>> {
+  const path = `${buildPath(route.path, input.params ?? {})}${buildQuery(
+    input.query as Record<string, unknown> | undefined,
+  )}`;
+  if (__DEV__ && input.body !== undefined) {
+    const checked = checkRequestBody(route, input.body);
+    if (!checked.ok) console.warn(`[contract] ${route.method} ${route.path} request: ${checked.issues}`);
+  }
+  const init: RequestInit & { timeoutMs?: number; extraHeaders?: Record<string, string> } = {
+    method: route.method,
+  };
+  if (input.idempotencyKey) init.extraHeaders = { "Idempotency-Key": input.idempotencyKey };
+  if (input.form) init.body = input.form;
+  else if (input.body !== undefined) init.body = JSON.stringify(input.body);
+  if (input.timeoutMs !== undefined) init.timeoutMs = input.timeoutMs;
+  if (input.signal) init.signal = input.signal;
+  const data = await request<ResponseOf<R>>(path, init);
+  if (__DEV__) {
+    const checked = checkResponse(route, 200, data);
+    if (!checked.ok) console.warn(`[contract] ${route.method} ${route.path} response: ${checked.issues}`);
+  }
+  return data;
+}
+
 async function appendScanStill(
   form: FormData,
   uri: string,
@@ -391,63 +357,33 @@ export async function createScan(input: {
     form.append("captureMethod", input.captureMethod);
     if (input.scenario) form.append("scenario", input.scenario);
     await appendScanStill(form, input.imageUri, mime);
-    return request<{ ok: true; scan: ScanRecord }>("/v1/scans", {
-      method: "POST",
-      body: form,
-    });
+    return callApi(apiContract.createScan, { form });
   }
-  return request<{ ok: true; scan: ScanRecord }>("/v1/scans", {
-    method: "POST",
-    body: JSON.stringify({
+  return callApi(apiContract.createScan, {
+    body: {
       captureMethod: input.captureMethod,
       ...(input.scenario ? { scenario: input.scenario } : {}),
-    }),
+    },
   });
 }
 
 export function getScan(scanId: string) {
-  return request<{ ok: true; scan: ScanRecord }>(`/v1/scans/${scanId}`);
+  return callApi(apiContract.getScan, { params: { scanId } });
 }
 
 export function rejectScan(scanId: string) {
-  return request<{ ok: true; scan: ScanRecord }>(`/v1/scans/${scanId}/reject`, {
-    method: "POST",
-  });
+  return callApi(apiContract.rejectScan, { params: { scanId } });
 }
 
 export function confirmScan(
   scanId: string,
   input: { tcgdexId: string; selectedVariant?: string | null },
 ) {
-  return request<{
-    ok: true;
-    scan: ScanRecord;
-    confirmation: ConfirmationRecord;
-    canonicalCard: CardFlowCanonicalCard;
-  }>(`/v1/scans/${scanId}/confirm`, {
-    method: "POST",
-    body: JSON.stringify(input),
-  });
+  return callApi(apiContract.confirmScan, { params: { scanId }, body: input });
 }
 
 export function getCard(cardflowCardId: string) {
-  return request<{ ok: true; canonicalCard: CardFlowCanonicalCard }>(
-    `/v1/cards/${cardflowCardId}`,
-  );
-}
-
-export interface CatalogSearchResponse {
-  ok: boolean;
-  provider: "tcgdex" | "mock" | "pokecollector";
-  language: "en";
-  query: { set: string | null; number: string | null; name: string | null };
-  userConfirmationRequired: true;
-  autoConfirm: false;
-  nameOnly: boolean;
-  cards: CardFlowCanonicalCard[];
-  cached: boolean;
-  notice: string | null;
-  error: { code: string; message: string; retryable: boolean } | null;
+  return callApi(apiContract.getCard, { params: { cardflowCardId } });
 }
 
 export function searchCatalog(input: {
@@ -455,37 +391,33 @@ export function searchCatalog(input: {
   number?: string;
   name?: string;
 }) {
-  const params = new URLSearchParams();
-  if (input.set?.trim()) params.set("set", input.set.trim());
-  if (input.number?.trim()) params.set("number", input.number.trim());
-  if (input.name?.trim()) params.set("name", input.name.trim());
-  return request<CatalogSearchResponse>(`/v1/catalog/search?${params.toString()}`);
+  return callApi(apiContract.searchCatalog, {
+    query: {
+      set: input.set?.trim() || undefined,
+      number: input.number?.trim() || undefined,
+      name: input.name?.trim() || undefined,
+    },
+  });
 }
 
 export function getPriceEstimate(tcgdexId: string, variant?: string) {
-  const params = new URLSearchParams();
-  if (variant?.trim()) params.set("variant", variant.trim());
-  const query = params.toString();
-  return request<{
-    ok: true;
-    provider: "off" | "pokecollector";
-    estimate: CardFlowPriceEstimate;
-  }>(`/v1/pricing/cards/${encodeURIComponent(tcgdexId)}${query ? `?${query}` : ""}`);
+  return callApi(apiContract.getPriceEstimate, {
+    params: { tcgdexId },
+    query: { variant: variant?.trim() || undefined },
+  });
 }
 
 export function getLiveOverlayGuess(
   tcgdexId: string,
   confidence?: RecognitionConfidence | null,
 ) {
-  const params = new URLSearchParams();
-  if (confidence) params.set("confidence", confidence);
-  const query = params.toString();
-  return request<{ ok: true; guess: LiveOverlayGuess }>(
-    `/v1/livestream/guesses/${encodeURIComponent(tcgdexId)}${query ? `?${query}` : ""}`,
-  );
+  return callApi(apiContract.getLiveOverlayGuess, {
+    params: { tcgdexId },
+    query: { confidence: confidence || undefined },
+  });
 }
 
-/** Live-video metadata only. Never a page jpeg, never Capture `/v1/scans`. */
+/** Live-video metadata only. Never a page jpeg, never the Capture scan upload. */
 export function identifyLivestreamFrame(input: {
   source: "live_video";
   platform: LiveVideoIdentityPlatform;
@@ -496,14 +428,8 @@ export function identifyLivestreamFrame(input: {
   identityCropQuad?: number[] | null;
   videoFrameJpeg?: string | null;
 }) {
-  return request<{
-    ok: true;
-    identity: LiveVideoIdentityResult;
-    /** Present only when the API runs with CARD_FLOW_LIVESTREAM_TIMING=1. */
-    timing?: { stages: Partial<Record<LiveScanStage, number>>; warped: boolean };
-  }>("/v1/livestream/identify", {
-    method: "POST",
-    body: JSON.stringify({
+  return callApi(apiContract.identifyLivestreamFrame, {
+    body: {
       source: "live_video",
       platform: input.platform,
       cardDetected: input.cardDetected,
@@ -512,42 +438,20 @@ export function identifyLivestreamFrame(input: {
       identityCropJpeg: input.identityCropJpeg ?? null,
       identityCropQuad: input.identityCropQuad ?? null,
       videoFrameJpeg: input.videoFrameJpeg ?? null,
-    }),
+    },
   });
 }
 
 export function listInventory() {
-  return request<{ ok: true; items: InventoryItem[] }>("/v1/inventory");
+  return callApi(apiContract.listInventory);
 }
 
 export function getPortfolio() {
-  return request<{
-    ok: true;
-    currency: "USD";
-    portfolio: CardFlowPortfolioSummary;
-  }>("/v1/portfolio");
-}
-
-export type PortfolioHistoryRange = "7d" | "30d" | "90d" | "all";
-
-/** One recorded day of the collection estimate. Real snapshots only, never backfilled. */
-export interface PortfolioHistoryPoint {
-  date: string;
-  amountCents: number;
-  amount: string;
-  pricedCopies: number;
-  totalCopies: number;
-  recordedAt: string;
+  return callApi(apiContract.getPortfolio);
 }
 
 export function getPortfolioHistory(range: PortfolioHistoryRange = "all") {
-  return request<{
-    ok: true;
-    currency: "USD";
-    range: PortfolioHistoryRange;
-    today: string;
-    points: PortfolioHistoryPoint[];
-  }>(`/v1/portfolio/history?range=${range}`);
+  return callApi(apiContract.getPortfolioHistory, { query: { range } });
 }
 
 export async function requestGradeEstimate(
@@ -580,22 +484,16 @@ export async function requestGradeEstimate(
           "image/jpeg";
         await appendGradeStill(form, "back", backUri, mime);
       }
-      const data = await request<{
-        ok: true;
-        estimate: CardFlowGradeEstimate;
-      }>(`/v1/inventory/${inventoryItemId}/grade-estimate`, {
-        method: "POST",
-        body: form,
+      const data = await callApi(apiContract.requestGradeEstimate, {
+        params: { inventoryItemId },
+        form,
         timeoutMs: GRADE_PREGRADE_TIMEOUT_MS,
       });
       return data.estimate;
     }
-    const data = await request<{
-      ok: true;
-      estimate: CardFlowGradeEstimate;
-    }>(`/v1/inventory/${inventoryItemId}/grade-estimate`, {
-      method: "POST",
-      body: JSON.stringify(input?.reestimate ? { reestimate: true } : {}),
+    const data = await callApi(apiContract.requestGradeEstimate, {
+      params: { inventoryItemId },
+      body: input?.reestimate ? { reestimate: true } : {},
       timeoutMs: GRADE_PREGRADE_TIMEOUT_MS,
     });
     return data.estimate;
@@ -620,9 +518,8 @@ export async function detectGradePhoto(
   await appendGradeStill(form, "image", uri, mime);
   form.append("side", side);
   try {
-    return await request<DetectCropResult>("/v1/grade/detect", {
-      method: "POST",
-      body: form,
+    return await callApi(apiContract.detectGradePhoto, {
+      form,
       timeoutMs: GRADE_DETECT_TIMEOUT_MS,
     });
   } catch (error) {
@@ -658,9 +555,8 @@ export async function requestPhotoPregrade(input: {
   if (input.backUploadId) form.append("backUploadId", input.backUploadId);
   else await appendGradeStill(form, "back", input.backUri, backMime);
   try {
-    const data = await request<PhotoPregradeResult>("/v1/grade/pregrade", {
-      method: "POST",
-      body: form,
+    const data = await callApi(apiContract.requestPhotoPregrade, {
+      form,
       timeoutMs: GRADE_PREGRADE_TIMEOUT_MS,
     });
     // 0.0 is grade_card's "nothing measurable", not a grade: never show it.
@@ -689,30 +585,21 @@ export async function requestPhotoPregrade(input: {
 }
 
 export function getGradeQuota() {
-  return request<{ ok: true; quota: GradeQuotaSnapshot }>("/v1/grade/quota");
+  return callApi(apiContract.getGradeQuota);
 }
 
 export function consumeGradeCredits(count = 1) {
-  return request<{ ok: true; quota: GradeQuotaSnapshot }>("/v1/grade/credits/consume", {
-    method: "POST",
-    body: JSON.stringify({ count }),
-  });
+  return callApi(apiContract.consumeGradeCredits, { body: { count } });
 }
 
 /** IAP stub. Real StoreKit is not wired; the server returns a plain "not available" unless the stub flag is on. */
 export function grantGradeCredits(input: { credits?: number; plan?: "free" | "premium" }) {
-  return request<{ ok: true; quota: GradeQuotaSnapshot }>("/v1/grade/credits", {
-    method: "POST",
-    body: JSON.stringify(input),
-  });
+  return callApi(apiContract.grantGradeCredits, { body: input });
 }
 
 export async function getSlabEstimates(tcgdexId: string): Promise<CardFlowSlabEstimate> {
   try {
-    const data = await request<{
-      ok: true;
-      estimate: CardFlowSlabEstimate;
-    }>(`/v1/cards/${encodeURIComponent(tcgdexId)}/slab-estimates`);
+    const data = await callApi(apiContract.getSlabEstimates, { params: { tcgdexId } });
     return data.estimate;
   } catch {
     return emptySlabEstimate(tcgdexId);
@@ -720,11 +607,7 @@ export async function getSlabEstimates(tcgdexId: string): Promise<CardFlowSlabEs
 }
 
 export function listGrading() {
-  return request<{
-    ok: true;
-    submitted: GradingSubmittedCopy[];
-    returned: GradingReturnedCopy[];
-  }>("/v1/grading");
+  return callApi(apiContract.listGrading);
 }
 
 export function submitGradingCopy(input: {
@@ -739,23 +622,14 @@ export function submitGradingCopy(input: {
   maxBuyAmount?: string | null;
   estimateJson?: string | null;
 }) {
-  return request<{ ok: true; submitted: GradingSubmittedCopy[] }>("/v1/grading/submitted", {
-    method: "POST",
-    body: JSON.stringify(input),
-  });
+  return callApi(apiContract.submitGradingCopy, { body: input });
 }
 
 export function patchGradingSubmitted(
   inventoryItemId: string,
   patch: { orderNumber?: string; company?: string; status?: "sent" | "at_grader" },
 ) {
-  return request<{ ok: true; submitted: GradingSubmittedCopy[] }>(
-    `/v1/grading/submitted/${encodeURIComponent(inventoryItemId)}`,
-    {
-      method: "PATCH",
-      body: JSON.stringify(patch),
-    },
-  );
+  return callApi(apiContract.patchGradingSubmitted, { params: { inventoryItemId }, body: patch });
 }
 
 export function markGradingReturned(input: {
@@ -763,27 +637,14 @@ export function markGradingReturned(input: {
   certNumber?: string;
   returnedGrade?: string;
 }) {
-  return request<{
-    ok: true;
-    submitted: GradingSubmittedCopy[];
-    returned: GradingReturnedCopy[];
-  }>("/v1/grading/returned", {
-    method: "POST",
-    body: JSON.stringify(input),
-  });
+  return callApi(apiContract.markGradingReturned, { body: input });
 }
 
 export function patchGradingReturned(
   inventoryItemId: string,
   patch: { certNumber?: string; returnedGrade?: string },
 ) {
-  return request<{ ok: true; returned: GradingReturnedCopy[] }>(
-    `/v1/grading/returned/${encodeURIComponent(inventoryItemId)}`,
-    {
-      method: "PATCH",
-      body: JSON.stringify(patch),
-    },
-  );
+  return callApi(apiContract.patchGradingReturned, { params: { inventoryItemId }, body: patch });
 }
 
 export function savePurchased(input: {
@@ -798,10 +659,10 @@ export function savePurchased(input: {
   condition?: string | null;
   selectedVariant?: string | null;
   referencePriceAmount?: string | null;
-}) {
-  return request<{ ok: true; item: InventoryItem }>("/v1/inventory/purchased", {
-    method: "POST",
-    body: JSON.stringify({ ...input, currency: LOCKED_DISPLAY_CURRENCY }),
+}, idempotencyKey?: string) {
+  return callApi(apiContract.savePurchased, {
+    body: { ...input, currency: LOCKED_DISPLAY_CURRENCY },
+    idempotencyKey,
   });
 }
 
@@ -811,30 +672,27 @@ export async function saveLivestreamPurchase(input: {
   platform?: string | null;
   streamUrl?: string | null;
   selectedVariant?: string | null;
-}) {
+}, idempotencyKey?: string) {
   const created = await createScan({ captureMethod: "manual_scan" });
   const confirmed = await confirmScan(created.scan.scanId, {
     tcgdexId: input.tcgdexId,
     selectedVariant: input.selectedVariant,
   });
-  return request<{ ok: true; item: InventoryItem; created?: boolean }>("/v1/inventory/purchased", {
-    method: "POST",
-    body: JSON.stringify({
+  return callApi(apiContract.savePurchased, {
+    body: {
       confirmationId: confirmed.confirmation.confirmationId,
       detailsNeeded: true,
       platform: input.platform,
       streamUrl: input.streamUrl,
       selectedVariant: input.selectedVariant,
-    }),
+    },
+    idempotencyKey,
   });
 }
 
 /** Reverses a details-needed Purchased write (livestream HUD or Watchlist). */
 export function undoPurchased(inventoryItemId: string) {
-  return request<{ ok: true; deleted: true }>(
-    `/v1/inventory/${encodeURIComponent(inventoryItemId)}`,
-    { method: "DELETE" },
-  );
+  return callApi(apiContract.deleteInventoryItem, { params: { inventoryItemId } });
 }
 
 /** Reverses a livestream details-needed Purchased write. Leaves no Purchased row. */
@@ -844,10 +702,7 @@ export function undoLivestreamPurchase(inventoryItemId: string) {
 
 /** One-tap Watchlist → Purchased. Carries identity and Max Buy; price stays optional. */
 export function convertWatchlistToPurchased(inventoryItemId: string) {
-  return request<{ ok: true; item: InventoryItem; created?: boolean }>(
-    `/v1/inventory/${encodeURIComponent(inventoryItemId)}/purchased`,
-    { method: "POST" },
-  );
+  return callApi(apiContract.convertWatchlistToPurchased, { params: { inventoryItemId } });
 }
 
 export function completePurchasedDetails(
@@ -865,13 +720,10 @@ export function completePurchasedDetails(
     referencePriceAmount?: string | null;
   },
 ) {
-  return request<{ ok: true; item: InventoryItem }>(
-    `/v1/inventory/${encodeURIComponent(inventoryItemId)}/purchase`,
-    {
-      method: "POST",
-      body: JSON.stringify({ ...input, currency: LOCKED_DISPLAY_CURRENCY }),
-    },
-  );
+  return callApi(apiContract.completePurchasedDetails, {
+    params: { inventoryItemId },
+    body: { ...input, currency: LOCKED_DISPLAY_CURRENCY },
+  });
 }
 
 export function saveWatchlist(input: {
@@ -880,11 +732,8 @@ export function saveWatchlist(input: {
   referencePriceAmount?: string | null;
   targetMaxBuyAmount?: string | null;
   condition?: string | null;
-}) {
-  return request<{ ok: true; item: InventoryItem }>("/v1/inventory/watchlist", {
-    method: "POST",
-    body: JSON.stringify(input),
-  });
+}, idempotencyKey?: string) {
+  return callApi(apiContract.saveWatchlist, { body: input, idempotencyKey });
 }
 
 export const WATCHLIST_DRAFT_PATH = "/draft/watchlist" as const;
@@ -894,14 +743,12 @@ export function isWatchlistDraftBlockedError(error: unknown): boolean {
   return /Purchased only|Save as Purchased first/i.test(message);
 }
 
-export function openOrCreateDraft(inventoryItemId: string) {
-  return request<DraftView>(`/v1/inventory/${inventoryItemId}/drafts`, {
-    method: "POST",
-  });
+export function openOrCreateDraft(inventoryItemId: string): Promise<DraftView> {
+  return callApi(apiContract.openOrCreateDraft, { params: { inventoryItemId } });
 }
 
-export function getDraft(draftId: string) {
-  return request<DraftView>(`/v1/drafts/${draftId}`);
+export function getDraft(draftId: string): Promise<DraftView> {
+  return callApi(apiContract.getDraft, { params: { draftId } });
 }
 
 export function patchDraft(
@@ -915,54 +762,37 @@ export function patchDraft(
     notes: string;
     titleTemplateId: ListingDraft["titleTemplateId"];
   }>,
-) {
-  return request<DraftView>(`/v1/drafts/${draftId}`, {
-    method: "PATCH",
-    body: JSON.stringify(patch),
-  });
+): Promise<DraftView> {
+  return callApi(apiContract.patchDraft, { params: { draftId }, body: patch });
 }
 
-export function markDraftReady(draftId: string) {
-  return request<DraftView>(`/v1/drafts/${draftId}/ready`, { method: "POST" });
+export function markDraftReady(draftId: string): Promise<DraftView> {
+  return callApi(apiContract.markDraftReady, { params: { draftId } });
 }
 
 export function getDraftClipboard(draftId: string) {
-  return request<{ ok: true; clipboard: ClipboardExport }>(
-    `/v1/drafts/${draftId}/clipboard`,
-  );
+  return callApi(apiContract.getDraftClipboard, { params: { draftId } });
 }
 
 export function getHealth() {
-  return request<CardFlowHealth>("/health");
+  return callApi(apiContract.getHealth);
 }
 
 export function getIdentity() {
-  return request<{
-    ok: true;
-    identity: InvitedIdentity | null;
-    invitedUsers: InvitedIdentity[];
-  }>("/v1/identity");
+  return callApi(apiContract.getIdentity);
 }
 
 export function createSession(inviteCode: string) {
-  return request<{
-    ok: true;
-    token: string;
-    identity: InvitedIdentity;
-    invitedUsers: InvitedIdentity[];
-  }>("/v1/sessions", {
-    method: "POST",
-    body: JSON.stringify({ inviteCode }),
-  });
+  return callApi(apiContract.createSession, { body: { inviteCode } });
 }
 
 export function getPreferences() {
-  return request<{ ok: true; preferences: MaxBuyPreferences }>("/v1/preferences");
+  return callApi(apiContract.getPreferences);
 }
 
 export function patchPreferences(preferences: MaxBuyPreferences) {
-  return request<{ ok: true; preferences: MaxBuyPreferences }>("/v1/preferences", {
-    method: "PATCH",
-    body: JSON.stringify(preferences),
-  });
+  return callApi(apiContract.patchPreferences, { body: preferences });
 }
+
+/** Typed list of every inventory item, for screens that hold one. */
+export type InventoryList = InventoryItem[];
