@@ -332,7 +332,7 @@ export default function GradingScreen() {
         >
           {actionError ? <Text style={styles.error}>{actionError}</Text> : null}
           {segment === "prepare" ? (
-            <Pressable accessibilityRole="button" onPress={() => router.push("/grade-batch")}>
+            <Pressable accessibilityLabel="Batch pre-grade" accessibilityRole="button" onPress={() => router.push("/grade-batch")}>
               <Text style={styles.batchLink}>Batch pre-grade</Text>
             </Pressable>
           ) : null}

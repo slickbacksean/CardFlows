@@ -93,11 +93,11 @@ export default function GradeBatchScreen() {
             : "Start a session to queue only the cards you scan next. Off: every purchased card with a front photo."}
         </Text>
         <View style={styles.actions}>
-          <Pressable accessibilityRole="button" disabled={running} onPress={toggleSession}>
+          <Pressable accessibilityLabel={session ? "End session" : "Start session"} accessibilityRole="button" disabled={running} onPress={toggleSession}>
             <Text style={styles.link}>{session ? "End session" : "Start session"}</Text>
           </Pressable>
           {session ? (
-            <Pressable accessibilityRole="button" onPress={() => router.push("/(tabs)/scan-tab")}>
+            <Pressable accessibilityLabel="Scan cards" accessibilityRole="button" onPress={() => router.push("/(tabs)/scan-tab")}>
               <Text style={styles.link}>Scan cards</Text>
             </Pressable>
           ) : null}
@@ -109,7 +109,7 @@ export default function GradeBatchScreen() {
         onPress={() => void runAll()}
       />
       {running ? (
-        <Pressable accessibilityRole="button" onPress={() => (cancelRef.current = true)}>
+        <Pressable accessibilityLabel="Stop after this card" accessibilityRole="button" onPress={() => (cancelRef.current = true)}>
           <Text style={styles.link}>Stop after this card</Text>
         </Pressable>
       ) : null}
