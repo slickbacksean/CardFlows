@@ -1,3 +1,4 @@
+import { recordVendorResponse } from "./ops-metrics";
 import {
   CatalogProviderError,
   POKECOLLECTOR_CATALOG_MAX_RETRIES,
@@ -59,6 +60,7 @@ export function createPokecollectorFetcher(options: PokecollectorHttpOptions): {
             headers,
             signal: controller.signal,
           });
+          recordVendorResponse("pokecollector", response.status);
           if (response.status >= 500 && attempt < attempts - 1) {
             await sleep(retryDelayMs(attempt));
             continue;

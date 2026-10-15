@@ -9,11 +9,13 @@ import {
   GRADE_LEVEL_NEAR_DEG,
   GRADE_LEVEL_OK_DEG,
   gradeCaptureReadiness,
+  GRADE_AUTO_CAPTURE_COPY,
   type GradeCaptureReadiness,
 } from "@cardflow/shared";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { Image } from "expo-image";
+import * as Haptics from "expo-haptics";
 import { useRef, useState, type RefObject } from "react";
 import {
   ActivityIndicator,
@@ -34,6 +36,7 @@ import {
 } from "@/lib/grade-photos";
 import { TAB_CURVE_RADIUS } from "@/components/ui/tab-bar-metrics";
 import { useDeviceLevel, type DeviceLevel } from "@/lib/device-level";
+import { useGradeAutoCapture } from "@/lib/use-grade-auto-capture";
 import { colors, space } from "@/lib/theme";
 
 const DIM = "rgba(0,0,0,0.55)";
@@ -93,12 +96,25 @@ export function GradeCardFinder({
   });
   const guideColor = GUIDE_COLORS[readiness.tone];
 
-  async function onShutter() {
+  // P1-15: auto-capture once level (≤ 2°) and still for 0.5 s. The shutter always works too.
+  const autoEnabled = showLivePreview && !freezeUri && !detecting && level.available;
+  const { holdProgress } = useGradeAutoCapture({
+    tick: level,
+    autoCaptureReady: readiness.autoCaptureReady,
+    enabled: autoEnabled,
+    busy: shutterDisabled,
+    onFire: () => void onShutter("auto"),
+  });
+
+  async function onShutter(via: "auto" | "manual" = "manual") {
     if (busyRef.current || shutterDisabled || !showLivePreview) return;
     busyRef.current = true;
     setCapturing(true);
     setError(null);
     try {
+      // Light haptic on capture (expo-haptics works in Expo Go).
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+      if (__DEV__) console.info(`[grade-finder] ${side} capture via ${via}`);
       const photo = await cameraRef.current?.takePictureAsync({
         // Full pixels; Photo grade prep writes JPEG q=0.8 once.
         quality: 1,
@@ -210,7 +226,17 @@ export function GradeCardFinder({
       <FinderHeader onBack={detecting ? undefined : onBack} title={`${sideLabel} photo`} />
       <View style={styles.helper}>
         <Text style={styles.helperMain}>{GRADE_GUIDE_COPY.lineUp}</Text>
-        <Text style={[styles.helperStatus, { color: guideColor }]}>{statusLine(readiness, level)}</Text>
+        <Text
+          accessibilityLiveRegion="polite"
+          style={[styles.helperStatus, { color: guideColor }]}
+        >
+          {capturing
+            ? GRADE_AUTO_CAPTURE_COPY.capturing
+            : holdProgress > 0 && readiness.autoCaptureReady
+              ? `${GRADE_AUTO_CAPTURE_COPY.holding} ${Math.round(holdProgress * 100)}%`
+              : statusLine(readiness, level)}
+        </Text>
+        {level.available ? <Text style={styles.helperMain}>{GRADE_AUTO_CAPTURE_COPY.manualHint}</Text> : null}
       </View>
       <CardFinderStage
         cameraRef={cameraRef}
@@ -239,7 +265,7 @@ export function GradeCardFinder({
           accessibilityRole="button"
           accessibilityState={{ disabled: shutterDisabled }}
           disabled={shutterDisabled}
-          onPress={() => void onShutter()}
+          onPress={() => void onShutter("manual")}
           style={[styles.shutterOuter, { borderColor: guideColor }, shutterDisabled && styles.disabled]}
         >
           {detecting || waitingForCamera ? (

@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { readApiSource } from "./repo-sources";
 
 const repoRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 
@@ -21,7 +22,7 @@ describe("PATCH is the Max Buy save path", () => {
     const preferences = readRepoFile("apps/mobile/lib/preferences.ts");
     const load = functionBody(preferences, "loadMaxBuyPreferences");
     const save = functionBody(preferences, "saveMaxBuyPreferences");
-    const api = readRepoFile("apps/api/src/app.ts");
+    const api = readApiSource();
 
     expect(load).toContain("await getPreferences()");
     expect(load).toContain("rememberSuccessful(result.preferences)");

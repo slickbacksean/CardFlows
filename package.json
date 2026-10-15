@@ -22,7 +22,8 @@
     "build:legacy": "pnpm --filter @cardflows/shared build",
     "test:legacy": "pnpm build:legacy && pnpm --filter @cardflows/shared test && pnpm --filter @cardflows/api test",
     "typecheck:legacy": "pnpm build:legacy && pnpm --filter @cardflows/api typecheck",
-    "livestream:timing": "node scripts/livestream-timing.mjs"
+    "livestream:timing": "node scripts/livestream-timing.mjs",
+    "smoke:purchased": "node scripts/smoke-purchased-lane.mjs"
   },
   "dependencies": {
     "huds": "2.2.2"
