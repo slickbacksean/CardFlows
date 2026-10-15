@@ -17,6 +17,7 @@ import {
   type ConfirmFrame,
 } from "@cardflow/shared";
 import { Image } from "expo-image";
+import { useQueryClient } from "@tanstack/react-query";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
@@ -26,6 +27,7 @@ import { LabeledFigure } from "@/components/ui/labeled-figure";
 import { PrimaryButton } from "@/components/ui/primary-button";
 import { confirmScan, getScan, rejectScan, type ScanRecord } from "@/lib/api";
 import { rememberCatalogCards, searchCatalogWithSnapshot } from "@/lib/catalog-snapshot";
+import { prefetchCandidatePrices } from "@/lib/price-queries";
 import { getConfirmPictureUri } from "@/lib/scan-capture";
 import { colors, space } from "@/lib/theme";
 
@@ -33,6 +35,7 @@ const MANUAL_SEARCH_FRAMES = new Set<ConfirmFrame>(CONFIRM_SEARCH_FRAMES);
 
 export default function ScanScreen() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const { scanId: scanIdParam } = useLocalSearchParams<{ scanId: string }>();
   const scanId = Array.isArray(scanIdParam) ? scanIdParam[0] : scanIdParam;
   const [scan, setScan] = useState<ScanRecord | null>(null);
@@ -66,6 +69,10 @@ export default function ScanScreen() {
             ? [data.scan.mapping.canonicalCard, ...data.scan.mapping.candidates]
             : data.scan.mapping.candidates,
         );
+        prefetchCandidatePrices(queryClient, [
+          ...(data.scan.mapping.canonicalCard ? [data.scan.mapping.canonicalCard] : []),
+          ...data.scan.mapping.candidates,
+        ]);
         setSelectedTcgdexId(
           data.scan.mapping.canonicalCard?.tcgdexId ??
             data.scan.mapping.candidates[0]?.tcgdexId ??
@@ -88,7 +95,7 @@ export default function ScanScreen() {
     return () => {
       cancelled = true;
     };
-  }, [scanId]);
+  }, [queryClient, scanId]);
 
   const options = useMemo(() => {
     if (!scan) return searchCards;
