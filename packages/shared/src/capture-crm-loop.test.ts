@@ -108,7 +108,7 @@ describe("Task 5 Capture CRM loop wiring", () => {
     expect(scan).toContain("confirmScan");
     expect(scan).toContain("CONFIRM_SEARCH_MANUALLY_LABEL");
     expect(decide).toContain("computeMaxBuy");
-    expect(decide).toContain("savePurchased");
+    expect(decide).toMatch(/savePurchased\(|runQueueableWrite\("save_purchased"/);
     expect(decide).toContain("canCommitInventory = Boolean(confirmationIdValue)");
     expect(collection).toContain("openOrCreateDraft");
     expect(draft).toContain("getDraftClipboard");

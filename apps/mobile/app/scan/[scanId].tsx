@@ -5,6 +5,7 @@ import {
   CONFIRM_AMBIGUOUS_TITLE,
   CONFIRM_COULD_NOT_CONFIRM_MESSAGE,
   CONFIRM_SEARCH_FRAMES,
+  CONFIRM_NOT_THIS_CARD_LABEL,
   CONFIRM_SEARCH_MANUALLY_LABEL,
   CONFIRM_TIPS,
   HOW_THIS_WORKS_OPEN_LABEL,
@@ -16,6 +17,7 @@ import {
   type ConfirmFrame,
 } from "@cardflow/shared";
 import { Image } from "expo-image";
+import { useQueryClient } from "@tanstack/react-query";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
@@ -23,7 +25,9 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { HowThisWorksSheet } from "@/components/ui/how-this-works-sheet";
 import { LabeledFigure } from "@/components/ui/labeled-figure";
 import { PrimaryButton } from "@/components/ui/primary-button";
-import { confirmScan, getScan, rejectScan, searchCatalog, type ScanRecord } from "@/lib/api";
+import { confirmScan, getScan, rejectScan, type ScanRecord } from "@/lib/api";
+import { rememberCatalogCards, searchCatalogWithSnapshot } from "@/lib/catalog-snapshot";
+import { prefetchCandidatePrices } from "@/lib/price-queries";
 import { getConfirmPictureUri } from "@/lib/scan-capture";
 import { colors, space } from "@/lib/theme";
 
@@ -31,6 +35,7 @@ const MANUAL_SEARCH_FRAMES = new Set<ConfirmFrame>(CONFIRM_SEARCH_FRAMES);
 
 export default function ScanScreen() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const { scanId: scanIdParam } = useLocalSearchParams<{ scanId: string }>();
   const scanId = Array.isArray(scanIdParam) ? scanIdParam[0] : scanIdParam;
   const [scan, setScan] = useState<ScanRecord | null>(null);
@@ -40,6 +45,8 @@ export default function ScanScreen() {
   const [rejected, setRejected] = useState(false);
   const [searchSet, setSearchSet] = useState("");
   const [searchNumber, setSearchNumber] = useState("");
+  const [searchName, setSearchName] = useState("");
+  const [searchOpen, setSearchOpen] = useState(false);
   const [searchCards, setSearchCards] = useState<CardFlowCanonicalCard[]>([]);
   const [searchCached, setSearchCached] = useState(false);
   const [searchNotice, setSearchNotice] = useState<string | null>(null);
@@ -57,6 +64,15 @@ export default function ScanScreen() {
         const data = await getScan(scanId);
         if (cancelled) return;
         setScan(data.scan);
+        void rememberCatalogCards(
+          data.scan.mapping.canonicalCard
+            ? [data.scan.mapping.canonicalCard, ...data.scan.mapping.candidates]
+            : data.scan.mapping.candidates,
+        );
+        prefetchCandidatePrices(queryClient, [
+          ...(data.scan.mapping.canonicalCard ? [data.scan.mapping.canonicalCard] : []),
+          ...data.scan.mapping.candidates,
+        ]);
         setSelectedTcgdexId(
           data.scan.mapping.canonicalCard?.tcgdexId ??
             data.scan.mapping.candidates[0]?.tcgdexId ??
@@ -79,7 +95,7 @@ export default function ScanScreen() {
     return () => {
       cancelled = true;
     };
-  }, [scanId]);
+  }, [queryClient, scanId]);
 
   const options = useMemo(() => {
     if (!scan) return searchCards;
@@ -107,13 +123,17 @@ export default function ScanScreen() {
         })
       : null;
   const captureUri = getConfirmPictureUri(scanId, scan?.imageStorageRef);
-  const showManualSearch = frame ? MANUAL_SEARCH_FRAMES.has(frame) : false;
+  const showManualSearch = searchOpen || (frame ? MANUAL_SEARCH_FRAMES.has(frame) : false);
 
   async function onSearch() {
     setIsSearching(true);
     setError(null);
     try {
-      const result = await searchCatalog({ set: searchSet, number: searchNumber });
+      const result = await searchCatalogWithSnapshot({
+        set: searchSet,
+        number: searchNumber,
+        name: searchName,
+      });
       setSearchCards(result.cards);
       setSearchCached(result.cached);
       setSearchNotice(
@@ -128,7 +148,7 @@ export default function ScanScreen() {
         setSelectedTcgdexId(null);
       }
       if (result.cards.length === 0 && !result.notice && !result.error) {
-        setSearchNotice("No English catalog row for that set and number.");
+        setSearchNotice("No English catalog card matches that search.");
       }
     } catch (caught) {
       setSearchCards([]);
@@ -156,7 +176,14 @@ export default function ScanScreen() {
     setIsConfirming(true);
     setError(null);
     try {
-      const result = await confirmScan(scan.scanId, { tcgdexId: selectedTcgdexId });
+      const pickedFromSearch =
+        searchCards.some((card) => card.tcgdexId === selectedTcgdexId) &&
+        scan.mapping.canonicalCard?.tcgdexId !== selectedTcgdexId &&
+        !scan.mapping.candidates.some((card) => card.tcgdexId === selectedTcgdexId);
+      const result = await confirmScan(scan.scanId, {
+        tcgdexId: selectedTcgdexId,
+        ...(pickedFromSearch ? { via: "manual_search" as const } : {}),
+      });
       const cardflowCardId = result.canonicalCard.cardflowCardId;
       router.push({
         pathname: "/decide/[cardflowCardId]",
@@ -195,6 +222,8 @@ export default function ScanScreen() {
       cards={searchCards}
       isSearching={isSearching}
       notice={searchNotice}
+      name={searchName}
+      onNameChange={setSearchName}
       number={searchNumber}
       onNumberChange={setSearchNumber}
       onSearch={() => void onSearch()}
@@ -206,7 +235,7 @@ export default function ScanScreen() {
   ) : null;
 
   const failureConfirm =
-    showManualSearch && frame !== "ambiguous" && selected ? (
+    showManualSearch && (searchOpen || frame !== "ambiguous") && selected ? (
       <View style={styles.stack}>
         <IdentityCopy card={selected} />
         {error ? <Text style={styles.error}>{error}</Text> : null}
@@ -277,6 +306,23 @@ export default function ScanScreen() {
             onSelect={setSelectedTcgdexId}
             selectedTcgdexId={selectedTcgdexId}
           />
+        ) : null}
+
+        {scan && (frame === "high" || frame === "ambiguous") ? (
+          searchOpen ? (
+            <View style={styles.stack}>
+              {manualSearch}
+              {failureConfirm}
+            </View>
+          ) : (
+            <Pressable
+              accessibilityRole="button"
+              hitSlop={8}
+              onPress={() => setSearchOpen(true)}
+            >
+              <Text style={styles.link}>{CONFIRM_NOT_THIS_CARD_LABEL}</Text>
+            </Pressable>
+          )
         ) : null}
 
         {scan && frame === "no-card" ? (
@@ -503,6 +549,8 @@ function FailureBody({
 }
 
 interface ManualCatalogSearchProps {
+  name: string;
+  onNameChange: (value: string) => void;
   setName: string;
   number: string;
   onSetNameChange: (value: string) => void;
@@ -517,6 +565,8 @@ interface ManualCatalogSearchProps {
 }
 
 function ManualCatalogSearch({
+  name,
+  onNameChange,
   setName,
   number,
   onSetNameChange,
@@ -533,6 +583,17 @@ function ManualCatalogSearch({
     <View style={styles.stack}>
       <Text style={styles.kicker}>{CONFIRM_SEARCH_MANUALLY_LABEL}</Text>
       <Text style={styles.body}>{CATALOG_SEARCH_HINT}</Text>
+      <TextInput
+        accessibilityLabel="Card name"
+        autoCorrect={false}
+        onChangeText={onNameChange}
+        placeholder="Name (e.g. Charizard)"
+        placeholderTextColor={colors.muted}
+        returnKeyType="search"
+        onSubmitEditing={onSearch}
+        style={styles.input}
+        value={name}
+      />
       <TextInput
         accessibilityLabel="English set name or id"
         autoCapitalize="none"
@@ -554,7 +615,7 @@ function ManualCatalogSearch({
         value={number}
       />
       <PrimaryButton
-        disabled={isSearching || !setName.trim() || !number.trim()}
+        disabled={isSearching || (!name.trim() && !setName.trim() && !number.trim())}
         label={isSearching ? "Searching…" : "Search catalog"}
         onPress={onSearch}
         tone="muted"
@@ -684,6 +745,7 @@ function GhostButton({ label, onPress, disabled }: GhostButtonProps) {
 }
 
 const styles = StyleSheet.create({
+  link: { color: colors.accent, fontSize: 16, fontWeight: "600", paddingVertical: space.sm },
   safe: { flex: 1, backgroundColor: colors.bg },
   topBar: {
     paddingHorizontal: space.md,
