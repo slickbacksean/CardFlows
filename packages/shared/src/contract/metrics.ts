@@ -11,4 +11,11 @@ export const metricsRoutes = {
     // JSON `{ ok, report }` or markdown text, so the body is not schema-checked.
     response: null,
   }),
+  /** P1-17 ops metrics; bearer token required (404 when unset). */
+  getOpsMetrics: defineRoute({
+    method: "GET",
+    path: "/ops/metrics",
+    bodyKind: "none",
+    response: z.looseObject({ ok: z.literal(true) }),
+  }),
 } as const;

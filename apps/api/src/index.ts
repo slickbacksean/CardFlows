@@ -1,6 +1,6 @@
 import { serve } from "@hono/node-server";
 import { loadLocalApiEnv } from "./local-env";
-import { initApiSentry } from "./sentry";
+import { captureApiException, initApiSentry } from "./sentry";
 import { createApp } from "./app";
 import { createCatalogFromEnv } from "./catalog-env";
 import { createPricingFromEnv, createPokecollectorAccountsFromEnv } from "./pokecollector-env";
@@ -15,11 +15,18 @@ import { loadOptionalPhashIndex } from "./obb-phash-provider";
 import { resolveLiveIdentityOpenclipFromEnv } from "./live-identity-openclip";
 import { resolveLiveVideoObbDetector } from "./live-video-obb";
 import type { ObbDetector } from "@cardflow/shared";
+import { opsMetrics, webhookAlertSink } from "./ops-metrics";
 
 installUnmappedSetNameLogger();
 
 loadLocalApiEnv();
 initApiSentry();
+
+// P1-17 alerts: always logged; sent to Sentry when SENTRY_DSN is set and to a webhook when configured.
+opsMetrics.addSink((alert) => console.warn(JSON.stringify({ event: "ops_alert", ...alert })));
+opsMetrics.addSink((alert) => captureApiException(new Error(`[ops_alert] ${alert.message}`)));
+const alertWebhook = process.env.CARD_FLOW_ALERT_WEBHOOK_URL?.trim();
+if (alertWebhook) opsMetrics.addSink(webhookAlertSink(alertWebhook));
 
 const parsedPort = Number(process.env.PORT);
 const port = Number.isFinite(parsedPort) && parsedPort > 0 ? parsedPort : 3001;

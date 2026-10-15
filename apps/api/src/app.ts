@@ -1,5 +1,7 @@
+import { createHash, timingSafeEqual } from "node:crypto";
+import { routePath } from "hono/route";
+import { opsMetrics, type OpsMetrics } from "./ops-metrics";
 import { parseUserPriceAmount } from "@cardflow/shared";
-import { createHash } from "node:crypto";
 import {
   cachedPricingProvider,
   createRecognitionCache,
@@ -297,6 +299,10 @@ export interface CreateAppOptions {
   pricing?: CardPricingProvider;
   /** Recognition provider. Tests default to mock; live Capture uses `obb_phash`. */
   recognition?: CardRecognitionProvider;
+  /** P1-17: defaults to the process-wide metrics. */
+  opsMetrics?: OpsMetrics;
+  /** P1-17: bearer token for GET /ops/metrics; defaults to CARD_FLOW_OPS_TOKEN. */
+  opsToken?: string | null;
   /** P1-06: manual-search corrections land here (and in the log) for P1-26. */
   scanCorrections?: ScanCorrection[];
   /** P1-03 server caches (pricing + recognition). Defaults to CARD_FLOW_SERVER_CACHE (on). */
@@ -701,12 +707,18 @@ export function createApp(
     }
   }
 
+  const metrics = options.opsMetrics ?? opsMetrics;
+  const opsToken = options.opsToken === undefined ? process.env.CARD_FLOW_OPS_TOKEN : options.opsToken;
   const app = new Hono<AppEnv>();
   app.use("*", async (c, next) => {
     const requestId = resolveRequestId(c.req.header(REQUEST_ID_HEADER));
     c.set("requestId", requestId);
     c.header(REQUEST_ID_HEADER, requestId);
+    const startedAt = performance.now();
     await next();
+    if (c.req.path !== "/health") {
+      metrics.recordRequest(`${c.req.method} ${routePath(c, -1)}`, c.res.status, performance.now() - startedAt);
+    }
     if (c.req.path !== "/health" && process.env.VITEST !== "true") {
       console.log(`${c.req.method} ${c.req.path} ${c.res.status} ${requestId}`);
     }
@@ -722,6 +734,16 @@ export function createApp(
     captureApiException(err, { requestId });
     console.error(`[${requestId}]`, err);
     return c.json({ ok: false, error: "Something went wrong" }, 500);
+  });
+  // P1-17: ops metrics, behind a bearer token. 404 when CARD_FLOW_OPS_TOKEN is unset.
+  app.get("/ops/metrics", (c) => {
+    const expected = opsToken?.trim();
+    const given = c.req.header("authorization")?.replace(/^Bearer\s+/i, "").trim();
+    if (!expected) return c.json({ ok: false, error: "Not found" }, 404);
+    if (!given || !timingSafeEqualString(given, expected)) {
+      return c.json({ ok: false, error: "Unauthorized" }, 401);
+    }
+    return c.json({ ok: true, ...metrics.snapshot() });
   });
   const allowedOrigins = new Set(options.corsOrigins ?? corsOriginsFromEnv());
   app.use(
@@ -2480,4 +2502,10 @@ function isIsoDateTime(value: string): boolean {
     );
   }
   return /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(value);
+}
+
+function timingSafeEqualString(a: string, b: string): boolean {
+  const left = Buffer.from(a);
+  const right = Buffer.from(b);
+  return left.length === right.length && timingSafeEqual(left, right);
 }
