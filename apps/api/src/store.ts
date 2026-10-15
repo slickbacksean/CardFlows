@@ -1,3 +1,4 @@
+import { createMemoryGradeHistoryStore, type GradeHistoryStore } from "./grade-history-store";
 import {
   catalogFingerprint,
   cachedCatalogCardMatches,
@@ -683,6 +684,8 @@ export function moveGradingSubmittedToReturned(copy: GradingReturnedCopy): void 
 
 /** Route-facing CRM port. CRM reads/writes take request-scoped userId. */
 export interface StorePort {
+  /** P2-07 pre-grade estimate history. */
+  gradeHistory: GradeHistoryStore;
   createSession: typeof createSession;
   getSessionByToken: typeof getSessionByToken;
   getPokecollectorUserMapping: typeof getPokecollectorUserMapping;
@@ -809,6 +812,7 @@ export function createMemoryStore(): StorePort {
   }
 
   return {
+    gradeHistory: createMemoryGradeHistoryStore(),
     createSession,
     getSessionByToken,
     getPokecollectorUserMapping,

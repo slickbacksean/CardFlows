@@ -8,6 +8,7 @@ import { accountRoutes } from "./account";
 import { catalogRoutes } from "./catalog";
 import type { ApiRoute } from "./core";
 import { gradeRoutes } from "./grade";
+import { gradeHistoryRoutes } from "./grade-history";
 import { gradingRoutes } from "./grading";
 import { healthRoutes } from "./health";
 import { inventoryRoutes } from "./inventory";
@@ -23,6 +24,7 @@ export const apiContract = {
   ...gradeRoutes,
   ...gradingRoutes,
   ...livestreamRoutes,
+  ...gradeHistoryRoutes,
 } as const;
 
 export type ApiContract = typeof apiContract;
@@ -33,5 +35,6 @@ export const apiContractRoutes: readonly ApiRoute[] = Object.values(apiContract)
 export * from "./core";
 export * from "./models";
 export * from "./records";
+export { GradeHistoryEntrySchema } from "./grade-history";
 export type { CatalogSearchResponse } from "./catalog";
 export { CatalogSearchResponseSchema } from "./catalog";

@@ -7,7 +7,8 @@ export type QueuedWriteKind =
   | "save_purchased"
   | "save_watchlist"
   | "watchlist_to_purchased"
-  | "complete_details";
+  | "complete_details"
+  | "import_grade_history";
 
 export interface QueuedWrite<P = unknown> {
   /** Also the Idempotency-Key header. */

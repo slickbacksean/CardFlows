@@ -786,6 +786,18 @@ export function createSession(inviteCode: string) {
   return callApi(apiContract.createSession, { body: { inviteCode } });
 }
 
+/** P2-07 pre-grade estimate history (server records each fresh estimate). */
+export function getGradeHistory(inventoryItemId: string) {
+  return callApi(apiContract.getGradeHistory, { params: { inventoryItemId } });
+}
+
+export function importGradeHistory(
+  inventoryItemId: string,
+  entries: Array<{ at: string; overall: number; confidence?: string | null }>,
+) {
+  return callApi(apiContract.importGradeHistory, { params: { inventoryItemId }, body: { entries } });
+}
+
 export function getPreferences() {
   return callApi(apiContract.getPreferences);
 }

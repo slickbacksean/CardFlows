@@ -30,3 +30,12 @@ describe("grade history", () => {
     expect(sheet).toContain("GRADE_HISTORY_TITLE");
   });
 });
+
+describe("grade history sync", () => {
+  it("phone reads server history and uploads local entries once via the offline queue", () => {
+    const lib = readFileSync(resolve(__dirname, "../../../apps/mobile/lib/grade-history.ts"), "utf8");
+    expect(lib).toContain("getGradeHistory");
+    expect(lib).toContain('runQueueableWrite("import_grade_history"');
+    expect(lib).toContain("clearLegacy");
+  });
+});

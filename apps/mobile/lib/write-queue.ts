@@ -16,6 +16,7 @@ import {
   apiErrorStatus,
   completePurchasedDetails,
   convertWatchlistToPurchased,
+  importGradeHistory,
   saveLivestreamPurchase,
   savePurchased,
   saveWatchlist,
@@ -33,6 +34,7 @@ type Payloads = {
   save_watchlist: Parameters<typeof saveWatchlist>[0];
   watchlist_to_purchased: { inventoryItemId: string };
   complete_details: { inventoryItemId: string; input: Parameters<typeof completePurchasedDetails>[1] };
+  import_grade_history: { inventoryItemId: string; entries: Parameters<typeof importGradeHistory>[1] };
 };
 
 type Results = {
@@ -41,6 +43,7 @@ type Results = {
   save_watchlist: Awaited<ReturnType<typeof saveWatchlist>>;
   watchlist_to_purchased: Awaited<ReturnType<typeof convertWatchlistToPurchased>>;
   complete_details: Awaited<ReturnType<typeof completePurchasedDetails>>;
+  import_grade_history: Awaited<ReturnType<typeof importGradeHistory>>;
 };
 
 const EXECUTORS: { [K in QueuedWriteKind]: (payload: Payloads[K], key: string) => Promise<Results[K]> } = {
@@ -49,6 +52,7 @@ const EXECUTORS: { [K in QueuedWriteKind]: (payload: Payloads[K], key: string) =
   save_watchlist: (p, key) => saveWatchlist(p, key),
   watchlist_to_purchased: (p) => convertWatchlistToPurchased(p.inventoryItemId),
   complete_details: (p) => completePurchasedDetails(p.inventoryItemId, p.input),
+  import_grade_history: (p) => importGradeHistory(p.inventoryItemId, p.entries),
 };
 
 export const QUEUED_ID_PREFIX = "queued:" as const;

@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import {
   check,
+  index,
   integer,
   primaryKey,
   real,
@@ -343,6 +344,20 @@ export const vendorQuotaUsage = sqliteTable(
   (table) => [primaryKey({ columns: [table.provider, table.monthKey] })],
 );
 
+/** P2-07: per-user pre-grade estimate history (estimates only, not official grades). */
+export const gradeEstimateHistory = sqliteTable(
+  "grade_estimate_history",
+  {
+    entryId: text("entry_id").primaryKey(),
+    userId: text("user_id").notNull(),
+    inventoryItemId: text("inventory_item_id").notNull(),
+    overall: real("overall").notNull(),
+    confidence: text("confidence"),
+    recordedAt: text("recorded_at").notNull(),
+  },
+  (table) => [index("grade_estimate_history_item_idx").on(table.userId, table.inventoryItemId, table.recordedAt)],
+);
+
 export const schema = {
   cardflowCards,
   cardExternalIds,
@@ -362,4 +377,5 @@ export const schema = {
   gradeAccounts,
   gradeQuotaUsage,
   vendorQuotaUsage,
+  gradeEstimateHistory,
 };

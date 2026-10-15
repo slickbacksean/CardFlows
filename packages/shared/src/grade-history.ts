@@ -1,4 +1,3 @@
-import type { CardFlowGradeEstimate } from "./grade-estimate";
 
 /** Per-card pre-grade estimate history. Estimates only, never an official grade. */
 export const GRADE_HISTORY_TITLE = "Pre-grade estimate history";
@@ -13,7 +12,7 @@ export interface GradeHistoryEntry {
 
 export function appendGradeHistory(
   history: readonly GradeHistoryEntry[],
-  estimate: Pick<CardFlowGradeEstimate, "overall" | "confidence">,
+  estimate: { overall: number | null; confidence?: string | null },
   at: string,
 ): GradeHistoryEntry[] {
   if (estimate.overall == null || !Number.isFinite(estimate.overall) || estimate.overall < 1) {
