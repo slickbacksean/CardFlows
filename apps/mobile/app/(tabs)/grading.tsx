@@ -277,7 +277,6 @@ export default function GradingScreen() {
         </Pressable>
         <View style={styles.titleRow}>
           <Text style={styles.title}>Grading</Text>
-          <StatusBanner />
           {segment === "prepare" ? (
             <View style={styles.searchBox}>
               <Ionicons color={colors.muted} name="search-outline" size={18} />
@@ -295,6 +294,7 @@ export default function GradingScreen() {
             </View>
           ) : null}
         </View>
+        <StatusBanner />
         <Text style={styles.constraint}>{GRADING_TAB_CONSTRAINT}</Text>
         <View accessibilityRole="tablist" style={styles.segments}>
           <SegmentButton
