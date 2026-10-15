@@ -1,4 +1,23 @@
-import { createHash } from "node:crypto";
+import { createHash, timingSafeEqual } from "node:crypto";
+import { routePath } from "hono/route";
+import { isHot, parsePerfBatch } from "@cardflow/shared";
+import { opsMetrics, type OpsMetrics } from "./ops-metrics";
+import { parseUserPriceAmount } from "@cardflow/shared";
+import {
+  cachedPricingProvider,
+  createRecognitionCache,
+  serverCacheEnabledFromEnv,
+} from "./server-cache";
+import {
+  computeMappingMetrics,
+  confirmEventFor,
+  mappingMetricsMarkdown,
+  weeklyWindow,
+  rerankItemsByConfirms,
+  scanCorrectionFor,
+  suggestVariants,
+  type ScanCorrection,
+} from "@cardflow/shared";
 import {
   canMarkReadyForReview,
   CatalogProviderError,
@@ -117,6 +136,7 @@ import { contractMiddleware } from "./contract-middleware";
 import { corsOriginsFromEnv } from "./cors-env";
 import { registerGradeQuotaRoutes } from "./routes/grade-quota";
 import { registerPreferenceRoutes } from "./routes/preferences";
+import { registerSalesRoutes } from "./routes/sales";
 import { recordGradeEstimate, registerGradeHistoryRoutes } from "./routes/grade-history";
 import { REQUEST_ID_HEADER, resolveRequestId } from "./request-id";
 import { captureApiException } from "./sentry";
@@ -125,6 +145,7 @@ import {
   LIVESTREAM_IDENTIFY_BODY_MAX_BYTES,
   GRADE_ROUTE_BODY_MAX_BYTES,
 } from "./request-limits";
+import { unmappedSetNameCounts } from "./tcgdex-catalog";
 import { createMemoryStore, type InventoryItemRecord, type StorePort } from "./store";
 import {
   offPokecollectorAccounts,
@@ -281,6 +302,14 @@ export interface CreateAppOptions {
   pricing?: CardPricingProvider;
   /** Recognition provider. Tests default to mock; live Capture uses `obb_phash`. */
   recognition?: CardRecognitionProvider;
+  /** P1-17: defaults to the process-wide metrics. */
+  opsMetrics?: OpsMetrics;
+  /** P1-17: bearer token for GET /ops/metrics; defaults to CARD_FLOW_OPS_TOKEN. */
+  opsToken?: string | null;
+  /** P1-06: manual-search corrections land here (and in the log) for P1-26. */
+  scanCorrections?: ScanCorrection[];
+  /** P1-03 server caches (pricing + recognition). Defaults to CARD_FLOW_SERVER_CACHE (on). */
+  serverCache?: boolean;
   /**
    * When true, identify reads persisted stills (`image_storage_ref`).
    * JSON-only DEV chips stay on mock. Missing/oversize stills never run the model.
@@ -365,6 +394,14 @@ export function createApp(
   options: CreateAppOptions = {},
 ) {
   const {
+    saveConfirmEvent,
+    listConfirmEvents,
+    confirmCounts,
+    variantCounts,
+    deleteUserConfirmEvents,
+    saveUserPriceSnapshot,
+    listUserPriceSnapshots,
+    deleteUserPriceSnapshots,
     confirmScan,
     createSession,
     findCachedCanonicals,
@@ -416,7 +453,24 @@ export function createApp(
   const appApiKey = options.appApiKey === undefined ? appApiKeyFromEnv() : options.appApiKey;
   const devAutoSession = options.devAutoSession ?? resolveDevAutoSession();
   const catalog = options.catalog ?? mockTcgdexCatalogProvider;
-  const pricing = options.pricing ?? offPricingProvider;
+  const scanCorrections = options.scanCorrections ?? [];
+  const variantSuggestionsFor = (mapping: {
+    canonicalCard: CardFlowCanonicalCard | null;
+    candidates: CardFlowCanonicalCard[];
+  }) => {
+    const card = mapping.canonicalCard ?? mapping.candidates[0] ?? null;
+    if (!card) return [];
+    return suggestVariants({ variants: card.variants, pickedVariantCounts: variantCounts(card.tcgdexId) });
+  };
+  const recordScanCorrection = (correction: ScanCorrection) => {
+    scanCorrections.push(correction);
+    if (scanCorrections.length > 1000) scanCorrections.shift();
+    if (!process.env.VITEST) console.info(JSON.stringify({ event: "scan_correction", ...correction }));
+  };
+  const serverCache = options.serverCache ?? serverCacheEnabledFromEnv();
+  const basePricing = options.pricing ?? offPricingProvider;
+  const pricing = serverCache ? cachedPricingProvider(basePricing) : basePricing;
+  const recognitionCache = serverCache ? createRecognitionCache() : null;
   const pokecollectorAccounts = options.pokecollectorAccounts ?? offPokecollectorAccounts;
   const recognitionProvider = options.recognition ?? mockCardRecognitionProvider;
   const gradingProvider = options.grading ?? mockCardGradingProvider;
@@ -656,12 +710,18 @@ export function createApp(
     }
   }
 
+  const metrics = options.opsMetrics ?? opsMetrics;
+  const opsToken = options.opsToken === undefined ? process.env.CARD_FLOW_OPS_TOKEN : options.opsToken;
   const app = new Hono<AppEnv>();
   app.use("*", async (c, next) => {
     const requestId = resolveRequestId(c.req.header(REQUEST_ID_HEADER));
     c.set("requestId", requestId);
     c.header(REQUEST_ID_HEADER, requestId);
+    const startedAt = performance.now();
     await next();
+    if (c.req.path !== "/health") {
+      metrics.recordRequest(`${c.req.method} ${routePath(c, -1)}`, c.res.status, performance.now() - startedAt);
+    }
     if (c.req.path !== "/health" && process.env.VITEST !== "true") {
       console.log(`${c.req.method} ${c.req.path} ${c.res.status} ${requestId}`);
     }
@@ -677,6 +737,16 @@ export function createApp(
     captureApiException(err, { requestId });
     console.error(`[${requestId}]`, err);
     return c.json({ ok: false, error: "Something went wrong" }, 500);
+  });
+  // P1-17: ops metrics, behind a bearer token. 404 when CARD_FLOW_OPS_TOKEN is unset.
+  app.get("/ops/metrics", (c) => {
+    const expected = opsToken?.trim();
+    const given = c.req.header("authorization")?.replace(/^Bearer\s+/i, "").trim();
+    if (!expected) return c.json({ ok: false, error: "Not found" }, 404);
+    if (!given || !timingSafeEqualString(given, expected)) {
+      return c.json({ ok: false, error: "Unauthorized" }, 401);
+    }
+    return c.json({ ok: true, ...metrics.snapshot() });
   });
   const allowedOrigins = new Set(options.corsOrigins ?? corsOriginsFromEnv());
   app.use(
@@ -886,6 +956,43 @@ export function createApp(
       }
       throw error;
     }
+  });
+
+  /** P1-12: your own reference prices. Works with pricing off. */
+  app.get("/v1/pricing/cards/:tcgdexId/yours", (c) => {
+    const tcgdexId = c.req.param("tcgdexId").trim();
+    if (!tcgdexId) return c.json({ ok: false, error: "tcgdexId is required" }, 400);
+    const variantRaw = c.req.query("variant");
+    const variant = variantRaw === undefined ? undefined : variantRaw.trim() || null;
+    return c.json({ ok: true, snapshots: listUserPriceSnapshots(c.get("userId"), tcgdexId, variant) });
+  });
+
+  app.post("/v1/pricing/cards/:tcgdexId/yours", async (c) => {
+    const tcgdexId = c.req.param("tcgdexId").trim();
+    if (!tcgdexId) return c.json({ ok: false, error: "tcgdexId is required" }, 400);
+    const body = await c.req.json<{ amount?: unknown; variant?: string | null }>().catch(() => ({}) as { amount?: unknown; variant?: string | null });
+    const amount = parseUserPriceAmount(body.amount);
+    if (!amount) return c.json({ ok: false, error: INVALID_DOLLAR_AMOUNT }, 400);
+    const snapshot = saveUserPriceSnapshot(c.get("userId"), {
+      snapshotId: crypto.randomUUID(),
+      tcgdexId,
+      variant: typeof body.variant === "string" && body.variant.trim() ? body.variant.trim() : null,
+      amount,
+      currency: "USD",
+      source: "you",
+      enteredAt: new Date().toISOString(),
+    });
+    return c.json({ ok: true, snapshot }, 201);
+  });
+
+  // P1-18: sampled on-device timings. Timings only; unknown fields are dropped.
+  app.post("/v1/telemetry/perf", async (c) => {
+    const batch = parsePerfBatch(await c.req.json().catch(() => null));
+    if (!batch) return c.json({ ok: false, error: "Invalid request" }, 400);
+    for (const sample of batch.samples) {
+      metrics.recordDeviceStage(sample.stage, batch.deviceClass, sample.ms, isHot(batch.thermal));
+    }
+    return c.json({ ok: true, accepted: batch.samples.length });
   });
 
   app.get("/v1/pricing/cards/:tcgdexId", async (c) => {
@@ -1242,11 +1349,15 @@ export function createApp(
   app.post("/v1/account/delete", (c) => {
     const userId = c.get("userId");
     const photos = deleteUserPhotos(userId);
+    deleteUserConfirmEvents(userId);
+    deleteUserPriceSnapshots(userId);
     const staged = gradeUploads.releaseUser(userId);
+    const salesDeleted = store.sales.deleteUser(userId);
     const gradeHistoryDeleted = store.gradeHistory.deleteUser(userId);
     return c.json({
       ok: true,
       photosDeleted: photos.deleted + staged,
+      salesDeleted,
       gradeHistoryDeleted,
     });
   });
@@ -1344,6 +1455,11 @@ export function createApp(
   });
 
   registerPreferenceRoutes(app, { getPreferences, setPreferences });
+  registerSalesRoutes(app, {
+    sales: store.sales,
+    ownsInventoryItem: (userId, inventoryItemId) =>
+      getInventoryItem(userId, inventoryItemId)?.intent === "purchased",
+  });
   registerGradeHistoryRoutes(app, {
     gradeHistory: store.gradeHistory,
     ownsInventoryItem: (userId, inventoryItemId) =>
@@ -1389,13 +1505,21 @@ export function createApp(
           image: identify.image,
           mimeType: identify.mimeType,
         };
-        recognition = await identifyLiveCaptureStill({
-          image: identify.image,
-          mimeType: identify.mimeType,
-          fallback: recognitionProvider,
-          openclip: liveIdentityOpenclip,
-          catalog,
-        });
+        const runLive = () =>
+          identifyLiveCaptureStill({
+            image: identify.image,
+            mimeType: identify.mimeType,
+            fallback: recognitionProvider,
+            openclip: liveIdentityOpenclip,
+            catalog,
+          });
+        recognition = recognitionCache
+          ? await recognitionCache.getOrIdentify(
+              { bytes: identify.image, mimeType: identify.mimeType },
+              recognitionProvider.name,
+              runLive,
+            )
+          : await runLive();
       } else {
         const identifyRequest: IdentifyCardRequest = {
           image: identify.image,
@@ -1406,7 +1530,19 @@ export function createApp(
           liveIdentifyEnabled ? mockCardRecognitionProvider : recognitionProvider;
         recognition = await mockProvider.identifyCard(identifyRequest);
       }
-      const mapping = await mapRecognitionToCatalog(recognition, catalog);
+      const mapped = await mapRecognitionToCatalog(recognition, catalog);
+      // P1-26: cards users keep confirming move up the candidate list.
+      const mapping =
+        mapped.candidates.length > 1
+          ? {
+              ...mapped,
+              candidates: rerankItemsByConfirms(
+                mapped.candidates,
+                (card) => card.tcgdexId,
+                confirmCounts(mapped.candidates.map((card) => card.tcgdexId)),
+              ),
+            }
+          : mapped;
       const scan = saveScan({
         scanId,
         userId,
@@ -1422,7 +1558,7 @@ export function createApp(
         recognition,
         mapping,
       });
-      return c.json({ ok: true, scan }, 201);
+      return c.json({ ok: true, scan, variantSuggestions: variantSuggestionsFor(scan.mapping) }, 201);
     },
   );
 
@@ -1444,7 +1580,7 @@ export function createApp(
   app.get("/v1/scans/:scanId", (c) => {
     const scan = getScan(c.get("userId"), c.req.param("scanId"));
     if (!scan) return c.json({ ok: false, error: "Scan not found" }, 404);
-    return c.json({ ok: true, scan });
+    return c.json({ ok: true, scan, variantSuggestions: variantSuggestionsFor(scan.mapping) });
   });
 
   app.post("/v1/scans/:scanId/confirm", async (c) => {
@@ -1453,6 +1589,7 @@ export function createApp(
     const body = await c.req.json<{
       tcgdexId?: string;
       selectedVariant?: string | null;
+      via?: string | null;
     }>();
     if (!body.tcgdexId) {
       return c.json({ ok: false, error: "tcgdexId is required" }, 400);
@@ -1490,6 +1627,30 @@ export function createApp(
         selectedVariant: body.selectedVariant,
         catalogCard,
       });
+      const correction = scanCorrectionFor({
+        scanId: scan.scanId,
+        userId: c.get("userId"),
+        via: body.via,
+        predictedTcgdexId: scan.mapping.tcgdexId ?? scan.mapping.canonicalCard?.tcgdexId ?? null,
+        candidateTcgdexIds: scan.mapping.candidates.map((card) => card.tcgdexId),
+        chosenTcgdexId: body.tcgdexId,
+        recognitionProvider: scan.mapping.provider,
+      });
+      if (correction) recordScanCorrection(correction);
+      const shown = scan.mapping.candidates.map((card) => card.tcgdexId);
+      const predicted = scan.mapping.tcgdexId ?? scan.mapping.canonicalCard?.tcgdexId ?? null;
+      saveConfirmEvent(
+        confirmEventFor({
+          scanId: scan.scanId,
+          userId: c.get("userId"),
+          via: body.via,
+          shownTcgdexIds: shown.length > 0 ? shown : predicted ? [predicted] : [],
+          chosenTcgdexId: body.tcgdexId,
+          selectedVariant: body.selectedVariant ?? null,
+          confidence: scan.mapping.confidence ?? null,
+          recognitionProvider: scan.mapping.provider,
+        }),
+      );
       return c.json({
         ok: true,
         scan: result.scan,
@@ -1505,6 +1666,22 @@ export function createApp(
         400,
       );
     }
+  });
+
+  /** P1-27: weekly mapping-quality report (aggregates only, no user ids). */
+  app.get("/v1/metrics/mapping", (c) => {
+    const daysRaw = Number(c.req.query("days") ?? 7);
+    const days = Number.isFinite(daysRaw) ? Math.min(Math.max(Math.floor(daysRaw), 1), 90) : 7;
+    const window = weeklyWindow(new Date(), days);
+    const report = computeMappingMetrics({
+      events: listConfirmEvents({ since: window.from }),
+      ...window,
+      unmappedSetNames: unmappedSetNameCounts(),
+    });
+    if (c.req.query("format") === "markdown") {
+      return c.text(mappingMetricsMarkdown(report), 200, { "content-type": "text/markdown; charset=utf-8" });
+    }
+    return c.json({ ok: true, report });
   });
 
   app.post("/v1/scans/:scanId/reject", (c) => {
@@ -1586,6 +1763,7 @@ export function createApp(
     if (!deleteInventoryItem(userId, inventoryItemId)) {
       return c.json({ ok: false, error: "Inventory item not found" }, 404);
     }
+    store.sales.delete(userId, inventoryItemId);
     store.gradeHistory.deleteItem(userId, inventoryItemId);
     if (sourceWatchlistId) {
       const watchlist = getInventoryItem(userId, sourceWatchlistId);
@@ -2355,4 +2533,10 @@ function isIsoDateTime(value: string): boolean {
     );
   }
   return /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(value);
+}
+
+function timingSafeEqualString(a: string, b: string): boolean {
+  const left = Buffer.from(a);
+  const right = Buffer.from(b);
+  return left.length === right.length && timingSafeEqual(left, right);
 }

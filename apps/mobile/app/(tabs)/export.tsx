@@ -8,7 +8,7 @@ import {
 } from "@cardflow/shared";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import * as Clipboard from "expo-clipboard";
-import { useFocusEffect } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
 import { useCallback, useMemo, useState } from "react";
 import { ActivityIndicator, Pressable, ScrollView, Share, StyleSheet, Text, View } from "react-native";
 import { getDraft, listInventory, type InventoryItem } from "@/lib/api";
@@ -177,6 +177,15 @@ export default function ExportScreen() {
           />
         </View>
       )}
+
+      <DestinationCard
+        busy={false}
+        countLabel={countLabel}
+        detail="All-in cost, sales, and net. Realized and estimated kept apart."
+        disabled={busy !== null}
+        label="P&L"
+        onPress={() => router.push("/pnl")}
+      />
 
       {purchased.length === 0 && !isLoading ? (
         <Text style={styles.constraint}>No purchased cards yet. Watchlist cards stay in the app.</Text>

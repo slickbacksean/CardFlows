@@ -118,7 +118,7 @@ export default function ScanTabScreen() {
           >
             <Ionicons color={colors.text} name="close" size={26} />
           </Pressable>
-          <Text numberOfLines={1} style={styles.errorTitle}>
+          <Text accessibilityRole="header" style={styles.errorTitle}>
             Livestream Screener
           </Text>
           <View style={styles.iconButton} />
@@ -260,6 +260,7 @@ export default function ScanTabScreen() {
         </View>
         {__DEV__ ? (
           <Pressable
+            accessibilityLabel="Developer: preview load failure"
             accessibilityRole="button"
             onPress={() => setLoadState("error")}
             style={styles.devToggle}
@@ -292,6 +293,7 @@ interface SegmentButtonProps {
 function SegmentButton({ label, selected, onPress }: SegmentButtonProps) {
   return (
     <Pressable
+      accessibilityLabel={label}
       accessibilityRole="tab"
       accessibilityState={{ selected }}
       onPress={onPress}
@@ -422,7 +424,7 @@ const styles = StyleSheet.create({
     gap: space.lg,
     paddingHorizontal: space.md,
   },
-  segment: { paddingBottom: 2 },
+  segment: { paddingBottom: 2, minHeight: 44, justifyContent: "flex-end" },
   segmentLabel: { color: colors.muted, fontSize: 16, fontWeight: "700" },
   segmentLabelSelected: { color: colors.text },
   segmentUnderline: {

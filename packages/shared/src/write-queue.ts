@@ -8,6 +8,8 @@ export type QueuedWriteKind =
   | "save_watchlist"
   | "watchlist_to_purchased"
   | "complete_details"
+  | "save_sale"
+  | "delete_sale"
   | "import_grade_history";
 
 export interface QueuedWrite<P = unknown> {

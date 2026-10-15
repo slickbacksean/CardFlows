@@ -377,7 +377,7 @@ export function rejectScan(scanId: string) {
 
 export function confirmScan(
   scanId: string,
-  input: { tcgdexId: string; selectedVariant?: string | null },
+  input: { tcgdexId: string; selectedVariant?: string | null; via?: "manual_search" },
 ) {
   return callApi(apiContract.confirmScan, { params: { scanId }, body: input });
 }
@@ -404,6 +404,21 @@ export function getPriceEstimate(tcgdexId: string, variant?: string) {
   return callApi(apiContract.getPriceEstimate, {
     params: { tcgdexId },
     query: { variant: variant?.trim() || undefined },
+  });
+}
+
+/** P1-12: your own reference prices for one card. */
+export function listUserPriceSnapshots(tcgdexId: string, variant?: string | null) {
+  return callApi(apiContract.listUserPriceSnapshots, {
+    params: { tcgdexId },
+    query: { variant: variant?.trim() || undefined },
+  });
+}
+
+export function saveUserPriceSnapshot(tcgdexId: string, amount: string, variant?: string | null) {
+  return callApi(apiContract.saveUserPriceSnapshot, {
+    params: { tcgdexId },
+    body: { amount, variant: variant ?? null },
   });
 }
 
@@ -786,6 +801,22 @@ export function createSession(inviteCode: string) {
   return callApi(apiContract.createSession, { body: { inviteCode } });
 }
 
+/** P2-03 sale records (server, per user). */
+export function listSales() {
+  return callApi(apiContract.listSales);
+}
+
+export function saveSaleRemote(
+  inventoryItemId: string,
+  body: { price: string; fees?: string | null; soldAt?: string; onlyIfMissing?: boolean },
+) {
+  return callApi(apiContract.saveSale, { params: { inventoryItemId }, body });
+}
+
+export function deleteSaleRemote(inventoryItemId: string) {
+  return callApi(apiContract.deleteSale, { params: { inventoryItemId } });
+}
+
 /** P2-07 pre-grade estimate history (server records each fresh estimate). */
 export function getGradeHistory(inventoryItemId: string) {
   return callApi(apiContract.getGradeHistory, { params: { inventoryItemId } });
@@ -808,3 +839,7 @@ export function patchPreferences(preferences: MaxBuyPreferences) {
 
 /** Typed list of every inventory item, for screens that hold one. */
 export type InventoryList = InventoryItem[];
+/** P1-18: sampled on-device timings (no images). */
+export function postPerfTelemetry(batch: import("@cardflow/shared").PerfBatch) {
+  return callApi(apiContract.postPerfTelemetry, { body: batch });
+}

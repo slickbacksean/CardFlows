@@ -27,7 +27,9 @@ export function PrimaryButton({
 
   return (
     <Pressable
+      accessibilityLabel={label}
       accessibilityRole="button"
+      accessibilityState={{ disabled: Boolean(disabled) }}
       disabled={disabled}
       onPress={onPress}
       style={[styles.button, { backgroundColor, opacity: disabled ? 0.5 : 1 }]}
@@ -43,6 +45,9 @@ const styles = StyleSheet.create({
     paddingVertical: space.sm + 2,
     paddingHorizontal: space.md,
     alignItems: "center",
+    justifyContent: "center",
+    // 48 dp covers iOS 44 pt and Android 48 dp; grows with Dynamic Type.
+    minHeight: 48,
   },
   label: {
     fontSize: 15,

@@ -75,6 +75,27 @@
     {
       "idx": 10,
       "version": "6",
+      "when": 1790486400000,
+      "tag": "0010_scan_confirm_events",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "6",
+      "when": 1790572800000,
+      "tag": "0011_user_price_snapshots",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1790659200000,
+      "tag": "0012_user_card_sales",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "6",
       "when": 1790745600000,
       "tag": "0013_grade_estimate_history",
       "breakpoints": true

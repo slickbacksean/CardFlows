@@ -16,6 +16,8 @@ import {
   apiErrorStatus,
   completePurchasedDetails,
   convertWatchlistToPurchased,
+  deleteSaleRemote,
+  saveSaleRemote,
   importGradeHistory,
   saveLivestreamPurchase,
   savePurchased,
@@ -34,6 +36,8 @@ type Payloads = {
   save_watchlist: Parameters<typeof saveWatchlist>[0];
   watchlist_to_purchased: { inventoryItemId: string };
   complete_details: { inventoryItemId: string; input: Parameters<typeof completePurchasedDetails>[1] };
+  save_sale: { inventoryItemId: string; body: Parameters<typeof saveSaleRemote>[1] };
+  delete_sale: { inventoryItemId: string };
   import_grade_history: { inventoryItemId: string; entries: Parameters<typeof importGradeHistory>[1] };
 };
 
@@ -43,6 +47,8 @@ type Results = {
   save_watchlist: Awaited<ReturnType<typeof saveWatchlist>>;
   watchlist_to_purchased: Awaited<ReturnType<typeof convertWatchlistToPurchased>>;
   complete_details: Awaited<ReturnType<typeof completePurchasedDetails>>;
+  save_sale: Awaited<ReturnType<typeof saveSaleRemote>>;
+  delete_sale: Awaited<ReturnType<typeof deleteSaleRemote>>;
   import_grade_history: Awaited<ReturnType<typeof importGradeHistory>>;
 };
 
@@ -52,8 +58,22 @@ const EXECUTORS: { [K in QueuedWriteKind]: (payload: Payloads[K], key: string) =
   save_watchlist: (p, key) => saveWatchlist(p, key),
   watchlist_to_purchased: (p) => convertWatchlistToPurchased(p.inventoryItemId),
   complete_details: (p) => completePurchasedDetails(p.inventoryItemId, p.input),
+  save_sale: (p) => saveSaleRemote(p.inventoryItemId, p.body),
+  delete_sale: (p) => deleteSaleRemote(p.inventoryItemId),
   import_grade_history: (p) => importGradeHistory(p.inventoryItemId, p.entries),
 };
+
+/** Writes of one kind still waiting on the phone, oldest first (for optimistic overlays). */
+export function pendingWritesOf<K extends QueuedWriteKind>(kind: K): Payloads[K][] {
+  return load()
+    .items.filter((item) => item.kind === kind)
+    .map((item) => item.payload as Payloads[K]);
+}
+
+/** Every pending write as kind + payload, oldest first. */
+export function pendingWrites(): Array<{ kind: QueuedWriteKind; payload: unknown }> {
+  return load().items.map((item) => ({ kind: item.kind, payload: item.payload }));
+}
 
 export const QUEUED_ID_PREFIX = "queued:" as const;
 const FILE_NAME = "write-queue-v1.json";
