@@ -5,7 +5,10 @@ import {
   serverCacheEnabledFromEnv,
 } from "./server-cache";
 import {
+  computeMappingMetrics,
   confirmEventFor,
+  mappingMetricsMarkdown,
+  weeklyWindow,
   rerankItemsByConfirms,
   scanCorrectionFor,
   suggestVariants,
@@ -136,6 +139,7 @@ import {
   LIVESTREAM_IDENTIFY_BODY_MAX_BYTES,
   GRADE_ROUTE_BODY_MAX_BYTES,
 } from "./request-limits";
+import { unmappedSetNameCounts } from "./tcgdex-catalog";
 import { createMemoryStore, type InventoryItemRecord, type StorePort } from "./store";
 import {
   offPokecollectorAccounts,
@@ -381,6 +385,7 @@ export function createApp(
 ) {
   const {
     saveConfirmEvent,
+    listConfirmEvents,
     confirmCounts,
     variantCounts,
     deleteUserConfirmEvents,
@@ -1580,6 +1585,22 @@ export function createApp(
         400,
       );
     }
+  });
+
+  /** P1-27: weekly mapping-quality report (aggregates only, no user ids). */
+  app.get("/v1/metrics/mapping", (c) => {
+    const daysRaw = Number(c.req.query("days") ?? 7);
+    const days = Number.isFinite(daysRaw) ? Math.min(Math.max(Math.floor(daysRaw), 1), 90) : 7;
+    const window = weeklyWindow(new Date(), days);
+    const report = computeMappingMetrics({
+      events: listConfirmEvents({ since: window.from }),
+      ...window,
+      unmappedSetNames: unmappedSetNameCounts(),
+    });
+    if (c.req.query("format") === "markdown") {
+      return c.text(mappingMetricsMarkdown(report), 200, { "content-type": "text/markdown; charset=utf-8" });
+    }
+    return c.json({ ok: true, report });
   });
 
   app.post("/v1/scans/:scanId/reject", (c) => {
