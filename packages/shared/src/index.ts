@@ -672,6 +672,9 @@ export {
   GRADE_LEVEL_OK_DEG,
   GRADE_STEADY_MAX_DEG_PER_S,
   gradeAutoCaptureHold,
+  gradeAutoCaptureStep,
+  GRADE_AUTO_CAPTURE_INITIAL,
+  GRADE_AUTO_CAPTURE_COPY,
   gradeCaptureReadiness,
   gradeGuideFrame,
   gradeLevelState,
@@ -695,6 +698,7 @@ export type {
   GradeCaptureReadinessInput,
   GradeFrameSize,
   GradeLevelState,
+  GradeAutoCaptureState,
   GradeTilt,
 } from "./grade-capture-guide";
 export {
