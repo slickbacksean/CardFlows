@@ -6,7 +6,11 @@ import {
   enqueueScan,
   expiredScans,
   markScanFailed,
+  makePendingDue,
+  markScanOpened,
   markScanReady,
+  scanCapturedTimeLabel,
+  scanRetryDelayMs,
   parseScanQueue,
   readyToConfirm,
   scanQueueLabel,
@@ -23,7 +27,7 @@ describe("P1-10 offline scan queue", () => {
     expect(s.items).toHaveLength(20);
     for (const item of dueScans(s)) s = markScanReady(s, item.id, `scan-${item.id}`);
     expect(readyToConfirm(s)).toHaveLength(20);
-    expect(s.items.every((i) => i.fileUri === null)).toBe(true);
+    expect(s.items.every((i) => i.fileUri?.startsWith("file:///doc/scan-queue/"))).toBe(true); // preview kept
     expect(scanQueueLabel(s)).toBe("20 ready to confirm");
   });
   it("backs off failures and caps the queue", () => {
@@ -42,5 +46,17 @@ describe("P1-10 offline scan queue", () => {
     expect(expiredScans(s, 29 * 86_400_000)).toEqual([]);
     expect(parseScanQueue("{nope")).toEqual(emptyScanQueue());
     expect(parseScanQueue(JSON.stringify(s)).items).toHaveLength(1);
+  });
+
+  it("caps backoff at 30 s, retries at once when the network returns, and hides opened rows", () => {
+    expect(scanRetryDelayMs(20)).toBe(30_000);
+    let s = add(emptyScanQueue(), "a", 0);
+    for (let i = 0; i < 6; i += 1) s = markScanFailed(s, "a", 0);
+    expect(dueScans(s, 1000)).toHaveLength(0);
+    expect(dueScans(makePendingDue(s, 1000), 1000)).toHaveLength(1);
+    s = markScanOpened(markScanReady(s, "a", "scan-a"), "a");
+    expect(readyToConfirm(s)).toEqual([]);
+    expect(s.items[0]?.fileUri).toBeTruthy(); // cleaned up at expiry, not on open
+    expect(scanCapturedTimeLabel("2026-10-15T21:14:00Z", "en-US")).toMatch(/^\d{1,2}:14\s?(AM|PM)$/);
   });
 });

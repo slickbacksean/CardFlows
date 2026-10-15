@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from "react";
 import { AppState } from "react-native";
+import NetInfo from "@react-native-community/netinfo";
 import { Directory, File, Paths } from "expo-file-system";
 import {
   canQueueScan,
@@ -7,7 +8,9 @@ import {
   emptyScanQueue,
   enqueueScan,
   expiredScans,
+  makePendingDue,
   markScanFailed,
+  markScanOpened,
   markScanReady,
   parseScanQueue,
   removeQueuedScan,
@@ -20,8 +23,9 @@ import { rememberScanCapture } from "./scan-capture";
 
 /**
  * P1-10: scans taken offline. The still is already downscaled and re-encoded without metadata
- * by `prepareScanStill`; we copy it into the app's document directory so the OS can't purge it,
- * upload it with one idempotency key when back online, then delete the local copy.
+ * by `prepareScanStill`; we copy it into the app's document directory so the OS can't purge it and
+ * upload it with one idempotency key when back online (immediately on reconnect via NetInfo, which
+ * ships in Expo Go). The local copy stays as the row/Confirm preview until the 30-day expiry.
  */
 const FILE_NAME = "scan-queue-v1.json";
 let state: ScanQueueState | null = null;
@@ -119,7 +123,6 @@ export async function flushScanQueue(): Promise<void> {
           imageMimeType: item.mimeType,
           idempotencyKey: item.id,
         });
-        deleteLocal(item.fileUri);
         save(markScanReady(load(), item.id, result.scan.scanId));
       } catch (error) {
         if (isOfflineScanError(error)) {
@@ -142,7 +145,7 @@ export function openReadyScan(queueId: string): string | null {
   const item = load().items.find((i) => i.id === queueId);
   if (!item?.scanId) return null;
   if (item.fileUri) rememberScanCapture(item.scanId, item.fileUri);
-  save(removeQueuedScan(load(), queueId));
+  save(markScanOpened(load(), queueId));
   return item.scanId;
 }
 
@@ -152,8 +155,18 @@ export function startScanQueue(): () => void {
   const sub = AppState.addEventListener("change", (next) => {
     if (next === "active") void flushScanQueue();
   });
+  let wasOnline: boolean | null = null;
+  const unsubscribeNet = NetInfo.addEventListener((net) => {
+    const online = Boolean(net.isConnected) && net.isInternetReachable !== false;
+    if (online && wasOnline === false) {
+      save(makePendingDue(load()));
+      void flushScanQueue();
+    }
+    wasOnline = online;
+  });
   return () => {
     sub.remove();
+    unsubscribeNet();
     if (timer) clearTimeout(timer);
   };
 }

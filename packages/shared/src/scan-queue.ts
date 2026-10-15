@@ -3,12 +3,13 @@
  * as downscaled, metadata-free stills and uploaded when the phone is back online. Each scan
  * keeps one idempotency key for every attempt, so a replay never makes a second scan.
  */
-export type QueuedScanStatus = "pending" | "ready";
+/** "opened": confirmed from the list; kept only so its preview file is cleaned up at expiry. */
+export type QueuedScanStatus = "pending" | "ready" | "opened";
 
 export interface QueuedScan {
   /** Also the Idempotency-Key header. */
   id: string;
-  /** Local file inside the app's document directory. Deleted once uploaded. */
+  /** Local file inside the app's document directory. Kept after upload as the row/Confirm preview; deleted at expiry. */
   fileUri: string | null;
   mimeType: string;
   captureMethod: "camera_photo" | "manual_scan";
@@ -28,7 +29,8 @@ export const SCAN_QUEUE_MAX_ITEMS = 50;
 /** Queued stills follow the scan-photo retention rule. */
 export const SCAN_QUEUE_RETENTION_DAYS = 30;
 export const SCAN_QUEUE_BASE_DELAY_MS = 3_000;
-export const SCAN_QUEUE_MAX_DELAY_MS = 5 * 60_000;
+/** Capped low because the phone also retries the moment the network comes back. */
+export const SCAN_QUEUE_MAX_DELAY_MS = 30_000;
 
 export function emptyScanQueue(): ScanQueueState {
   return { version: 1, items: [] };
@@ -76,12 +78,30 @@ export function markScanFailed(state: ScanQueueState, id: string, now = Date.now
   };
 }
 
-/** Uploaded: keep the scan ID for "Ready to confirm", drop the local file. */
+/** Uploaded: keep the scan ID for "Ready to confirm" and the local preview. */
 export function markScanReady(state: ScanQueueState, id: string, scanId: string): ScanQueueState {
   return {
     version: 1,
-    items: state.items.map((i) => (i.id === id ? { ...i, status: "ready", scanId, fileUri: null } : i)),
+    items: state.items.map((i) => (i.id === id ? { ...i, status: "ready", scanId } : i)),
   };
+}
+
+export function markScanOpened(state: ScanQueueState, id: string): ScanQueueState {
+  return { version: 1, items: state.items.map((i) => (i.id === id ? { ...i, status: "opened" } : i)) };
+}
+
+/** Network is back: everything pending is due now. */
+export function makePendingDue(state: ScanQueueState, now = Date.now()): ScanQueueState {
+  return {
+    version: 1,
+    items: state.items.map((i) => (i.status === "pending" ? { ...i, nextAttemptAt: Math.min(i.nextAttemptAt, now) } : i)),
+  };
+}
+
+export function scanCapturedTimeLabel(capturedAt: string, locale?: string): string {
+  const date = new Date(capturedAt);
+  if (Number.isNaN(date.getTime())) return "earlier";
+  return date.toLocaleTimeString(locale ?? "en-US", { hour: "numeric", minute: "2-digit" });
 }
 
 export function removeQueuedScan(state: ScanQueueState, id: string): ScanQueueState {
