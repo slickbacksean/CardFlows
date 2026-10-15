@@ -345,6 +345,8 @@ export {
   MAX_BUY_CONDITION_FACTOR_INVALID_MESSAGE,
   MAX_BUY_FEES_BUFFER_INVALID_MESSAGE,
   MAX_BUY_MARGIN_INVALID_MESSAGE,
+  MAX_BUY_MARGIN_MAX_PCT,
+  MAX_BUY_FEES_MAX_PCT,
   MAX_BUY_NOT_MARKET_PRICE_DISCLAIMER,
   MAX_BUY_RESET_NOT_SAVED_NOTICE,
   maxBuyPreferencesRangeError,
@@ -805,3 +807,4 @@ export * from "./contract";
 export * from "./write-queue";
 export * from "./price-freshness";
 export * from "./user-price";
+export * from "./max-buy-breakdown";
