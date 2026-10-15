@@ -1,7 +1,8 @@
 import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { and, asc, desc, eq, gte, inArray } from "drizzle-orm";
-import type { ConfirmEvent } from "@cardflow/shared";
+import { and, asc, desc, eq, gte, inArray, isNull } from "drizzle-orm";
+import type { ConfirmEvent, UserPriceSnapshot } from "@cardflow/shared";
+import { USER_PRICE_SNAPSHOTS_PER_CARD } from "./store";
 import {
   catalogFingerprint,
   cachedCatalogCardMatches,
@@ -68,6 +69,7 @@ import {
   portfolioValueSnapshots,
   vendorQuotaUsage,
   scanConfirmEvents,
+  userPriceSnapshots,
   crmInventoryItems,
   crmListingDrafts,
   crmPurchases,
@@ -1842,6 +1844,49 @@ export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStor
     return db.delete(scanConfirmEvents).where(eq(scanConfirmEvents.userId, userId)).run().changes;
   }
 
+  function saveUserPriceSnapshot(userId: string, snapshot: UserPriceSnapshot): UserPriceSnapshot {
+    const cents = Math.round(Number(snapshot.amount) * 100);
+    db.insert(userPriceSnapshots)
+      .values({
+        snapshotId: snapshot.snapshotId,
+        userId,
+        tcgdexId: snapshot.tcgdexId,
+        variant: snapshot.variant,
+        amountCents: cents,
+        currency: "USD",
+        enteredAt: snapshot.enteredAt,
+      })
+      .run();
+    return { ...snapshot, amount: centsToDollarString(cents) };
+  }
+
+  function listUserPriceSnapshots(userId: string, tcgdexId: string, variant?: string | null): UserPriceSnapshot[] {
+    const where = [eq(userPriceSnapshots.userId, userId), eq(userPriceSnapshots.tcgdexId, tcgdexId)];
+    if (variant !== undefined) {
+      where.push(variant === null ? isNull(userPriceSnapshots.variant) : eq(userPriceSnapshots.variant, variant));
+    }
+    return db
+      .select()
+      .from(userPriceSnapshots)
+      .where(and(...where))
+      .orderBy(desc(userPriceSnapshots.enteredAt))
+      .limit(USER_PRICE_SNAPSHOTS_PER_CARD)
+      .all()
+      .map((row) => ({
+        snapshotId: row.snapshotId,
+        tcgdexId: row.tcgdexId,
+        variant: row.variant ?? null,
+        amount: centsToDollarString(row.amountCents),
+        currency: "USD" as const,
+        source: "you" as const,
+        enteredAt: row.enteredAt,
+      }));
+  }
+
+  function deleteUserPriceSnapshots(userId: string): number {
+    return db.delete(userPriceSnapshots).where(eq(userPriceSnapshots.userId, userId)).run().changes;
+  }
+
   return {
     sqlitePath: options.sqlitePath,
     close() {
@@ -1905,5 +1950,8 @@ export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStor
     confirmCounts,
     variantCounts,
     deleteUserConfirmEvents,
+    saveUserPriceSnapshot,
+    listUserPriceSnapshots,
+    deleteUserPriceSnapshots,
   };
 }

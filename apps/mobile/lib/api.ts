@@ -407,6 +407,21 @@ export function getPriceEstimate(tcgdexId: string, variant?: string) {
   });
 }
 
+/** P1-12: your own reference prices for one card. */
+export function listUserPriceSnapshots(tcgdexId: string, variant?: string | null) {
+  return callApi(apiContract.listUserPriceSnapshots, {
+    params: { tcgdexId },
+    query: { variant: variant?.trim() || undefined },
+  });
+}
+
+export function saveUserPriceSnapshot(tcgdexId: string, amount: string, variant?: string | null) {
+  return callApi(apiContract.saveUserPriceSnapshot, {
+    params: { tcgdexId },
+    body: { amount, variant: variant ?? null },
+  });
+}
+
 export function getLiveOverlayGuess(
   tcgdexId: string,
   confidence?: RecognitionConfidence | null,

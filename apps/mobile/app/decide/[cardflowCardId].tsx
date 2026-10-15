@@ -14,6 +14,10 @@ import {
   PRICE_UNAVAILABLE_ENTER_OWN_COPY,
   WATCHLIST_SAVED_MAX_BUY_META,
   YOUR_PRICE_INPUT_LABEL,
+  SAVE_YOUR_PRICE_LABEL,
+  priceSnapshotOptions,
+  selectMaxBuyReference,
+  userPriceLabel,
   priceDisplayState,
   PRICE_ESTIMATE_SCREEN_LABEL,
   PRICE_ESTIMATE_UNAVAILABLE_COPY,
@@ -28,9 +32,9 @@ import {
   type MaxBuyPreferences,
 } from "@cardflow/shared";
 import { Image } from "expo-image";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { HowThisWorksSheet } from "@/components/ui/how-this-works-sheet";
@@ -40,6 +44,8 @@ import { PrimaryButton } from "@/components/ui/primary-button";
 import { WatchlistSheet } from "@/components/ui/watchlist-sheet";
 import {
   getCard,
+  listUserPriceSnapshots,
+  saveUserPriceSnapshot,
 } from "@/lib/api";
 import { priceQueryOptions } from "@/lib/price-queries";
 import { loadMaxBuyPreferences, peekMaxBuyPreferences } from "@/lib/preferences";
@@ -110,6 +116,15 @@ export default function DecideScreen() {
     enabled: Boolean(card?.tcgdexId) && canCommitInventory,
   });
   const marketEstimate: CardFlowPriceEstimate | null = priceQuery.data?.estimate ?? null;
+  const queryClient = useQueryClient();
+  const yourPricesKey = ["cardflow", "userPriceSnapshots", { tcgdexId: card?.tcgdexId ?? "", variant: selectedVariant }] as const;
+  const yourPricesQuery = useQuery({
+    queryKey: yourPricesKey,
+    queryFn: () => listUserPriceSnapshots(card?.tcgdexId ?? "", selectedVariant),
+    enabled: Boolean(card?.tcgdexId) && canCommitInventory,
+  });
+  const [pickedPriceKey, setPickedPriceKey] = useState<string | null>(null);
+  const [isSavingPrice, setIsSavingPrice] = useState(false);
   const priceProvider = priceQuery.data?.provider ?? null;
   const priceFetchedAt = priceQuery.data
     ? (marketEstimate?.fetchedAt ?? new Date(priceQuery.dataUpdatedAt).toISOString())
@@ -169,17 +184,25 @@ export default function DecideScreen() {
   );
 
   const typedReference = parsedReference(reference);
-  const estimateReference = marketEstimate?.amount ?? null;
-  const maxBuyReference = typedReference ?? estimateReference;
-  const maxBuy = useMemo(
-    () =>
-      computeMaxBuy({
-        referencePriceAmount: maxBuyReference,
-        condition,
-        preferences,
-      }),
-    [condition, maxBuyReference, preferences],
+  const vendorSourceLabel = priceSourceLabel(
+    resolvePriceSourceKind({
+      provider: priceProvider,
+      source: marketEstimate?.source,
+      referenceSource: marketEstimate?.referenceSource,
+    }),
   );
+  // P1-12: your saved prices sit next to the vendor price; Max Buy uses the one you pick (newest by default).
+  const priceOptions = priceSnapshotOptions({
+    userSnapshots: yourPricesQuery.data?.snapshots ?? [],
+    vendor: { amount: marketEstimate?.amount, at: priceFetchedAt, sourceLabel: vendorSourceLabel },
+  });
+  const pickedReference = selectMaxBuyReference(priceOptions, pickedPriceKey);
+  const maxBuyReference = typedReference ?? pickedReference?.amount ?? null;
+  const maxBuy = computeMaxBuy({
+    referencePriceAmount: maxBuyReference,
+    condition,
+    preferences,
+  });
   const hasReference = maxBuy.referencePriceCents !== null;
   const matchConfidence = confidenceWord(firstSearchParam(confidence));
   const vendorSourceKind = resolvePriceSourceKind({
@@ -187,14 +210,15 @@ export default function DecideScreen() {
     source: marketEstimate?.source,
     referenceSource: marketEstimate?.referenceSource,
   });
-  const maxBuySourceKind = typedReference ? "your_price" : vendorSourceKind;
+  const maxBuySourceKind =
+    typedReference || pickedReference?.kind === "you" ? "your_price" : vendorSourceKind;
   const vendorPriceMeta = formatPriceEstimateMeta({
     sourceLabel: priceSourceLabel(vendorSourceKind),
     fetchedAt: priceFetchedAt,
   });
   const maxBuyMeta = formatMaxBuyEstimateMeta({
     sourceLabel: priceSourceLabel(maxBuySourceKind),
-    fetchedAt: typedReference ? referenceFetchedAt : priceFetchedAt,
+    fetchedAt: typedReference ? referenceFetchedAt : (pickedReference?.at ?? priceFetchedAt),
   });
 
   const variants = card ? variantOptions(card.variants) : [];
@@ -218,7 +242,7 @@ export default function DecideScreen() {
   async function onAddCard() {
     if (!confirmationIdValue) return;
     // Prices never block: your own typed price stands in when the estimate is unavailable.
-    const marketPrice = marketEstimate?.amount ?? typedReference;
+    const marketPrice = marketEstimate?.amount ?? typedReference ?? pickedReference?.amount ?? null;
     if (!marketPrice) {
       setError(PRICE_ESTIMATE_UNAVAILABLE_COPY);
       return;
@@ -241,6 +265,22 @@ export default function DecideScreen() {
       setError(caught instanceof Error ? caught.message : "Save failed");
     } finally {
       setIsSaving(false);
+    }
+  }
+
+  async function onSaveYourPrice() {
+    if (!card?.tcgdexId || !typedReference) return;
+    setIsSavingPrice(true);
+    setError(null);
+    try {
+      const saved = await saveUserPriceSnapshot(card.tcgdexId, typedReference, selectedVariant);
+      await queryClient.invalidateQueries({ queryKey: yourPricesKey });
+      setPickedPriceKey(`you:${saved.snapshot.snapshotId}`);
+      setReference("");
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Save failed");
+    } finally {
+      setIsSavingPrice(false);
     }
   }
 
@@ -381,8 +421,37 @@ export default function DecideScreen() {
                       <Text style={styles.body}>{marketEstimate.disclaimer}</Text>
                     </>
                   ) : (
-                    <>
-                      <Text style={styles.body}>{PRICE_UNAVAILABLE_ENTER_OWN_COPY}</Text>
+                    <Text style={styles.body}>{PRICE_UNAVAILABLE_ENTER_OWN_COPY}</Text>
+                  )}
+                  {priceOptions.length > 0 ? (
+                    <View style={styles.pills}>
+                      {priceOptions.map((option) => {
+                        const selected = !typedReference && pickedReference?.key === option.key;
+                        const label =
+                          option.kind === "you"
+                            ? `${userPriceLabel(option.at)} · $${option.amount}`
+                            : `${option.sourceLabel} · $${option.amount}`;
+                        return (
+                          <Pressable
+                            accessibilityLabel={`Use ${label} for Max Buy`}
+                            accessibilityRole="button"
+                            accessibilityState={{ selected }}
+                            key={option.key}
+                            onPress={() => {
+                              setPickedPriceKey(option.key);
+                              setReference("");
+                            }}
+                            style={[styles.pill, styles.pillTap, selected && styles.pillSelected]}
+                          >
+                            <Text style={[styles.pillLabel, selected && styles.pillLabelSelected]}>
+                              {selected ? "✓ " : ""}{label}
+                            </Text>
+                          </Pressable>
+                        );
+                      })}
+                    </View>
+                  ) : null}
+                  <>
                       <TextInput
                         accessibilityLabel={YOUR_PRICE_INPUT_LABEL}
                         inputMode="decimal"
@@ -396,8 +465,14 @@ export default function DecideScreen() {
                         style={styles.priceInput}
                         value={reference}
                       />
-                    </>
-                  )}
+                      {typedReference ? (
+                        <PrimaryButton
+                          disabled={isSavingPrice}
+                          label={SAVE_YOUR_PRICE_LABEL}
+                          onPress={() => void onSaveYourPrice()}
+                        />
+                      ) : null}
+                  </>
                 </LabeledFigure>
                 <LabeledFigure label={MAX_BUY_YOUR_RULE_LABEL} tip={CONFIRM_TIPS.maxBuy}>
                   {hasReference && maxBuy.maxBuyAmount ? (
@@ -622,6 +697,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 6,
   },
+  pillTap: { minHeight: 44, justifyContent: "center" },
   pillSelected: { borderColor: colors.accent, backgroundColor: colors.accentSoft },
   pillLabel: { color: colors.muted, fontSize: 13, fontWeight: "700" },
   pillLabelSelected: { color: colors.accent },

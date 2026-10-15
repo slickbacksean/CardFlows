@@ -804,3 +804,4 @@ export * from "./mapping-metrics";
 export * from "./contract";
 export * from "./write-queue";
 export * from "./price-freshness";
+export * from "./user-price";
