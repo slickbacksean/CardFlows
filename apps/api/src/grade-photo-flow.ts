@@ -226,7 +226,7 @@ function stillFromRequest(
 /**
  * Prepare-sheet provider on the same free grader. Front + back required.
  * A hard gate is a retake estimate (no number). A grader failure throws so
- * the route returns "Estimate unavailable." and does not cache it.
+ * the route returns "Pre-grade estimate unavailable. Try again later." and does not cache it.
  */
 export function createCardgradingProvider(runner: CardgradingRunner): CardGradingProvider {
   return {

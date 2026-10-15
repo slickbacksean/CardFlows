@@ -21,7 +21,7 @@ const STATUS_COPY: Record<BatchItem["status"], string> = {
   running: "Estimating…",
   done: "Pre-grade estimate",
   no_estimate: "Needs a retake",
-  unavailable: "Estimate unavailable",
+  unavailable: "Pre-grade estimate unavailable. Try again later.",
   skipped: "Skipped",
 };
 

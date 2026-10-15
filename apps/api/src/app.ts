@@ -305,6 +305,7 @@ export interface CreateAppOptions {
   recognition?: CardRecognitionProvider;
   /** P1-07: async grade jobs. Defaults to CARD_FLOW_GRADE_JOBS=on (off). */
   gradeJobs?: boolean;
+  gradeJobLimits?: { ttlMs?: number; maxActiveJobs?: number; maxActiveJobsPerUser?: number; sweepMs?: number };
   /** P1-17: defaults to the process-wide metrics. */
   opsMetrics?: OpsMetrics;
   /** P1-17: bearer token for GET /ops/metrics; defaults to CARD_FLOW_OPS_TOKEN. */
@@ -1856,6 +1857,7 @@ export function createApp(
   registerGradeJobRoutes(app, {
     enabled: options.gradeJobs ?? process.env.CARD_FLOW_GRADE_JOBS?.trim().toLowerCase() === "on",
     dispatch: (request) => Promise.resolve(app.fetch(request)),
+    ...options.gradeJobLimits,
   });
 
   app.post(

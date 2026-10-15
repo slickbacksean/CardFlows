@@ -50,7 +50,8 @@ describe("P1-07 async grade jobs", () => {
     expect(created.status).toBe(202);
     const { job } = (await created.json()) as { job: GradeJobView };
     expect(job.requestId).toBe("req-123");
-    const done = await pollGradeJob(getJob(app, job.jobId), { sleep: async () => {} });
+    const outcome = await pollGradeJob(getJob(app, job.jobId), { sleep: async () => {} });
+    const done = outcome.kind === "finished" ? outcome.job : null;
     expect(done?.status).toBe("done");
     const sync = (await (
       await app.request(`/v1/inventory/${id}/grade-estimate`, {
@@ -90,11 +91,44 @@ describe("P1-07 async grade jobs", () => {
     });
     expect(seen).toContain("waiting");
     expect(waitHint).toBeGreaterThan(0);
-    expect(result?.status === "done" || result?.status === "waiting" || result?.status === "failed").toBe(true);
+    expect(["finished", "timeout"]).toContain(result.kind);
   }, 40_000);
 
   it("another user cannot read a job", async () => {
     const app = createApp(createMemoryStore(), { gradeJobs: true });
     expect((await app.request("/v1/grade-jobs/not-a-job")).status).toBe(404);
   });
+
+  it("job IDs are 256-bit random, unfinished jobs are capped, and expired jobs 404 (client retries)", async () => {
+    let full = true;
+    const app = createApp(createMemoryStore(), {
+      gradeJobs: true,
+      gradeGate: { isFull: () => full },
+      gradeJobLimits: { maxActiveJobsPerUser: 2, ttlMs: 50, sweepMs: 0 },
+    });
+    const id = await purchasedWithStill(app);
+    const post = () =>
+      app.request(`/v1/inventory/${id}/grade-jobs`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({}),
+      });
+    const a = (await (await post()).json()) as { job: GradeJobView };
+    await post();
+    expect(a.job.jobId).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    const capped = await post();
+    expect(capped.status).toBe(503);
+    expect(capped.headers.get("retry-after")).toBe("10");
+    full = false;
+    await new Promise((r) => setTimeout(r, 80));
+    expect((await app.request(`/v1/grade-jobs/${a.job.jobId}`)).status).toBe(404);
+    const lost = await pollGradeJob(getJob404(app, a.job.jobId), { sleep: async () => {}, isNotFound: (e) => (e as { status?: number }).status === 404 });
+    expect(lost).toEqual({ kind: "not_found" });
+  });
 });
+
+const getJob404 = (app: App, jobId: string) => async () => {
+  const res = await app.request(`/v1/grade-jobs/${jobId}`);
+  if (res.status === 404) throw Object.assign(new Error("not found"), { status: 404 });
+  return ((await res.json()) as { job: GradeJobView }).job;
+};

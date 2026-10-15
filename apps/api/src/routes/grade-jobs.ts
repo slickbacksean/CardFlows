@@ -4,7 +4,8 @@
  * background (same auth, quota, cache and grader), so results are identical. A queue-full
  * 503 becomes "waiting" with the server's Retry-After, then retries (max 5).
  */
-import type { GradeJobView } from "@cardflow/shared";
+import { randomBytes } from "node:crypto";
+import { GRADE_ESTIMATE_UNAVAILABLE_COPY, type GradeJobView } from "@cardflow/shared";
 import type { CardFlowApp } from "../app-env";
 import { REQUEST_ID_HEADER } from "../request-id";
 
@@ -13,6 +14,11 @@ export interface GradeJobRouteDeps {
   dispatch: (request: Request) => Promise<Response>;
   ttlMs?: number;
   maxWaits?: number;
+  /** Max unfinished jobs across all users / per user. Over the cap → 503 + Retry-After. */
+  maxActiveJobs?: number;
+  maxActiveJobsPerUser?: number;
+  /** TTL sweep interval. 0 disables the timer (prune still runs on every request). */
+  sweepMs?: number;
   sleep?: (ms: number) => Promise<void>;
 }
 
@@ -27,6 +33,9 @@ export function registerGradeJobRoutes(app: CardFlowApp, deps: GradeJobRouteDeps
   const jobs = new Map<string, JobRecord>();
   const ttlMs = deps.ttlMs ?? 60 * 60_000;
   const maxWaits = deps.maxWaits ?? 5;
+  const maxActive = deps.maxActiveJobs ?? 200;
+  const maxPerUser = deps.maxActiveJobsPerUser ?? 5;
+  const sweepMs = deps.sweepMs ?? 5 * 60_000;
   const sleep = deps.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
   const off = { ok: false, error: "Grade jobs are off" } as const;
 
@@ -53,10 +62,13 @@ export function registerGradeJobRoutes(app: CardFlowApp, deps: GradeJobRouteDeps
         res = await deps.dispatch(new Request(url, { method: "POST", headers, body }));
       } catch {
         job.status = "failed";
-        job.error = "Estimate unavailable.";
+        job.error = GRADE_ESTIMATE_UNAVAILABLE_COPY;
         return;
       }
-      if (res.status === 503 && waits < maxWaits) {
+      // Queue full (503) or a short rate limit (429 with Retry-After ≤ 2 min) → wait, not fail.
+      const retryHint = Number(res.headers.get("retry-after") ?? "NaN");
+      const shortRateLimit = res.status === 429 && Number.isFinite(retryHint) && retryHint <= 120;
+      if ((res.status === 503 || shortRateLimit) && waits < maxWaits) {
         const after = Number(res.headers.get("retry-after") ?? "5");
         job.status = "waiting";
         job.retryAfterSeconds = Number.isFinite(after) && after > 0 ? after : 5;
@@ -69,20 +81,34 @@ export function registerGradeJobRoutes(app: CardFlowApp, deps: GradeJobRouteDeps
         job.estimate = data.estimate;
       } else {
         job.status = "failed";
-        job.error = typeof data?.error === "string" ? data.error : "Estimate unavailable.";
+        job.error = typeof data?.error === "string" ? data.error : GRADE_ESTIMATE_UNAVAILABLE_COPY;
         job.retryAfterSeconds = res.headers.get("retry-after") ? Number(res.headers.get("retry-after")) : null;
       }
       return;
     }
   }
 
+  if (deps.enabled && sweepMs > 0) {
+    const sweep = setInterval(prune, sweepMs);
+    (sweep as { unref?: () => void }).unref?.();
+  }
+
+  const isActive = (job: JobRecord) => job.status !== "done" && job.status !== "failed";
+
   app.post("/v1/inventory/:inventoryItemId/grade-jobs", async (c) => {
     if (!deps.enabled) return c.json(off, 404);
     prune();
-    const jobId = crypto.randomUUID();
+    const userId = c.get("userId");
+    const active = [...jobs.values()].filter(isActive);
+    if (active.length >= maxActive || active.filter((j) => j.userId === userId).length >= maxPerUser) {
+      c.header("Retry-After", "10");
+      return c.json({ ok: false, error: "The pre-grade queue is full. Try again soon." }, 503);
+    }
+    // 256-bit random, URL-safe: unguessable even without the per-user check below.
+    const jobId = randomBytes(32).toString("base64url");
     const job: JobRecord = {
       jobId,
-      userId: c.get("userId"),
+      userId,
       createdAt: Date.now(),
       status: "queued",
       retryAfterSeconds: null,
@@ -106,6 +132,7 @@ export function registerGradeJobRoutes(app: CardFlowApp, deps: GradeJobRouteDeps
 
   app.get("/v1/grade-jobs/:jobId", (c) => {
     if (!deps.enabled) return c.json(off, 404);
+    prune();
     const job = jobs.get(c.req.param("jobId"));
     if (!job || job.userId !== c.get("userId")) return c.json({ ok: false, error: "Job not found" }, 404);
     return c.json({ ok: true, job: view(job) });
