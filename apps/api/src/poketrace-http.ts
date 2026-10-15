@@ -1,3 +1,4 @@
+import { recordVendorResponse } from "./ops-metrics";
 import {
   applyGradedMarketSummary,
   emptySlabEstimate,
@@ -166,6 +167,7 @@ export function createPoketraceSlabProvider(options: PoketraceHttpOptions): Slab
         },
         signal: controller.signal,
       });
+      recordVendorResponse("poketrace", response.status);
       if (response.status === 429 && attempt < 1) {
         const retryAfter = Number(response.headers.get("retry-after"));
         const delay =

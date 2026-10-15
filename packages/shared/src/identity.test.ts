@@ -28,6 +28,7 @@ import {
   requireInvitedIdentity,
   shouldConfirmAccountSwitch,
 } from "./identity";
+import { readApiSource, readApiClientSource } from "./repo-sources";
 
 const repoRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 const MOCK_UUID =
@@ -124,7 +125,7 @@ describe("Private-beta identity model", () => {
 
   it("lets the mock API select and report the active invited user", () => {
     const store = readRepoFile("apps/api/src/store.ts");
-    const api = readRepoFile("apps/api/src/app.ts");
+    const api = readApiSource();
     const settings = readRepoFile("apps/mobile/app/settings.tsx");
 
     expect(store).not.toContain("DEV_USER_ID");
@@ -199,9 +200,9 @@ describe("Account switching", () => {
   it("lets Settings switch invited testers without minting inventory", () => {
     const settings = readRepoFile("apps/mobile/app/settings.tsx");
     const identity = readRepoFile("apps/mobile/lib/identity.ts");
-    const apiClient = readRepoFile("apps/mobile/lib/api.ts");
+    const apiClient = readApiClientSource();
     const store = readRepoFile("apps/api/src/store.ts");
-    const api = readRepoFile("apps/api/src/app.ts");
+    const api = readApiSource();
     const collection = readRepoFile("apps/mobile/app/(tabs)/collection.tsx");
 
     expect(settings).toContain("This tester");
@@ -214,7 +215,7 @@ describe("Account switching", () => {
     expect(identity).toContain("listInventory()");
     expect(identity).not.toContain("patchIdentity");
     expect(apiClient).toContain('"/v1/sessions"');
-    expect(apiClient).toContain("JSON.stringify({ inviteCode })");
+    expect(apiClient).toContain("body: { inviteCode }");
     expect(apiClient).not.toContain("patchIdentity");
 
     expect(store).toContain("export function createSession(");
@@ -255,7 +256,7 @@ describe("CRM rows per invited user", () => {
     expect(crmValueForUser(null, "a")).toBeNull();
 
     const store = readRepoFile("apps/api/src/store.ts");
-    const api = readRepoFile("apps/api/src/app.ts");
+    const api = readApiSource();
     const collection = readRepoFile("apps/mobile/app/(tabs)/collection.tsx");
     const exportScreen = readRepoFile("apps/mobile/app/(tabs)/export.tsx");
     const grading = readRepoFile("apps/mobile/app/(tabs)/grading.tsx");
@@ -315,7 +316,7 @@ describe("No sign-up wall", () => {
     expect(forbiddenSignUpWall("Create an account")).toBe("sign_up_to_continue");
 
     const store = readRepoFile("apps/api/src/store.ts");
-    const api = readRepoFile("apps/api/src/app.ts");
+    const api = readApiSource();
     const mobileIdentity = readRepoFile("apps/mobile/lib/identity.ts");
     const rootLayout = readRepoFile("apps/mobile/app/_layout.tsx");
     const tabsLayout = readRepoFile("apps/mobile/app/(tabs)/_layout.tsx");
@@ -358,7 +359,7 @@ describe("No sign-up wall", () => {
     const scan = readRepoFile("apps/mobile/app/scan/[scanId].tsx");
     const decide = readRepoFile("apps/mobile/app/decide/[cardflowCardId].tsx");
     const draft = readRepoFile("apps/mobile/app/draft/[draftId].tsx");
-    const api = readRepoFile("apps/api/src/app.ts");
+    const api = readApiSource();
     const rootLayout = readRepoFile("apps/mobile/app/_layout.tsx");
 
     expect(mobileIdentity).not.toContain("restoreDefaultInvitedIdentity");
@@ -391,7 +392,7 @@ describe("Mobile session restore", () => {
   it("persists the invite token on native and restores it on cold start", () => {
     const sessionToken = readRepoFile("apps/mobile/lib/session-token.ts");
     const identity = readRepoFile("apps/mobile/lib/identity.ts");
-    const apiClient = readRepoFile("apps/mobile/lib/api.ts");
+    const apiClient = readApiClientSource();
     const rootLayout = readRepoFile("apps/mobile/app/_layout.tsx");
     const settings = readRepoFile("apps/mobile/app/settings.tsx");
     const switchTester = readRepoFile("apps/mobile/app/switch-tester.tsx");
@@ -453,7 +454,7 @@ describe("Session loop check", () => {
     const identity = readRepoFile("apps/mobile/lib/identity.ts");
     const capture = readRepoFile("apps/mobile/app/capture.tsx");
     const collection = readRepoFile("apps/mobile/app/(tabs)/collection.tsx");
-    const api = readRepoFile("apps/api/src/app.ts");
+    const api = readApiSource();
 
     expect(switchTester).toContain("shouldConfirmAccountSwitch");
     expect(switchTester).toContain("Alert.alert");

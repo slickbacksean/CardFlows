@@ -15,6 +15,7 @@ import {
   type PickedGradeStill,
 } from "@cardflow/shared";
 import { manipulateAsync, SaveFormat } from "expo-image-manipulator";
+import { timePerfStage } from "./perf-telemetry";
 import * as ImagePicker from "expo-image-picker";
 import { Alert, Image, Platform } from "react-native";
 import { launchSystemImagePicker } from "@/lib/system-photo-picker";
@@ -118,10 +119,12 @@ export async function prepareGradeStill(input: {
   try {
     const size = await stillDimensions(input.uri, input.width, input.height);
     const resize = size ? gradeStillResizeAction(size.width, size.height) : null;
-    const result = await manipulateAsync(input.uri, resize ? [resize] : [], {
-      compress: GRADE_STILL_QUALITY,
-      format: SaveFormat.JPEG,
-    });
+    const result = await timePerfStage("grade_still_prep", () =>
+      manipulateAsync(input.uri, resize ? [resize] : [], {
+        compress: GRADE_STILL_QUALITY,
+        format: SaveFormat.JPEG,
+      }),
+    );
     if (
       result.width > 0 &&
       result.height > 0 &&

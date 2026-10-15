@@ -12,6 +12,7 @@ import {
   parseMaxBuyRulesForm,
 } from "./max-buy";
 import { dollarsToCents } from "./money";
+import { readApiSource } from "./repo-sources";
 
 const repoRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 
@@ -40,13 +41,13 @@ describe("computeMaxBuy", () => {
     expect(result.maxBuyAmountCents).toBe(dollarsToCents(8 * 0.8 * 0.87 * 0.85));
   });
 
-  it("defaults condition_factor to 1.0 when the map is missing", () => {
+  it("uses the shared default preset when the map is missing (HP = 50%)", () => {
     const result = computeMaxBuy({
       referencePriceAmount: "8.00",
       condition: "HP",
     });
-    expect(result.currentConditionFactor).toBe(1);
-    expect(result.maxBuyAmount).toBe("5.57");
+    expect(result.currentConditionFactor).toBe(0.5);
+    expect(result.maxBuyAmount).toBe("2.78");
   });
 
   it("still returns guidance metadata when reference is null", () => {
@@ -66,7 +67,7 @@ describe("Max Buy rules form", () => {
     });
   });
 
-  it("rejects a margin outside 0–99 with the wireframe copy", () => {
+  it("rejects a margin outside 0–80 with the wireframe copy", () => {
     const result = parseMaxBuyRulesForm({
       targetMarginDisplay: "200",
       feesBufferDisplay: "13",
@@ -76,10 +77,10 @@ describe("Max Buy rules form", () => {
       ok: false,
       error: MAX_BUY_MARGIN_INVALID_MESSAGE,
     });
-    expect(MAX_BUY_MARGIN_INVALID_MESSAGE).toBe("Margin must be between 0 and 99.");
+    expect(MAX_BUY_MARGIN_INVALID_MESSAGE).toBe("Margin must be between 0 and 80.");
   });
 
-  it("rejects a fees buffer outside 0–99 with the shared copy", () => {
+  it("rejects a fees buffer outside 0–50 with the shared copy", () => {
     const result = parseMaxBuyRulesForm({
       targetMarginDisplay: "20",
       feesBufferDisplay: "200",
@@ -111,7 +112,7 @@ describe("Max Buy rules form", () => {
     ).toBe("Condition factor must be 0 or greater.");
   });
 
-  it("rejects stored percents above 0.99 before PATCH", () => {
+  it("rejects stored percents above the bounds before PATCH", () => {
     expect(
       maxBuyPreferencesRangeError({
         targetMarginPct: 2,
@@ -139,16 +140,19 @@ describe("Max Buy rules form", () => {
     }
   });
 
-  it("accepts 0 and 99 percent", () => {
+  it("accepts 0 and the top of each range, rejects just above", () => {
+    expect(parseMaxBuyRulesForm({ targetMarginDisplay: "81", feesBufferDisplay: "13", conditionFactorNmDisplay: "1" }).ok).toBe(false);
+    expect(parseMaxBuyRulesForm({ targetMarginDisplay: "20", feesBufferDisplay: "51", conditionFactorNmDisplay: "1" }).ok).toBe(false);
+    expect(parseMaxBuyRulesForm({ targetMarginDisplay: "80", feesBufferDisplay: "13", conditionFactorNmDisplay: "1" }).ok).toBe(true);
     const zero = parseMaxBuyRulesForm({
       targetMarginDisplay: "0",
-      feesBufferDisplay: "99",
+      feesBufferDisplay: "50",
       conditionFactorNmDisplay: "1.0",
     });
     expect(zero.ok).toBe(true);
     if (zero.ok) {
       expect(zero.preferences.targetMarginPct).toBe(0);
-      expect(zero.preferences.feesBufferPct).toBe(0.99);
+      expect(zero.preferences.feesBufferPct).toBe(0.5);
     }
   });
 });
@@ -172,7 +176,7 @@ describe("Invalid Max Buy save does not persist", () => {
       preferences.indexOf("patchPreferences(withLockedDisplayCurrency(preferences))"),
     );
 
-    const api = readRepoFile("apps/api/src/app.ts");
+    const api = readApiSource();
     expect(api).toContain("maxBuyPreferencesRangeError");
     expect(api.indexOf("maxBuyPreferencesRangeError(next)")).toBeLessThan(
       api.indexOf("setPreferences(userId, next)"),
