@@ -14,7 +14,7 @@ import {
 } from "@cardflow/shared";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { Image } from "expo-image";
-import { useFocusEffect } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
 import { useCallback, useMemo, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { PhotoGradeFlow } from "@/components/ui/photo-grade-flow";
@@ -332,6 +332,11 @@ export default function GradingScreen() {
         >
           {actionError ? <Text style={styles.error}>{actionError}</Text> : null}
           {segment === "prepare" ? (
+            <Pressable accessibilityLabel="Batch pre-grade" accessibilityRole="button" onPress={() => router.push("/grade-batch")}>
+              <Text style={styles.batchLink}>Batch pre-grade</Text>
+            </Pressable>
+          ) : null}
+          {segment === "prepare" ? (
             loadState === "loading" && purchasedItems.length === 0 ? null : visiblePurchased.length ===
               0 ? (
               <EmptyState
@@ -642,6 +647,7 @@ function ReturnedRow({ copy, onPress }: ReturnedRowProps) {
 }
 
 const styles = StyleSheet.create({
+  batchLink: { color: colors.accent, fontWeight: "700", fontSize: 15 },
   flex: { flex: 1, backgroundColor: colors.bg },
   toolbar: {
     paddingHorizontal: space.lg,
