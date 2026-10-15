@@ -1,4 +1,5 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
+import { msSinceScan, trackEvent } from "@/lib/product-events";
 import {
   CATALOG_SEARCH_HINT,
   CONFIDENCE_SCREEN_LABEL,
@@ -184,6 +185,11 @@ export default function ScanScreen() {
         tcgdexId: selectedTcgdexId,
         ...(pickedFromSearch ? { via: "manual_search" as const } : {}),
       });
+      trackEvent("confirm", {
+        time_to_confirm_ms: msSinceScan(scan.scanId),
+        source: pickedFromSearch ? "manual_search" : "candidate",
+      });
+      if (pickedFromSearch) trackEvent("manual_search_used");
       const cardflowCardId = result.canonicalCard.cardflowCardId;
       router.push({
         pathname: "/decide/[cardflowCardId]",
@@ -209,6 +215,7 @@ export default function ScanScreen() {
       const result = await rejectScan(scan.scanId);
       setScan(result.scan);
       setRejected(true);
+      trackEvent("reject", { ms_since_scan: msSinceScan(scan.scanId) });
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not reject that scan");
     } finally {
