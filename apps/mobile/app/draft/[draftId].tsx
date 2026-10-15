@@ -1,4 +1,8 @@
 import {
+  ESTIMATED_SPREAD_LABEL,
+  ESTIMATED_SPREAD_NOTE,
+  estimatedSpreadLine,
+  listingReadiness,
   CONDITION_LABELS,
   DISCLOSURE_ITEMS,
   appendSnippet,
@@ -132,6 +136,12 @@ export default function DraftScreen() {
   }, [blocked, draftId, routeBlocked]);
 
   const catalog = draft?.catalogDisplay;
+  const readiness = listingReadiness({ title, condition, askingPrice, disclosure });
+  const estimatedSpread = estimatedSpreadLine({
+    askingPrice: askingPrice.trim() || null,
+    allInTotal,
+    at: draft?.updatedAt ?? null,
+  });
   const liveSpread = useMemo(
     () =>
       computeCostToAskSpread({
@@ -305,6 +315,19 @@ export default function DraftScreen() {
                 </View>
                 <Text style={styles.caption}>Catalog art — not a listing photo</Text>
 
+                <View
+                  accessibilityLabel={`Listing readiness: ${readiness.label}`}
+                  accessible
+                  style={styles.guidance}
+                >
+                  <Text style={styles.guidanceLabel}>{readiness.label}</Text>
+                  {readiness.steps.map((step) => (
+                    <Text key={step.id} style={styles.body}>
+                      {step.done ? "✓" : "○"} {step.label}
+                    </Text>
+                  ))}
+                </View>
+
                 <Text style={styles.label}>Title</Text>
                 <View style={styles.chips}>
                   <Chip
@@ -354,14 +377,15 @@ export default function DraftScreen() {
                 ) : null}
                 <View style={styles.guidance}>
                   <View style={styles.guidanceRow}>
-                    <Text style={styles.guidanceLabel}>Spread vs all-in</Text>
+                    <Text style={styles.guidanceLabel}>{ESTIMATED_SPREAD_LABEL}</Text>
                     <Text style={styles.guidanceValue}>
-                      {liveSpread ? `$${liveSpread.spread}` : "—"}
+                      {liveSpread ? (estimatedSpread?.amount ?? `$${liveSpread.spread}`) : "—"}
                     </Text>
                   </View>
                   <Text style={styles.body}>
-                    Spread / cost-to-ask — never labeled profit.
+                    {estimatedSpread ? estimatedSpread.line : allInTotal ? "Enter an asking price." : "Cost missing. Add your cost in Collection."}
                   </Text>
+                  <Text style={styles.body}>{ESTIMATED_SPREAD_NOTE}</Text>
                 </View>
 
                 <Text style={styles.label}>Description</Text>

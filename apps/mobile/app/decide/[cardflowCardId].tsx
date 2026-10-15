@@ -1,5 +1,6 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import {
+  MAKE_LISTING_LABEL,
   computeMaxBuy,
   CONDITION_LABELS,
   CONFIDENCE_SCREEN_LABEL,
@@ -34,6 +35,7 @@ import { WatchlistSheet } from "@/components/ui/watchlist-sheet";
 import {
   convertWatchlistToPurchased,
   getCard,
+  openOrCreateDraft,
   getPriceEstimate,
   savePurchased,
   saveWatchlist,
@@ -232,7 +234,7 @@ export default function DecideScreen() {
     );
   }
 
-  async function onAddCard() {
+  async function onAddCard(then: "collection" | "listing" = "collection") {
     if (!confirmationIdValue) return;
     const marketPrice = marketEstimate?.amount;
     if (!marketPrice) {
@@ -242,13 +244,19 @@ export default function DecideScreen() {
     setIsSaving(true);
     setError(null);
     try {
-      await savePurchased({
+      const saved = await savePurchased({
         confirmationId: confirmationIdValue,
         purchasePrice: marketPrice,
         purchasedAt: new Date().toISOString(),
         condition,
         selectedVariant,
       });
+      if (then === "listing") {
+        // P2-02: straight into a draft built from the confirmed card.
+        const draft = await openOrCreateDraft(saved.item.inventoryItemId);
+        router.replace(`/draft/${draft.draft.draftId}`);
+        return;
+      }
       router.replace({
         pathname: "/(tabs)/collection",
         params: { segment: "purchased" },
@@ -432,6 +440,12 @@ export default function DecideScreen() {
                   disabled={isSaving || marketState === "loading" || !marketEstimate?.amount}
                   label={isSaving ? "Adding…" : "Add card"}
                   onPress={() => void onAddCard()}
+                />
+                <PrimaryButton
+                  disabled={isSaving || marketState === "loading" || !marketEstimate?.amount}
+                  label={MAKE_LISTING_LABEL}
+                  onPress={() => void onAddCard("listing")}
+                  tone="muted"
                 />
                 <PrimaryButton
                   disabled={isSaving}
