@@ -811,3 +811,7 @@ export function patchPreferences(preferences: MaxBuyPreferences) {
 
 /** Typed list of every inventory item, for screens that hold one. */
 export type InventoryList = InventoryItem[];
+/** P1-18: sampled on-device timings (no images). */
+export function postPerfTelemetry(batch: import("@cardflow/shared").PerfBatch) {
+  return callApi(apiContract.postPerfTelemetry, { body: batch });
+}

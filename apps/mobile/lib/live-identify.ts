@@ -21,6 +21,7 @@ import {
   type LiveVideoIdentityResult,
 } from "@cardflow/shared";
 import { getHealth, identifyLivestreamFrame } from "./api";
+import { recordPerfStage } from "./perf-telemetry";
 import { publishLivestreamHud } from "./huds";
 import {
   isLiveVideoNativeAvailable,
@@ -199,6 +200,10 @@ async function identifyFrame(frame: LiveVideoFrame, key: string, pullMs: number)
       videoFrameJpeg: yoloDetect ? (frame.videoFrameJpeg ?? null) : null,
     });
     const roundTripMs = nowMs() - requestStart;
+    recordPerfStage("live_identify_round_trip", roundTripMs);
+    recordPerfStage("live_frame_pull", pullMs);
+    if (frame.detectMs != null) recordPerfStage("live_detect", frame.detectMs);
+    recordPerfStage("live_frame_to_hud", pullMs + (frame.detectMs ?? 0) + roundTripMs);
     if (!running) return;
     if (frame.cardDetected) {
       tracker.noteMatch({

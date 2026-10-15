@@ -1,6 +1,7 @@
 /** P1-27 mapping-quality report (aggregates only). `format=markdown` answers text. */
 import { z } from "zod";
-import { defineRoute } from "./core";
+import type { PerfBatch } from "../perf-telemetry";
+import { defineRoute, typed } from "./core";
 
 export const metricsRoutes = {
   getMappingMetrics: defineRoute({
@@ -17,5 +18,13 @@ export const metricsRoutes = {
     path: "/ops/metrics",
     bodyKind: "none",
     response: z.looseObject({ ok: z.literal(true) }),
+  }),
+  /** P1-18 sampled on-device timings (no images). */
+  postPerfTelemetry: defineRoute({
+    method: "POST",
+    path: "/v1/telemetry/perf",
+    bodyKind: "json",
+    body: typed<PerfBatch>(z.object({ samples: z.array(z.unknown()) })),
+    response: z.looseObject({ ok: z.literal(true), accepted: z.number() }),
   }),
 } as const;

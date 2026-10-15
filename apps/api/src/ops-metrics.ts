@@ -44,6 +44,7 @@ export class OpsMetrics {
   private readonly routes = new Map<string, Sample[]>();
   private readonly vendor = new Map<string, Sample[]>();
   private readonly lastAlertAt = new Map<string, number>();
+  private readonly device = new Map<string, Array<Sample & { hot: boolean }>>();
   readonly alerts: OpsAlert[] = [];
 
   constructor(
@@ -77,7 +78,16 @@ export class OpsMetrics {
     }
   }
 
-  private recent(list: readonly Sample[]) {
+  /** P1-18: on-device stage timings, keyed by stage and device class. */
+  recordDeviceStage(stage: string, deviceClass: string, ms: number, hot: boolean) {
+    const key = `${stage}|${deviceClass}`;
+    const list = this.device.get(key) ?? [];
+    list.push({ at: this.now(), ms, status: 200, hot });
+    if (list.length > SAMPLES_PER_ROUTE) list.shift();
+    this.device.set(key, list);
+  }
+
+  private recent<T extends Sample>(list: readonly T[]): T[] {
     const cutoff = this.now() - OPS_WINDOW_MS;
     return list.filter((s) => s.at >= cutoff);
   }
@@ -134,7 +144,21 @@ export class OpsMetrics {
         errors5xx: recent.filter((s) => s.status >= 500).length,
       };
     });
-    return { windowMs: OPS_WINDOW_MS, routes: routes.sort((a, b) => a.route.localeCompare(b.route)), vendors, alerts: [...this.alerts] };
+    const devices = [...this.device.entries()].map(([key, list]) => {
+      const [stage, deviceClass] = key.split("|");
+      const day = list.filter((s) => s.at >= this.now() - 24 * 60 * 60_000);
+      const sorted = day.map((s) => s.ms).sort((a, b) => a - b);
+      const hot = day.filter((s) => s.hot);
+      return {
+        stage,
+        deviceClass,
+        count: day.length,
+        p95Ms: percentile(sorted, 95),
+        hotShare: day.length ? hot.length / day.length : 0,
+        hotP95Ms: percentile(hot.map((s) => s.ms).sort((a, b) => a - b), 95),
+      };
+    });
+    return { windowMs: OPS_WINDOW_MS, devices, routes: routes.sort((a, b) => a.route.localeCompare(b.route)), vendors, alerts: [...this.alerts] };
   }
 }
 

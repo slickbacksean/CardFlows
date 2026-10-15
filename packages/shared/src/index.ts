@@ -809,3 +809,4 @@ export * from "./price-freshness";
 export * from "./user-price";
 export * from "./max-buy-breakdown";
 export * from "./condition-presets";
+export * from "./perf-telemetry";
