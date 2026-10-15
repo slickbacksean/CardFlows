@@ -37,7 +37,8 @@ export const PRODUCT_ANALYTICS_LABEL = "Share usage analytics";
 export const PRODUCT_ANALYTICS_NOTE =
   "Counts and timings only (for example, how long a scan takes to confirm). Never photos, card details, prices or anything you type. Off by default.";
 
-const ENUM_VALUE = /^[a-z0-9_]{1,32}$/;
+/** `source` is a fixed set, so a search term or card ID can never ride along in it. */
+export const PRODUCT_EVENT_SOURCES = ["camera_photo", "manual_scan", "candidate", "manual_search", "livestream", "practice"] as const;
 
 export function isProductEventName(value: string): value is ProductEventName {
   return (PRODUCT_EVENT_NAMES as readonly string[]).includes(value);
@@ -49,7 +50,7 @@ export function sanitizeEventProps(props: Record<string, unknown> | undefined): 
   for (const key of PRODUCT_EVENT_PROPS) {
     const value = props[key];
     if (typeof value === "number" && Number.isFinite(value) && value >= 0) out[key] = Math.round(value);
-    else if (typeof value === "string" && key === "source" && ENUM_VALUE.test(value)) out[key] = value;
+    else if (typeof value === "string" && key === "source" && (PRODUCT_EVENT_SOURCES as readonly string[]).includes(value)) out[key] = value;
   }
   return out;
 }
