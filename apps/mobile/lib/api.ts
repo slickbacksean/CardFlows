@@ -8,6 +8,8 @@ import {
   PREGRADE_DETECT_UNAVAILABLE_MESSAGE,
   PREGRADE_UNAVAILABLE_MESSAGE,
   unavailableGradeEstimate,
+  pollGradeJob,
+  type GradeJobView,
   LOCKED_DISPLAY_CURRENCY,
   type CaptureMethod,
   type CardFlowGradeEstimate,
@@ -469,6 +471,28 @@ export function getPortfolioHistory(range: PortfolioHistoryRange = "all") {
   return callApi(apiContract.getPortfolioHistory, { query: { range } });
 }
 
+/** P1-07: async pre-grade jobs when `EXPO_PUBLIC_CARD_FLOW_GRADE_JOBS=1` (off by default). */
+export function gradeJobsEnabled(): boolean {
+  return process.env.EXPO_PUBLIC_CARD_FLOW_GRADE_JOBS === "1";
+}
+
+export function getGradeJob(jobId: string) {
+  return callApi(apiContract.getGradeJob, { params: { jobId } });
+}
+
+/** Polls with backoff; survives backgrounding because the job lives on the server. */
+async function runGradeJob(
+  created: { job: { jobId: string } },
+  onUpdate?: (job: GradeJobView) => void,
+): Promise<CardFlowGradeEstimate> {
+  const finished = await pollGradeJob(
+    async () => (await getGradeJob(created.job.jobId)).job as unknown as GradeJobView,
+    { onUpdate },
+  );
+  if (finished?.status === "done" && finished.estimate) return finished.estimate;
+  return unavailableGradeEstimate();
+}
+
 export async function requestGradeEstimate(
   inventoryItemId: string,
   input?: {
@@ -499,12 +523,23 @@ export async function requestGradeEstimate(
           "image/jpeg";
         await appendGradeStill(form, "back", backUri, mime);
       }
+      if (gradeJobsEnabled()) {
+        return await runGradeJob(await callApi(apiContract.createGradeJob, { params: { inventoryItemId }, form }));
+      }
       const data = await callApi(apiContract.requestGradeEstimate, {
         params: { inventoryItemId },
         form,
         timeoutMs: GRADE_PREGRADE_TIMEOUT_MS,
       });
       return data.estimate;
+    }
+    if (gradeJobsEnabled()) {
+      return await runGradeJob(
+        await callApi(apiContract.createGradeJob, {
+          params: { inventoryItemId },
+          body: input?.reestimate ? { reestimate: true } : {},
+        }),
+      );
     }
     const data = await callApi(apiContract.requestGradeEstimate, {
       params: { inventoryItemId },

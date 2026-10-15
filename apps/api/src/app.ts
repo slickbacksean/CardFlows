@@ -136,6 +136,7 @@ import { contractMiddleware } from "./contract-middleware";
 import { corsOriginsFromEnv } from "./cors-env";
 import { registerGradeQuotaRoutes } from "./routes/grade-quota";
 import { registerPreferenceRoutes } from "./routes/preferences";
+import { registerGradeJobRoutes } from "./routes/grade-jobs";
 import { registerSalesRoutes } from "./routes/sales";
 import { recordGradeEstimate, registerGradeHistoryRoutes } from "./routes/grade-history";
 import { REQUEST_ID_HEADER, resolveRequestId } from "./request-id";
@@ -302,6 +303,8 @@ export interface CreateAppOptions {
   pricing?: CardPricingProvider;
   /** Recognition provider. Tests default to mock; live Capture uses `obb_phash`. */
   recognition?: CardRecognitionProvider;
+  /** P1-07: async grade jobs. Defaults to CARD_FLOW_GRADE_JOBS=on (off). */
+  gradeJobs?: boolean;
   /** P1-17: defaults to the process-wide metrics. */
   opsMetrics?: OpsMetrics;
   /** P1-17: bearer token for GET /ops/metrics; defaults to CARD_FLOW_OPS_TOKEN. */
@@ -1849,6 +1852,11 @@ export function createApp(
       return c.json({ ...result, quota: taken.quota });
     },
   );
+
+  registerGradeJobRoutes(app, {
+    enabled: options.gradeJobs ?? process.env.CARD_FLOW_GRADE_JOBS?.trim().toLowerCase() === "on",
+    dispatch: (request) => Promise.resolve(app.fetch(request)),
+  });
 
   app.post(
     "/v1/inventory/:inventoryItemId/grade-estimate",

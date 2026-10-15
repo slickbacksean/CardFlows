@@ -8,6 +8,7 @@ import { accountRoutes } from "./account";
 import { catalogRoutes } from "./catalog";
 import type { ApiRoute } from "./core";
 import { gradeRoutes } from "./grade";
+import { gradeJobRoutes } from "./grade-jobs";
 import { gradeHistoryRoutes } from "./grade-history";
 import { gradingRoutes } from "./grading";
 import { healthRoutes } from "./health";
@@ -29,6 +30,7 @@ export const apiContract = {
   ...metricsRoutes,
   ...salesRoutes,
   ...gradeHistoryRoutes,
+  ...gradeJobRoutes,
 } as const;
 
 export type ApiContract = typeof apiContract;
