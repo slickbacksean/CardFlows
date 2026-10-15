@@ -10,6 +10,11 @@ import {
   MAX_BUY_YOUR_RULE_LABEL,
   PREGRADE_COPY,
   PRICE_CHECKING_COPY,
+  PRICE_REFRESHING_COPY,
+  PRICE_UNAVAILABLE_ENTER_OWN_COPY,
+  WATCHLIST_SAVED_MAX_BUY_META,
+  YOUR_PRICE_INPUT_LABEL,
+  priceDisplayState,
   PRICE_ESTIMATE_SCREEN_LABEL,
   PRICE_ESTIMATE_UNAVAILABLE_COPY,
   confidenceWord,
@@ -23,9 +28,10 @@ import {
   type MaxBuyPreferences,
 } from "@cardflow/shared";
 import { Image } from "expo-image";
+import { useQuery } from "@tanstack/react-query";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { HowThisWorksSheet } from "@/components/ui/how-this-works-sheet";
 import { playPurchasedSuccessHaptic } from "@/components/ui/hud-bubble";
@@ -34,8 +40,8 @@ import { PrimaryButton } from "@/components/ui/primary-button";
 import { WatchlistSheet } from "@/components/ui/watchlist-sheet";
 import {
   getCard,
-  getPriceEstimate,
 } from "@/lib/api";
+import { priceQueryOptions } from "@/lib/price-queries";
 import { loadMaxBuyPreferences, peekMaxBuyPreferences } from "@/lib/preferences";
 import { colors, space } from "@/lib/theme";
 import { defaultVariantId, variantOptions } from "@/lib/variants";
@@ -71,10 +77,6 @@ export default function DecideScreen() {
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [watchlistOpen, setWatchlistOpen] = useState(false);
-  const [marketEstimate, setMarketEstimate] = useState<CardFlowPriceEstimate | null>(null);
-  const [marketState, setMarketState] = useState<"loading" | "ready">("loading");
-  const [priceProvider, setPriceProvider] = useState<string | null>(null);
-  const [priceFetchedAt, setPriceFetchedAt] = useState<string | null>(null);
   const [howThisWorksOpen, setHowThisWorksOpen] = useState(false);
   const [referenceFetchedAt, setReferenceFetchedAt] = useState<string | null>(
     () => (firstSearchParam(referencePriceAmount) ? new Date().toISOString() : null),
@@ -103,15 +105,21 @@ export default function DecideScreen() {
     setReference(routeReference);
     setReferenceFetchedAt(routeReference ? new Date().toISOString() : null);
   }
-  const marketKey = `${canCommitInventory ? (card?.tcgdexId ?? "") : ""}:${selectedVariant}`;
-  const [marketKeySeen, setMarketKeySeen] = useState(marketKey);
-  if (marketKeySeen !== marketKey) {
-    setMarketKeySeen(marketKey);
-    setMarketEstimate(null);
-    setMarketState("loading");
-    setPriceProvider(null);
-    setPriceFetchedAt(null);
-  }
+  const priceQuery = useQuery({
+    ...priceQueryOptions(card?.tcgdexId ?? "", selectedVariant),
+    enabled: Boolean(card?.tcgdexId) && canCommitInventory,
+  });
+  const marketEstimate: CardFlowPriceEstimate | null = priceQuery.data?.estimate ?? null;
+  const priceProvider = priceQuery.data?.provider ?? null;
+  const priceFetchedAt = priceQuery.data
+    ? (marketEstimate?.fetchedAt ?? new Date(priceQuery.dataUpdatedAt).toISOString())
+    : null;
+  const priceDisplay = priceDisplayState({
+    estimate: marketEstimate,
+    isPending: priceQuery.isPending,
+    isFetching: priceQuery.isFetching,
+    isError: priceQuery.isError,
+  });
 
   useEffect(() => {
     let cancelled = false;
@@ -142,29 +150,6 @@ export default function DecideScreen() {
       cancelled = true;
     };
   }, [cardflowCardId, routeVariant]);
-
-  useEffect(() => {
-    if (!card?.tcgdexId || !canCommitInventory) return;
-    let cancelled = false;
-    void getPriceEstimate(card.tcgdexId, selectedVariant)
-      .then((result) => {
-        if (cancelled) return;
-        setMarketEstimate(result.estimate);
-        setPriceProvider(result.provider);
-        setPriceFetchedAt(result.estimate.fetchedAt ?? new Date().toISOString());
-        setMarketState("ready");
-      })
-      .catch(() => {
-        if (cancelled) return;
-        setMarketEstimate(null);
-        setPriceProvider(null);
-        setPriceFetchedAt(null);
-        setMarketState("ready");
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [canCommitInventory, card?.tcgdexId, selectedVariant]);
 
   useFocusEffect(
     useCallback(() => {
@@ -232,7 +217,8 @@ export default function DecideScreen() {
 
   async function onAddCard() {
     if (!confirmationIdValue) return;
-    const marketPrice = marketEstimate?.amount;
+    // Prices never block: your own typed price stands in when the estimate is unavailable.
+    const marketPrice = marketEstimate?.amount ?? typedReference;
     if (!marketPrice) {
       setError(PRICE_ESTIMATE_UNAVAILABLE_COPY);
       return;
@@ -381,16 +367,36 @@ export default function DecideScreen() {
             {canCommitInventory ? (
               <>
                 <LabeledFigure label={PRICE_ESTIMATE_SCREEN_LABEL} tip={CONFIRM_TIPS.priceSource}>
-                  {marketState === "loading" ? (
+                  {priceDisplay.kind === "checking" ? (
                     <Text style={styles.body}>{PRICE_CHECKING_COPY}</Text>
-                  ) : marketEstimate?.amount ? (
+                  ) : priceDisplay.kind === "price" && marketEstimate?.amount ? (
                     <>
                       <Text style={styles.marketPrice}>${marketEstimate.amount}</Text>
                       <Text style={styles.body}>{vendorPriceMeta}</Text>
+                      {priceDisplay.refreshing ? (
+                        <Text accessibilityLiveRegion="polite" style={styles.caption}>
+                          {PRICE_REFRESHING_COPY}
+                        </Text>
+                      ) : null}
                       <Text style={styles.body}>{marketEstimate.disclaimer}</Text>
                     </>
                   ) : (
-                    <Text style={styles.body}>{PRICE_ESTIMATE_UNAVAILABLE_COPY}</Text>
+                    <>
+                      <Text style={styles.body}>{PRICE_UNAVAILABLE_ENTER_OWN_COPY}</Text>
+                      <TextInput
+                        accessibilityLabel={YOUR_PRICE_INPUT_LABEL}
+                        inputMode="decimal"
+                        keyboardType="decimal-pad"
+                        onChangeText={(value) => {
+                          setReference(value);
+                          setReferenceFetchedAt(new Date().toISOString());
+                        }}
+                        placeholder={YOUR_PRICE_INPUT_LABEL}
+                        placeholderTextColor={colors.muted}
+                        style={styles.priceInput}
+                        value={reference}
+                      />
+                    </>
                   )}
                 </LabeledFigure>
                 <LabeledFigure label={MAX_BUY_YOUR_RULE_LABEL} tip={CONFIRM_TIPS.maxBuy}>
@@ -429,7 +435,7 @@ export default function DecideScreen() {
                   ))}
                 </View>
                 <PrimaryButton
-                  disabled={isSaving || marketState === "loading" || !marketEstimate?.amount}
+                  disabled={isSaving || (!marketEstimate?.amount && !typedReference)}
                   label={isSaving ? "Adding…" : "Add card"}
                   onPress={() => void onAddCard()}
                 />
@@ -446,15 +452,21 @@ export default function DecideScreen() {
             ) : savedIntent === "watchlist" ? (
               <View style={styles.missing}>
                 <Text style={styles.body}>Watching. Cannot create a listing draft.</Text>
-                {maxBuy.maxBuyAmount ? (
-                  <Text style={styles.marketPrice}>Max Buy ${maxBuy.maxBuyAmount}</Text>
-                ) : firstSearchParam(targetMaxBuyAmount) ? (
-                  <Text style={styles.marketPrice}>
-                    Max Buy ${firstSearchParam(targetMaxBuyAmount)}
-                  </Text>
-                ) : (
-                  <Text style={styles.body}>No Max Buy snapshot on this Watchlist item.</Text>
-                )}
+                <LabeledFigure label={MAX_BUY_YOUR_RULE_LABEL} tip={CONFIRM_TIPS.maxBuy}>
+                  {maxBuy.maxBuyAmount ? (
+                    <>
+                      <Text style={styles.marketPrice}>${maxBuy.maxBuyAmount}</Text>
+                      <Text style={styles.body}>{maxBuyMeta}</Text>
+                    </>
+                  ) : firstSearchParam(targetMaxBuyAmount) ? (
+                    <>
+                      <Text style={styles.marketPrice}>${firstSearchParam(targetMaxBuyAmount)}</Text>
+                      <Text style={styles.body}>{WATCHLIST_SAVED_MAX_BUY_META}</Text>
+                    </>
+                  ) : (
+                    <Text style={styles.body}>No Max Buy snapshot on this Watchlist item.</Text>
+                  )}
+                </LabeledFigure>
                 <Text style={styles.body}>
                   Purchased keeps this card and Max Buy. Price is optional until Collection →
                   Purchased.
@@ -622,6 +634,16 @@ const styles = StyleSheet.create({
   missing: { gap: 8 },
   label: { color: colors.text, fontWeight: "700" },
   marketPrice: { color: colors.text, fontSize: 28, fontWeight: "800" },
+  priceInput: {
+    backgroundColor: colors.bg,
+    borderColor: colors.cardBorder,
+    borderWidth: 1,
+    borderRadius: 12,
+    color: colors.text,
+    paddingHorizontal: space.md,
+    paddingVertical: 12,
+    fontSize: 18,
+  },
   body: { color: colors.muted, fontSize: 15, lineHeight: 22 },
   error: { color: colors.danger, fontSize: 14 },
   ghost: {
