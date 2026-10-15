@@ -316,6 +316,7 @@ export default function ScanScreen() {
             </View>
           ) : (
             <Pressable
+              accessibilityLabel={CONFIRM_NOT_THIS_CARD_LABEL}
               accessibilityRole="button"
               hitSlop={8}
               onPress={() => setSearchOpen(true)}
