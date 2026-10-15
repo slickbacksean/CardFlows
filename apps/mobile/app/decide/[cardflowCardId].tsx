@@ -1,6 +1,7 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { runQueueableWrite } from "@/lib/write-queue";
 import {
+  MAKE_LISTING_LABEL,
   computeMaxBuy,
   CONDITION_LABELS,
   CONFIDENCE_SCREEN_LABEL,
@@ -46,6 +47,7 @@ import { WatchlistSheet } from "@/components/ui/watchlist-sheet";
 import {
   getCard,
   listUserPriceSnapshots,
+  openOrCreateDraft,
   saveUserPriceSnapshot,
 } from "@/lib/api";
 import { priceQueryOptions } from "@/lib/price-queries";
@@ -240,7 +242,7 @@ export default function DecideScreen() {
     );
   }
 
-  async function onAddCard() {
+  async function onAddCard(then: "collection" | "listing" = "collection") {
     if (!confirmationIdValue) return;
     // Prices never block: your own typed price stands in when the estimate is unavailable.
     const marketPrice = marketEstimate?.amount ?? typedReference ?? pickedReference?.amount ?? null;
@@ -251,13 +253,19 @@ export default function DecideScreen() {
     setIsSaving(true);
     setError(null);
     try {
-      await runQueueableWrite("save_purchased", {
+      const outcome = await runQueueableWrite("save_purchased", {
         confirmationId: confirmationIdValue,
         purchasePrice: marketPrice,
         purchasedAt: new Date().toISOString(),
         condition,
         selectedVariant,
       });
+      if (then === "listing" && !outcome.queued) {
+        // P2-02: straight into a draft built from the confirmed card. Offline: saved to Collection only.
+        const draft = await openOrCreateDraft(outcome.result.item.inventoryItemId);
+        router.replace(`/draft/${draft.draft.draftId}`);
+        return;
+      }
       router.replace({
         pathname: "/(tabs)/collection",
         params: { segment: "purchased" },
@@ -518,6 +526,12 @@ export default function DecideScreen() {
                   disabled={isSaving || (!marketEstimate?.amount && !typedReference)}
                   label={isSaving ? "Adding…" : "Add card"}
                   onPress={() => void onAddCard()}
+                />
+                <PrimaryButton
+                  disabled={isSaving || (!marketEstimate?.amount && !typedReference)}
+                  label={MAKE_LISTING_LABEL}
+                  onPress={() => void onAddCard("listing")}
+                  tone="muted"
                 />
                 <PrimaryButton
                   disabled={isSaving}
