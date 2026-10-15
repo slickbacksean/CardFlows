@@ -799,6 +799,7 @@ export type {
 export * from "./set-name-map";
 export * from "./catalog-snapshot";
 export * from "./scan-correction";
+export * from "./confirm-log";
 export * from "./contract";
 export * from "./write-queue";
 export * from "./price-freshness";

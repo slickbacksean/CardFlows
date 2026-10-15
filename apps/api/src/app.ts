@@ -1,10 +1,16 @@
 import { createHash } from "node:crypto";
-import { scanCorrectionFor, type ScanCorrection } from "@cardflow/shared";
 import {
   cachedPricingProvider,
   createRecognitionCache,
   serverCacheEnabledFromEnv,
 } from "./server-cache";
+import {
+  confirmEventFor,
+  rerankItemsByConfirms,
+  scanCorrectionFor,
+  suggestVariants,
+  type ScanCorrection,
+} from "@cardflow/shared";
 import {
   canMarkReadyForReview,
   CatalogProviderError,
@@ -374,6 +380,10 @@ export function createApp(
   options: CreateAppOptions = {},
 ) {
   const {
+    saveConfirmEvent,
+    confirmCounts,
+    variantCounts,
+    deleteUserConfirmEvents,
     confirmScan,
     createSession,
     findCachedCanonicals,
@@ -426,6 +436,14 @@ export function createApp(
   const devAutoSession = options.devAutoSession ?? resolveDevAutoSession();
   const catalog = options.catalog ?? mockTcgdexCatalogProvider;
   const scanCorrections = options.scanCorrections ?? [];
+  const variantSuggestionsFor = (mapping: {
+    canonicalCard: CardFlowCanonicalCard | null;
+    candidates: CardFlowCanonicalCard[];
+  }) => {
+    const card = mapping.canonicalCard ?? mapping.candidates[0] ?? null;
+    if (!card) return [];
+    return suggestVariants({ variants: card.variants, pickedVariantCounts: variantCounts(card.tcgdexId) });
+  };
   const recordScanCorrection = (correction: ScanCorrection) => {
     scanCorrections.push(correction);
     if (scanCorrections.length > 1000) scanCorrections.shift();
@@ -1260,6 +1278,7 @@ export function createApp(
   app.post("/v1/account/delete", (c) => {
     const userId = c.get("userId");
     const photos = deleteUserPhotos(userId);
+    deleteUserConfirmEvents(userId);
     const staged = gradeUploads.releaseUser(userId);
     return c.json({
       ok: true,
@@ -1425,7 +1444,19 @@ export function createApp(
           liveIdentifyEnabled ? mockCardRecognitionProvider : recognitionProvider;
         recognition = await mockProvider.identifyCard(identifyRequest);
       }
-      const mapping = await mapRecognitionToCatalog(recognition, catalog);
+      const mapped = await mapRecognitionToCatalog(recognition, catalog);
+      // P1-26: cards users keep confirming move up the candidate list.
+      const mapping =
+        mapped.candidates.length > 1
+          ? {
+              ...mapped,
+              candidates: rerankItemsByConfirms(
+                mapped.candidates,
+                (card) => card.tcgdexId,
+                confirmCounts(mapped.candidates.map((card) => card.tcgdexId)),
+              ),
+            }
+          : mapped;
       const scan = saveScan({
         scanId,
         userId,
@@ -1441,7 +1472,7 @@ export function createApp(
         recognition,
         mapping,
       });
-      return c.json({ ok: true, scan }, 201);
+      return c.json({ ok: true, scan, variantSuggestions: variantSuggestionsFor(scan.mapping) }, 201);
     },
   );
 
@@ -1463,7 +1494,7 @@ export function createApp(
   app.get("/v1/scans/:scanId", (c) => {
     const scan = getScan(c.get("userId"), c.req.param("scanId"));
     if (!scan) return c.json({ ok: false, error: "Scan not found" }, 404);
-    return c.json({ ok: true, scan });
+    return c.json({ ok: true, scan, variantSuggestions: variantSuggestionsFor(scan.mapping) });
   });
 
   app.post("/v1/scans/:scanId/confirm", async (c) => {
@@ -1520,6 +1551,20 @@ export function createApp(
         recognitionProvider: scan.mapping.provider,
       });
       if (correction) recordScanCorrection(correction);
+      const shown = scan.mapping.candidates.map((card) => card.tcgdexId);
+      const predicted = scan.mapping.tcgdexId ?? scan.mapping.canonicalCard?.tcgdexId ?? null;
+      saveConfirmEvent(
+        confirmEventFor({
+          scanId: scan.scanId,
+          userId: c.get("userId"),
+          via: body.via,
+          shownTcgdexIds: shown.length > 0 ? shown : predicted ? [predicted] : [],
+          chosenTcgdexId: body.tcgdexId,
+          selectedVariant: body.selectedVariant ?? null,
+          confidence: scan.mapping.confidence ?? null,
+          recognitionProvider: scan.mapping.provider,
+        }),
+      );
       return c.json({
         ok: true,
         scan: result.scan,

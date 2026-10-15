@@ -1,3 +1,4 @@
+import type { ConfirmEvent } from "@cardflow/shared";
 import {
   catalogFingerprint,
   cachedCatalogCardMatches,
@@ -734,11 +735,50 @@ export interface StorePort {
   consumeGradeQuota: (userId: string, input: GradeQuotaConsumeInput) => GradeQuotaConsumeResult;
   getVendorQuotaUsage: (provider: string, monthKey: string) => number;
   consumeVendorQuota: (provider: string, monthKey: string, cap: number) => boolean;
+  /** P1-26 confirm log. */
+  saveConfirmEvent: (event: ConfirmEvent) => void;
+  listConfirmEvents: (options?: { since?: string; limit?: number }) => ConfirmEvent[];
+  confirmCounts: (tcgdexIds: readonly string[]) => Map<string, number>;
+  variantCounts: (tcgdexId: string) => Map<string, number>;
+  deleteUserConfirmEvents: (userId: string) => number;
 }
 
 const DEFAULT_GRADE_ACCOUNT: GradeAccountRecord = { plan: "free", extraCredits: 0 };
 
+/** Plain in-memory confirm log, shared by the memory store and tests. */
+export function createMemoryConfirmLog(cap = 50_000) {
+  const events: ConfirmEvent[] = [];
+  return {
+    saveConfirmEvent(event: ConfirmEvent) {
+      events.push({ ...event, shownTcgdexIds: [...event.shownTcgdexIds] });
+      if (events.length > cap) events.shift();
+    },
+    listConfirmEvents(options: { since?: string; limit?: number } = {}) {
+      const since = options.since;
+      const rows = since ? events.filter((e) => e.at >= since) : [...events];
+      return options.limit ? rows.slice(-options.limit) : rows;
+    },
+    confirmCounts(tcgdexIds: readonly string[]) {
+      const want = new Set(tcgdexIds);
+      const counts = new Map<string, number>();
+      for (const e of events) if (want.has(e.chosenTcgdexId)) counts.set(e.chosenTcgdexId, (counts.get(e.chosenTcgdexId) ?? 0) + 1);
+      return counts;
+    },
+    variantCounts(tcgdexId: string) {
+      const counts = new Map<string, number>();
+      for (const e of events) if (e.chosenTcgdexId === tcgdexId && e.selectedVariant) counts.set(e.selectedVariant, (counts.get(e.selectedVariant) ?? 0) + 1);
+      return counts;
+    },
+    deleteUserConfirmEvents(userId: string) {
+      let removed = 0;
+      for (let i = events.length - 1; i >= 0; i -= 1) if (events[i]!.userId === userId) { events.splice(i, 1); removed += 1; }
+      return removed;
+    },
+  };
+}
+
 export function createMemoryStore(): StorePort {
+  const confirmLog = createMemoryConfirmLog();
   const gradeAccounts = new Map<string, GradeAccountRecord>();
   const gradeUsage = new Map<string, number>();
   const vendorUsage = new Map<string, number>();
@@ -860,5 +900,6 @@ export function createMemoryStore(): StorePort {
     consumeGradeQuota,
     getVendorQuotaUsage,
     consumeVendorQuota,
+    ...confirmLog,
   };
 }
