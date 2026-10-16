@@ -8,6 +8,8 @@ import { startWriteQueue } from "@/lib/write-queue";
 import { startScanQueue } from "@/lib/scan-queue";
 import { loadAnalyticsPreference } from "@/lib/product-events";
 import { Alert, StyleSheet, Text, View } from "react-native";
+import { flushProductEvents, loadAnalyticsPreference } from "@/lib/product-events";
+import { AppState, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { PrimaryButton } from "@/components/ui/primary-button";
 import { ensureIdentitySession } from "@/lib/identity";
@@ -36,6 +38,14 @@ export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
 
 export default function RootLayout() {
   const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    // D7: send queued opt-in events when the app goes to the background.
+    const sub = AppState.addEventListener("change", (next) => {
+      if (next !== "active") void flushProductEvents();
+    });
+    return () => sub.remove();
+  }, []);
 
   useEffect(() => {
     void loadAnalyticsPreference();

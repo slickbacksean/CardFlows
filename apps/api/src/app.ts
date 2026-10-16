@@ -1,6 +1,7 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 import { routePath } from "hono/route";
 import { GUEST_FREE_SCANS, GUEST_USER_PREFIX, SIGNUP_REQUIRED_CODE, guestIdentity, guestRouteAllowed, isGuestUserId, isHot, parsePerfBatch, signupMessage, type SignupReason } from "@cardflow/shared";
+import { isHot, parsePerfBatch, NORTH_STAR_NAME, northStarWeekly } from "@cardflow/shared";
 import { opsMetrics, type OpsMetrics } from "./ops-metrics";
 import { parseUserPriceAmount } from "@cardflow/shared";
 import {
@@ -431,6 +432,7 @@ export function createApp(
     getInventoryItem,
     getPreferences,
     getScan,
+    listScans,
     getScanImage,
     getGradeImage,
     deleteUserPhotos,
@@ -811,6 +813,24 @@ export function createApp(
       return c.json({ ok: false, error: "Unauthorized" }, 401);
     }
     return c.json({ ok: true, ...metrics.snapshot() });
+  });
+  // D10 / P1-20: North Star, same token rule. Counts only (no user IDs leave the server).
+  app.get("/ops/north-star", (c) => {
+    const expected = opsToken?.trim();
+    const given = c.req.header("authorization")?.replace(/^Bearer\s+/i, "").trim();
+    if (!expected) return c.json({ ok: false, error: "Not found" }, 404);
+    if (!given || !timingSafeEqualString(given, expected)) {
+      return c.json({ ok: false, error: "Unauthorized" }, 401);
+    }
+    const users = store.listInvitedUsers().map((user) => ({
+      userId: user.userId,
+      scans: listScans(user.userId).map((scan) => scan.capturedAt),
+      purchases: listInventory(user.userId)
+        .filter((item) => item.intent === "purchased" && item.purchase)
+        .map((item) => item.purchase!.purchasedAt),
+    }));
+    const weeks = northStarWeekly(users, { weeks: Number(c.req.query("weeks") ?? "8") || 8 });
+    return c.json({ ok: true, metric: NORTH_STAR_NAME, weeks });
   });
   const allowedOrigins = new Set(options.corsOrigins ?? corsOriginsFromEnv());
   app.use(

@@ -22,7 +22,7 @@ Public GitHub product docs (`MVP_SCOPE.md`, `PRODUCT_OVERVIEW.md`, `NON_GOALS.md
 
 **Assumption (stack):** Supabase Auth / Postgres / Storage unless later confirmed.  
 **Assumption:** CardSight is called only from a CardFlow backend.  
-**Assumption:** No analytics SDK is enabled until founder + counsel approve.  
+**D7 (Oct 15, 2026):** PostHog cloud is approved for **opt-in** product events only. No SDK is used; the phone posts to PostHog's HTTP batch API. Nothing is sent unless `EXPO_PUBLIC_POSTHOG_KEY` is set **and** the user turns on Settings → Usage analytics (off by default). Events are names plus allow-listed counts and timings (`time_to_confirm_ms`, `ms_since_scan`, `candidate_count`, `rank`, and a fixed `source` set). The distinct ID is a random per-install ID (deleted on opt-out). `$process_person_profile: false`, `$geoip_disable: true`. Never photos, card names or IDs, prices, search text or any typed text. No advertising ID, so no ATT prompt. The App Store privacy label needs updating for "Product interaction, not linked to identity, not used for tracking".  
 **Known (product):** MVP images are user-selected manual photos, not live marketplace capture.
 
 ---
@@ -309,3 +309,7 @@ Same research pass as `RISK_REGISTER.md`. Key privacy-related fetches: CardSight
 ---
 
 *End of privacy data map. Draft user language lives in `USER_CONSENT_DRAFT.md`.*
+
+See `docs/STORE_PRIVACY_LABELS.md` for the App Store / Play answers and the perf-telemetry note.
+
+**Perf timings (`/v1/telemetry/perf`):** optional and opt-in. They're sent only when the analytics switch is on (the same switch as PostHog, off by default), and pending timings are dropped when it's turned off. They go to CardFlow's own API, not PostHog, and are kept as in-memory aggregates only. Store declaration if declared: Diagnostics > Performance Data, not linked, not tracking.

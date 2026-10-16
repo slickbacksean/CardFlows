@@ -8,6 +8,7 @@ import {
   pnlTotals,
   type PnlRow,
 } from "@cardflow/shared";
+import { shareFlipMessage } from "@cardflow/shared";
 import * as Clipboard from "expo-clipboard";
 import { Stack, useFocusEffect } from "expo-router";
 import { useCallback, useState } from "react";
@@ -20,6 +21,7 @@ import { colors, radii, space } from "@/lib/theme";
 interface Entry {
   row: PnlRow;
   sale: SaleRecord | null;
+  tcgdexId: string | null;
 }
 
 async function loadEntries(): Promise<{ entries: Entry[]; offline: boolean }> {
@@ -48,7 +50,7 @@ async function loadEntries(): Promise<{ entries: Entry[]; offline: boolean }> {
         referencePrice: item.referencePriceAmount,
         feesBufferPct,
       });
-      return { row, sale };
+      return { row, sale, tcgdexId: item.card?.tcgdexId ?? null };
     }),
   );
   return { entries, offline };
@@ -134,6 +136,13 @@ function PnlCard({
   onSave: (id: string, sale: SaleRecord | null) => Promise<void>;
 }) {
   const { row, sale } = entry;
+  const flipMessage = shareFlipMessage({
+    name: row.name,
+    costCents: row.costCents,
+    saleCents: row.priceCents,
+    realized: row.status === "realized",
+    tcgdexId: entry.tcgdexId,
+  });
   const [editing, setEditing] = useState(false);
   const [price, setPrice] = useState(sale?.price ?? "");
   const [fees, setFees] = useState(sale?.fees ?? "");
@@ -175,6 +184,15 @@ function PnlCard({
           {sale ? (
             <Pressable accessibilityRole="button" onPress={() => void onSave(row.inventoryItemId, null)}>
               <Text style={styles.link}>Undo sale</Text>
+            </Pressable>
+          ) : null}
+          {flipMessage ? (
+            <Pressable
+              accessibilityLabel={`Share flip for ${row.name}`}
+              accessibilityRole="button"
+              onPress={() => void Share.share({ message: flipMessage }).catch(() => undefined)}
+            >
+              <Text style={styles.link}>Share flip</Text>
             </Pressable>
           ) : null}
         </View>

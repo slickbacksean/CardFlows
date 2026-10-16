@@ -19,6 +19,14 @@ export const metricsRoutes = {
     bodyKind: "none",
     response: z.looseObject({ ok: z.literal(true) }),
   }),
+  /** D10 / P1-20 North Star by ISO week; same bearer token as /ops/metrics. */
+  getNorthStar: defineRoute({
+    method: "GET",
+    path: "/ops/north-star",
+    bodyKind: "none",
+    query: z.object({ weeks: z.string().optional() }),
+    response: z.looseObject({ ok: z.literal(true), metric: z.string(), weeks: z.array(z.looseObject({})) }),
+  }),
   /** P1-18 sampled on-device timings (no images). */
   postPerfTelemetry: defineRoute({
     method: "POST",
