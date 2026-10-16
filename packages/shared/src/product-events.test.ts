@@ -20,10 +20,10 @@ describe("P1-19 product events", () => {
       { step: "purchased", count: 0 },
     ]);
   });
-  it("is off by default, has no ad ID and no network sink until D7", () => {
+  it("is off by default and has no ad ID", () => {
     expect(PRODUCT_ANALYTICS_DEFAULT_ON).toBe(false);
     const lib = readFileSync(resolve(__dirname, "../../../apps/mobile/lib/product-events.ts"), "utf8");
-    expect(lib).not.toMatch(/advertising|IDFA|expo-tracking-transparency|fetch\(/i);
+    expect(lib).not.toMatch(/advertising|IDFA|expo-tracking-transparency/i);
     expect(lib).toContain("analyticsEnabled");
   });
 

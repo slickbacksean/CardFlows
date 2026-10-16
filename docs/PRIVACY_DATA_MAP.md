@@ -22,7 +22,7 @@ Public GitHub product docs (`MVP_SCOPE.md`, `PRODUCT_OVERVIEW.md`, `NON_GOALS.md
 
 **Assumption (stack):** Supabase Auth / Postgres / Storage unless later confirmed.  
 **Assumption:** CardSight is called only from a CardFlow backend.  
-**Assumption:** No analytics SDK is enabled until founder + counsel approve.  
+**D7 (Oct 15, 2026):** PostHog cloud is approved for **opt-in** product events only. No SDK is used; the phone posts to PostHog's HTTP batch API. Nothing is sent unless `EXPO_PUBLIC_POSTHOG_KEY` is set **and** the user turns on Settings → Usage analytics (off by default). Events are names plus allow-listed counts and timings (`time_to_confirm_ms`, `ms_since_scan`, `candidate_count`, `rank`, and a fixed `source` set). The distinct ID is a random per-install ID (deleted on opt-out). `$process_person_profile: false`, `$geoip_disable: true`. Never photos, card names or IDs, prices, search text or any typed text. No advertising ID, so no ATT prompt. The App Store privacy label needs updating for "Product interaction, not linked to identity, not used for tracking".  
 **Known (product):** MVP images are user-selected manual photos, not live marketplace capture.
 
 ---

@@ -35,7 +35,7 @@ export interface ProductEvent {
 export const PRODUCT_ANALYTICS_DEFAULT_ON = false;
 export const PRODUCT_ANALYTICS_LABEL = "Share usage analytics";
 export const PRODUCT_ANALYTICS_NOTE =
-  "Counts and timings only (for example, how long a scan takes to confirm). Never photos, card details, prices or anything you type. Off by default.";
+  "Counts and timings only (for example, how long a scan takes to confirm), sent to PostHog, our analytics service. Never photos, card details, prices or anything you type. Off by default.";
 
 /** `source` is a fixed set, so a search term or card ID can never ride along in it. */
 export const PRODUCT_EVENT_SOURCES = ["camera_photo", "manual_scan", "candidate", "manual_search", "livestream", "practice"] as const;

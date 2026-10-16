@@ -1,4 +1,5 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
+import { trackEvent } from "@/lib/product-events";
 import {
   LIVESTREAM_SCANNER_UNAVAILABLE_DETAIL,
   LIVESTREAM_SCANNER_UNAVAILABLE_MESSAGE,
@@ -79,6 +80,7 @@ export default function ScanTabScreen() {
   }
 
   async function onPurchased(guess: LiveOverlayGuess) {
+    trackEvent("purchased", { source: "livestream" });
     const saved = await runQueueableWrite("livestream_purchase", {
       tcgdexId: guess.tcgdexId,
       platform,

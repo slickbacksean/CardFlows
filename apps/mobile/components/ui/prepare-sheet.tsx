@@ -29,6 +29,7 @@ import {
   type CardFlowGradeEstimate,
   type CardFlowSlabEstimate,
 } from "@cardflow/shared";
+import { trackEvent } from "@/lib/product-events";
 import { Image } from "expo-image";
 import { useEffect, useRef, useState } from "react";
 import { GradeJobErrorCard, GradeWaitCard, useGradeWaitClock } from "./grade-wait-card";
@@ -159,6 +160,8 @@ function PrepareSheetForm({
     wait.reset();
     setJobError(null);
     setEstimating(true);
+    const gradeStartedAt = Date.now();
+    trackEvent(reestimate ? "grade_retake" : "grade_started");
     void requestGradeEstimate(
       itemId,
       {
@@ -180,6 +183,7 @@ function PrepareSheetForm({
     )
       .then((result) => {
         if (controller.signal.aborted) return;
+        trackEvent("grade_shown", { ms_since_scan: Date.now() - gradeStartedAt });
         setFetchedEstimate(result);
         void recordGradeHistory(itemId, result).then((next) => {
           if (!controller.signal.aborted) setGradeHistory(next);

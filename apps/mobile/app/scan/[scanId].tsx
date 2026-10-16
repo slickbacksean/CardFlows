@@ -65,6 +65,10 @@ export default function ScanScreen() {
         const data = await getScan(scanId);
         if (cancelled) return;
         setScan(data.scan);
+        trackEvent("candidates_shown", {
+          candidate_count: data.scan.mapping.candidates.length,
+          ms_since_scan: msSinceScan(data.scan.scanId),
+        });
         void rememberCatalogCards(
           data.scan.mapping.canonicalCard
             ? [data.scan.mapping.canonicalCard, ...data.scan.mapping.candidates]
