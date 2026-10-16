@@ -90,7 +90,7 @@ describe("grade estimate DTO", () => {
     expect(GRADING_TAB_CONSTRAINT.toLowerCase()).not.toContain("profit");
     expect(GRADING_TAB_CONSTRAINT.toLowerCase()).toContain("not a cert");
     expect(GRADE_ESTIMATE_EMPTY_COPY).toBe("No photo estimate yet.");
-    expect(GRADE_ESTIMATE_UNAVAILABLE_COPY).toBe("Estimate unavailable.");
+    expect(GRADE_ESTIMATE_UNAVAILABLE_COPY).toBe("Pre-grade estimate unavailable. Try again later.");
     expect(GRADE_PHOTOS_HINT.toLowerCase()).toContain("still submit");
     expect(GRADE_ESTIMATE_ENABLED_FLAG in FEATURE_FLAG_DEFAULTS).toBe(false);
     expect(canMovePurchasedCopyToSubmitted("purchased")).toBe(true);

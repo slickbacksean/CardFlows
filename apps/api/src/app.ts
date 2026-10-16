@@ -136,6 +136,8 @@ import { contractMiddleware } from "./contract-middleware";
 import { corsOriginsFromEnv } from "./cors-env";
 import { registerGradeQuotaRoutes } from "./routes/grade-quota";
 import { registerPreferenceRoutes } from "./routes/preferences";
+import { registerGradeJobRoutes } from "./routes/grade-jobs";
+import { registerStatusRoutes } from "./routes/status";
 import { registerSalesRoutes } from "./routes/sales";
 import { recordGradeEstimate, registerGradeHistoryRoutes } from "./routes/grade-history";
 import { REQUEST_ID_HEADER, resolveRequestId } from "./request-id";
@@ -302,6 +304,11 @@ export interface CreateAppOptions {
   pricing?: CardPricingProvider;
   /** Recognition provider. Tests default to mock; live Capture uses `obb_phash`. */
   recognition?: CardRecognitionProvider;
+  /** P1-07: async grade jobs. Defaults to CARD_FLOW_GRADE_JOBS=on (off). */
+  gradeJobs?: boolean;
+  gradeJobLimits?: { ttlMs?: number; maxActiveJobs?: number; maxActiveJobsPerUser?: number; sweepMs?: number };
+  /** P1-21: /v1/status cache window (ms). Default 30 s. */
+  statusCacheMs?: number;
   /** P1-17: defaults to the process-wide metrics. */
   opsMetrics?: OpsMetrics;
   /** P1-17: bearer token for GET /ops/metrics; defaults to CARD_FLOW_OPS_TOKEN. */
@@ -896,6 +903,19 @@ export function createApp(
     );
   });
 
+  registerStatusRoutes(app, {
+    cacheMs: options.statusCacheMs,
+    inputs: async () => {
+      const engine = gradeEngineProbe ? await boundedProbe(gradeEngineProbe) : null;
+      return {
+        pricingProvider: pricingProviderHealth(pricing.name),
+        gradeEstimate: gradeEstimateHealth(gradingProvider.name),
+        gradeEngineOk: engine ? healthOk(engine) : null,
+        opsMessage: process.env.CARD_FLOW_STATUS_MESSAGE ?? null,
+      };
+    },
+  });
+
   app.get("/v1/catalog/search", async (c) => {
     try {
       const result = await searchCatalog(
@@ -1476,8 +1496,16 @@ export function createApp(
       }
       const captureMethod = parsed.captureMethod;
       const scenario = parsed.scenario;
-      const scanId = crypto.randomUUID();
       const userId = c.get("userId");
+      // P1-10: a replayed offline scan with the same Idempotency-Key returns the first scan.
+      const scanIdempotencyKey = c.req.header("idempotency-key")?.trim() || null;
+      const scanId = scanIdempotencyKey
+        ? scanIdForIdempotency(userId, scanIdempotencyKey)
+        : crypto.randomUUID();
+      const replayedScan = scanIdempotencyKey ? getScan(userId, scanId) : undefined;
+      if (replayedScan) {
+        return c.json({ ok: true, scan: replayedScan, variantSuggestions: variantSuggestionsFor(replayedScan.mapping) }, 201);
+      }
       let imageStorageRef: string | null = null;
       let imageMimeType: ScanImageMimeType | null = null;
       if (parsed.image) {
@@ -1849,6 +1877,12 @@ export function createApp(
       return c.json({ ...result, quota: taken.quota });
     },
   );
+
+  registerGradeJobRoutes(app, {
+    enabled: options.gradeJobs ?? process.env.CARD_FLOW_GRADE_JOBS?.trim().toLowerCase() === "on",
+    dispatch: (request) => Promise.resolve(app.fetch(request)),
+    ...options.gradeJobLimits,
+  });
 
   app.post(
     "/v1/inventory/:inventoryItemId/grade-estimate",
@@ -2498,6 +2532,12 @@ export function createApp(
   });
 
   return app;
+}
+
+/** UUID-shaped so scan paths and storage refs stay the same shape as random scan IDs. */
+function scanIdForIdempotency(userId: string, key: string): string {
+  const h = createHash("sha256").update(`${userId}\0scan\0${key}`).digest("hex");
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-4${h.slice(13, 16)}-a${h.slice(17, 20)}-${h.slice(20, 32)}`;
 }
 
 function inventoryIdForIdempotency(

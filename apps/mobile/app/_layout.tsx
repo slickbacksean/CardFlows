@@ -3,6 +3,8 @@ import { type ErrorBoundaryProps, Link, Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useEffect, useState } from "react";
 import { startWriteQueue } from "@/lib/write-queue";
+import { startScanQueue } from "@/lib/scan-queue";
+import { loadAnalyticsPreference } from "@/lib/product-events";
 import { StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { PrimaryButton } from "@/components/ui/primary-button";
@@ -34,12 +36,14 @@ export default function RootLayout() {
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
+    void loadAnalyticsPreference();
     void ensureIdentitySession()
       .catch(() => undefined)
       .finally(() => setReady(true));
   }, []);
 
   useEffect(() => (ready ? startWriteQueue() : undefined), [ready]);
+  useEffect(() => (ready ? startScanQueue() : undefined), [ready]);
 
   if (!ready) return null;
 
@@ -66,6 +70,7 @@ export default function RootLayout() {
         <Stack.Screen name="settings" options={{ headerShown: false }} />
         <Stack.Screen name="switch-tester" options={{ headerShown: false }} />
         <Stack.Screen name="about" options={{ headerShown: false }} />
+        <Stack.Screen name="analytics" options={{ headerShown: false }} />
         <Stack.Screen name="practice" options={{ headerShown: false }} />
         <Stack.Screen name="max-buy-rules" options={{ headerShown: false }} />
         <Stack.Screen name="watch" options={{ headerShown: false }} />
