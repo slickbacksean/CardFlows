@@ -136,6 +136,7 @@ import { contractMiddleware } from "./contract-middleware";
 import { corsOriginsFromEnv } from "./cors-env";
 import { registerGradeQuotaRoutes } from "./routes/grade-quota";
 import { registerPreferenceRoutes } from "./routes/preferences";
+import { registerGradeJobRoutes } from "./routes/grade-jobs";
 import { registerStatusRoutes } from "./routes/status";
 import { registerSalesRoutes } from "./routes/sales";
 import { recordGradeEstimate, registerGradeHistoryRoutes } from "./routes/grade-history";
@@ -303,6 +304,9 @@ export interface CreateAppOptions {
   pricing?: CardPricingProvider;
   /** Recognition provider. Tests default to mock; live Capture uses `obb_phash`. */
   recognition?: CardRecognitionProvider;
+  /** P1-07: async grade jobs. Defaults to CARD_FLOW_GRADE_JOBS=on (off). */
+  gradeJobs?: boolean;
+  gradeJobLimits?: { ttlMs?: number; maxActiveJobs?: number; maxActiveJobsPerUser?: number; sweepMs?: number };
   /** P1-21: /v1/status cache window (ms). Default 30 s. */
   statusCacheMs?: number;
   /** P1-17: defaults to the process-wide metrics. */
@@ -1865,6 +1869,12 @@ export function createApp(
       return c.json({ ...result, quota: taken.quota });
     },
   );
+
+  registerGradeJobRoutes(app, {
+    enabled: options.gradeJobs ?? process.env.CARD_FLOW_GRADE_JOBS?.trim().toLowerCase() === "on",
+    dispatch: (request) => Promise.resolve(app.fetch(request)),
+    ...options.gradeJobLimits,
+  });
 
   app.post(
     "/v1/inventory/:inventoryItemId/grade-estimate",

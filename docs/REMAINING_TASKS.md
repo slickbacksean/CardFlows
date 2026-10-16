@@ -48,7 +48,7 @@ Touch: [apps/api/src/recognition-env.ts](../apps/api/src/recognition-env.ts), Ca
 
 - [x] Done.
 
-Default grade estimate is `off` outside tests. Missing PSA URL and missing Anthropic key stay `off`, not mock “Estimate 8.5.” The sheet says “Estimate unavailable.” This machine already has Claude configured, so a configured local API may still return a vision estimate.
+Default grade estimate is `off` outside tests. Missing PSA URL and missing Anthropic key stay `off`, not mock “Estimate 8.5.” The sheet says “Pre-grade estimate unavailable. Try again later.” This machine already has Claude configured, so a configured local API may still return a vision estimate.
 
 Touch: [apps/api/src/grade-estimate-env.ts](../apps/api/src/grade-estimate-env.ts), Prepare sheet.
 

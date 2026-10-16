@@ -141,7 +141,7 @@
 - **Expected:** No estimate unless a real CNN or vision provider is configured.
 - **Solution:**
   - Default to `off` outside tests, and fall back to `off`, not `mock`, when the flag is on but credentials are missing.
-  - Show "Estimate unavailable" for `off`.
+  - Show "Pre-grade estimate unavailable. Try again later." for `off`.
   - Optionally label mock results "DEV sample" under `__DEV__`.
 - **Effort:** S
 
