@@ -1,6 +1,7 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { StatusBanner } from "@/components/ui/status-banner";
 import { SyncPending } from "@/components/ui/sync-pending";
+import { ScanQueueList } from "@/components/ui/scan-queue-list";
 import { cancelQueuedWrite, isQueuedId, runQueueableWrite } from "@/lib/write-queue";
 import {
   collectionTileValue,
@@ -402,6 +403,7 @@ export default function CollectionScreen() {
             />
           ) : null}
           <SyncPending />
+          <ScanQueueList />
           <StatusBanner />
           {actionError ? <Text style={styles.error}>{actionError}</Text> : null}
           {loadState === "loading" && items.length === 0 ? (

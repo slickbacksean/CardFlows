@@ -1496,8 +1496,16 @@ export function createApp(
       }
       const captureMethod = parsed.captureMethod;
       const scenario = parsed.scenario;
-      const scanId = crypto.randomUUID();
       const userId = c.get("userId");
+      // P1-10: a replayed offline scan with the same Idempotency-Key returns the first scan.
+      const scanIdempotencyKey = c.req.header("idempotency-key")?.trim() || null;
+      const scanId = scanIdempotencyKey
+        ? scanIdForIdempotency(userId, scanIdempotencyKey)
+        : crypto.randomUUID();
+      const replayedScan = scanIdempotencyKey ? getScan(userId, scanId) : undefined;
+      if (replayedScan) {
+        return c.json({ ok: true, scan: replayedScan, variantSuggestions: variantSuggestionsFor(replayedScan.mapping) }, 201);
+      }
       let imageStorageRef: string | null = null;
       let imageMimeType: ScanImageMimeType | null = null;
       if (parsed.image) {
@@ -2524,6 +2532,12 @@ export function createApp(
   });
 
   return app;
+}
+
+/** UUID-shaped so scan paths and storage refs stay the same shape as random scan IDs. */
+function scanIdForIdempotency(userId: string, key: string): string {
+  const h = createHash("sha256").update(`${userId}\0scan\0${key}`).digest("hex");
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-4${h.slice(13, 16)}-a${h.slice(17, 20)}-${h.slice(20, 32)}`;
 }
 
 function inventoryIdForIdempotency(

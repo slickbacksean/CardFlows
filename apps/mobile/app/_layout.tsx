@@ -3,6 +3,7 @@ import { type ErrorBoundaryProps, Link, Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useEffect, useState } from "react";
 import { startWriteQueue } from "@/lib/write-queue";
+import { startScanQueue } from "@/lib/scan-queue";
 import { loadAnalyticsPreference } from "@/lib/product-events";
 import { StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -42,6 +43,7 @@ export default function RootLayout() {
   }, []);
 
   useEffect(() => (ready ? startWriteQueue() : undefined), [ready]);
+  useEffect(() => (ready ? startScanQueue() : undefined), [ready]);
 
   if (!ready) return null;
 
