@@ -7,6 +7,7 @@ import {
   type CardFlowSlabEstimate,
   type SlabCompany,
 } from "@cardflow/shared";
+import { shareCardMessage } from "@cardflow/shared";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { Image } from "expo-image";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -207,8 +208,9 @@ export default function ShopCardScreen() {
           accessibilityLabel="Share card"
           accessibilityRole="button"
           onPress={() => {
+            // D12: text + deep link, no referral code or reward.
             void Share.share({
-              message: `${card.name} #${card.localId} · ${card.set.name}`,
+              message: shareCardMessage({ name: card.name, number: card.localId, setName: card.set.name, tcgdexId: card.id }),
             });
           }}
           style={styles.circle}
