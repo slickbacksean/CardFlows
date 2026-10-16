@@ -1,3 +1,4 @@
+import { SIGNUP_REQUIRED_CODE, type SignupReason } from "@cardflow/shared";
 import {
   CARD_FLOW_REQUEST_TIMEOUT_MS,
   cardFlowHttpErrorMessage,
@@ -267,6 +268,13 @@ async function request<T>(
     extra.status = response.status;
     const quota = (data as { quota?: GradeQuotaSnapshot }).quota;
     if (quota) extra.quota = quota;
+    // D9: the API says a guest must sign up (4th scan or a save step).
+    const signup = data as { code?: unknown; reason?: unknown };
+    if (response.status === 403 && signup.code === SIGNUP_REQUIRED_CODE) {
+      const reason: SignupReason = signup.reason === "scan_limit" ? "scan_limit" : "save";
+      (extra as Error & { signupRequired?: SignupReason }).signupRequired = reason;
+      notifySignupRequired(reason);
+    }
     throw extra;
   }
   return data;
@@ -911,6 +919,25 @@ export function getHealth() {
 
 export function getIdentity() {
   return callApi(apiContract.getIdentity);
+}
+
+type SignupListener = (reason: SignupReason) => void;
+let signupListener: SignupListener | null = null;
+
+/** D9: the root layout shows the sign-up prompt. Returns an unsubscribe. */
+export function onSignupRequired(listener: SignupListener): () => void {
+  signupListener = listener;
+  return () => {
+    if (signupListener === listener) signupListener = null;
+  };
+}
+
+function notifySignupRequired(reason: SignupReason) {
+  signupListener?.(reason);
+}
+
+export function createGuestSession() {
+  return callApi(apiContract.createGuestSession, {});
 }
 
 export function createSession(inviteCode: string) {

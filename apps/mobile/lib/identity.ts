@@ -1,5 +1,5 @@
-import { type InvitedIdentity } from "@cardflow/shared";
-import { createSession, getIdentity, listInventory } from "./api";
+import { isGuestUserId, type InvitedIdentity } from "@cardflow/shared";
+import { createGuestSession, createSession, getIdentity, listInventory } from "./api";
 import { stopLiveVideoIdentify } from "./live-identify";
 import { clearLivestreamOverlay } from "./livestream";
 import {
@@ -77,8 +77,22 @@ async function restoreIdentitySession(): Promise<IdentitySession> {
     setSessionToken(null);
     await persistSessionToken(null);
   }
-  rememberIdentity(null);
-  return signedOut;
+  // D9: no stored session -> try a guest session (3 free scans). 404 = guest mode is off.
+  try {
+    const guest = await createGuestSession();
+    setSessionToken(guest.token);
+    await persistSessionToken(guest.token);
+    rememberIdentity(guest.identity);
+    return { identity: guest.identity, invitedUsers: [] };
+  } catch {
+    rememberIdentity(null);
+    return signedOut;
+  }
+}
+
+/** D9: true while the app runs on a guest session. */
+export function isGuestSession(): boolean {
+  return isGuestUserId(cachedUserId);
 }
 
 export async function ensureIdentitySession(): Promise<IdentitySession> {
