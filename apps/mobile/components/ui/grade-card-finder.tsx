@@ -26,6 +26,7 @@ import {
   Text,
   useWindowDimensions,
   View,
+  AccessibilityInfo,
 } from "react-native";
 import { PrimaryButton } from "@/components/ui/primary-button";
 import {
@@ -95,7 +96,6 @@ export function GradeCardFinder({
     cardInFrame: null,
   });
   const guideColor = GUIDE_COLORS[readiness.tone];
-
   // P1-15: auto-capture once level (≤ 2°) and still for 0.5 s. The shutter always works too.
   const autoEnabled = showLivePreview && !freezeUri && !detecting && level.available;
   const { holdProgress } = useGradeAutoCapture({
@@ -105,11 +105,21 @@ export function GradeCardFinder({
     busy: shutterDisabled,
     onFire: () => void onShutter("auto"),
   });
+  const holding = holdProgress > 0 && readiness.autoCaptureReady;
+  const statusPhrase = capturing
+    ? GRADE_AUTO_CAPTURE_COPY.capturing
+    : holding
+      ? GRADE_AUTO_CAPTURE_COPY.holding
+      : statusLine(readiness);
+  const tiltNote = capturing || holding ? null : tiltDetail(readiness, level);
+
 
   async function onShutter(via: "auto" | "manual" = "manual") {
     if (busyRef.current || shutterDisabled || !showLivePreview) return;
     busyRef.current = true;
     setCapturing(true);
+    // Announce once per capture (iOS); Android reads the chip's live region.
+    if (Platform.OS === "ios") AccessibilityInfo.announceForAccessibility(GRADE_AUTO_CAPTURE_COPY.capturing);
     setError(null);
     try {
       // Light haptic on capture (expo-haptics works in Expo Go).
@@ -226,17 +236,22 @@ export function GradeCardFinder({
       <FinderHeader onBack={detecting ? undefined : onBack} title={`${sideLabel} photo`} />
       <View style={styles.helper}>
         <Text style={styles.helperMain}>{GRADE_GUIDE_COPY.lineUp}</Text>
-        <Text
-          accessibilityLiveRegion="polite"
-          style={[styles.helperStatus, { color: guideColor }]}
-        >
-          {capturing
-            ? GRADE_AUTO_CAPTURE_COPY.capturing
-            : holdProgress > 0 && readiness.autoCaptureReady
-              ? `${GRADE_AUTO_CAPTURE_COPY.holding} ${Math.round(holdProgress * 100)}%`
-              : statusLine(readiness, level)}
-        </Text>
-        {level.available ? <Text style={styles.helperMain}>{GRADE_AUTO_CAPTURE_COPY.manualHint}</Text> : null}
+        {/* Dark hint chip: icon + phrase, color only on the icon. The live region carries the
+            phrase only (no %, no degrees), so it speaks when the phrase changes, not every tick. */}
+        <View style={styles.hintChip}>
+          <Ionicons color={guideColor} name={TONE_ICONS[readiness.tone]} size={18} />
+          <Text accessibilityLiveRegion="polite" style={styles.hintChipText}>
+            {statusPhrase}
+          </Text>
+          {tiltNote ? (
+            <Text accessibilityElementsHidden importantForAccessibility="no" style={styles.hintChipText}>
+              {tiltNote}
+            </Text>
+          ) : null}
+        </View>
+        {level.available && statusPhrase === statusLine(readiness) && !holding ? (
+          <Text style={styles.helperMain}>{GRADE_AUTO_CAPTURE_COPY.manualHint}</Text>
+        ) : null}
       </View>
       <CardFinderStage
         cameraRef={cameraRef}
@@ -263,10 +278,9 @@ export function GradeCardFinder({
         <Pressable
           accessibilityLabel="Take photo"
           accessibilityRole="button"
-          accessibilityState={{ disabled: shutterDisabled }}
-          disabled={shutterDisabled}
+          accessibilityState={{ busy: shutterDisabled }}
           onPress={() => void onShutter("manual")}
-          style={[styles.shutterOuter, { borderColor: guideColor }, shutterDisabled && styles.disabled]}
+          style={[styles.shutterOuter, { borderColor: guideColor }]}
         >
           {detecting || waitingForCamera ? (
             <ActivityIndicator color={colors.ctaText} />
@@ -280,13 +294,22 @@ export function GradeCardFinder({
   );
 }
 
-function statusLine(readiness: GradeCaptureReadiness, level: DeviceLevel): string {
-  if (!level.available || level.tiltDeg == null) return readiness.status;
-  if (readiness.status === GRADE_GUIDE_COPY.holdFlat) {
-    return `${GRADE_GUIDE_COPY.holdFlat} · ${level.tiltDeg.toFixed(1)}° off`;
-  }
+function statusLine(readiness: GradeCaptureReadiness): string {
   return readiness.status;
 }
+
+/** Visible-only tilt detail; never in the live region. */
+function tiltDetail(readiness: GradeCaptureReadiness, level: DeviceLevel): string | null {
+  if (!level.available || level.tiltDeg == null) return null;
+  return readiness.status === GRADE_GUIDE_COPY.holdFlat ? `${level.tiltDeg.toFixed(1)}° off` : null;
+}
+
+const TONE_ICONS = {
+  good: "checkmark-circle",
+  warn: "alert-circle",
+  bad: "close-circle",
+  neutral: "scan-outline",
+} as const;
 
 function FinderHeader({ onBack, title }: { onBack?: () => void; title: string }) {
   return (
@@ -304,7 +327,7 @@ function FinderHeader({ onBack, title }: { onBack?: () => void; title: string })
       ) : (
         <View style={styles.iconButton} />
       )}
-      <Text numberOfLines={1} style={styles.topTitle}>
+      <Text style={styles.topTitle}>
         {title}
       </Text>
       <View style={styles.iconButton} />
@@ -425,7 +448,8 @@ function LevelBubble({ level, color }: { level: DeviceLevel; color: string }) {
   const target = Math.max(DOT_RADIUS + 2, GRADE_LEVEL_OK_DEG * PX_PER_DEG + DOT_RADIUS);
   return (
     <View
-      accessibilityLabel={`Tilt ${level.tiltDeg?.toFixed(1) ?? "unknown"} degrees`}
+      accessibilityLabel="Level indicator"
+      accessibilityValue={{ text: level.tiltDeg != null && level.tiltDeg <= GRADE_LEVEL_OK_DEG ? "Level" : "Tilted" }}
       pointerEvents="none"
       style={styles.bubble}
     >
@@ -466,7 +490,7 @@ const styles = StyleSheet.create({
     gap: space.md,
   },
   title: { color: colors.text, fontSize: 22, fontWeight: "800" },
-  body: { color: colors.muted, fontSize: 15, lineHeight: 22 },
+  body: { color: colors.muted, fontSize: 15 },
   error: {
     color: colors.danger,
     fontSize: 14,
@@ -524,7 +548,18 @@ const styles = StyleSheet.create({
   bubbleDot: { width: DOT_RADIUS * 2, height: DOT_RADIUS * 2, borderRadius: DOT_RADIUS },
   helper: { alignItems: "center", gap: 2, paddingHorizontal: space.lg, paddingBottom: space.sm },
   helperMain: { color: colors.text, fontSize: 15, fontWeight: "700", textAlign: "center" },
-  helperStatus: { fontSize: 14, fontWeight: "700", textAlign: "center" },
+  hintChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "wrap",
+    justifyContent: "center",
+    gap: space.xs,
+    backgroundColor: "rgba(0,0,0,0.7)",
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  hintChipText: { color: "#FFFFFF", fontSize: 14, fontWeight: "700", textAlign: "center", flexShrink: 1 },
   detectScrim: {
     ...StyleSheet.absoluteFill,
     backgroundColor: "rgba(7, 9, 11, 0.55)",

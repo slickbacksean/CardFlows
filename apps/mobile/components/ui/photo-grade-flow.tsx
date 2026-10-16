@@ -15,7 +15,8 @@ import { Image } from "expo-image";
 import { useFocusEffect } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { checkGradeStillOnPhone } from "@/lib/phone-photo-check";
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import Ionicons from "@expo/vector-icons/Ionicons";
+import { AccessibilityInfo, ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { GradeCardFinder } from "@/components/ui/grade-card-finder";
 import { PrimaryButton } from "@/components/ui/primary-button";
 import { detectGradePhoto, getGradeQuota, grantGradeCredits, requestPhotoPregrade } from "@/lib/api";
@@ -368,19 +369,20 @@ export function PhotoGradeFlow({ onOpenPipeline }: PhotoGradeFlowProps) {
         <View style={styles.block}>
           <Text style={styles.section}>Photo guidelines</Text>
           {quota ? (
-            <Text
-              accessibilityRole="text"
-              style={isOutOfGrades ? styles.error : styles.body}
-            >
-              {remainingGradesCaption(quota)}
-            </Text>
+            isOutOfGrades ? (
+              <ErrorText text={remainingGradesCaption(quota)} />
+            ) : (
+              <Text accessibilityRole="text" style={styles.body}>
+                {remainingGradesCaption(quota)}
+              </Text>
+            )
           ) : null}
           {isOutOfGrades ? (
             <View style={styles.block}>
               <Text style={styles.section}>Out of grades</Text>
               <Text style={styles.body}>{GRADE_QUOTA_COPY.outOfGrades}</Text>
               <Text style={styles.caption}>{GRADE_QUOTA_COPY.outOfGradesHint}</Text>
-              {quotaNotice ? <Text style={styles.error}>{quotaNotice}</Text> : null}
+              {quotaNotice ? <ErrorText text={quotaNotice} /> : null}
               <PrimaryButton
                 label={GRADE_QUOTA_COPY.getExtra}
                 onPress={() => void handleGetExtra()}
@@ -417,18 +419,7 @@ export function PhotoGradeFlow({ onOpenPipeline }: PhotoGradeFlowProps) {
               : "Keep the whole card in frame."}
           </Text>
           <RetakeReasons reasons={retakeReasons} side={side} />
-          {phoneFlag && phoneFlag.side === side && retakeReasons.length > 0 ? (
-            <>
-              <Text style={styles.caption}>{PHONE_CHECK_COPY.phoneFlagNote}</Text>
-              <PrimaryButton
-                disabled={scoring}
-                label={PHONE_CHECK_COPY.checkAnyway}
-                onPress={() => void runDetect(phoneFlag.side, phoneFlag.still, { fromGuide: false, skip: true })}
-                tone="muted"
-              />
-            </>
-          ) : null}
-          {notice ? <Text style={styles.error}>{notice}</Text> : null}
+          {notice ? <ErrorText text={notice} /> : null}
           <PrimaryButton
             disabled={scoring}
             label={`Take ${sideLabel.toLowerCase()} photo`}
@@ -440,6 +431,17 @@ export function PhotoGradeFlow({ onOpenPipeline }: PhotoGradeFlowProps) {
             onPress={() => void takePhoto(side, "library")}
             tone="muted"
           />
+          {phoneFlag && phoneFlag.side === side && retakeReasons.length > 0 ? (
+            <>
+              <Text style={styles.caption}>{PHONE_CHECK_COPY.phoneFlagNote}</Text>
+              <PrimaryButton
+                disabled={scoring}
+                label={PHONE_CHECK_COPY.checkAnyway}
+                onPress={() => void runDetect(phoneFlag.side, phoneFlag.still, { fromGuide: false, skip: true })}
+                tone="muted"
+              />
+            </>
+          ) : null}
         </View>
       ) : null}
 
@@ -476,22 +478,11 @@ export function PhotoGradeFlow({ onOpenPipeline }: PhotoGradeFlowProps) {
           {!checking && detected ? <Text style={styles.body}>Card found. Use this crop?</Text> : null}
           {!checking && detected && warnings.length > 0 ? (
             <Text style={styles.warning}>
-              {`Still gradable, but: ${warnings.join(", ")}. A retake may score more reliably.`}
+              {`Still usable, but: ${warnings.join(", ")}. A retake may make the estimate more accurate.`}
             </Text>
           ) : null}
           <RetakeReasons reasons={retakeReasons} side={side} />
-          {phoneFlag && phoneFlag.side === side && retakeReasons.length > 0 ? (
-            <>
-              <Text style={styles.caption}>{PHONE_CHECK_COPY.phoneFlagNote}</Text>
-              <PrimaryButton
-                disabled={scoring}
-                label={PHONE_CHECK_COPY.checkAnyway}
-                onPress={() => void runDetect(phoneFlag.side, phoneFlag.still, { fromGuide: false, skip: true })}
-                tone="muted"
-              />
-            </>
-          ) : null}
-          {!checking && notice ? <Text style={styles.error}>{notice}</Text> : null}
+          {!checking && notice ? <ErrorText text={notice} /> : null}
           {!checking && detected ? (
             <PrimaryButton disabled={scoring} label="Use this crop" onPress={confirmCrop} />
           ) : null}
@@ -502,6 +493,17 @@ export function PhotoGradeFlow({ onOpenPipeline }: PhotoGradeFlowProps) {
               onPress={() => openFinder(side)}
               tone={detected ? "muted" : "cta"}
             />
+          ) : null}
+          {phoneFlag && phoneFlag.side === side && retakeReasons.length > 0 ? (
+            <>
+              <Text style={styles.caption}>{PHONE_CHECK_COPY.phoneFlagNote}</Text>
+              <PrimaryButton
+                disabled={scoring}
+                label={PHONE_CHECK_COPY.checkAnyway}
+                onPress={() => void runDetect(phoneFlag.side, phoneFlag.still, { fromGuide: false, skip: true })}
+                tone="muted"
+              />
+            </>
           ) : null}
           {!checking && !detected && notice ? (
             <PrimaryButton
@@ -517,8 +519,8 @@ export function PhotoGradeFlow({ onOpenPipeline }: PhotoGradeFlowProps) {
       {step === "scoring" ? (
         <View style={styles.block}>
           <ActivityIndicator color={colors.accent} />
-          <Text style={styles.body}>Grading both photos on your CardFlow server…</Text>
-          <Text style={styles.caption}>This can take 10–30 seconds.</Text>
+          <Text style={styles.body}>Estimating your card…</Text>
+          <Text style={styles.caption}>This usually takes a few seconds.</Text>
         </View>
       ) : null}
 
@@ -551,7 +553,7 @@ export function PhotoGradeFlow({ onOpenPipeline }: PhotoGradeFlowProps) {
               <Text style={styles.section}>Out of grades</Text>
               <Text style={styles.body}>{GRADE_QUOTA_COPY.outOfGrades}</Text>
               <Text style={styles.caption}>{GRADE_QUOTA_COPY.outOfGradesHint}</Text>
-              {quotaNotice ? <Text style={styles.error}>{quotaNotice}</Text> : null}
+              {quotaNotice ? <ErrorText text={quotaNotice} /> : null}
               <PrimaryButton
                 label={GRADE_QUOTA_COPY.getExtra}
                 onPress={() => void handleGetExtra()}
@@ -583,17 +585,37 @@ export function PhotoGradeFlow({ onOpenPipeline }: PhotoGradeFlowProps) {
   );
 }
 
+/** Spec §2: one reason at a time, in a card with an icon (never color alone), announced on appear. */
 function RetakeReasons({ reasons, side }: { reasons: string[]; side: Side }) {
-  if (reasons.length === 0) return null;
+  const first = reasons[0] ?? null;
+  const sideText = side === "back" ? "Back photo" : "Front photo";
+  useEffect(() => {
+    if (first && Platform.OS === "ios") AccessibilityInfo.announceForAccessibility(`${GRADE_FLOW_RETAKE_HEADING}. ${first}`);
+  }, [first]);
+  if (!first) return null;
   return (
-    <View style={styles.retakeBox}>
-      <Text style={styles.retakeHeading}>{GRADE_FLOW_RETAKE_HEADING}</Text>
-      <Text style={styles.retakeSide}>{side === "back" ? "Back photo" : "Front photo"}</Text>
-      {reasons.map((reason) => (
-        <Text key={reason} style={styles.error}>
-          {reason}
-        </Text>
-      ))}
+    <View
+      accessibilityLabel={`${GRADE_FLOW_RETAKE_HEADING}. ${sideText}. ${first}`}
+      accessibilityLiveRegion="polite"
+      accessible
+      style={styles.retakeBox}
+    >
+      <View style={styles.iconRow}>
+        <Ionicons color={colors.danger} name="alert-circle" size={20} style={styles.rowIcon} />
+        <Text style={styles.retakeHeading}>{GRADE_FLOW_RETAKE_HEADING}</Text>
+      </View>
+      <Text style={styles.retakeSide}>{sideText}</Text>
+      <Text style={styles.retakeReason}>{first}</Text>
+    </View>
+  );
+}
+
+/** Red text always carries an icon so the error isn't color-only. */
+function ErrorText({ text }: { text: string }) {
+  return (
+    <View accessibilityLabel={`Error: ${text}`} accessible style={styles.iconRow}>
+      <Ionicons color={colors.danger} name="alert-circle" size={18} style={styles.rowIcon} />
+      <Text style={styles.error}>{text}</Text>
     </View>
   );
 }
@@ -618,14 +640,24 @@ const styles = StyleSheet.create({
   block: { gap: space.md },
   title: { color: colors.text, fontSize: 22, fontWeight: "800" },
   section: { color: colors.text, fontSize: 18, fontWeight: "800" },
-  body: { color: colors.muted, fontSize: 15, lineHeight: 22 },
-  caption: { color: colors.muted, fontSize: 13, lineHeight: 18 },
-  error: { color: colors.danger, fontSize: 15, lineHeight: 22 },
-  warning: { color: colors.text, fontSize: 14, lineHeight: 20 },
+  body: { color: colors.muted, fontSize: 15 },
+  caption: { color: colors.muted, fontSize: 13 },
+  error: { color: colors.danger, fontSize: 15, flexShrink: 1 },
+  warning: { color: colors.text, fontSize: 14 },
   score: { color: colors.text, fontSize: 40, fontWeight: "800" },
-  retakeBox: { gap: space.xs },
+  retakeBox: {
+    gap: space.xs,
+    padding: space.md,
+    borderRadius: 12,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.danger,
+  },
+  iconRow: { flexDirection: "row", alignItems: "flex-start", gap: space.xs },
+  rowIcon: { marginTop: 2 },
+  retakeReason: { color: colors.text, fontSize: 15, flexShrink: 1 },
   retakeHeading: { color: colors.text, fontSize: 16, fontWeight: "800" },
-  retakeSide: { color: colors.muted, fontSize: 13, lineHeight: 18 },
+  retakeSide: { color: colors.muted, fontSize: 13 },
   frame: {
     backgroundColor: colors.card,
     borderColor: colors.cardBorder,
