@@ -93,6 +93,8 @@ export default function SettingsScreen() {
           onPress={() => router.push("/max-buy-rules")}
         />
 
+        <JobRow label="Usage analytics" onPress={() => router.push("/analytics")} />
+
         <Text style={styles.section}>{SETTINGS_STACK_SECTION_LABEL}</Text>
         {SETTINGS_STACK_STATUS_ROWS.map((row) => {
           const value = settingsStackStatusValue(stack, row.id, stackLoad);

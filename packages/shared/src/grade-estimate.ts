@@ -17,7 +17,7 @@ export type GradeConfidence = (typeof GRADE_CONFIDENCE)[number];
 export const GRADE_ESTIMATE_LABEL = "estimate" as const;
 export const GRADE_ESTIMATE_DISCLAIMER = PREGRADE_DISCLAIMER_TEXT;
 export const GRADE_ESTIMATE_EMPTY_COPY = "No photo estimate yet." as const;
-export const GRADE_ESTIMATE_UNAVAILABLE_COPY = "Estimate unavailable." as const;
+export const GRADE_ESTIMATE_UNAVAILABLE_COPY = "Pre-grade estimate unavailable. Try again later." as const;
 export const GRADE_ESTIMATE_GUIDANCE_HISTORY_LABEL = "Guidance history" as const;
 export const GRADE_PHOTOS_HINT =
   "Front and back photos are required for a pre-grade estimate. You can still submit without one." as const;

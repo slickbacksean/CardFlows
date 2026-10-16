@@ -336,7 +336,7 @@ describe("POST /v1/inventory/:id/grade-estimate", () => {
     expect(off.status).toBe(200);
     expect(off.body.provider).toBe("off");
     expect(off.body.estimate).toEqual(unavailableGradeEstimate());
-    expect(off.body.estimate?.display).toBe("Estimate unavailable.");
+    expect(off.body.estimate?.display).toBe("Pre-grade estimate unavailable. Try again later.");
 
     const listed = await json<{
       items: Array<{ inventoryItemId: string; intent: string }>;

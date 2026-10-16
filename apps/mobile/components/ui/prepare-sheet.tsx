@@ -1,4 +1,6 @@
 import {
+  GradeJobCancelled,
+  GradeJobError,
   CONDITION_LABELS,
   GRADE_ESTIMATE_EMPTY_COPY,
   GRADE_HISTORY_NOTE,
@@ -28,7 +30,8 @@ import {
   type CardFlowSlabEstimate,
 } from "@cardflow/shared";
 import { Image } from "expo-image";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { GradeJobErrorCard, GradeWaitCard, useGradeWaitClock } from "./grade-wait-card";
 import {
   KeyboardAvoidingView,
   Modal,
@@ -142,28 +145,73 @@ function PrepareSheetForm({
     setSlabEstimate(null);
   }
 
-  useEffect(() => {
-    if (!visible || !itemId || estimate || !hasFront) return;
-    let cancelled = false;
-    void requestGradeEstimate(itemId, {
-      frontUri: pickedFront?.uri ?? (imageStorageRef ? null : captureFrontUri),
-      frontMimeType: pickedFront?.mimeType,
-      backUri: pickedBack?.uri,
-      backMimeType: pickedBack?.mimeType,
-    })
+  // P1-07: wait card state for async grade jobs.
+  const wait = useGradeWaitClock();
+  const [jobError, setJobError] = useState<GradeJobError | null>(null);
+  const [estimating, setEstimating] = useState(false);
+  const runRef = useRef<AbortController | null>(null);
+
+  function runEstimate(reestimate: boolean) {
+    if (!itemId) return;
+    runRef.current?.abort();
+    const controller = new AbortController();
+    runRef.current = controller;
+    wait.reset();
+    setJobError(null);
+    setEstimating(true);
+    void requestGradeEstimate(
+      itemId,
+      {
+        frontUri: pickedFront?.uri ?? (imageStorageRef ? null : captureFrontUri),
+        frontMimeType: pickedFront?.mimeType,
+        backUri: pickedBack?.uri,
+        backMimeType: pickedBack?.mimeType,
+        ...(reestimate ? { reestimate: true } : {}),
+      },
+      {
+        signal: controller.signal,
+        onJobUpdate: (job) => {
+          if (!controller.signal.aborted) wait.onJobUpdate(job);
+        },
+        onPollError: (n) => {
+          if (!controller.signal.aborted) wait.onPollError(n);
+        },
+      },
+    )
       .then((result) => {
-        if (cancelled) return;
+        if (controller.signal.aborted) return;
         setFetchedEstimate(result);
         void recordGradeHistory(itemId, result).then((next) => {
-          if (!cancelled) setGradeHistory(next);
+          if (!controller.signal.aborted) setGradeHistory(next);
         });
       })
-      .catch(() => {
-        if (!cancelled) setFetchedEstimate(unavailableGradeEstimate());
+      .catch((error: unknown) => {
+        if (controller.signal.aborted || error instanceof GradeJobCancelled) return;
+        if (error instanceof GradeJobError) setJobError(error);
+        else setFetchedEstimate(unavailableGradeEstimate());
+      })
+      .finally(() => {
+        if (runRef.current === controller) setEstimating(false);
       });
+  }
+
+  function cancelEstimate() {
+    // Photos are kept; the server job expires on its own (TTL). A late result is dropped.
+    runRef.current?.abort();
+    runRef.current = null;
+    setEstimating(false);
+    wait.reset();
+  }
+
+  useEffect(() => {
+    if (!visible || !itemId || estimate || !hasFront) return;
+    // Next tick so the effect itself doesn't set state synchronously.
+    const start = setTimeout(() => runEstimate(false), 0);
     return () => {
-      cancelled = true;
+      clearTimeout(start);
+      runRef.current?.abort();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [captureFrontUri, estimate, hasFront, imageStorageRef, itemId, pickedBack, pickedFront, visible]);
 
   useEffect(() => {
@@ -211,18 +259,7 @@ function PrepareSheetForm({
   function reestimate() {
     if (!itemId || !hasFront) return;
     setFetchedEstimate(null);
-    void requestGradeEstimate(itemId, {
-      frontUri: pickedFront?.uri ?? (imageStorageRef ? null : captureFrontUri),
-      frontMimeType: pickedFront?.mimeType,
-      backUri: pickedBack?.uri,
-      backMimeType: pickedBack?.mimeType,
-      reestimate: true,
-    })
-      .then((result) => {
-        setFetchedEstimate(result);
-        void recordGradeHistory(itemId, result).then(setGradeHistory);
-      })
-      .catch(() => setFetchedEstimate(unavailableGradeEstimate()));
+    runEstimate(true);
   }
 
   async function onPickStill(side: "front" | "back", source: "library" | "camera") {
@@ -315,7 +352,11 @@ function PrepareSheetForm({
                     <Text style={styles.caption}>{GRADE_HISTORY_NOTE}</Text>
                   </View>
                 ) : null}
-                {gradeEstimate.overall == null ? (
+                {estimating && !fetchedEstimate ? (
+                  <GradeWaitCard clock={wait.clock} onCancel={cancelEstimate} />
+                ) : jobError && !fetchedEstimate ? (
+                  <GradeJobErrorCard onRetry={() => runEstimate(false)} retryAfterSeconds={jobError.retryAfterSeconds} />
+                ) : gradeEstimate.overall == null ? (
                   <Text style={styles.body}>
                     {gradeEstimate.display === GRADE_ESTIMATE_UNAVAILABLE_COPY
                       ? GRADE_ESTIMATE_UNAVAILABLE_COPY

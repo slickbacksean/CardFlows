@@ -8,6 +8,11 @@ import {
   PREGRADE_DETECT_UNAVAILABLE_MESSAGE,
   PREGRADE_UNAVAILABLE_MESSAGE,
   unavailableGradeEstimate,
+  pollGradeJob,
+  GradeJobCancelled,
+  GradeJobError,
+  GRADE_JOB_POLL_TIMEOUT_MS,
+  type GradeJobView,
   LOCKED_DISPLAY_CURRENCY,
   type CaptureMethod,
   type CardFlowGradeEstimate,
@@ -347,6 +352,8 @@ export async function createScan(input: {
   scenario?: RecognitionScenario;
   imageUri?: string | null;
   imageMimeType?: string | null;
+  /** P1-10: replayed offline scans reuse one key so the server makes one scan. */
+  idempotencyKey?: string;
 }) {
   if (input.imageUri) {
     const mime =
@@ -357,7 +364,7 @@ export async function createScan(input: {
     form.append("captureMethod", input.captureMethod);
     if (input.scenario) form.append("scenario", input.scenario);
     await appendScanStill(form, input.imageUri, mime);
-    return callApi(apiContract.createScan, { form });
+    return callApi(apiContract.createScan, { form, idempotencyKey: input.idempotencyKey });
   }
   return callApi(apiContract.createScan, {
     body: {
@@ -469,6 +476,99 @@ export function getPortfolioHistory(range: PortfolioHistoryRange = "all") {
   return callApi(apiContract.getPortfolioHistory, { query: { range } });
 }
 
+/** P1-07: async pre-grade jobs when `EXPO_PUBLIC_CARD_FLOW_GRADE_JOBS=1` (off by default). */
+export function gradeJobsEnabled(): boolean {
+  return process.env.EXPO_PUBLIC_CARD_FLOW_GRADE_JOBS === "1";
+}
+
+export function getGradeJob(jobId: string) {
+  return callApi(apiContract.getGradeJob, { params: { jobId } });
+}
+
+export interface GradeEstimateRunOptions {
+  /** Wait card updates (queued/running/waiting/done/failed). */
+  onJobUpdate?: (job: GradeJobView) => void;
+  /** Consecutive failed polls (offline row after 2). */
+  onPollError?: (consecutiveFailures: number) => void;
+  /** Cancel: stops polling; the server job expires on its own. */
+  signal?: AbortSignal;
+}
+
+const BUSY_STATUSES = new Set([429, 503]);
+const DEFAULT_BUSY_WAIT_S = 10;
+
+function retryAfterOf(error: unknown): number | null {
+  const raw = (error as { retryAfterSeconds?: unknown; retryAfter?: unknown } | null) ?? null;
+  const value = Number(raw?.retryAfterSeconds ?? raw?.retryAfter);
+  return Number.isFinite(value) && value > 0 ? value : null;
+}
+
+function abortableSleep(ms: number, signal?: AbortSignal) {
+  return new Promise<void>((resolve) => {
+    const t = setTimeout(resolve, ms);
+    signal?.addEventListener("abort", () => {
+      clearTimeout(t);
+      resolve();
+    });
+  });
+}
+
+/**
+ * Runs `attempt`; a 429/503 (rate limit or queue full) becomes the wait state with the server's
+ * Retry-After, then retries until the poll timeout. Never "unavailable" just because it's busy.
+ */
+async function withBusyWait<T>(attempt: () => Promise<T>, options: GradeEstimateRunOptions): Promise<T> {
+  const deadline = Date.now() + GRADE_JOB_POLL_TIMEOUT_MS;
+  for (;;) {
+    if (options.signal?.aborted) throw new GradeJobCancelled();
+    try {
+      return await attempt();
+    } catch (error) {
+      const status = apiErrorStatus(error);
+      if (status === null || !BUSY_STATUSES.has(status) || Date.now() >= deadline) throw error;
+      const wait = retryAfterOf(error) ?? DEFAULT_BUSY_WAIT_S;
+      options.onJobUpdate?.({ jobId: "", status: "waiting", retryAfterSeconds: wait, estimate: null, error: null, requestId: null });
+      await abortableSleep(wait * 1000, options.signal);
+    }
+  }
+}
+
+/** Polls with backoff; survives backgrounding because the job lives on the server. */
+async function runGradeJob(
+  create: () => Promise<{ job: { jobId: string } }>,
+  options: GradeEstimateRunOptions,
+): Promise<CardFlowGradeEstimate | "jobs_off"> {
+  for (let lost = 0; ; lost += 1) {
+    let created: { job: { jobId: string } };
+    try {
+      created = await withBusyWait(create, options);
+    } catch (error) {
+      if (apiErrorStatus(error) === 404) return "jobs_off"; // Server flag off: use the sync route.
+      throw error;
+    }
+    options.onJobUpdate?.(created.job as unknown as GradeJobView);
+    const outcome = await pollGradeJob(
+      async () => (await getGradeJob(created.job.jobId)).job as unknown as GradeJobView,
+      {
+        onUpdate: options.onJobUpdate,
+        onPollError: options.onPollError,
+        isNotFound: (error) => apiErrorStatus(error) === 404,
+        signal: options.signal,
+      },
+    );
+    if (outcome.kind === "aborted") throw new GradeJobCancelled();
+    if (outcome.kind === "timeout") throw new GradeJobError("timeout");
+    // 404 mid-poll: job expired or the API restarted. Retry the grade once, fast.
+    if (outcome.kind === "not_found") {
+      if (lost >= 1) throw new GradeJobError("not_found");
+      continue;
+    }
+    const job = outcome.job;
+    if (job.status === "done" && job.estimate) return job.estimate;
+    throw new GradeJobError("failed", job.retryAfterSeconds);
+  }
+}
+
 export async function requestGradeEstimate(
   inventoryItemId: string,
   input?: {
@@ -478,12 +578,14 @@ export async function requestGradeEstimate(
     backMimeType?: string | null;
     reestimate?: boolean;
   },
+  options: GradeEstimateRunOptions = {},
 ): Promise<CardFlowGradeEstimate> {
   try {
     const frontUri = isLocalGradeStillUri(input?.frontUri ?? "") ? input?.frontUri : null;
     const backUri = isLocalGradeStillUri(input?.backUri ?? "") ? input?.backUri : null;
+    let form: FormData | null = null;
     if (frontUri || backUri) {
-      const form = new FormData();
+      form = new FormData();
       if (input?.reestimate) form.append("reestimate", "true");
       if (frontUri) {
         const mime =
@@ -499,20 +601,29 @@ export async function requestGradeEstimate(
           "image/jpeg";
         await appendGradeStill(form, "back", backUri, mime);
       }
-      const data = await callApi(apiContract.requestGradeEstimate, {
-        params: { inventoryItemId },
-        form,
-        timeoutMs: GRADE_PREGRADE_TIMEOUT_MS,
-      });
-      return data.estimate;
     }
-    const data = await callApi(apiContract.requestGradeEstimate, {
-      params: { inventoryItemId },
-      body: input?.reestimate ? { reestimate: true } : {},
-      timeoutMs: GRADE_PREGRADE_TIMEOUT_MS,
-    });
+    const body = input?.reestimate ? { reestimate: true } : {};
+    if (gradeJobsEnabled()) {
+      const viaJob = await runGradeJob(
+        () =>
+          form
+            ? callApi(apiContract.createGradeJob, { params: { inventoryItemId }, form })
+            : callApi(apiContract.createGradeJob, { params: { inventoryItemId }, body }),
+        options,
+      );
+      if (viaJob !== "jobs_off") return viaJob;
+    }
+    const data = await withBusyWait(
+      () =>
+        form
+          ? callApi(apiContract.requestGradeEstimate, { params: { inventoryItemId }, form, timeoutMs: GRADE_PREGRADE_TIMEOUT_MS })
+          : callApi(apiContract.requestGradeEstimate, { params: { inventoryItemId }, body, timeoutMs: GRADE_PREGRADE_TIMEOUT_MS }),
+      options,
+    );
     return data.estimate;
-  } catch {
+  } catch (error) {
+    // Retryable job errors and Cancel go to the wait card; they are not "unavailable".
+    if (error instanceof GradeJobError || error instanceof GradeJobCancelled) throw error;
     // Network error or timeout: say so. Never a silent "no estimate".
     return unavailableGradeEstimate();
   }
@@ -787,6 +898,11 @@ export function markDraftReady(draftId: string): Promise<DraftView> {
 
 export function getDraftClipboard(draftId: string) {
   return callApi(apiContract.getDraftClipboard, { params: { draftId } });
+}
+
+/** P1-21 status banners. */
+export function getStatus() {
+  return callApi(apiContract.getStatus);
 }
 
 export function getHealth() {
