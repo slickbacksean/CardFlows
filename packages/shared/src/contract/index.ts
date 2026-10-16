@@ -16,6 +16,7 @@ import { livestreamRoutes } from "./livestream";
 import { metricsRoutes } from "./metrics";
 import { salesRoutes } from "./sales";
 import { scanRoutes } from "./scans";
+import { statusRoutes } from "./status";
 
 export const apiContract = {
   ...healthRoutes,
@@ -29,6 +30,7 @@ export const apiContract = {
   ...metricsRoutes,
   ...salesRoutes,
   ...gradeHistoryRoutes,
+  ...statusRoutes,
 } as const;
 
 export type ApiContract = typeof apiContract;
