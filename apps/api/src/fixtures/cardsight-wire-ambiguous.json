@@ -1,0 +1,14 @@
+{
+  "_synthetic": "Shape from docs/CARDSIGHT_INTEGRATION_RECOMMENDATION.md; replace with a recorded staging response (D3).",
+  "requestId": "req_wire_amb_001",
+  "detections": [
+    {
+      "confidence": "Medium",
+      "card": { "id": "c1", "name": "Charizard", "setName": "Base Set", "number": "4" },
+      "suggestions": [
+        { "card": { "id": "c2", "name": "Charizard", "setName": "Base Set 2", "number": "4" } },
+        { "id": "c3", "name": "Charizard", "setName": "Legendary Collection", "number": "3" }
+      ]
+    }
+  ]
+}
