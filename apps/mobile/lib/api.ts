@@ -1,4 +1,4 @@
-import { SIGNUP_REQUIRED_CODE, type SignupReason } from "@cardflow/shared";
+import { PREMIUM_REQUIRED_CODE, SIGNUP_REQUIRED_CODE, isPremiumFeature, type PremiumFeature, type SignupReason } from "@cardflow/shared";
 import {
   CARD_FLOW_REQUEST_TIMEOUT_MS,
   cardFlowHttpErrorMessage,
@@ -268,6 +268,11 @@ async function request<T>(
     extra.status = response.status;
     const quota = (data as { quota?: GradeQuotaSnapshot }).quota;
     if (quota) extra.quota = quota;
+    // D14: premium-only feature.
+    const premium = data as { code?: unknown; feature?: unknown };
+    if (response.status === 403 && premium.code === PREMIUM_REQUIRED_CODE && isPremiumFeature(premium.feature)) {
+      (extra as Error & { premiumRequired?: PremiumFeature }).premiumRequired = premium.feature;
+    }
     // D9: the API says a guest must sign up (4th scan or a save step).
     const signup = data as { code?: unknown; reason?: unknown };
     if (response.status === 403 && signup.code === SIGNUP_REQUIRED_CODE) {
@@ -961,6 +966,16 @@ export function deleteSaleRemote(inventoryItemId: string) {
 }
 
 /** P2-07 pre-grade estimate history (server records each fresh estimate). */
+/** D14: true when the error is the API's premium_required for that feature. */
+export function isPremiumRequired(error: unknown, feature: PremiumFeature): boolean {
+  return (error as { premiumRequired?: unknown } | null)?.premiumRequired === feature;
+}
+
+/** D14: premium-only gate before a batch pre-grade run. */
+export function startGradeBatch() {
+  return callApi(apiContract.startGradeBatch, {});
+}
+
 export function getGradeHistory(inventoryItemId: string) {
   return callApi(apiContract.getGradeHistory, { params: { inventoryItemId } });
 }

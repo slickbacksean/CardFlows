@@ -6,11 +6,12 @@ import {
   runBatchQueue,
   type BatchItem,
 } from "@cardflow/shared";
+import { PremiumPrompt } from "@/components/ui/premium-prompt";
 import { Stack, router, useFocusEffect } from "expo-router";
 import { useCallback, useRef, useState } from "react";
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { PrimaryButton } from "@/components/ui/primary-button";
-import { listInventory, requestGradeEstimate, type InventoryItem } from "@/lib/api";
+import { isPremiumRequired, listInventory, requestGradeEstimate, startGradeBatch, type InventoryItem } from "@/lib/api";
 import { colors, radii, space } from "@/lib/theme";
 
 /** Batch scan session start, kept for the app session only. */
@@ -31,6 +32,7 @@ export default function GradeBatchScreen() {
   const [results, setResults] = useState<BatchItem[]>([]);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [needsPremium, setNeedsPremium] = useState(false);
   const cancelRef = useRef(false);
 
   const refresh = useCallback(async () => {
@@ -65,6 +67,18 @@ export default function GradeBatchScreen() {
     cancelRef.current = false;
     setRunning(true);
     try {
+      // D14: batch pre-grade is premium-only; the API decides.
+      try {
+        await startGradeBatch();
+        setNeedsPremium(false);
+      } catch (caught) {
+        if (isPremiumRequired(caught, "batch_grading")) {
+          setNeedsPremium(true);
+        } else {
+          setError(caught instanceof Error ? caught.message : "Could not start the batch");
+        }
+        return;
+      }
       await runBatchQueue(
         queue.map((item) => item.inventoryItemId),
         (id) => requestGradeEstimate(id),
@@ -113,6 +127,7 @@ export default function GradeBatchScreen() {
           <Text style={styles.link}>Stop after this card</Text>
         </Pressable>
       ) : null}
+      {needsPremium ? <PremiumPrompt feature="batch_grading" /> : null}
       {results.length > 0 && !running ? <Text style={styles.label}>{batchSummary(results)}</Text> : null}
       {shown.map((entry) => (
         <View key={entry.inventoryItemId} style={styles.row}>

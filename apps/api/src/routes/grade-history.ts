@@ -1,11 +1,24 @@
 /** P2-07 pre-grade estimate history. Contract: `gradeHistoryRoutes`. Per-user; copy must be the caller's. */
-import { appendGradeHistory, GRADE_HISTORY_MAX, type GradeHistoryEntry } from "@cardflow/shared";
+import {
+  appendGradeHistory,
+  GRADE_HISTORY_MAX,
+  PREMIUM_REQUIRED_CODE,
+  premiumFeatureLine,
+  type GradeHistoryEntry,
+  type PremiumFeature,
+} from "@cardflow/shared";
 import type { CardFlowApp } from "../app-env";
 import type { GradeHistoryRecord, GradeHistoryStore } from "../grade-history-store";
 
 export interface GradeHistoryRouteDeps {
   gradeHistory: GradeHistoryStore;
   ownsInventoryItem(userId: string, inventoryItemId: string): boolean;
+  /** D14: the existing plan check (CARD_FLOW_PREMIUM_USER_IDS or a stored premium plan). */
+  isPremium(userId: string): boolean;
+}
+
+export function premiumRequiredBody(feature: PremiumFeature) {
+  return { ok: false as const, code: PREMIUM_REQUIRED_CODE, feature, error: premiumFeatureLine(feature) };
 }
 
 const toEntry = (row: GradeHistoryRecord): GradeHistoryEntry => ({
@@ -41,12 +54,19 @@ export function recordGradeEstimate(
 }
 
 export function registerGradeHistoryRoutes(app: CardFlowApp, deps: GradeHistoryRouteDeps): void {
+  app.post("/v1/grading/batch", (c) => {
+    if (!deps.isPremium(c.get("userId"))) return c.json(premiumRequiredBody("batch_grading"), 403);
+    return c.json({ ok: true as const, plan: "premium" as const });
+  });
+
   app.get("/v1/inventory/:inventoryItemId/grade-history", (c) => {
     const userId = c.get("userId");
     const id = c.req.param("inventoryItemId");
     if (!deps.ownsInventoryItem(userId, id)) {
       return c.json({ ok: false, error: "Inventory item not found" }, 404);
     }
+    // D14: free users' history keeps saving but stays hidden until they upgrade.
+    if (!deps.isPremium(userId)) return c.json(premiumRequiredBody("grade_history"), 403);
     return c.json({ ok: true, history: gradeHistoryView(deps.gradeHistory, userId, id) });
   });
 
@@ -75,6 +95,7 @@ export function registerGradeHistoryRoutes(app: CardFlowApp, deps: GradeHistoryR
       });
       imported += 1;
     }
-    return c.json({ ok: true, imported, history: gradeHistoryView(deps.gradeHistory, userId, id) });
+    const history = deps.isPremium(userId) ? gradeHistoryView(deps.gradeHistory, userId, id) : [];
+    return c.json({ ok: true, imported, history });
   });
 }
