@@ -309,3 +309,5 @@ Same research pass as `RISK_REGISTER.md`. Key privacy-related fetches: CardSight
 ---
 
 *End of privacy data map. Draft user language lives in `USER_CONSENT_DRAFT.md`.*
+
+See `docs/STORE_PRIVACY_LABELS.md` for the App Store / Play answers and the perf-telemetry note.

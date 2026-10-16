@@ -126,18 +126,17 @@ Marketplace apps have their own rules. Using overlays, bots, or scrapers can vio
 
 ## 6. Analytics
 
-**Draft if analytics remain off:**
+**In-app note (exact, `PRODUCT_ANALYTICS_NOTE`):**
 
-CardFlow does not use a third-party analytics SDK in this version. We keep limited technical logs (app version, error codes) to fix crashes. Those logs should not include your photos or passwords.
+> Counts and timings only (for example, how long a scan takes to confirm), sent to PostHog, our analytics provider. Never photos, card details, prices or anything you type. Off by default, and you can turn it off anytime.
 
-**Draft if analytics are later approved:**
+[ ] Share usage analytics (off by default)
 
-Help improve CardFlow by sharing anonymous usage events (which screens you open, whether a scan failed). This does **not** include your card photos or account password.
+**Privacy policy draft: analytics service provider**
 
-[ ] Share usage analytics  
-[ ] Do not share usage analytics
+If you turn on usage analytics, CardFlow sends counts and timings to **PostHog Inc.**, a service provider that processes this data on our behalf and stores it in the **United States**. PostHog briefly receives your device's IP address when events arrive, but we have turned off its location lookup (GeoIP), so no location is derived or stored, and events are not linked to a person profile. We never send photos, card details, prices or anything you type. You can turn analytics off at any time in Settings; events not yet sent are deleted from your phone.
 
-**Open:** vendor name, ATT (App Tracking Transparency) if the SDK tracks across apps, Play Data safety answers.
+**Performance timings (separate from analytics):** a small sample of scan-step timings (for example, how long recognition took), a coarse device class, OS and phone model are sent to CardFlow's own servers, not to PostHog, to keep scanning fast. This is not controlled by the analytics switch. Our servers keep only aggregate counts and timings by step and device class, in memory; the phone model and OS are not stored.
 
 ---
 
