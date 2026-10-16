@@ -15,5 +15,9 @@ Applies once PostHog (D7) ships. Analytics is **off by default** and opt-in.
 - **Encrypted in transit:** Yes (HTTPS only; non-https hosts are rejected)
 - **Shared with third parties:** No (PostHog Inc. is a service provider acting for CardFlow)
 
-## Does perf telemetry leave the phone?
-**Yes, but only to CardFlow's own API, never to PostHog.** `apps/mobile/lib/perf-telemetry.ts` samples scan-step timings and posts them to `POST /v1/telemetry/perf` along with a device class, OS and `Device.modelName`. **The analytics opt-in does not gate this.** The server (`app.ts`) keeps only in-memory aggregates by stage and device class and drops the model and OS. There are no images, card data or identifiers. It counts as app performance / diagnostics data. Either declare it (App Store: Diagnostics > Performance Data, not linked, not tracking; Play: App info and performance > Diagnostics, collected, not shared) or gate it behind the analytics switch before submission. **Owner decision needed.**
+## Perf timings (decided: opt-in, same switch)
+Sampled scan-step timings go to CardFlow's own API (`POST /v1/telemetry/perf`), **never to PostHog**, and **only when the user has turned on analytics** (the same switch as PostHog, off by default). When the switch is off, the client sends nothing and drops any pending timings (`apps/mobile/lib/perf-telemetry.ts`, tested in `packages/shared/src/perf-outbox.test.ts`). Each batch carries a device class, OS and phone model. The server keeps only in-memory aggregates by stage and device class and drops the model and OS. No images, card data or identifiers.
+
+If declared:
+- **App Store:** Diagnostics > **Performance Data**, Analytics, not linked, not tracking. Optional (opt-in).
+- **Play Data safety:** App info and performance > **Diagnostics**, optional, Analytics, encrypted in transit, not shared.

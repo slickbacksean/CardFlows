@@ -826,3 +826,4 @@ export * from "./product-events";
 export * from "./grade-jobs";
 export * from "./status-banner";
 export * from "./posthog-sink";
+export * from "./perf-outbox";

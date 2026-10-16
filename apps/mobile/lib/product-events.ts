@@ -70,9 +70,17 @@ export async function loadAnalyticsPreference(): Promise<boolean> {
   return analyticsEnabled;
 }
 
+const disabledListeners = new Set<() => void>();
+/** Lets perf telemetry drop its pending timings when analytics is turned off. */
+export function onAnalyticsDisabled(listener: () => void): () => void {
+  disabledListeners.add(listener);
+  return () => disabledListeners.delete(listener);
+}
+
 export async function setAnalyticsEnabled(enabled: boolean): Promise<void> {
   analyticsEnabled = enabled;
   if (!enabled) {
+    for (const listener of disabledListeners) listener();
     buffer = [];
     outbox = [];
     if (flushTimer) clearTimeout(flushTimer);
