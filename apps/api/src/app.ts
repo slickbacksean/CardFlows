@@ -1,7 +1,7 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 import { routePath } from "hono/route";
 import { GUEST_FREE_SCANS, GUEST_USER_PREFIX, SIGNUP_REQUIRED_CODE, guestIdentity, guestRouteAllowed, isGuestUserId, isHot, parsePerfBatch, signupMessage, type SignupReason } from "@cardflow/shared";
-import { isHot, parsePerfBatch, NORTH_STAR_NAME, northStarWeekly } from "@cardflow/shared";
+import { NORTH_STAR_NAME, northStarWeekly } from "@cardflow/shared";
 import { opsMetrics, type OpsMetrics } from "./ops-metrics";
 import { parseUserPriceAmount } from "@cardflow/shared";
 import {
@@ -443,7 +443,6 @@ export function createApp(
     savePokecollectorUserMapping,
     inventoryItemWithLiveGuidance,
     listInventory,
-    listScans,
     saveDraft,
     saveInventoryItem,
     deleteInventoryItem,
