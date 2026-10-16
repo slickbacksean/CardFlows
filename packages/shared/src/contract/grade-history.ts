@@ -14,6 +14,13 @@ const HistoryResponse = z.looseObject({
 });
 
 export const gradeHistoryRoutes = {
+  /** D14: premium-only gate the batch screen calls before running. 403 premium_required for free. */
+  startGradeBatch: defineRoute({
+    method: "POST",
+    path: "/v1/grading/batch",
+    bodyKind: "none",
+    response: z.looseObject({ ok: z.literal(true), plan: z.literal("premium") }),
+  }),
   getGradeHistory: defineRoute({
     method: "GET",
     path: "/v1/inventory/:inventoryItemId/grade-history",

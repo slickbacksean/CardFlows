@@ -5,7 +5,7 @@ import {
 } from "@cardflow/shared";
 import * as SecureStore from "expo-secure-store";
 import { Platform } from "react-native";
-import { getGradeHistory } from "./api";
+import { getGradeHistory, isPremiumRequired } from "./api";
 import { peekActiveUserId } from "./identity";
 import { runQueueableWrite } from "./write-queue";
 
@@ -56,17 +56,29 @@ export async function migrateLocalGradeHistory(inventoryItemId: string): Promise
   return legacy;
 }
 
+/** D14: last answer was premium_required (history saved but hidden until upgrade). */
+let historyLocked = false;
+export function isGradeHistoryLocked(): boolean {
+  return historyLocked;
+}
+
 export async function loadGradeHistory(inventoryItemId: string): Promise<GradeHistoryEntry[]> {
   const legacy = await migrateLocalGradeHistory(inventoryItemId);
   const cacheKey = `${peekActiveUserId()}|${inventoryItemId}`;
   try {
     const { history } = await getGradeHistory(inventoryItemId);
+    historyLocked = false;
     const entries = history.map((entry) => ({ at: entry.at, overall: entry.overall, confidence: entry.confidence }));
     // If the import is still queued, show the legacy entries until it lands.
     const shown = entries.length === 0 && legacy.length > 0 ? legacy : entries;
     lastSeen.set(cacheKey, shown);
     return shown;
-  } catch {
+  } catch (error) {
+    if (isPremiumRequired(error, "grade_history")) {
+      historyLocked = true;
+      lastSeen.delete(cacheKey);
+      return [];
+    }
     return lastSeen.get(cacheKey) ?? legacy;
   }
 }

@@ -75,7 +75,7 @@ describe("P2-07 grade estimate history", () => {
 
   it("records real estimates, skips empty ones and repeats, imports once, lists newest 8", async () => {
     const store = open();
-    const app = createApp(store);
+    const app = createApp(store, { premiumUserIds: [DEFAULT_INVITED_USER_ID] });
     const item = await purchasedItem(store, DEFAULT_INVITED_USER_ID);
     const u = DEFAULT_INVITED_USER_ID;
     expect(recordGradeEstimate(store.gradeHistory, u, item.inventoryItemId, { overall: null, confidence: null }, "2026-10-01T00:00:00Z")).toBe(false);
@@ -105,5 +105,31 @@ describe("P2-07 grade estimate history", () => {
     expect(res.gradeHistoryDeleted).toBe(1);
     expect(store.gradeHistory.list(DEFAULT_INVITED_USER_ID, mine.inventoryItemId)).toEqual([]);
     expect(store.gradeHistory.list(other, theirs.inventoryItemId)).toHaveLength(1);
+  });
+
+  it("D14: free users' history keeps saving but the list is premium-only", async () => {
+    const store = open();
+    const free = createApp(store, { premiumUserIds: [] });
+    const item = await purchasedItem(store, DEFAULT_INVITED_USER_ID);
+    expect(recordGradeEstimate(store.gradeHistory, DEFAULT_INVITED_USER_ID, item.inventoryItemId, { overall: 7, confidence: null }, "2026-10-01T00:00:00Z")).toBe(true);
+    const locked = await free.request(`/v1/inventory/${item.inventoryItemId}/grade-history`);
+    expect(locked.status).toBe(403);
+    expect(await locked.json()).toMatchObject({ code: "premium_required", feature: "grade_history" });
+    const imported = (await (await free.request(`/v1/inventory/${item.inventoryItemId}/grade-history`, post({ entries: [{ at: "2026-09-01T00:00:00Z", overall: 6 }] }))).json()) as { imported: number; history: unknown[] };
+    expect(imported).toMatchObject({ imported: 1, history: [] });
+    expect(store.gradeHistory.list(DEFAULT_INVITED_USER_ID, item.inventoryItemId)).toHaveLength(2);
+    // Upgrading reveals everything saved while free.
+    const premium = createApp(store, { premiumUserIds: [DEFAULT_INVITED_USER_ID] });
+    const listed = (await (await premium.request(`/v1/inventory/${item.inventoryItemId}/grade-history`)).json()) as { history: unknown[] };
+    expect(listed.history).toHaveLength(2);
+  });
+
+  it("D14: batch grading is premium-only", async () => {
+    const store = open();
+    const free = await createApp(store, { premiumUserIds: [] }).request("/v1/grading/batch", { method: "POST" });
+    expect(free.status).toBe(403);
+    expect(await free.json()).toMatchObject({ code: "premium_required", feature: "batch_grading" });
+    const premium = await createApp(store, { premiumUserIds: [DEFAULT_INVITED_USER_ID] }).request("/v1/grading/batch", { method: "POST" });
+    expect(premium.status).toBe(200);
   });
 });

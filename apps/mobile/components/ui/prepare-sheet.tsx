@@ -58,7 +58,8 @@ import {
   type PickedGradeStill,
 } from "@/lib/grade-photos";
 import { getConfirmPictureUri } from "@/lib/scan-capture";
-import { loadGradeHistory, recordGradeHistory } from "@/lib/grade-history";
+import { isGradeHistoryLocked, loadGradeHistory, recordGradeHistory } from "@/lib/grade-history";
+import { PremiumPrompt } from "@/components/ui/premium-prompt";
 import { PrimaryButton } from "./primary-button";
 
 export interface PrepareMovePayload {
@@ -137,6 +138,7 @@ function PrepareSheetForm({
 
   const photoKey = `${pickedFront?.uri ?? ""}|${pickedBack?.uri ?? ""}|${captureFrontUri ?? ""}`;
   const [gradeHistory, setGradeHistory] = useState<GradeHistoryEntry[]>([]);
+  const [historyLocked, setHistoryLocked] = useState(false);
   const [photoKeySeen, setPhotoKeySeen] = useState(photoKey);
   if (photoKeySeen !== photoKey) {
     setPhotoKeySeen(photoKey);
@@ -222,7 +224,9 @@ function PrepareSheetForm({
     if (!visible || !itemId) return;
     let cancelled = false;
     void loadGradeHistory(itemId).then((history) => {
-      if (!cancelled) setGradeHistory(history);
+      if (cancelled) return;
+      setGradeHistory(history);
+      setHistoryLocked(isGradeHistoryLocked());
     });
     return () => {
       cancelled = true;
@@ -355,6 +359,8 @@ function PrepareSheetForm({
                     ))}
                     <Text style={styles.caption}>{GRADE_HISTORY_NOTE}</Text>
                   </View>
+                ) : historyLocked ? (
+                  <PremiumPrompt feature="grade_history" />
                 ) : null}
                 {estimating && !fetchedEstimate ? (
                   <GradeWaitCard clock={wait.clock} onCancel={cancelEstimate} />

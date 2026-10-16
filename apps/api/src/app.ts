@@ -1600,6 +1600,7 @@ export function createApp(
     gradeHistory: store.gradeHistory,
     ownsInventoryItem: (userId, inventoryItemId) =>
       getInventoryItem(userId, inventoryItemId)?.intent === "purchased",
+    isPremium: (userId) => resolveAccountPlan(userId, getGradeAccount(userId).plan) === "premium",
   });
 
   app.post("/v1/scans", bodyLimit({
