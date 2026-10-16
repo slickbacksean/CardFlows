@@ -102,7 +102,7 @@
 
 | Problem | Solution |
 |---------|----------|
-| Default config (flag off, or flag on with no CNN URL and no vision key) returns a fake “Estimate 8.5.” The sheet does not say it is mock. (P1-2) | Default to `off` outside tests. Missing credentials stay `off`, not mock. UI: “Estimate unavailable.” |
+| Default config (flag off, or flag on with no CNN URL and no vision key) returns a fake “Estimate 8.5.” The sheet does not say it is mock. (P1-2) | Default to `off` outside tests. Missing credentials stay `off`, not mock. UI: “Pre-grade estimate unavailable. Try again later.” |
 | Every time Prepare opens, it re-runs the estimator. With vision, that is a paid call even if the photos did not change. (P2-12) | Cache by inventory item + photo hash. Call the provider only when photos change or the user taps Re-estimate. |
 | Submit, mark-returned, and edits update the UI first and swallow errors (`.catch(() => {})`). Refresh snaps the row back. Server deletes the submitted row before inserting returned, with no transaction. (P1-7) | Keep previous state and restore it on error. One SQLite transaction for the move. |
 | Graded PSA / BGS / CGC / TAG amounts are empty on the Free plan. | Leave hidden until a Pro key exists. Do not call `/prices/{tier}/history`. |

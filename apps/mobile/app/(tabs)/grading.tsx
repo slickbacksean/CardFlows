@@ -12,6 +12,7 @@ import {
   type GradingReturnedCopy,
   type GradingSubmittedCopy,
 } from "@cardflow/shared";
+import { StatusBanner } from "@/components/ui/status-banner";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { Image } from "expo-image";
 import { router, useFocusEffect } from "expo-router";
@@ -293,6 +294,7 @@ export default function GradingScreen() {
             </View>
           ) : null}
         </View>
+        <StatusBanner />
         <Text style={styles.constraint}>{GRADING_TAB_CONSTRAINT}</Text>
         <View accessibilityRole="tablist" style={styles.segments}>
           <SegmentButton
