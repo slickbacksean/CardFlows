@@ -1,4 +1,5 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
+import { trackEvent } from "@/lib/product-events";
 import { runQueueableWrite } from "@/lib/write-queue";
 import {
   MAKE_LISTING_LABEL,
@@ -253,6 +254,7 @@ export default function DecideScreen() {
     setIsSaving(true);
     setError(null);
     try {
+      trackEvent("purchased", { source: "candidate" });
       const outcome = await runQueueableWrite("save_purchased", {
         confirmationId: confirmationIdValue,
         purchasePrice: marketPrice,

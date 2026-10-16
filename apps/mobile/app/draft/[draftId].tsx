@@ -14,6 +14,7 @@ import {
   type DisclosureAnswers,
   type ListingDraft,
 } from "@cardflow/shared";
+import { trackEvent } from "@/lib/product-events";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import * as Clipboard from "expo-clipboard";
 import { Image } from "expo-image";
@@ -249,6 +250,7 @@ export default function DraftScreen() {
       });
       const result = await getDraftClipboard(draftId);
       await Clipboard.setStringAsync(result.clipboard.plainText);
+      trackEvent("draft_copied");
       setHasCopied(true);
       setCopyNotice(
         "Copied title, description, condition, and asking price. Private notes omitted.",
