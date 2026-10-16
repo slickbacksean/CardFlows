@@ -821,5 +821,6 @@ export * from "./user-price";
 export * from "./max-buy-breakdown";
 export * from "./condition-presets";
 export * from "./perf-telemetry";
+export * from "./product-events";
 export * from "./grade-jobs";
 export * from "./status-banner";

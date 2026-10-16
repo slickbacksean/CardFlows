@@ -6,6 +6,7 @@ import {
   CAMERA_PREPROMPT_TITLE,
   PHOTO_PICKER_UNAVAILABLE_COPY,
 } from "@cardflow/shared";
+import { trackScanStarted } from "@/lib/product-events";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { useRouter } from "expo-router";
@@ -76,6 +77,7 @@ export default function CaptureScreen() {
     imageMimeType?: string | null,
     size?: { width?: number; height?: number },
   ) {
+    const startedAt = Date.now();
     let uploadUri = imageUri;
     let uploadMime = imageMimeType ?? null;
     if (imageUri) {
@@ -91,6 +93,7 @@ export default function CaptureScreen() {
       imageMimeType: uploadMime,
     });
     if (uploadUri) rememberScanCapture(result.scan.scanId, uploadUri);
+    trackScanStarted(result.scan.scanId, captureMethod, startedAt);
     router.push(`/scan/${result.scan.scanId}`);
   }
 
