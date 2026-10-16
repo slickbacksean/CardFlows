@@ -1,3 +1,4 @@
+import { DEFAULT_MAX_BUY_PREFERENCES } from "./max-buy";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -11,7 +12,7 @@ describe("reseller P&L", () => {
     expect(row.netLabel).toBe("$11.75");
   });
   it("estimated uses asking then reference price with fee buffer", () => {
-    const row = pnlRow({ inventoryItemId: "b", name: "X", allInTotal: "10", askingPrice: "20", referencePrice: "99", feesBufferPct: 10 });
+    const row = pnlRow({ inventoryItemId: "b", name: "X", allInTotal: "10", askingPrice: "20", referencePrice: "99", feesBufferPct: 0.1 });
     expect(row.status).toBe("estimated");
     expect(row.netCents).toBe(800);
     expect(pnlRow({ inventoryItemId: "c", name: "Y", allInTotal: "10", referencePrice: "5", feesBufferPct: 0 }).netLabel).toBe("-$5.00");
@@ -49,5 +50,19 @@ describe("P&L sales sync", () => {
     expect(sales).toContain("migratedKey");
     const screen = readFileSync(resolve(__dirname, "../../../apps/mobile/app/pnl.tsx"), "utf8");
     expect(screen).toContain("migrateLocalSales");
+  });
+  it("uses the Max Buy fee fraction: default 13% takes $2.60 off a $20 estimate", () => {
+    const row = pnlRow({
+      inventoryItemId: "f",
+      name: "F",
+      allInTotal: "10",
+      askingPrice: "20",
+      feesBufferPct: DEFAULT_MAX_BUY_PREFERENCES.feesBufferPct,
+    });
+    expect(DEFAULT_MAX_BUY_PREFERENCES.feesBufferPct).toBe(0.13);
+    expect(row.feesCents).toBe(260);
+    expect(row.netCents).toBe(740);
+    expect(pnlRow({ inventoryItemId: "g", name: "G", allInTotal: "10", askingPrice: "20" }).feesCents).toBe(260);
+    expect(pnlRow({ inventoryItemId: "h", name: "H", allInTotal: "10", askingPrice: "20", feesBufferPct: 0.9 }).feesCents).toBe(1000);
   });
 });
