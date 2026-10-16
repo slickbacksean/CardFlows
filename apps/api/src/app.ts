@@ -304,6 +304,10 @@ export interface CreateAppOptions {
   devAutoSession?: boolean;
   /** D9: allow guest sessions with 3 free scans. Default from CARD_FLOW_GUEST_SCANS=true. */
   guestMode?: boolean;
+  /** D9: how often ended-guest data is purged (default hourly; always within 24 h). */
+  guestCleanupIntervalMs?: number;
+  /** D9 tests: receives the cleanup function so a test can run it on demand. */
+  onGuestCleanup?: (run: () => { guestsPurged: number; scansDeleted: number }) => void;
   /** D9: guest sessions minted per client IP per hour (default 10). */
   guestMintsPerHour?: number;
   /** Catalog provider. Tests default to mock; local/staging may inject live TCGdex or PokéCollector. */
@@ -476,6 +480,42 @@ export function createApp(
   /** tokenHash -> guest session. In memory: a restart just means a fresh guest. */
   const guestSessions = new Map<string, { userId: string; expiresAt: string }>();
   const guestMints = new Map<string, { windowStart: number; count: number }>();
+  /**
+   * D9 retention: a guest's scans and photos are deleted within 24 h after the guest session
+   * ends (expired, signed up, or lost on an API restart). Runs hourly.
+   */
+  const runGuestCleanup = () => {
+    const live = new Set<string>();
+    for (const [hash, guest] of guestSessions) {
+      if (isSessionExpired(guest.expiresAt, now())) guestSessions.delete(hash);
+      else live.add(guest.userId);
+    }
+    let guestsPurged = 0;
+    let scansDeleted = 0;
+    for (const userId of store.listScanUserIds(GUEST_USER_PREFIX)) {
+      if (live.has(userId)) continue;
+      scansDeleted += store.deleteUserScans(userId);
+      guestsPurged += 1;
+    }
+    return { guestsPurged, scansDeleted };
+  };
+  const endGuestSession = (tokenHash: string) => {
+    const guest = guestSessions.get(tokenHash);
+    if (!guest) return;
+    guestSessions.delete(tokenHash);
+    store.deleteUserScans(guest.userId);
+  };
+  if (guestMode) {
+    options.onGuestCleanup?.(runGuestCleanup);
+    const timer = setInterval(() => {
+      try {
+        runGuestCleanup();
+      } catch {
+        // retried next tick
+      }
+    }, Math.min(options.guestCleanupIntervalMs ?? 60 * 60 * 1000, 24 * 60 * 60 * 1000));
+    timer.unref?.();
+  }
   const catalog = options.catalog ?? mockTcgdexCatalogProvider;
   const scanCorrections = options.scanCorrections ?? [];
   const variantSuggestionsFor = (mapping: {
@@ -1412,6 +1452,9 @@ export function createApp(
     }
     const created = createSession(identity.userId);
     await bindPokecollectorUser(created.identity);
+    // D9: signing up ends the guest session; its scans and photos are deleted now.
+    const guestToken = parseBearerToken(c.req.header("authorization"));
+    if (guestToken) endGuestSession(hashSessionToken(guestToken));
     return c.json({
       ok: true,
       token: created.token,

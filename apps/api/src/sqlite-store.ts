@@ -640,6 +640,20 @@ export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStor
     return row ? scanFromRow(row) : undefined;
   }
 
+  /** D9: user IDs that have scans and start with `prefix` (guest cleanup). */
+  function listScanUserIds(prefix: string): string[] {
+    return [
+      ...new Set(
+        db
+          .select({ userId: crmScans.userId })
+          .from(crmScans)
+          .all()
+          .map((row) => row.userId)
+          .filter((id) => id.startsWith(prefix)),
+      ),
+    ];
+  }
+
   function listScans(userId: string): ScanRecord[] {
     return db
       .select()
@@ -845,6 +859,15 @@ export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStor
       deleted = true;
     }
     return deleted;
+  }
+
+  /** D9: guest cleanup. Photos (files too), then the scan rows. Returns scans removed. */
+  function deleteUserScans(userId: string): number {
+    deleteUserPhotos(userId);
+    const scans = listScans(userId);
+    for (const scan of scans) memoryImages.delete(scan.scanId);
+    db.delete(crmScans).where(eq(crmScans.userId, userId)).run();
+    return scans.length;
   }
 
   function deleteUserPhotos(userId: string): PhotoPurgeResult {
@@ -1917,6 +1940,8 @@ export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStor
     getGradeImage,
     deleteGradeImage,
     deleteUserPhotos,
+    deleteUserScans,
+    listScanUserIds,
     purgeExpiredGradePhotos,
     listInventory,
     confirmScan,

@@ -52,7 +52,7 @@ export default function RootLayout() {
       showing = true;
       Alert.alert(GUEST_SIGNUP_COPY.title, signupMessage(reason), [
         { text: GUEST_SIGNUP_COPY.dismiss, style: "cancel", onPress: () => { showing = false; } },
-        { text: GUEST_SIGNUP_COPY.action, onPress: () => { showing = false; router.push("/switch-tester"); } },
+        { text: GUEST_SIGNUP_COPY.action, onPress: () => { showing = false; router.push("/switch-tester"); /* no public sign-up screen yet; invite code is sign-up */ } },
       ], { cancelable: true, onDismiss: () => { showing = false; } });
     });
   }, []);
