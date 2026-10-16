@@ -1,0 +1,12 @@
+{
+  "_synthetic": "Shape from docs/CARDSIGHT_INTEGRATION_RECOMMENDATION.md; replace with a recorded staging response (D3).",
+  "requestId": "req_wire_high_001",
+  "processingTime": 412,
+  "detections": [
+    {
+      "confidence": "High",
+      "matchLevel": "exact",
+      "card": { "id": "a1b2c3d4", "name": "Pikachu", "set": { "name": "Base Set" }, "number": "58", "language": "en" }
+    }
+  ]
+}
