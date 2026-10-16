@@ -825,6 +825,7 @@ export * from "./scan-queue";
 export * from "./product-events";
 export * from "./grade-jobs";
 export * from "./status-banner";
+export * from "./guest-access";
 export * from "./share-links";
 export * from "./posthog-sink";
 export * from "./perf-outbox";

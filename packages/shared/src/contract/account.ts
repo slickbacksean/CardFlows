@@ -15,6 +15,20 @@ const SessionResponse = z.looseObject({
 const money = z.union([z.string(), z.number()]).nullable().optional();
 
 export const accountRoutes = {
+  /** D9: guest session (3 free scans). 404 when guest mode is off. */
+  createGuestSession: defineRoute({
+    method: "POST",
+    path: "/v1/sessions/guest",
+    bodyKind: "none",
+    response: z.looseObject({
+      ok: z.literal(true),
+      token: z.string(),
+      identity: InvitedIdentitySchema,
+      guest: z.literal(true),
+      freeScans: z.number(),
+      scansRemaining: z.number(),
+    }),
+  }),
   createSession: defineRoute({
     method: "POST",
     path: "/v1/sessions",

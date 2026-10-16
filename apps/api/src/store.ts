@@ -418,6 +418,22 @@ export function deleteUserPhotos(userId: string): PhotoPurgeResult {
   return { deleted };
 }
 
+/** D9: user IDs that have scans and start with `prefix` (guest cleanup). */
+export function listScanUserIds(prefix: string): string[] {
+  return [...new Set([...store.scans.values()].map((scan) => scan.userId).filter((id) => id.startsWith(prefix)))];
+}
+
+/** D9: guest cleanup. Photos, then the scan rows. Returns scans removed. */
+export function deleteUserScans(userId: string): number {
+  deleteUserPhotos(userId);
+  const scans = listScans(userId);
+  for (const scan of scans) {
+    store.scanImages.delete(scan.scanId);
+    store.scans.delete(scan.scanId);
+  }
+  return scans.length;
+}
+
 export function purgeExpiredGradePhotos(now: Date = new Date()): PhotoPurgeResult {
   let deleted = 0;
   for (const meta of [...store.gradePhotoMeta.values()]) {
@@ -710,6 +726,8 @@ export interface StorePort {
   getGradeImage: typeof getGradeImage;
   deleteGradeImage: typeof deleteGradeImage;
   deleteUserPhotos: typeof deleteUserPhotos;
+  deleteUserScans: typeof deleteUserScans;
+  listScanUserIds: typeof listScanUserIds;
   purgeExpiredGradePhotos: typeof purgeExpiredGradePhotos;
   listInventory: typeof listInventory;
   confirmScan: typeof confirmScan;
@@ -898,6 +916,8 @@ export function createMemoryStore(): StorePort {
     getGradeImage,
     deleteGradeImage,
     deleteUserPhotos,
+    deleteUserScans,
+    listScanUserIds,
     purgeExpiredGradePhotos,
     listInventory,
     confirmScan,

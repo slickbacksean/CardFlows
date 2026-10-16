@@ -1,11 +1,13 @@
 import { QueryClientProvider } from "@tanstack/react-query";
-import { type ErrorBoundaryProps, Link, Stack } from "expo-router";
+import { type ErrorBoundaryProps, Link, Stack, router } from "expo-router";
+import { GUEST_SIGNUP_COPY, signupMessage } from "@cardflow/shared";
+import { onSignupRequired } from "@/lib/api";
 import { StatusBar } from "expo-status-bar";
 import { useEffect, useState } from "react";
 import { startWriteQueue } from "@/lib/write-queue";
 import { startScanQueue } from "@/lib/scan-queue";
 import { flushProductEvents, loadAnalyticsPreference } from "@/lib/product-events";
-import { AppState, StyleSheet, Text, View } from "react-native";
+import { Alert, AppState, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { PrimaryButton } from "@/components/ui/primary-button";
 import { ensureIdentitySession } from "@/lib/identity";
@@ -50,6 +52,18 @@ export default function RootLayout() {
       .finally(() => setReady(true));
   }, []);
 
+  // D9: one sign-up prompt when the API says a guest has to sign up.
+  useEffect(() => {
+    let showing = false;
+    return onSignupRequired((reason) => {
+      if (showing) return;
+      showing = true;
+      Alert.alert(GUEST_SIGNUP_COPY.title, signupMessage(reason), [
+        { text: GUEST_SIGNUP_COPY.dismiss, style: "cancel", onPress: () => { showing = false; } },
+        { text: GUEST_SIGNUP_COPY.action, onPress: () => { showing = false; router.push("/switch-tester"); /* no public sign-up screen yet; invite code is sign-up */ } },
+      ], { cancelable: true, onDismiss: () => { showing = false; } });
+    });
+  }, []);
   useEffect(() => (ready ? startWriteQueue() : undefined), [ready]);
   useEffect(() => (ready ? startScanQueue() : undefined), [ready]);
 

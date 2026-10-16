@@ -140,6 +140,12 @@ If you turn on usage analytics, CardFlow sends counts and timings to **PostHog I
 
 ---
 
+## 6a. Guest scans (D9)
+
+**Privacy policy draft:** You can try CardFlow as a guest with 3 free scans before signing up. Guest scans and their photos are stored only so the scan works, and we delete them within 24 hours after the guest session ends (when you sign up, when the guest session expires, or if our servers restart). Guest data is not moved to the account you create.
+
+---
+
 ## 7. Start / stop controls (settings index)
 
 Draft list for Settings:

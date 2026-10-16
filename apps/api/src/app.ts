@@ -1,6 +1,7 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 import { routePath } from "hono/route";
-import { isHot, parsePerfBatch, NORTH_STAR_NAME, northStarWeekly } from "@cardflow/shared";
+import { GUEST_FREE_SCANS, GUEST_USER_PREFIX, SIGNUP_REQUIRED_CODE, guestIdentity, guestRouteAllowed, isGuestUserId, isHot, parsePerfBatch, signupMessage, type SignupReason } from "@cardflow/shared";
+import { NORTH_STAR_NAME, northStarWeekly } from "@cardflow/shared";
 import { opsMetrics, type OpsMetrics } from "./ops-metrics";
 import { parseUserPriceAmount } from "@cardflow/shared";
 import {
@@ -177,6 +178,10 @@ import {
 } from "./listing";
 import { identityForInviteCode } from "./invited-testers";
 import {
+  hashSessionToken,
+  isSessionExpired,
+  mintSessionToken,
+  sessionExpiryIso,
   defaultAutoSessionIdentity,
   parseBearerToken,
   resolveDevAutoSession,
@@ -222,7 +227,7 @@ async function boundedProbe(
 }
 
 function isPublicV1Path(method: string, pathName: string): boolean {
-  return method === "POST" && pathName === "/v1/sessions";
+  return method === "POST" && (pathName === "/v1/sessions" || pathName === "/v1/sessions/guest");
 }
 
 /** Live catalog GET refreshes cache. Outage/flag-off falls back to last mapping snapshot. */
@@ -298,6 +303,14 @@ function gradePhotoHash(
 export interface CreateAppOptions {
   /** When true, a missing Authorization header acts as the default invited user. */
   devAutoSession?: boolean;
+  /** D9: allow guest sessions with 3 free scans. Default from CARD_FLOW_GUEST_SCANS=true. */
+  guestMode?: boolean;
+  /** D9: how often ended-guest data is purged (default hourly; always within 24 h). */
+  guestCleanupIntervalMs?: number;
+  /** D9 tests: receives the cleanup function so a test can run it on demand. */
+  onGuestCleanup?: (run: () => { guestsPurged: number; scansDeleted: number }) => void;
+  /** D9: guest sessions minted per client IP per hour (default 10). */
+  guestMintsPerHour?: number;
   /** Catalog provider. Tests default to mock; local/staging may inject live TCGdex or PokéCollector. */
   catalog?: CardCatalogProvider;
   /** Pricing provider. Tests default to off; local stack may inject PokéCollector. */
@@ -460,6 +473,50 @@ export function createApp(
   const premiumUserIds = new Set(options.premiumUserIds ?? premiumUserIdsFromEnv());
   const appApiKey = options.appApiKey === undefined ? appApiKeyFromEnv() : options.appApiKey;
   const devAutoSession = options.devAutoSession ?? resolveDevAutoSession();
+  // D9: guest mode is off with dev auto-session (that already signs everyone in).
+  const guestMode =
+    !devAutoSession &&
+    (options.guestMode ?? process.env.CARD_FLOW_GUEST_SCANS?.trim().toLowerCase() === "true");
+  const guestMintsPerHour = options.guestMintsPerHour ?? 10;
+  /** tokenHash -> guest session. In memory: a restart just means a fresh guest. */
+  const guestSessions = new Map<string, { userId: string; expiresAt: string }>();
+  const guestMints = new Map<string, { windowStart: number; count: number }>();
+  /**
+   * D9 retention: a guest's scans and photos are deleted within 24 h after the guest session
+   * ends (expired, signed up, or lost on an API restart). Runs hourly.
+   */
+  const runGuestCleanup = () => {
+    const live = new Set<string>();
+    for (const [hash, guest] of guestSessions) {
+      if (isSessionExpired(guest.expiresAt, now())) guestSessions.delete(hash);
+      else live.add(guest.userId);
+    }
+    let guestsPurged = 0;
+    let scansDeleted = 0;
+    for (const userId of store.listScanUserIds(GUEST_USER_PREFIX)) {
+      if (live.has(userId)) continue;
+      scansDeleted += store.deleteUserScans(userId);
+      guestsPurged += 1;
+    }
+    return { guestsPurged, scansDeleted };
+  };
+  const endGuestSession = (tokenHash: string) => {
+    const guest = guestSessions.get(tokenHash);
+    if (!guest) return;
+    guestSessions.delete(tokenHash);
+    store.deleteUserScans(guest.userId);
+  };
+  if (guestMode) {
+    options.onGuestCleanup?.(runGuestCleanup);
+    const timer = setInterval(() => {
+      try {
+        runGuestCleanup();
+      } catch {
+        // retried next tick
+      }
+    }, Math.min(options.guestCleanupIntervalMs ?? 60 * 60 * 1000, 24 * 60 * 60 * 1000));
+    timer.unref?.();
+  }
   const catalog = options.catalog ?? mockTcgdexCatalogProvider;
   const scanCorrections = options.scanCorrections ?? [];
   const variantSuggestionsFor = (mapping: {
@@ -793,6 +850,36 @@ export function createApp(
     maxSize: LIVESTREAM_IDENTIFY_BODY_MAX_BYTES,
     onError: rejectOversized,
   });
+  const signupRequired = (c: Context, reason: SignupReason) =>
+    c.json({ ok: false, code: SIGNUP_REQUIRED_CODE, reason, error: signupMessage(reason) }, 403);
+
+  app.post("/v1/sessions/guest", (c) => {
+    if (!guestMode) return c.json({ ok: false, error: "Not found" }, 404);
+    const ip = clientIp(c, trustProxyHops, socketAddress) ?? "unknown";
+    const nowMs = now().getTime();
+    const bucket = guestMints.get(ip);
+    if (bucket && nowMs - bucket.windowStart < 60 * 60 * 1000) {
+      if (bucket.count >= guestMintsPerHour) {
+        c.header("Retry-After", String(Math.ceil((bucket.windowStart + 3_600_000 - nowMs) / 1000)));
+        return c.json({ ok: false, error: "Too many requests" }, 429);
+      }
+      bucket.count += 1;
+    } else {
+      guestMints.set(ip, { windowStart: nowMs, count: 1 });
+    }
+    const token = mintSessionToken();
+    const userId = `${GUEST_USER_PREFIX}${crypto.randomUUID()}`;
+    guestSessions.set(hashSessionToken(token), { userId, expiresAt: sessionExpiryIso(now()) });
+    return c.json({
+      ok: true as const,
+      token,
+      identity: guestIdentity(userId),
+      guest: true as const,
+      freeScans: GUEST_FREE_SCANS,
+      scansRemaining: GUEST_FREE_SCANS,
+    });
+  });
+
   app.use("/v1/*", async (c, next) => {
     if (c.req.method === "GET" || c.req.method === "HEAD") return next();
     const type = (c.req.header("content-type") ?? "").toLowerCase();
@@ -868,6 +955,13 @@ export function createApp(
     if (isPublicV1Path(c.req.method, c.req.path)) return next();
     const token = parseBearerToken(c.req.header("authorization"));
     if (token) {
+      const guest = guestMode ? guestSessions.get(hashSessionToken(token)) : undefined;
+      if (guest && !isSessionExpired(guest.expiresAt)) {
+        c.set("userId", guest.userId);
+        c.set("identity", guestIdentity(guest.userId));
+        if (!guestRouteAllowed(c.req.method, c.req.path)) return signupRequired(c, "save");
+        return next();
+      }
       const session = getSessionByToken(token);
       if (!session) return c.json({ ok: false, error: "Unauthorized" }, 401);
       const identity = requireInvitedIdentity(session.userId);
@@ -1377,6 +1471,9 @@ export function createApp(
     }
     const created = createSession(identity.userId);
     await bindPokecollectorUser(created.identity);
+    // D9: signing up ends the guest session; its scans and photos are deleted now.
+    const guestToken = parseBearerToken(c.req.header("authorization"));
+    if (guestToken) endGuestSession(hashSessionToken(guestToken));
     return c.json({
       ok: true,
       token: created.token,
@@ -1509,6 +1606,10 @@ export function createApp(
       maxSize: SCAN_IMAGE_MAX_BYTES,
       onError: (c) => c.json({ ok: false, error: "Image must be 20 MB or smaller" }, 413),
     }), async (c) => {
+      // D9: server-enforced guest limit. The 4th scan needs sign-up.
+      if (isGuestUserId(c.get("userId")) && listScans(c.get("userId")).length >= GUEST_FREE_SCANS) {
+        return signupRequired(c, "scan_limit");
+      }
       const parsed = await parseScanCreateRequest(c);
       if ("error" in parsed) {
         return c.json({ ok: false, error: parsed.error }, parsed.status);
