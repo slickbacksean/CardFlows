@@ -1,8 +1,10 @@
 import { createHash, randomBytes, randomInt, timingSafeEqual } from "node:crypto";
 import { emailSenderFromEnv, type EmailSender } from "./email-sender";
+import { consentState, hasActiveConsent } from "./consent-store";
+import { createRecognitionWithFallback } from "./cardsight-adapter";
 import { normalizeEmail } from "./account-store";
 import { routePath } from "hono/route";
-import { EMAIL_CODE_LENGTH, EMAIL_RESEND_COOLDOWN_MS, EMAIL_UNVERIFIED_CODE, EMAIL_VERIFICATION_COPY, EMAIL_VERIFICATION_TTL_MS, isEmailCode, passwordResetEmailText, verificationEmailText, quotaAnchor, quotaPeriodFor, ACCOUNT_AUTH_COPY, PASSWORD_RESET_TTL_MS, GUEST_MINT_WINDOW_MS, GUEST_SESSION_TTL_MS, isValidEmail, passwordProblem, GUEST_FREE_SCANS, GUEST_USER_PREFIX, SIGNUP_REQUIRED_CODE, guestIdentity, guestRouteAllowed, isGuestUserId, isHot, parsePerfBatch, signupMessage, type SignupReason } from "@cardflow/shared";
+import { CARDSIGHT_CONSENT_VERSION, EMAIL_CODE_LENGTH, EMAIL_RESEND_COOLDOWN_MS, EMAIL_UNVERIFIED_CODE, EMAIL_VERIFICATION_COPY, EMAIL_VERIFICATION_TTL_MS, isEmailCode, passwordResetEmailText, verificationEmailText, quotaAnchor, quotaPeriodFor, ACCOUNT_AUTH_COPY, PASSWORD_RESET_TTL_MS, GUEST_MINT_WINDOW_MS, GUEST_SESSION_TTL_MS, isValidEmail, passwordProblem, GUEST_FREE_SCANS, GUEST_USER_PREFIX, SIGNUP_REQUIRED_CODE, guestIdentity, guestRouteAllowed, isGuestUserId, isHot, parsePerfBatch, signupMessage, type SignupReason } from "@cardflow/shared";
 import { NORTH_STAR_NAME, SCANS_PER_WAR_NAME, northStarWeekly } from "@cardflow/shared";
 import { opsMetrics, type OpsMetrics } from "./ops-metrics";
 import { parseUserPriceAmount } from "@cardflow/shared";
@@ -348,6 +350,11 @@ export interface CreateAppOptions {
   pricing?: CardPricingProvider;
   /** Recognition provider. Tests default to mock; live Capture uses `obb_phash`. */
   recognition?: CardRecognitionProvider;
+  /**
+   * Sean: CardSight adapter (null/undefined = not configured). Called only for users whose
+   * current-version consent is on; everyone else gets the local matcher.
+   */
+  cardSight?: CardRecognitionProvider | null;
   /** P1-07: async grade jobs. Defaults to CARD_FLOW_GRADE_JOBS=on (off). */
   gradeJobs?: boolean;
   gradeJobLimits?: { ttlMs?: number; maxActiveJobs?: number; maxActiveJobsPerUser?: number; sweepMs?: number; maxStoredJobs?: number };
@@ -1749,6 +1756,31 @@ export function createApp(
     });
   };
 
+  // Sean: CardSight disclosure + consent, stored with its version and timestamps.
+  app.get("/v1/consents/cardsight", (c) =>
+    c.json({ ok: true as const, consent: consentState(store.consents.get(c.get("userId"), "cardsight")) }),
+  );
+  app.post("/v1/consents/cardsight", async (c) => {
+    const userId = c.get("userId");
+    const body = await c.req.json<{ granted?: unknown; version?: unknown }>().catch(() => ({}) as Record<string, unknown>);
+    if (typeof body.granted !== "boolean") return c.json({ ok: false, error: "granted must be true or false" }, 400);
+    const at = now().toISOString();
+    if (body.granted) {
+      // Agreeing counts only for the wording the user saw: the current version.
+      if (body.version !== CARDSIGHT_CONSENT_VERSION) {
+        return c.json({ ok: false, error: "Consent version is out of date. Reload and try again.", currentVersion: CARDSIGHT_CONSENT_VERSION }, 409);
+      }
+      store.consents.grant(userId, "cardsight", CARDSIGHT_CONSENT_VERSION, at);
+    } else if (store.consents.get(userId, "cardsight")?.version === CARDSIGHT_CONSENT_VERSION) {
+      store.consents.withdraw(userId, "cardsight", at);
+    } else {
+      // Declined the prompt: remember the answer (withdrawn at once) so the app doesn't ask again.
+      store.consents.grant(userId, "cardsight", CARDSIGHT_CONSENT_VERSION, at);
+      store.consents.withdraw(userId, "cardsight", at);
+    }
+    return c.json({ ok: true as const, consent: consentState(store.consents.get(userId, "cardsight")) });
+  });
+
   app.post("/v1/email-verifications", (c) => {
     const userId = c.get("userId");
     const account = store.accounts.getAccount(userId);
@@ -2079,7 +2111,7 @@ export function createApp(
           image: identify.image,
           mimeType: identify.mimeType,
         };
-        const runLive = () =>
+        const runLocal = () =>
           identifyLiveCaptureStill({
             image: identify.image,
             mimeType: identify.mimeType,
@@ -2087,10 +2119,19 @@ export function createApp(
             openclip: liveIdentityOpenclip,
             catalog,
           });
+        // Sean: the photo goes to CardSight only with this user's current consent, checked here,
+        // right before the adapter. Without it (or if CardSight misses) the local matcher runs.
+        const cardSight = options.cardSight && hasActiveConsent(store.consents, userId) ? options.cardSight : null;
+        const runLive = cardSight
+          ? () =>
+              createRecognitionWithFallback(cardSight, { name: recognitionProvider.name, identifyCard: () => runLocal() }).identifyCard(
+                identifyRequest,
+              )
+          : runLocal;
         recognition = recognitionCache
           ? await recognitionCache.getOrIdentify(
               { bytes: identify.image, mimeType: identify.mimeType },
-              recognitionProvider.name,
+              cardSight ? `cardsight+${recognitionProvider.name}` : recognitionProvider.name,
               runLive,
             )
           : await runLive();

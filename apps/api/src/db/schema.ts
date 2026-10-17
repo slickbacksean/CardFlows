@@ -229,6 +229,23 @@ export const userAccounts = sqliteTable(
   (table) => [unique("user_accounts_email").on(table.email)],
 );
 
+/** Sean: CardSight consent (version + timestamps). Photos go to CardSight only while granted. */
+export const providerConsents = sqliteTable(
+  "provider_consents",
+  {
+    userId: text("user_id").notNull(),
+    provider: text("provider", { enum: ["cardsight"] }).notNull(),
+    version: text("version").notNull(),
+    grantedAt: text("granted_at").notNull(),
+    withdrawnAt: text("withdrawn_at"),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.userId, table.provider] }),
+    check("provider_consents_provider_chk", sql`${table.provider} in ('cardsight')`),
+  ],
+);
+
 /** Email verification: one live 6-digit code per user (SHA-256 only), 15 min, 5 tries. */
 export const emailVerificationCodes = sqliteTable("email_verification_codes", {
   userId: text("user_id").primaryKey(),
@@ -505,6 +522,7 @@ export const schema = {
   userAccounts,
   passwordResetTokens,
   emailVerificationCodes,
+  providerConsents,
   cardExternalIds,
   crmScans,
   crmConfirmations,

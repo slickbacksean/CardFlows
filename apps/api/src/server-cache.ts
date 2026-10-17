@@ -99,7 +99,9 @@ export function createRecognitionCache(options: { ttlMs?: number; now?: () => nu
       source: string,
       identify: () => Promise<CardFlowNormalizedRecognitionResult>,
     ): Promise<CardFlowNormalizedRecognitionResult> {
-      const key = imageCacheKey(image.bytes, image.mimeType);
+      // Keyed by source too, so a CardSight answer (consented user) is never reused for a user
+      // whose photos stay on the local matcher, and vice versa.
+      const key = `${source}:${imageCacheKey(image.bytes, image.mimeType)}`;
       const hit = cache.get(key);
       if (hit) return hit.value;
       const result = await identify();

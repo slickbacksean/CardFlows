@@ -74,6 +74,7 @@ describe("MVP CRM schema", () => {
       "idempotency_keys",
       "password_reset_tokens",
       "portfolio_value_snapshots",
+      "provider_consents",
       "purchase_events",
       "scan_confirm_events",
       "user_accounts",
