@@ -21,7 +21,8 @@ export const PREMIUM_PLACEHOLDER_PRICING = {
 } as const;
 
 /** Shown on the sign-up screen. */
-export const SIGNUP_ALLOWANCE_NOTE = `Free accounts get ${GRADE_QUOTA_FREE_PER_MONTH} pre-grade estimates a month, resetting on the day you sign up, and see their ${GRADE_HISTORY_FREE_VISIBLE} most recent estimates per card. Older estimates stay saved, not deleted.`;
+export const SIGNUP_ALLOWANCE_NOTE =
+  "Free accounts get 5 pre-grade estimates a month, resetting on your monthly reset date, and see their 10 most recent estimates per card. Older estimates stay saved, not deleted.";
 
 export const PREMIUM_REQUIRED_CODE = "premium_required";
 export const PREMIUM_FEATURES = ["batch_grading", "grade_history"] as const;

@@ -47,8 +47,15 @@ export function quotaAnchor(input: { billingAnchorAt?: string | null; createdAt:
   return input.billingAnchorAt || input.createdAt;
 }
 
-export function resetDateLabel(resetsAt: string): string {
+/**
+ * Policy Reviewer: the reset date is shown in the user's local time zone (the phone's zone by
+ * default), so a reset at 00:30 UTC on the 16th reads "Resets Oct 15" in Los Angeles.
+ * `timeZone` is for tests and server-side callers that know the user's zone.
+ */
+export function resetDateLabel(resetsAt: string, options: { timeZone?: string } = {}): string {
   const d = new Date(resetsAt);
   if (!Number.isFinite(d.getTime())) return "";
-  return `Resets ${d.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" })}`;
+  const format: Intl.DateTimeFormatOptions = { month: "short", day: "numeric" };
+  if (options.timeZone) format.timeZone = options.timeZone;
+  return `Resets ${d.toLocaleDateString("en-US", format)}`;
 }

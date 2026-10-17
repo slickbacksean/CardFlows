@@ -93,6 +93,37 @@ describe("P2-07 grade estimate history", () => {
     expect(listed.history.at(-1)?.overall).toBe(5.9);
   });
 
+  it("premium history is paginated (newest page first, then older pages), not capped", async () => {
+    const store = open();
+    const app = createApp(store, { premiumUserIds: [DEFAULT_INVITED_USER_ID] });
+    const item = await purchasedItem(store, DEFAULT_INVITED_USER_ID);
+    for (let i = 0; i < 130; i += 1) {
+      store.gradeHistory.append(DEFAULT_INVITED_USER_ID, {
+        entryId: `e${String(i).padStart(3, "0")}`,
+        inventoryItemId: item.inventoryItemId,
+        overall: 5,
+        confidence: null,
+        recordedAt: new Date(Date.UTC(2026, 0, 1) + i * 60_000).toISOString(),
+      });
+    }
+    type Page = { history: Array<{ at: string }>; nextCursor: string | null };
+    const get = async (query = "") =>
+      (await (await app.request(`/v1/inventory/${item.inventoryItemId}/grade-history${query}`)).json()) as Page;
+    const first = await get();
+    expect(first.history).toHaveLength(50);
+    expect(first.history.at(-1)?.at).toBe(new Date(Date.UTC(2026, 0, 1) + 129 * 60_000).toISOString());
+    const seen = [...first.history];
+    let cursor = first.nextCursor;
+    while (cursor) {
+      const page = await get(`?before=${cursor}&limit=100`);
+      seen.unshift(...page.history);
+      cursor = page.nextCursor;
+    }
+    expect(seen).toHaveLength(130);
+    expect(new Set(seen.map((e) => e.at)).size).toBe(130);
+    expect((await get("?limit=500")).history).toHaveLength(100);
+  });
+
   it("is per user and account deletion removes only the caller's history", async () => {
     const store = open();
     const app = createApp(store);

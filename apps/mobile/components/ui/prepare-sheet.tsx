@@ -5,6 +5,7 @@ import {
   GRADE_ESTIMATE_EMPTY_COPY,
   GRADE_HISTORY_NOTE,
   gradeHistoryLockedLine,
+  GRADE_HISTORY_SHOW_OLDER,
   GRADE_HISTORY_TITLE,
   gradeHistoryLines,
   type GradeHistoryEntry,
@@ -59,7 +60,13 @@ import {
   type PickedGradeStill,
 } from "@/lib/grade-photos";
 import { getConfirmPictureUri } from "@/lib/scan-capture";
-import { gradeHistoryLockedCount, loadGradeHistory, recordGradeHistory } from "@/lib/grade-history";
+import {
+  gradeHistoryHasOlder,
+  gradeHistoryLockedCount,
+  loadGradeHistory,
+  loadOlderGradeHistory,
+  recordGradeHistory,
+} from "@/lib/grade-history";
 import { PremiumPrompt } from "@/components/ui/premium-prompt";
 import { PrimaryButton } from "./primary-button";
 
@@ -140,6 +147,7 @@ function PrepareSheetForm({
   const photoKey = `${pickedFront?.uri ?? ""}|${pickedBack?.uri ?? ""}|${captureFrontUri ?? ""}`;
   const [gradeHistory, setGradeHistory] = useState<GradeHistoryEntry[]>([]);
   const [historyLocked, setHistoryLocked] = useState(0);
+  const [historyHasOlder, setHistoryHasOlder] = useState(false);
   const [photoKeySeen, setPhotoKeySeen] = useState(photoKey);
   if (photoKeySeen !== photoKey) {
     setPhotoKeySeen(photoKey);
@@ -228,6 +236,7 @@ function PrepareSheetForm({
       if (cancelled) return;
       setGradeHistory(history);
       setHistoryLocked(gradeHistoryLockedCount());
+      setHistoryHasOlder(gradeHistoryHasOlder());
     });
     return () => {
       cancelled = true;
@@ -360,6 +369,19 @@ function PrepareSheetForm({
                     ))}
                     <Text style={styles.caption}>{GRADE_HISTORY_NOTE}</Text>
                     {historyLocked > 0 ? <Text style={styles.caption}>{gradeHistoryLockedLine(historyLocked)}</Text> : null}
+                    {historyHasOlder && itemId ? (
+                      <Pressable
+                        accessibilityRole="button"
+                        onPress={() =>
+                          void loadOlderGradeHistory(itemId, gradeHistory).then((all) => {
+                            setGradeHistory(all);
+                            setHistoryHasOlder(gradeHistoryHasOlder());
+                          })
+                        }
+                      >
+                        <Text style={styles.caption}>{GRADE_HISTORY_SHOW_OLDER}</Text>
+                      </Pressable>
+                    ) : null}
                   </View>
                 ) : null}
                 {historyLocked > 0 ? <PremiumPrompt feature="grade_history" /> : null}

@@ -13,6 +13,8 @@ const HistoryResponse = z.looseObject({
   history: z.array(GradeHistoryEntrySchema),
   /** Free accounts: older estimates kept on the server but not shown until upgrade. */
   lockedCount: z.number().optional(),
+  /** Premium: pass as `before` to get the next older page; null when there is none. */
+  nextCursor: z.string().nullable().optional(),
 });
 
 export const gradeHistoryRoutes = {
@@ -27,6 +29,7 @@ export const gradeHistoryRoutes = {
     method: "GET",
     path: "/v1/inventory/:inventoryItemId/grade-history",
     bodyKind: "none",
+    query: z.looseObject({ before: z.string().optional(), limit: z.string().optional() }),
     response: HistoryResponse,
   }),
   /** One-time upload of entries kept on the phone before server history. */

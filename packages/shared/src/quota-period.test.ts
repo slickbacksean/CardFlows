@@ -34,3 +34,18 @@ describe("reset date in the app caption", () => {
     );
   });
 });
+
+describe("reset date in the user's local time zone (Policy Reviewer)", () => {
+  it("formats in the given zone, so the date matches the user's calendar", () => {
+    expect(resetDateLabel("2026-10-16T00:30:00.000Z", { timeZone: "America/Los_Angeles" })).toBe("Resets Oct 15");
+    expect(resetDateLabel("2026-10-16T00:30:00.000Z", { timeZone: "Asia/Tokyo" })).toBe("Resets Oct 16");
+    expect(resetDateLabel("not a date")).toBe("");
+  });
+
+  it("signup allowance note is the exact approved copy", async () => {
+    const { SIGNUP_ALLOWANCE_NOTE } = await import("./premium");
+    expect(SIGNUP_ALLOWANCE_NOTE).toBe(
+      "Free accounts get 5 pre-grade estimates a month, resetting on your monthly reset date, and see their 10 most recent estimates per card. Older estimates stay saved, not deleted.",
+    );
+  });
+});
