@@ -96,7 +96,7 @@ describe("monthly grade quotas", () => {
     expect(listed.body.quota?.remainingGrades).toBe(GRADE_QUOTA_PREMIUM_PER_MONTH);
   });
 
-  it("resets on the account's own date each month, with no rollover of estimates or credits", async () => {
+  it("resets the allowance on the account's own date with no rollover; bought credits never expire", async () => {
     let nowMs = Date.parse("2026-10-31T12:00:00.000Z");
     const store = createMemoryStore();
     const app = createApp(store, {
@@ -117,10 +117,19 @@ describe("monthly grade quotas", () => {
     nowMs = Date.parse("2026-11-01T00:00:00.000Z");
     const stillOld = await json<QuotaBody>(app, "/v1/grade/quota");
     expect(stillOld.body.quota).toMatchObject({ month: "2026-10-31", remainingMonthly: 0, extraCredits: 3 });
-    // The reset date: fresh allowance, unused estimates and the 3 purchased credits are gone.
+    // The reset date: fresh allowance (unused estimates don't roll over); the 3 bought credits stay.
     nowMs = Date.parse("2026-11-30T12:00:00.000Z");
     const next = await json<QuotaBody>(app, "/v1/grade/quota");
-    expect(next.body.quota).toMatchObject({ month: "2026-11-30", usedThisMonth: 0, remainingGrades: 5, extraCredits: 0, resetsAt: "2026-12-31T12:00:00.000Z" });
+    expect(next.body.quota).toMatchObject({ month: "2026-11-30", usedThisMonth: 0, remainingMonthly: 5, remainingGrades: 8, extraCredits: 3, resetsAt: "2026-12-31T12:00:00.000Z" });
+    // The allowance is spent first; credits only once it is used up.
+    for (let i = 0; i < GRADE_QUOTA_FREE_PER_MONTH; i += 1) {
+      await json<QuotaBody>(app, "/v1/grade/credits/consume", { method: "POST", body: "{}" });
+    }
+    expect((await json<QuotaBody>(app, "/v1/grade/quota")).body.quota).toMatchObject({ remainingMonthly: 0, extraCredits: 3 });
+    await json<QuotaBody>(app, "/v1/grade/credits/consume", { method: "POST", body: "{}" });
+    // A year later the remaining credits are still there.
+    nowMs = Date.parse("2027-11-30T12:00:00.000Z");
+    expect((await json<QuotaBody>(app, "/v1/grade/quota")).body.quota).toMatchObject({ usedThisMonth: 0, extraCredits: 2 });
   });
 
   it("uses the billing date when there is one", async () => {
@@ -180,6 +189,51 @@ describe("monthly grade quotas", () => {
     expect(granted.body.quota).toMatchObject({ extraCredits: 3, plan: "premium", monthlyLimit: 30 });
   });
 
+  it("free users can't buy credit packs (Premium-only)", async () => {
+    const stub = createApp(createMemoryStore(), {
+      devAutoSession: true,
+      gradeQuota: true,
+      gradeIap: { enabled: false, stub: true },
+    });
+    const denied = await json<QuotaBody & { code?: string; feature?: string }>(stub, "/v1/grade/credits", {
+      method: "POST",
+      body: JSON.stringify({ credits: 10 }),
+    });
+    expect(denied.status).toBe(403);
+    expect(denied.body).toMatchObject({ code: "premium_required", feature: "credit_packs", error: "Credit packs are for Premium members." });
+    expect((await json<QuotaBody>(stub, "/v1/grade/quota")).body.quota).toMatchObject({ plan: "free", extraCredits: 0 });
+  });
+
+  it("a lapsed Premium user keeps their bought credits and spends them after the free allowance", async () => {
+    const store = createMemoryStore();
+    const app = createApp(store, {
+      devAutoSession: true,
+      gradeQuota: true,
+      gradeIap: { enabled: false, stub: true },
+      now: () => new Date("2026-10-20T00:00:00Z"),
+    });
+    const bought = await json<QuotaBody>(app, "/v1/grade/credits", { method: "POST", body: JSON.stringify({ credits: 10, plan: "premium" }) });
+    expect(bought.body.quota).toMatchObject({ plan: "premium", extraCredits: 10 });
+    // Premium lapses.
+    await json<QuotaBody>(app, "/v1/grade/credits", { method: "POST", body: JSON.stringify({ plan: "free" }) });
+    expect((await json<QuotaBody>(app, "/v1/grade/quota")).body.quota).toMatchObject({
+      plan: "free",
+      monthlyLimit: GRADE_QUOTA_FREE_PER_MONTH,
+      extraCredits: 10,
+      remainingGrades: GRADE_QUOTA_FREE_PER_MONTH + 10,
+    });
+    // The 5 free estimates go first; then the leftover credits, with no Premium needed.
+    for (let i = 0; i < GRADE_QUOTA_FREE_PER_MONTH; i += 1) {
+      await json<QuotaBody>(app, "/v1/grade/credits/consume", { method: "POST", body: "{}" });
+    }
+    expect((await json<QuotaBody>(app, "/v1/grade/quota")).body.quota).toMatchObject({ remainingMonthly: 0, extraCredits: 10 });
+    const spent = await json<QuotaBody>(app, "/v1/grade/credits/consume", { method: "POST", body: "{}" });
+    expect(spent.status).toBe(200);
+    expect(spent.body.quota).toMatchObject({ plan: "free", extraCredits: 9 });
+    // Buying more needs Premium again.
+    expect((await json<QuotaBody>(app, "/v1/grade/credits", { method: "POST", body: JSON.stringify({ credits: 10 }) })).status).toBe(403);
+  });
+
   it("requires the app API key when configured", async () => {
     const app = createApp(createMemoryStore(), {
       devAutoSession: true,
@@ -211,11 +265,12 @@ describe("monthly grade quotas", () => {
         creditsPeriod: "2026-10-13",
       });
       expect(store.getGradeQuotaUsage(DEFAULT_INVITED_USER_ID, "2026-10-13")).toBe(1);
-      // Buying in a later period replaces old credits instead of adding to them.
+      // Bought credits never expire: a later purchase adds to them.
       store.addGradeCredits(DEFAULT_INVITED_USER_ID, 2, "2026-11-13T00:00:00.000Z", "2026-11-13");
-      expect(store.getGradeAccount(DEFAULT_INVITED_USER_ID)).toMatchObject({ extraCredits: 2, creditsPeriod: "2026-11-13" });
-      const stale = store.consumeGradeQuota(DEFAULT_INVITED_USER_ID, { monthKey: "2026-12-13", monthlyLimit: 0, at: "2026-12-13T00:00:00.000Z" });
-      expect(stale).toMatchObject({ ok: false, extraCredits: 0 });
+      expect(store.getGradeAccount(DEFAULT_INVITED_USER_ID)).toMatchObject({ extraCredits: 6, creditsPeriod: "2026-11-13" });
+      // Months later, with the allowance used up, they are still spendable.
+      const later = store.consumeGradeQuota(DEFAULT_INVITED_USER_ID, { monthKey: "2027-03-13", monthlyLimit: 0, at: "2027-03-13T00:00:00.000Z" });
+      expect(later).toMatchObject({ ok: true, source: "credit", extraCredits: 5 });
     } finally {
       store.close();
     }

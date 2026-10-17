@@ -1024,7 +1024,10 @@ export function createApp(
     return premiumUserIds.has(userId) ? "premium" : stored;
   }
 
-  /** Sean: the allowance resets on the billing date, else the account creation date. No rollover. */
+  /**
+   * Sean: the allowance resets on the billing date, else the account creation date, with no
+   * rollover. Bought credits are separate and never expire (Sean, Oct 16; Apple 3.1.1).
+   */
   function quotaPeriodForUser(userId: string, at: Date) {
     const account = store.ensureGradeAnchor(userId, at.toISOString());
     const anchor = quotaAnchor({ billingAnchorAt: account.billingAnchorAt, createdAt: account.anchorAt ?? at.toISOString() });
@@ -1038,7 +1041,7 @@ export function createApp(
     return gradeQuotaSnapshot({
       plan,
       usedThisMonth: getGradeQuotaUsage(userId, period.key),
-      extraCredits: account.creditsPeriod === period.key ? account.extraCredits : 0,
+      extraCredits: account.extraCredits,
       iapEnabled: gradeIap.enabled,
       now: at,
       period,
@@ -2479,7 +2482,7 @@ export function createApp(
     outOfGradesResponse,
     gradeIap,
     setGradePlan,
-    // Purchased credits belong to the current period and don't roll over.
+    // Bought credits never expire; the period is only recorded as when they were last bought.
     addGradeCredits: (userId, credits, at) =>
       addGradeCredits(userId, credits, at, quotaPeriodForUser(userId, new Date(at)).period.key),
     now,
