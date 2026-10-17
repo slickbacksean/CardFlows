@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { pollGradeJob, type GradeJobView } from "@cardflow/shared";
+import { DEFAULT_INVITED_USER_ID, pollGradeJob, type GradeJobView } from "@cardflow/shared";
 import { createApp } from "./app";
 import { createMemoryStore } from "./store";
 
@@ -132,3 +132,73 @@ const getJob404 = (app: App, jobId: string) => async () => {
   if (res.status === 404) throw Object.assign(new Error("not found"), { status: 404 });
   return ((await res.json()) as { job: GradeJobView }).job;
 };
+
+describe("grade jobs backend review", () => {
+  it("finishes without re-sending the user's auth headers (app key on, no dev session leak)", async () => {
+    const inner = createApp(createMemoryStore(), { gradeJobs: true, appApiKey: "app-key-1" });
+    const app = {
+      request: (url: string, init: RequestInit = {}) =>
+        inner.request(url, { ...init, headers: { ...(init.headers as Record<string, string> | undefined), "x-cardflow-app-key": "app-key-1" } }),
+    } as unknown as App;
+    const id = await purchasedWithStill(app);
+    const created = (await (
+      await app.request(`/v1/inventory/${id}/grade-jobs`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({}),
+      })
+    ).json()) as { job: GradeJobView };
+    const outcome = await pollGradeJob(getJob(app, created.job.jobId), { sleep: async () => {} });
+    expect(outcome.kind === "finished" ? `${outcome.job.status}:${outcome.job.error}` : outcome.kind).toBe("done:null");
+    // A network request without the key still fails: the bypass is only for in-process jobs.
+    expect((await inner.request(`/v1/grade-jobs/${created.job.jobId}`)).status).toBe(401);
+  });
+
+  it("caps stored jobs including finished ones and has a body limit", async () => {
+    const app = createApp(createMemoryStore(), { gradeJobs: true, gradeJobLimits: { maxStoredJobs: 2, sweepMs: 0 } });
+    const id = await purchasedWithStill(app);
+    const post = () =>
+      app.request(`/v1/inventory/${id}/grade-jobs`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({}),
+      });
+    const ids: string[] = [];
+    for (let i = 0; i < 4; i += 1) {
+      const res = await post();
+      expect(res.status).toBe(202);
+      const { job } = (await res.json()) as { job: GradeJobView };
+      ids.push(job.jobId);
+      await pollGradeJob(getJob(app, job.jobId), { sleep: async () => {} });
+    }
+    // Oldest finished jobs were evicted to stay under the cap.
+    expect((await app.request(`/v1/grade-jobs/${ids[0]}`)).status).toBe(404);
+    expect((await app.request(`/v1/grade-jobs/${ids[3]}`)).status).toBe(200);
+    const huge = new FormData();
+    huge.append("front", new File([new Uint8Array(23 * 1024 * 1024)], "f.jpg", { type: "image/jpeg" }));
+    expect((await app.request(`/v1/inventory/${id}/grade-jobs`, { method: "POST", body: huge })).status).toBe(413);
+  });
+});
+
+describe("server-enforced batch pre-grade", () => {
+  const batchPost = (app: App, id: string, route: "grade-estimate" | "grade-jobs") =>
+    app.request(`/v1/inventory/${id}/${route}`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-cardflow-batch": "1" },
+      body: JSON.stringify({}),
+    });
+
+  it("a batch-marked estimate is 403 premium_required for free accounts, allowed for premium", async () => {
+    const free = createApp(createMemoryStore(), { gradeJobs: true, premiumUserIds: [] });
+    const freeId = await purchasedWithStill(free);
+    for (const route of ["grade-estimate", "grade-jobs"] as const) {
+      const res = await batchPost(free, freeId, route);
+      expect(res.status).toBe(403);
+      expect(await res.json()).toMatchObject({ code: "premium_required", feature: "batch_grading" });
+    }
+    const premium = createApp(createMemoryStore(), { gradeJobs: true, premiumUserIds: [DEFAULT_INVITED_USER_ID] });
+    const premiumId = await purchasedWithStill(premium);
+    expect((await batchPost(premium, premiumId, "grade-estimate")).status).toBe(200);
+    expect((await batchPost(premium, premiumId, "grade-jobs")).status).toBe(202);
+  });
+});

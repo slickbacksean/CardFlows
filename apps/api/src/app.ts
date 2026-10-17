@@ -110,6 +110,7 @@ import {
   monthlyLimitForPlan,
   type GradePlan,
   type GradeQuotaSnapshot,
+  BATCH_GRADE_HEADER,
 } from "@cardflow/shared";
 import { Hono, type Context as HonoContext } from "hono";
 import { cors } from "hono/cors";
@@ -140,7 +141,7 @@ import { registerPreferenceRoutes } from "./routes/preferences";
 import { registerGradeJobRoutes } from "./routes/grade-jobs";
 import { registerStatusRoutes } from "./routes/status";
 import { registerSalesRoutes } from "./routes/sales";
-import { recordGradeEstimate, registerGradeHistoryRoutes } from "./routes/grade-history";
+import { premiumRequiredBody, recordGradeEstimate, registerGradeHistoryRoutes } from "./routes/grade-history";
 import { REQUEST_ID_HEADER, resolveRequestId } from "./request-id";
 import { captureApiException } from "./sentry";
 import {
@@ -177,6 +178,7 @@ import {
   draftView,
 } from "./listing";
 import { identityForInviteCode } from "./invited-testers";
+import { createIdempotencyRegistry, hashRequestBody, IDEMPOTENCY_TTL_MS } from "./idempotency";
 import {
   hashSessionToken,
   isSessionExpired,
@@ -319,7 +321,7 @@ export interface CreateAppOptions {
   recognition?: CardRecognitionProvider;
   /** P1-07: async grade jobs. Defaults to CARD_FLOW_GRADE_JOBS=on (off). */
   gradeJobs?: boolean;
-  gradeJobLimits?: { ttlMs?: number; maxActiveJobs?: number; maxActiveJobsPerUser?: number; sweepMs?: number };
+  gradeJobLimits?: { ttlMs?: number; maxActiveJobs?: number; maxActiveJobsPerUser?: number; sweepMs?: number; maxStoredJobs?: number };
   /** P1-21: /v1/status cache window (ms). Default 30 s. */
   statusCacheMs?: number;
   /** P1-17: defaults to the process-wide metrics. */
@@ -478,6 +480,8 @@ export function createApp(
     !devAutoSession &&
     (options.guestMode ?? process.env.CARD_FLOW_GUEST_SCANS?.trim().toLowerCase() === "true");
   const guestMintsPerHour = options.guestMintsPerHour ?? 10;
+  /** Scan Idempotency-Key -> first scan ID (body hash, in-flight, 24 h). */
+  const scanIdempotency = createIdempotencyRegistry<string>(() => now().getTime());
   /** tokenHash -> guest session. In memory: a restart just means a fresh guest. */
   const guestSessions = new Map<string, { userId: string; expiresAt: string }>();
   const guestMints = new Map<string, { windowStart: number; count: number }>();
@@ -778,7 +782,18 @@ export function createApp(
   const metrics = options.opsMetrics ?? opsMetrics;
   const opsToken = options.opsToken === undefined ? process.env.CARD_FLOW_OPS_TOKEN : options.opsToken;
   const app = new Hono<AppEnv>();
+  /**
+   * Grade jobs replay grade-estimate in-process. The owner is attached to the Request object
+   * (unforgeable from the network) instead of re-sending the user's auth headers. Read here,
+   * first, because body-limit middleware may swap `c.req.raw`.
+   */
+  const internalJobRequests = new WeakMap<Request, { userId: string; identity: unknown }>();
   app.use("*", async (c, next) => {
+    const internalOwner = internalJobRequests.get(c.req.raw);
+    if (internalOwner) {
+      internalJobRequests.delete(c.req.raw);
+      c.set("internalOwner", internalOwner);
+    }
     const requestId = resolveRequestId(c.req.header(REQUEST_ID_HEADER));
     c.set("requestId", requestId);
     c.header(REQUEST_ID_HEADER, requestId);
@@ -824,9 +839,8 @@ export function createApp(
     const users = store.listInvitedUsers().map((user) => ({
       userId: user.userId,
       scans: listScans(user.userId).map((scan) => scan.capturedAt),
-      purchases: listInventory(user.userId)
-        .filter((item) => item.intent === "purchased" && item.purchase)
-        .map((item) => item.purchase!.purchasedAt),
+      // Data Engineer review: from the purchase ledger, excluding voided (undone) purchases.
+      purchases: store.purchaseLedger.activePurchaseTimes(user.userId),
     }));
     const weeks = northStarWeekly(users, { weeks: Number(c.req.query("weeks") ?? "8") || 8 });
     return c.json({ ok: true, metric: NORTH_STAR_NAME, weeks });
@@ -889,7 +903,7 @@ export function createApp(
   });
 
   app.use("/v1/*", async (c, next) => {
-    if (!appApiKey) return next();
+    if (!appApiKey || c.get("internalOwner")) return next();
     const presented = c.req.header(APP_API_KEY_HEADER) ?? "";
     if (presented !== appApiKey) {
       return c.json({ ok: false, error: "CardFlow could not authorize that request." }, 401);
@@ -953,6 +967,12 @@ export function createApp(
 
   app.use("/v1/*", async (c, next) => {
     if (isPublicV1Path(c.req.method, c.req.path)) return next();
+    const internal = c.get("internalOwner");
+    if (internal) {
+      c.set("userId", internal.userId);
+      c.set("identity", internal.identity as never);
+      return next();
+    }
     const token = parseBearerToken(c.req.header("authorization"));
     if (token) {
       const guest = guestMode ? guestSessions.get(hashSessionToken(token)) : undefined;
@@ -1490,6 +1510,7 @@ export function createApp(
     const staged = gradeUploads.releaseUser(userId);
     const salesDeleted = store.sales.deleteUser(userId);
     const gradeHistoryDeleted = store.gradeHistory.deleteUser(userId);
+    store.purchaseLedger.deleteUser(userId);
     return c.json({
       ok: true,
       photosDeleted: photos.deleted + staged,
@@ -1590,6 +1611,47 @@ export function createApp(
     });
   });
 
+  /**
+   * Mobile Tech Lead review: queued writes send an Idempotency-Key for every kind. Routes that
+   * do not mint their own deterministic row ID replay the first 2xx response for 24 h; the same
+   * key with a different body is a 422; concurrent duplicates wait for the first.
+   */
+  const writeIdempotency = createIdempotencyRegistry<{ status: number; body: string }>(() => now().getTime());
+  const replayableWrite = async (c: Context, next: () => Promise<void>) => {
+    const key = c.req.header("idempotency-key")?.trim();
+    if (!key) return next();
+    const userId = c.get("userId") as string;
+    const raw = new Uint8Array(await c.req.arrayBuffer().catch(() => new ArrayBuffer(0)));
+    const bodyHash = hashRequestBody([c.req.method, c.req.path, raw]);
+    const claim = writeIdempotency.claim(`${userId}\0${key}`);
+    if (claim.kind === "replay") {
+      const first = await claim.wait();
+      if (claim.entry.bodyHash && claim.entry.bodyHash !== bodyHash) {
+        return c.json({ ok: false, error: "That Idempotency-Key was already used with a different request." }, 422);
+      }
+      if (first) return c.body(first.body, first.status as 200, { "content-type": "application/json" });
+      // The first attempt failed: run this one normally (no key reserved).
+      return next();
+    }
+    claim.setHash(bodyHash);
+    try {
+      await next();
+    } catch (error) {
+      claim.finish(bodyHash, undefined);
+      throw error;
+    }
+    const res = c.res;
+    if (res.status >= 200 && res.status < 300) {
+      claim.finish(bodyHash, { status: res.status, body: await res.clone().text() });
+    } else {
+      claim.finish(bodyHash, undefined);
+    }
+  };
+  app.use("/v1/inventory/:inventoryItemId/purchased", async (c, next) => (c.req.method === "POST" ? replayableWrite(c, next) : next()));
+  app.use("/v1/inventory/:inventoryItemId/purchase", async (c, next) => (c.req.method === "POST" ? replayableWrite(c, next) : next()));
+  app.use("/v1/sales/:inventoryItemId", async (c, next) => (c.req.method === "GET" ? next() : replayableWrite(c, next)));
+  app.use("/v1/inventory/:inventoryItemId/grade-history", async (c, next) => (c.req.method === "POST" ? replayableWrite(c, next) : next()));
+
   registerPreferenceRoutes(app, { getPreferences, setPreferences });
   registerSalesRoutes(app, {
     sales: store.sales,
@@ -1607,26 +1669,54 @@ export function createApp(
       maxSize: SCAN_IMAGE_MAX_BYTES,
       onError: (c) => c.json({ ok: false, error: "Image must be 20 MB or smaller" }, 413),
     }), async (c) => {
-      // D9: server-enforced guest limit. The 4th scan needs sign-up.
-      if (isGuestUserId(c.get("userId")) && listScans(c.get("userId")).length >= GUEST_FREE_SCANS) {
-        return signupRequired(c, "scan_limit");
+      const userId = c.get("userId");
+      // P1-10 + backend review: replays are checked first (before the guest limit), the body hash
+      // must match (422 otherwise), concurrent same-key requests share one run, keys last 24 h.
+      const scanIdempotencyKey = c.req.header("idempotency-key")?.trim() || null;
+      const regKey = scanIdempotencyKey ? `${userId}\0${scanIdempotencyKey}` : null;
+      const claim = regKey ? scanIdempotency.claim(regKey) : null;
+      const persistedReplay =
+        claim?.kind === "new" && scanIdempotencyKey
+          ? getScan(userId, scanIdForIdempotency(userId, scanIdempotencyKey))
+          : undefined;
+      const freshPersisted =
+        persistedReplay && now().getTime() - Date.parse(persistedReplay.capturedAt) < IDEMPOTENCY_TTL_MS ? persistedReplay : undefined;
+      if (claim?.kind !== "replay" && !freshPersisted) {
+        // D9: server-enforced guest limit. The 4th scan needs sign-up.
+        if (isGuestUserId(userId) && listScans(userId).length >= GUEST_FREE_SCANS) {
+          if (claim?.kind === "new") claim.finish("", undefined);
+          return signupRequired(c, "scan_limit");
+        }
       }
       const parsed = await parseScanCreateRequest(c);
       if ("error" in parsed) {
+        if (claim?.kind === "new") claim.finish("", undefined);
         return c.json({ ok: false, error: parsed.error }, parsed.status);
       }
       const captureMethod = parsed.captureMethod;
       const scenario = parsed.scenario;
-      const userId = c.get("userId");
-      // P1-10: a replayed offline scan with the same Idempotency-Key returns the first scan.
-      const scanIdempotencyKey = c.req.header("idempotency-key")?.trim() || null;
-      const scanId = scanIdempotencyKey
-        ? scanIdForIdempotency(userId, scanIdempotencyKey)
-        : crypto.randomUUID();
-      const replayedScan = scanIdempotencyKey ? getScan(userId, scanId) : undefined;
-      if (replayedScan) {
-        return c.json({ ok: true, scan: replayedScan, variantSuggestions: variantSuggestionsFor(replayedScan.mapping) }, 201);
+      const bodyHash = hashRequestBody([captureMethod, scenario ?? null, parsed.image?.mimeType ?? null, parsed.image?.bytes ?? null]);
+      if (claim?.kind === "replay") {
+        const first = await claim.wait();
+        if (claim.entry.bodyHash && claim.entry.bodyHash !== bodyHash) {
+          return c.json({ ok: false, error: "That Idempotency-Key was already used with a different request." }, 422);
+        }
+        const replayed = first ? getScan(userId, first) : undefined;
+        if (replayed) {
+          return c.json({ ok: true, scan: replayed, variantSuggestions: variantSuggestionsFor(replayed.mapping) }, 201);
+        }
       }
+      if (freshPersisted && claim?.kind === "new") {
+        // After a restart the registry is empty; the deterministic scan ID still finds the first scan.
+        claim.finish(bodyHash, freshPersisted.scanId);
+        return c.json({ ok: true, scan: freshPersisted, variantSuggestions: variantSuggestionsFor(freshPersisted.mapping) }, 201);
+      }
+      const scanId =
+        scanIdempotencyKey && !persistedReplay
+          ? scanIdForIdempotency(userId, scanIdempotencyKey)
+          : crypto.randomUUID();
+      claim?.kind === "new" && claim.setHash(bodyHash);
+      try {
       let imageStorageRef: string | null = null;
       let imageMimeType: ScanImageMimeType | null = null;
       if (parsed.image) {
@@ -1707,7 +1797,12 @@ export function createApp(
         recognition,
         mapping,
       });
+      if (claim?.kind === "new") claim.finish(bodyHash, scan.scanId);
       return c.json({ ok: true, scan, variantSuggestions: variantSuggestionsFor(scan.mapping) }, 201);
+      } catch (error) {
+        if (claim?.kind === "new") claim.finish(bodyHash, undefined);
+        throw error;
+      }
     },
   );
 
@@ -1999,9 +2094,23 @@ export function createApp(
     },
   );
 
+  // Mobile Tech Lead review: batch is enforced on the server, not only by the pre-check route.
+  const batchGate = async (c: Context, next: () => Promise<void>) => {
+    if (c.req.method !== "POST" || c.req.header(BATCH_GRADE_HEADER) !== "1") return next();
+    const userId = c.get("userId") as string;
+    if (resolveAccountPlan(userId, getGradeAccount(userId).plan) === "premium") return next();
+    return c.json(premiumRequiredBody("batch_grading"), 403);
+  };
+  app.use("/v1/inventory/:inventoryItemId/grade-jobs", batchGate);
+  app.use("/v1/inventory/:inventoryItemId/grade-estimate", batchGate);
+
   registerGradeJobRoutes(app, {
     enabled: options.gradeJobs ?? process.env.CARD_FLOW_GRADE_JOBS?.trim().toLowerCase() === "on",
-    dispatch: (request) => Promise.resolve(app.fetch(request)),
+    dispatch: (request, owner) => {
+      internalJobRequests.set(request, owner);
+      return Promise.resolve(app.fetch(request));
+    },
+    bodyLimit: bodyLimit({ maxSize: GRADE_ROUTE_BODY_MAX_BYTES, onError: gradeBodyTooLarge }),
     ...options.gradeJobLimits,
   });
 

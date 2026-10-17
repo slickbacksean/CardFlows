@@ -85,9 +85,23 @@ function cardFields(card: Wire) {
   };
 }
 
-/** Tolerant wire → normalized mapping. Unknown shapes become an empty, ok result. */
+export const CARDSIGHT_BAD_RESPONSE: RecognitionError = {
+  code: "PROVIDER_UNAVAILABLE",
+  message: "Card matching is unavailable right now. Search by name or number.",
+  retryable: true,
+};
+
+/**
+ * Wire → normalized mapping. Backend review: a body that is not a JSON object, that says
+ * `success: false`, or whose `detections` is present but not an array is an error (so the
+ * fallback matcher runs), not an empty ok result.
+ */
 export function mapCardSightWire(body: unknown, elapsedMs: number | null): CardFlowNormalizedRecognitionResult {
-  const root = (body ?? {}) as Wire;
+  if (!body || typeof body !== "object" || Array.isArray(body)) return failure(CARDSIGHT_BAD_RESPONSE);
+  const root = body as Wire;
+  if (root.success === false || (root.detections !== undefined && !Array.isArray(root.detections))) {
+    return failure(CARDSIGHT_BAD_RESPONSE);
+  }
   const rawDetections = Array.isArray(root.detections) ? (root.detections as Wire[]) : [];
   const detections: RecognitionDetection[] = rawDetections.map((det) => {
     const card = ((det.card ?? det) as Wire) ?? {};
@@ -99,7 +113,8 @@ export function mapCardSightWire(body: unknown, elapsedMs: number | null): CardF
     }));
     return {
       confidence: confidence(det.confidence),
-      matchLevel: str(det.matchLevel) ?? (suggestions.length ? "set" : "exact"),
+      // Backend review: a missing matchLevel is unknown (null), never "exact".
+      matchLevel: str(det.matchLevel),
       ...cardFields(card),
       fields: [],
       candidates,
@@ -149,7 +164,7 @@ export function createCardSightRecognitionProvider(options: CardSightAdapterOpti
             body: form,
             signal: controller.signal,
           });
-          if (res.ok) return mapCardSightWire(await res.json().catch(() => ({})), Date.now() - started);
+          if (res.ok) return mapCardSightWire(await res.json().catch(() => null), Date.now() - started);
           lastStatus = res.status;
           if (res.status === 401 || res.status === 403) options.onAlert?.({ code: "PROVIDER_AUTH", httpStatus: res.status });
           if (!isRetryableStatus(res.status)) break;

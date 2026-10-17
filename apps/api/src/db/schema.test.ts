@@ -71,6 +71,7 @@ describe("MVP CRM schema", () => {
       "grade_photo_objects",
       "grade_quota_usage",
       "portfolio_value_snapshots",
+      "purchase_events",
       "scan_confirm_events",
       "user_card_sales",
       "user_preferences",

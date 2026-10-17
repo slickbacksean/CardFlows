@@ -1,6 +1,7 @@
 import type { ConfirmEvent } from "@cardflow/shared";
 import type { UserPriceSnapshot } from "@cardflow/shared";
 import { createMemorySalesStore, type SalesStore } from "./sales-store";
+import { createMemoryPurchaseLedger, type PurchaseLedger } from "./purchase-ledger";
 import { createMemoryGradeHistoryStore, type GradeHistoryStore } from "./grade-history-store";
 import {
   catalogFingerprint,
@@ -705,6 +706,8 @@ export function moveGradingSubmittedToReturned(copy: GradingReturnedCopy): void 
 export interface StorePort {
   /** P2-03 sale records. */
   sales: SalesStore;
+  /** Data Engineer review: purchases are voided, never forgotten (North Star excludes voided). */
+  purchaseLedger: PurchaseLedger;
   /** P2-07 pre-grade estimate history. */
   gradeHistory: GradeHistoryStore;
   createSession: typeof createSession;
@@ -894,8 +897,21 @@ export function createMemoryStore(): StorePort {
     return true;
   }
 
+  const purchaseLedger = createMemoryPurchaseLedger();
+  const recordPurchase = (item: InventoryItemRecord | undefined) => {
+    if (item?.purchase) {
+      purchaseLedger.record(item.userId, {
+        purchaseId: item.purchase.purchaseId,
+        inventoryItemId: item.inventoryItemId,
+        purchasedAt: item.purchase.purchasedAt,
+        at: new Date().toISOString(),
+      });
+    }
+    return item;
+  };
   return {
     sales: createMemorySalesStore(),
+    purchaseLedger,
     gradeHistory: createMemoryGradeHistoryStore(),
     createSession,
     getSessionByToken,
@@ -926,13 +942,18 @@ export function createMemoryStore(): StorePort {
     getCanonical,
     findCachedCanonicals,
     getInventoryItem,
-    updateInventoryItem,
+    updateInventoryItem: (userId: string, inventoryItemId: string, patch: Partial<InventoryItemRecord>) =>
+      recordPurchase(updateInventoryItem(userId, inventoryItemId, patch)),
     getDraft,
     listDrafts,
     getDraftForInventoryItem,
     saveDraft,
-    saveInventoryItem,
-    deleteInventoryItem,
+    saveInventoryItem: (item: InventoryItemRecord) => recordPurchase(saveInventoryItem(item))!,
+    deleteInventoryItem: (userId: string, inventoryItemId: string) => {
+      const deleted = deleteInventoryItem(userId, inventoryItemId);
+      if (deleted) purchaseLedger.voidForItem(userId, inventoryItemId, new Date().toISOString());
+      return deleted;
+    },
     listGradingSubmitted,
     listGradingReturned,
     saveGradingSubmitted,

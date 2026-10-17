@@ -39,6 +39,7 @@ import {
 } from "@cardflow/shared";
 import { catalogDisplayFromCard } from "./listing";
 import { createSqliteSalesStore } from "./sales-store";
+import { createSqlitePurchaseLedger } from "./purchase-ledger";
 import { createSqliteGradeHistoryStore } from "./grade-history-store";
 import { applyMvpMigrations, isMemorySqlitePath } from "./db/migrate";
 import {
@@ -253,6 +254,7 @@ function catalogImageFromRow(card: {
 
 export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStorePort {
   const { sqlite, db } = applyMvpMigrations(options.sqlitePath);
+  const purchaseLedger = createSqlitePurchaseLedger(db);
   const memoryImages = new Map<string, ScanImageBytes>();
   const memoryGradeImages = new Map<string, GradeImageBytes>();
   const sqliteDir = isMemorySqlitePath(options.sqlitePath)
@@ -1111,6 +1113,12 @@ export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStor
 
   function persistPurchase(item: InventoryItemRecord): void {
     if (!item.purchase) return;
+    purchaseLedger.record(item.userId, {
+      purchaseId: item.purchase.purchaseId,
+      inventoryItemId: item.inventoryItemId,
+      purchasedAt: item.purchase.purchasedAt,
+      at: new Date().toISOString(),
+    });
     const cost = item.purchase.costBasis;
     const referenceCents = optionalDollarsToCents(
       item.referencePriceAmount ?? item.purchase.maxBuy.referencePriceAmount,
@@ -1239,6 +1247,9 @@ export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStor
     const item = loadInventoryItem(userId, inventoryItemId);
     if (!item) return false;
     sqlite.transaction(() => {
+      // Data Engineer review: void the purchase in the ledger; the crm_purchases row must go
+      // with the inventory item (foreign key).
+      purchaseLedger.voidForItem(userId, inventoryItemId, new Date().toISOString());
       db.delete(crmPurchases).where(eq(crmPurchases.inventoryItemId, inventoryItemId)).run();
       db.delete(crmListingDrafts).where(eq(crmListingDrafts.inventoryItemId, inventoryItemId)).run();
       db.delete(crmGradingSubmitted)
@@ -1918,6 +1929,7 @@ export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStor
       sqlite.close();
     },
     sales: createSqliteSalesStore(db),
+    purchaseLedger,
     gradeHistory: createSqliteGradeHistoryStore(db),
     createSession,
     getSessionByToken,

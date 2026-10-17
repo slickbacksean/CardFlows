@@ -410,6 +410,23 @@ export const gradeEstimateHistory = sqliteTable(
   (table) => [index("grade_estimate_history_item_idx").on(table.userId, table.inventoryItemId, table.recordedAt)],
 );
 
+/** Data Engineer review: purchase ledger. Undo sets voided_at; rows are never deleted (except account deletion). */
+export const purchaseEvents = sqliteTable(
+  "purchase_events",
+  {
+    purchaseId: text("purchase_id").primaryKey(),
+    userId: text("user_id").notNull(),
+    inventoryItemId: text("inventory_item_id").notNull(),
+    purchasedAt: text("purchased_at").notNull(),
+    recordedAt: text("recorded_at").notNull(),
+    voidedAt: text("voided_at"),
+  },
+  (table) => [
+    index("purchase_events_user_purchased_idx").on(table.userId, table.purchasedAt),
+    index("purchase_events_item_idx").on(table.inventoryItemId),
+  ],
+);
+
 export const schema = {
   cardflowCards,
   cardExternalIds,
@@ -433,4 +450,5 @@ export const schema = {
   userPriceSnapshots,
   userCardSales,
   gradeEstimateHistory,
+  purchaseEvents,
 };
