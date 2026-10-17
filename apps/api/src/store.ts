@@ -1,6 +1,8 @@
 import type { ConfirmEvent } from "@cardflow/shared";
 import type { UserPriceSnapshot } from "@cardflow/shared";
 import { createMemorySalesStore, type SalesStore } from "./sales-store";
+import { createMemoryPurchaseLedger, type PurchaseLedger } from "./purchase-ledger";
+import { createMemoryIdempotencyStore, type IdempotencyStore } from "./idempotency-store";
 import { createMemoryGradeHistoryStore, type GradeHistoryStore } from "./grade-history-store";
 import { normalizeEmail, type AccountRecord, type AccountStore } from "./account-store";
 import {
@@ -78,6 +80,8 @@ export interface ScanRecord {
   inventoryItemId: string | null;
   imageStorageRef: string | null;
   imageMimeType: ScanImageMimeType | null;
+  /** Backend review M2: body hash of the Idempotency-Key request that made this scan. */
+  idempotencyBodyHash?: string | null;
   recognition: CardFlowNormalizedRecognitionResult;
   mapping: CatalogMappingResult;
 }
@@ -710,6 +714,10 @@ export interface StorePort {
   accounts: AccountStore;
   /** P2-03 sale records. */
   sales: SalesStore;
+  /** Data Engineer review: purchases are voided, never forgotten (North Star excludes voided). */
+  purchaseLedger: PurchaseLedger;
+  /** Backend review M3: persisted queued-write idempotency (24 h). */
+  idempotency: IdempotencyStore;
   /** P2-07 pre-grade estimate history. */
   gradeHistory: GradeHistoryStore;
   createSession: typeof createSession;
@@ -901,9 +909,24 @@ export function createMemoryStore(): StorePort {
     return true;
   }
 
+  const purchaseLedger = createMemoryPurchaseLedger();
+  const recordPurchase = (item: InventoryItemRecord | undefined) => {
+    if (item?.purchase) {
+      purchaseLedger.record(item.userId, {
+        purchaseId: item.purchase.purchaseId,
+        inventoryItemId: item.inventoryItemId,
+        purchasedAt: item.purchase.purchasedAt,
+        snapshot: item.purchase,
+        at: new Date().toISOString(),
+      });
+    }
+    return item;
+  };
   const port: StorePort = {
     accounts: undefined as unknown as AccountStore,
     sales: createMemorySalesStore(),
+    purchaseLedger,
+    idempotency: createMemoryIdempotencyStore(),
     gradeHistory: createMemoryGradeHistoryStore(),
     createSession,
     getSessionByToken,
@@ -939,13 +962,18 @@ export function createMemoryStore(): StorePort {
     getCanonical,
     findCachedCanonicals,
     getInventoryItem,
-    updateInventoryItem,
+    updateInventoryItem: (userId: string, inventoryItemId: string, patch: Partial<InventoryItemRecord>) =>
+      recordPurchase(updateInventoryItem(userId, inventoryItemId, patch)),
     getDraft,
     listDrafts,
     getDraftForInventoryItem,
     saveDraft,
-    saveInventoryItem,
-    deleteInventoryItem,
+    saveInventoryItem: (item: InventoryItemRecord) => recordPurchase(saveInventoryItem(item))!,
+    deleteInventoryItem: (userId: string, inventoryItemId: string) => {
+      const deleted = deleteInventoryItem(userId, inventoryItemId);
+      if (deleted) purchaseLedger.voidForItem(userId, inventoryItemId, new Date().toISOString());
+      return deleted;
+    },
     listGradingSubmitted,
     listGradingReturned,
     saveGradingSubmitted,
@@ -1067,6 +1095,9 @@ function createMemoryAccountStore(
       counts.user_price_snapshots = port.deleteUserPriceSnapshots(userId);
       counts.user_card_sales = port.sales.deleteUser(userId);
       counts.grade_estimate_history = port.gradeHistory.deleteUser(userId);
+      // Data Engineer review: the purchase ledger is anonymized, not deleted (North Star history).
+      counts.purchase_events_anonymized = port.purchaseLedger.anonymizeUser(userId);
+      counts.idempotency_keys = port.idempotency.deleteUser(userId);
       for (const item of port.listInventory(userId)) port.deleteInventoryItem(userId, item.inventoryItemId);
       store.inventory = store.inventory.filter((item) => item.userId !== userId);
       for (const [id, c] of store.confirmations) if ((c as { userId?: string }).userId === userId) store.confirmations.delete(id);

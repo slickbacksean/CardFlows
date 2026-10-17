@@ -123,7 +123,7 @@ async function mapPhashTcgdexIds(
       canonicalCardFromTcgdex(card, { cardflowCardId: null, cardsightCardId: null }),
     );
     return mappingResult(catalog, {
-      confidence: hits.length === 1 ? detection.confidence : "Medium",
+      confidence: hits.length === 1 ? (detection.confidence ?? "Low") : "Medium",
       status: "ambiguous",
       matchedOn: ["tcgdex_id"],
       cardflowCardId: null,

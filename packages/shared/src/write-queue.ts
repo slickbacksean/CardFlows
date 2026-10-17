@@ -80,6 +80,41 @@ export function dueWrites(state: WriteQueueState, now = Date.now()): QueuedWrite
 }
 
 /**
+ * The card a write belongs to. Writes for one card must replay in order (e.g. save sale, then
+ * delete sale); writes for different cards are independent.
+ */
+export function writeEntityKey(item: Pick<QueuedWrite, "id" | "payload">): string {
+  const payload = (item.payload ?? {}) as { inventoryItemId?: unknown; confirmationId?: unknown };
+  if (typeof payload.inventoryItemId === "string" && payload.inventoryItemId) return `item:${payload.inventoryItemId}`;
+  if (typeof payload.confirmationId === "string" && payload.confirmationId) return `confirmation:${payload.confirmationId}`;
+  return `write:${item.id}`;
+}
+
+/**
+ * Oldest first, keeping per-card order: a write that is not due yet (backing off after a 5xx)
+ * holds back every later write for the same card instead of letting it skip ahead.
+ */
+export function orderedRunnableWrites(state: WriteQueueState, now = Date.now()): QueuedWrite[] {
+  const held = new Set<string>();
+  const runnable: QueuedWrite[] = [];
+  for (const item of state.items) {
+    const key = writeEntityKey(item);
+    if (held.has(key)) continue;
+    if (item.nextAttemptAt > now) {
+      held.add(key);
+      continue;
+    }
+    runnable.push(item);
+  }
+  return runnable;
+}
+
+/** Back online: every write may try again now (the backoff was for the outage). */
+export function makeWritesDue(state: WriteQueueState, now = Date.now()): WriteQueueState {
+  return { version: 1, items: state.items.map((item) => ({ ...item, nextAttemptAt: Math.min(item.nextAttemptAt, now) })) };
+}
+
+/**
  * Whether a failed attempt should stay queued. No status = network/timeout; 408/429/5xx = transient.
  * Other 4xx mean the server answered and will keep refusing, so the write is dropped.
  */

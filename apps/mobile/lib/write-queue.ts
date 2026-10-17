@@ -1,9 +1,12 @@
 import { useSyncExternalStore } from "react";
 import { AppState } from "react-native";
+import NetInfo from "@react-native-community/netinfo";
 import { File, Paths } from "expo-file-system";
 import {
-  dueWrites,
   emptyWriteQueue,
+  makeWritesDue,
+  orderedRunnableWrites,
+  writeEntityKey,
   enqueueWrite,
   markWriteFailed,
   parseWriteQueue,
@@ -56,11 +59,12 @@ const EXECUTORS: { [K in QueuedWriteKind]: (payload: Payloads[K], key: string) =
   livestream_purchase: (p, key) => saveLivestreamPurchase(p, key),
   save_purchased: (p, key) => savePurchased(p, key),
   save_watchlist: (p, key) => saveWatchlist(p, key),
-  watchlist_to_purchased: (p) => convertWatchlistToPurchased(p.inventoryItemId),
-  complete_details: (p) => completePurchasedDetails(p.inventoryItemId, p.input),
-  save_sale: (p) => saveSaleRemote(p.inventoryItemId, p.body),
-  delete_sale: (p) => deleteSaleRemote(p.inventoryItemId),
-  import_grade_history: (p) => importGradeHistory(p.inventoryItemId, p.entries),
+  // Mobile Tech Lead review: every kind sends its queue ID as the Idempotency-Key.
+  watchlist_to_purchased: (p, key) => convertWatchlistToPurchased(p.inventoryItemId, key),
+  complete_details: (p, key) => completePurchasedDetails(p.inventoryItemId, p.input, key),
+  save_sale: (p, key) => saveSaleRemote(p.inventoryItemId, p.body, key),
+  delete_sale: (p, key) => deleteSaleRemote(p.inventoryItemId, key),
+  import_grade_history: (p, key) => importGradeHistory(p.inventoryItemId, p.entries, key),
 };
 
 /** Writes of one kind still waiting on the phone, oldest first (for optimistic overlays). */
@@ -154,9 +158,14 @@ export async function flushWriteQueue(): Promise<void> {
   if (flushing) return;
   flushing = true;
   try {
-    for (const item of dueWrites(load())) {
+    // Mobile Tech Lead review: per-card order. A write that failed (5xx) or is backing off holds
+    // back every later write for the same card, so they never run out of order.
+    const blocked = new Set<string>();
+    for (const item of orderedRunnableWrites(load())) {
       // Undo may have removed it while an earlier item was in flight.
       if (!load().items.some((i) => i.id === item.id)) continue;
+      const entity = writeEntityKey(item);
+      if (blocked.has(entity)) continue;
       try {
         await (EXECUTORS[item.kind] as (p: unknown, key: string) => Promise<unknown>)(item.payload, item.id);
         save(removeWrite(load(), item.id));
@@ -164,6 +173,7 @@ export async function flushWriteQueue(): Promise<void> {
         const status = apiErrorStatus(error);
         if (shouldRetryWrite(status)) {
           save(markWriteFailed(load(), item.id, String((error as Error)?.message ?? error)));
+          blocked.add(entity);
           if (status == null) break; // Still offline: stop and wait for the next attempt.
         } else {
           save(removeWrite(load(), item.id)); // Server refused for good (e.g. 409 already done).
@@ -176,15 +186,25 @@ export async function flushWriteQueue(): Promise<void> {
   }
 }
 
-/** Call once at app start: flush now and whenever the app comes to the foreground. */
+/** Call once at app start: flush now, on foreground, and as soon as the network comes back. */
 export function startWriteQueue(): () => void {
   load();
   void flushWriteQueue();
   const sub = AppState.addEventListener("change", (next) => {
     if (next === "active") void flushWriteQueue();
   });
+  let wasOnline: boolean | null = null;
+  const unsubscribeNet = NetInfo.addEventListener((net) => {
+    const online = Boolean(net.isConnected) && net.isInternetReachable !== false;
+    if (online && wasOnline === false) {
+      save(makeWritesDue(load()));
+      void flushWriteQueue();
+    }
+    wasOnline = online;
+  });
   return () => {
     sub.remove();
+    unsubscribeNet();
     if (timer) clearTimeout(timer);
   };
 }

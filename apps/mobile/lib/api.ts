@@ -1,4 +1,4 @@
-import { PREMIUM_REQUIRED_CODE, SIGNUP_REQUIRED_CODE, isPremiumFeature, type PremiumFeature, type SignupReason } from "@cardflow/shared";
+import { BATCH_GRADE_HEADER, PREMIUM_REQUIRED_CODE, SIGNUP_REQUIRED_CODE, isPremiumFeature, type PremiumFeature, type SignupReason } from "@cardflow/shared";
 import {
   CARD_FLOW_REQUEST_TIMEOUT_MS,
   cardFlowHttpErrorMessage,
@@ -294,6 +294,8 @@ type CallInput<R extends ApiRoute> = {
   signal?: AbortSignal;
   /** P1-09: replays of a queued write reuse the same key so the server makes one row. */
   idempotencyKey?: string;
+  /** Extra request headers (e.g. the batch marker). */
+  headers?: Record<string, string>;
 };
 
 /**
@@ -316,7 +318,8 @@ export async function callApi<R extends ApiRoute>(
   const init: RequestInit & { timeoutMs?: number; extraHeaders?: Record<string, string> } = {
     method: route.method,
   };
-  if (input.idempotencyKey) init.extraHeaders = { "Idempotency-Key": input.idempotencyKey };
+  if (input.headers) init.extraHeaders = { ...input.headers };
+  if (input.idempotencyKey) init.extraHeaders = { ...init.extraHeaders, "Idempotency-Key": input.idempotencyKey };
   if (input.form) init.body = input.form;
   else if (input.body !== undefined) init.body = JSON.stringify(input.body);
   if (input.timeoutMs !== undefined) init.timeoutMs = input.timeoutMs;
@@ -505,6 +508,8 @@ export interface GradeEstimateRunOptions {
   onPollError?: (consecutiveFailures: number) => void;
   /** Cancel: stops polling; the server job expires on its own. */
   signal?: AbortSignal;
+  /** Batch screen: the API refuses this for free accounts (403 premium_required). */
+  batch?: boolean;
 }
 
 const BUSY_STATUSES = new Set([429, 503]);
@@ -616,12 +621,13 @@ export async function requestGradeEstimate(
       }
     }
     const body = input?.reestimate ? { reestimate: true } : {};
+    const headers = options.batch ? { [BATCH_GRADE_HEADER]: "1" } : undefined;
     if (gradeJobsEnabled()) {
       const viaJob = await runGradeJob(
         () =>
           form
-            ? callApi(apiContract.createGradeJob, { params: { inventoryItemId }, form })
-            : callApi(apiContract.createGradeJob, { params: { inventoryItemId }, body }),
+            ? callApi(apiContract.createGradeJob, { params: { inventoryItemId }, form, headers })
+            : callApi(apiContract.createGradeJob, { params: { inventoryItemId }, body, headers }),
         options,
       );
       if (viaJob !== "jobs_off") return viaJob;
@@ -629,8 +635,8 @@ export async function requestGradeEstimate(
     const data = await withBusyWait(
       () =>
         form
-          ? callApi(apiContract.requestGradeEstimate, { params: { inventoryItemId }, form, timeoutMs: GRADE_PREGRADE_TIMEOUT_MS })
-          : callApi(apiContract.requestGradeEstimate, { params: { inventoryItemId }, body, timeoutMs: GRADE_PREGRADE_TIMEOUT_MS }),
+          ? callApi(apiContract.requestGradeEstimate, { params: { inventoryItemId }, form, headers, timeoutMs: GRADE_PREGRADE_TIMEOUT_MS })
+          : callApi(apiContract.requestGradeEstimate, { params: { inventoryItemId }, body, headers, timeoutMs: GRADE_PREGRADE_TIMEOUT_MS }),
       options,
     );
     return data.estimate;
@@ -840,8 +846,8 @@ export function undoLivestreamPurchase(inventoryItemId: string) {
 }
 
 /** One-tap Watchlist → Purchased. Carries identity and Max Buy; price stays optional. */
-export function convertWatchlistToPurchased(inventoryItemId: string) {
-  return callApi(apiContract.convertWatchlistToPurchased, { params: { inventoryItemId } });
+export function convertWatchlistToPurchased(inventoryItemId: string, idempotencyKey?: string) {
+  return callApi(apiContract.convertWatchlistToPurchased, { params: { inventoryItemId }, idempotencyKey });
 }
 
 export function completePurchasedDetails(
@@ -858,9 +864,11 @@ export function completePurchasedDetails(
     selectedVariant?: string | null;
     referencePriceAmount?: string | null;
   },
+  idempotencyKey?: string,
 ) {
   return callApi(apiContract.completePurchasedDetails, {
     params: { inventoryItemId },
+    idempotencyKey,
     body: { ...input, currency: LOCKED_DISPLAY_CURRENCY },
   });
 }
@@ -974,12 +982,13 @@ export function listSales() {
 export function saveSaleRemote(
   inventoryItemId: string,
   body: { price: string; fees?: string | null; soldAt?: string; onlyIfMissing?: boolean },
+  idempotencyKey?: string,
 ) {
-  return callApi(apiContract.saveSale, { params: { inventoryItemId }, body });
+  return callApi(apiContract.saveSale, { params: { inventoryItemId }, body, idempotencyKey });
 }
 
-export function deleteSaleRemote(inventoryItemId: string) {
-  return callApi(apiContract.deleteSale, { params: { inventoryItemId } });
+export function deleteSaleRemote(inventoryItemId: string, idempotencyKey?: string) {
+  return callApi(apiContract.deleteSale, { params: { inventoryItemId }, idempotencyKey });
 }
 
 /** P2-07 pre-grade estimate history (server records each fresh estimate). */
@@ -1000,8 +1009,9 @@ export function getGradeHistory(inventoryItemId: string) {
 export function importGradeHistory(
   inventoryItemId: string,
   entries: Array<{ at: string; overall: number; confidence?: string | null }>,
+  idempotencyKey?: string,
 ) {
-  return callApi(apiContract.importGradeHistory, { params: { inventoryItemId }, body: { entries } });
+  return callApi(apiContract.importGradeHistory, { params: { inventoryItemId }, body: { entries }, idempotencyKey });
 }
 
 export function getPreferences() {

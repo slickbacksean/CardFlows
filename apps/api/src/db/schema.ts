@@ -68,6 +68,8 @@ export const crmScans = sqliteTable("crm_scans", {
   imageStorageRef: text("image_storage_ref"),
   imageSource: text("image_source").notNull().default("user_capture"),
   imageMimeType: text("image_mime_type"),
+  /** Backend review M2: Idempotency-Key request body hash (replay after restart → 422 on mismatch). */
+  idempotencyBodyHash: text("idempotency_body_hash"),
   recognitionJson: text("recognition_json").notNull(),
   mappingJson: text("mapping_json"),
   mappingStatus: text("mapping_status"),
@@ -444,6 +446,43 @@ export const gradeEstimateHistory = sqliteTable(
   (table) => [index("grade_estimate_history_item_idx").on(table.userId, table.inventoryItemId, table.recordedAt)],
 );
 
+/** Data Engineer review: append-only purchase ledger (see purchase-ledger.ts). */
+export const purchaseEvents = sqliteTable(
+  "purchase_events",
+  {
+    seq: integer("seq").primaryKey({ autoIncrement: true }),
+    eventId: text("event_id").notNull(),
+    purchaseId: text("purchase_id").notNull(),
+    userId: text("user_id").notNull(),
+    inventoryItemId: text("inventory_item_id").notNull(),
+    kind: text("kind").notNull(),
+    purchasedAt: text("purchased_at").notNull(),
+    snapshot: text("snapshot"),
+    at: text("at").notNull(),
+  },
+  (table) => [
+    uniqueIndex("purchase_events_event_id").on(table.eventId),
+    index("purchase_events_user_purchased_idx").on(table.userId, table.purchasedAt),
+    index("purchase_events_purchase_idx").on(table.purchaseId, table.seq),
+    index("purchase_events_item_idx").on(table.inventoryItemId),
+    check("purchase_events_kind_chk", sql`${table.kind} in ('recorded', 'edited', 'voided')`),
+  ],
+);
+
+/** Backend review M3: persisted Idempotency-Key results for queued writes (24 h). */
+export const idempotencyKeys = sqliteTable(
+  "idempotency_keys",
+  {
+    userId: text("user_id").notNull(),
+    idemKey: text("idem_key").notNull(),
+    bodyHash: text("body_hash").notNull(),
+    status: integer("status").notNull(),
+    response: text("response").notNull(),
+    createdAt: text("created_at").notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.userId, table.idemKey] }), index("idempotency_keys_created_idx").on(table.createdAt)],
+);
+
 export const schema = {
   cardflowCards,
   userAccounts,
@@ -469,4 +508,6 @@ export const schema = {
   userPriceSnapshots,
   userCardSales,
   gradeEstimateHistory,
+  purchaseEvents,
+  idempotencyKeys,
 };

@@ -46,3 +46,18 @@ describe("offline write queue (P1-09)", () => {
     expect(writeQueueLabel(3)).toBe("3 waiting to sync");
   });
 });
+
+describe("write queue per-card order (Mobile Tech Lead review)", () => {
+  it("a backing-off write holds back later writes for the same card only", async () => {
+    const { orderedRunnableWrites, makeWritesDue, writeEntityKey } = await import("./write-queue");
+    let state = emptyWriteQueue();
+    state = enqueueWrite(state, { id: "a", kind: "save_sale", payload: { inventoryItemId: "card-1" } }, 0);
+    state = enqueueWrite(state, { id: "b", kind: "delete_sale", payload: { inventoryItemId: "card-1" } }, 0);
+    state = enqueueWrite(state, { id: "c", kind: "save_sale", payload: { inventoryItemId: "card-2" } }, 0);
+    state = markWriteFailed(state, "a", "503", 0);
+    expect(orderedRunnableWrites(state, 1).map((i) => i.id)).toEqual(["c"]);
+    expect(orderedRunnableWrites(makeWritesDue(state, 1), 1).map((i) => i.id)).toEqual(["a", "b", "c"]);
+    expect(writeEntityKey({ id: "x", payload: { confirmationId: "conf" } })).toBe("confirmation:conf");
+    expect(writeEntityKey({ id: "x", payload: {} })).toBe("write:x");
+  });
+});
