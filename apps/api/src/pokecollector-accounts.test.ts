@@ -149,7 +149,7 @@ describe("invite session maps to a PokéCollector user", () => {
     expect(mapping!.pokecollectorUsername).not.toContain("alex");
     expect(mapping?.pokecollectorUserId).toBeTruthy();
     // Only the encrypted per-link password is stored.
-    expect(mapping?.passwordCiphertext).toMatch(/^v1:/);
+    expect(mapping?.passwordCiphertext).toMatch(/^v2:[A-Za-z0-9_-]{8}:/);
     const { passwordCiphertext: _ciphertext, ...rest } = mapping!;
     expect(JSON.stringify(rest)).not.toMatch(/access_token|password|jwt/i);
   });

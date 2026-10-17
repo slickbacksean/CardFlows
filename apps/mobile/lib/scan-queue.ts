@@ -80,6 +80,26 @@ function schedule() {
   timer = setTimeout(() => void flushScanQueue(), wait);
 }
 
+/** P4 account deletion: drop queued scans and their photos from the phone. */
+export function clearScanQueue(): void {
+  if (timer) clearTimeout(timer);
+  timer = null;
+  state = emptyScanQueue();
+  try {
+    const dir = new Directory(Paths.document, "scan-queue");
+    if (dir.exists) dir.delete();
+  } catch {
+    // Already gone.
+  }
+  try {
+    const file = new File(Paths.document, FILE_NAME);
+    if (file.exists) file.delete();
+  } catch {
+    // Already gone.
+  }
+  for (const listener of listeners) listener();
+}
+
 /** A guest hit the scan limit (403 signup_required). Not a real refusal of this scan. */
 export function isSignupRequiredError(error: unknown): boolean {
   return (error as { signupRequired?: unknown } | null)?.signupRequired != null;

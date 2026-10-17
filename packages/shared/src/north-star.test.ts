@@ -23,3 +23,19 @@ describe("D10 North Star", () => {
     expect(northStarWeekly([], { weeks: 1, now: new Date("2026-10-15T00:00:00Z") })[0]?.perActiveReseller).toBeNull();
   });
 });
+
+describe("H2: deleted accounts' weekly totals", () => {
+  it("rolls one user into per-week counts and adds them back without double counting", async () => {
+    const { northStarUserWeekTotals, northStarWeekly } = await import("./north-star");
+    const now = new Date("2026-10-14T12:00:00Z");
+    const gone = { userId: "gone", scans: ["2026-10-13T00:00:00Z", "2026-10-06T00:00:00Z"], purchases: ["2026-10-13T01:00:00Z", "bad"] };
+    const live = { userId: "live", scans: ["2026-10-13T02:00:00Z"], purchases: [] };
+    const totals = northStarUserWeekTotals(gone);
+    expect(totals).toEqual([
+      { weekStart: "2026-10-05", purchased: 0, scans: 1, activeResellers: 1 },
+      { weekStart: "2026-10-12", purchased: 1, scans: 1, activeResellers: 1 },
+    ]);
+    expect(northStarWeekly([live], { now, weeks: 2, totals })).toEqual(northStarWeekly([gone, live], { now, weeks: 2 }));
+    expect(northStarUserWeekTotals({ scans: [], purchases: [] })).toEqual([]);
+  });
+});

@@ -16,11 +16,26 @@ import {
 import { createPokecollectorAccountsFromEnv } from "./pokecollector-env";
 import {
   decryptLinkPassword,
+  encryptLinkPassword,
   isOpaquePokecollectorUsername,
+  linkCiphertextNeedsRotation,
+  linkKeyId,
+  MIN_LINK_PAYLOAD_BYTES,
   opaquePokecollectorUsername,
   pokecollectorLinkSecretsFromEnv,
+  reencryptLinkPassword,
 } from "./pokecollector-link-secrets";
-import { planPokecollectorRelink, runPokecollectorRelink } from "./pokecollector-relink";
+import { createCipheriv, randomBytes } from "node:crypto";
+import { statSync } from "node:fs";
+import {
+  fileRelinkState,
+  hashRelinkId,
+  memoryRelinkState,
+  planPokecollectorRelink,
+  runPokecollectorRelink,
+  summarizeRelink,
+  writePrivateJson,
+} from "./pokecollector-relink";
 import { createSqliteStore, type SqliteStorePort } from "./sqlite-store";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -208,6 +223,58 @@ describe("real adapter: always create, never look up by name", () => {
   });
 });
 
+describe("link ciphertext (Backend re-review L2)", () => {
+  const keyA = Buffer.alloc(32, 1);
+  const keyB = Buffer.alloc(32, 2);
+  it("v2 carries a key ID, so a rotated key still reads old links", () => {
+    const ct = encryptLinkPassword("cf-secret", "acct_1", keyA);
+    const [version, kid, payload] = ct.split(":");
+    expect(version).toBe("v2");
+    expect(kid).toBe(linkKeyId(keyA));
+    expect(Buffer.from(payload!, "base64url").length).toBeGreaterThanOrEqual(MIN_LINK_PAYLOAD_BYTES);
+    // Rotation: B is current, A is previous.
+    expect(decryptLinkPassword(ct, "acct_1", [keyB, keyA])).toBe("cf-secret");
+    expect(() => decryptLinkPassword(ct, "acct_1", [keyB])).toThrow(/not configured/);
+    expect(linkCiphertextNeedsRotation(ct, keyB)).toBe(true);
+    const rotated = reencryptLinkPassword(ct, "acct_1", { userPepper: "p".repeat(40), linkKey: keyB, previousLinkKeys: [keyA] });
+    expect(rotated.split(":")[1]).toBe(linkKeyId(keyB));
+    expect(linkCiphertextNeedsRotation(rotated, keyB)).toBe(false);
+    expect(decryptLinkPassword(rotated, "acct_1", keyB)).toBe("cf-secret");
+  });
+
+  it("still reads v1 (no key ID), with any configured key", () => {
+    const iv = randomBytes(12);
+    const cipher = createCipheriv("aes-256-gcm", keyA, iv, { authTagLength: 16 });
+    cipher.setAAD(Buffer.from("cardflow-pokecollector-link\0acct_1", "utf8"));
+    const body = Buffer.concat([cipher.update("cf-old", "utf8"), cipher.final()]);
+    const v1 = `v1:${Buffer.concat([iv, cipher.getAuthTag(), body]).toString("base64url")}`;
+    expect(decryptLinkPassword(v1, "acct_1", [keyB, keyA])).toBe("cf-old");
+    expect(linkCiphertextNeedsRotation(v1, keyA)).toBe(true);
+  });
+
+  it("rejects payloads under 28 bytes (iv + 16-byte tag) and truncated tags", () => {
+    const ct = encryptLinkPassword("cf-secret", "acct_1", keyA);
+    const [v, kid, payload] = ct.split(":");
+    const raw = Buffer.from(payload!, "base64url");
+    expect(() => decryptLinkPassword(`${v}:${kid}:${raw.subarray(0, 27).toString("base64url")}`, "acct_1", keyA)).toThrow(/too short/);
+    expect(() => decryptLinkPassword(`v1:${raw.subarray(0, 20).toString("base64url")}`, "acct_1", keyA)).toThrow(/too short/);
+    // A changed byte in the tag fails authentication.
+    const tampered = Buffer.from(raw);
+    tampered[20] = tampered[20]! ^ 1;
+    expect(() => decryptLinkPassword(`${v}:${kid}:${tampered.toString("base64url")}`, "acct_1", keyA)).toThrow();
+  });
+
+  it("previous keys come from CARD_FLOW_POKECOLLECTOR_PREVIOUS_LINK_KEYS", () => {
+    const env = {
+      CARD_FLOW_POKECOLLECTOR_USER_PEPPER: "p".repeat(40),
+      CARD_FLOW_POKECOLLECTOR_LINK_KEY: keyB.toString("base64"),
+      CARD_FLOW_POKECOLLECTOR_PREVIOUS_LINK_KEYS: `${keyA.toString("hex")}, ${Buffer.alloc(32, 3).toString("base64")}`,
+    };
+    expect(pokecollectorLinkSecretsFromEnv(env).secrets?.previousLinkKeys).toHaveLength(2);
+    expect(pokecollectorLinkSecretsFromEnv({ ...env, CARD_FLOW_POKECOLLECTOR_PREVIOUS_LINK_KEYS: "nope" }).secrets).toBeNull();
+  });
+});
+
 describe("fail closed without the pepper or key (no fallbacks)", () => {
   const base = {
     VITEST: "false",
@@ -216,7 +283,26 @@ describe("fail closed without the pepper or key (no fallbacks)", () => {
     CARD_FLOW_POKECOLLECTOR_TOKEN: "admin-token",
     CARD_FLOW_POKECOLLECTOR_USER_PEPPER: "p".repeat(40),
     CARD_FLOW_POKECOLLECTOR_LINK_KEY: Buffer.alloc(32, 1).toString("base64"),
+    CARD_FLOW_POKECOLLECTOR_ACCOUNTS: "true",
   };
+  it("M3: accounts stay off unless CARD_FLOW_POKECOLLECTOR_ACCOUNTS=true", () => {
+    for (const flag of [undefined, "", "1", "yes", "on", "TRUE ", "false"]) {
+      const env = { ...base, CARD_FLOW_POKECOLLECTOR_ACCOUNTS: flag };
+      const expected = flag?.trim().toLowerCase() === "true" ? "pokecollector" : "off";
+      expect(createPokecollectorAccountsFromEnv(env).accounts.name, String(flag)).toBe(expected);
+    }
+  });
+
+  it("M2: the admin's credentials can stand in for the token (minted at first use, again on a 401)", () => {
+    const env = {
+      ...base,
+      CARD_FLOW_POKECOLLECTOR_TOKEN: "",
+      CARD_FLOW_POKECOLLECTOR_ADMIN_USERNAME: "admin",
+      CARD_FLOW_POKECOLLECTOR_ADMIN_PASSWORD: "admin-password",
+    };
+    expect(createPokecollectorAccountsFromEnv(env).accounts.name).toBe("pokecollector");
+  });
+
   it("accounts are on only with the admin token, user pepper and link key", () => {
     expect(createPokecollectorAccountsFromEnv(base).accounts.name).toBe("pokecollector");
     for (const missing of ["CARD_FLOW_POKECOLLECTOR_USER_PEPPER", "CARD_FLOW_POKECOLLECTOR_LINK_KEY", "CARD_FLOW_POKECOLLECTOR_TOKEN"] as const) {
@@ -245,11 +331,13 @@ describe("fail closed without the pepper or key (no fallbacks)", () => {
 });
 
 describe("relink script (dry run by default; never run against a real server here)", () => {
+  const GUEST = "guest_00000000-0000-4000-8000-000000000000";
   async function legacyWorld() {
     const { app, store } = open();
     const alex = await call(app, "/v1/sessions", { body: { inviteCode: ALEX_INVITE_CODE } });
     const jordan = await call(app, "/v1/sessions", { body: { inviteCode: JORDAN_INVITE_CODE } });
     await purchase(app, alex.body.token as string, "base1-58");
+    await purchase(app, alex.body.token as string, "swsh3-136");
     await purchase(app, alex.body.token as string, "base1-4", "watchlist");
     await purchase(app, jordan.body.token as string, "swsh3-136");
     // Legacy rows as main used to write them: email-derived names, no ciphertext. SQLite's unique
@@ -259,8 +347,51 @@ describe("relink script (dry run by default; never run against a real server her
     });
     store.savePokecollectorUserMapping(legacy(INVITED_USERS[0].userId, "41", "cardflow-alex"));
     store.savePokecollectorUserMapping(legacy(INVITED_USERS[1].userId, "42", "cardflow-jordan"));
-    store.savePokecollectorUserMapping(legacy("guest_00000000-0000-4000-8000-000000000000", "43", "cardflow-guest"));
+    store.savePokecollectorUserMapping(legacy(GUEST, "43", "cardflow-guest"));
     return { store };
+  }
+  const alexId = INVITED_USERS[0].userId;
+  const jordanId = INVITED_USERS[1].userId;
+
+  /** Mock PokéCollector that can be made to "crash" (throw) at a given call. */
+  function crashable() {
+    const accounts = createMockPokecollectorAccounts();
+    const frozen: string[] = [];
+    accounts.freezeRemoteUser = async (id) => {
+      frozen.push(id);
+      return true;
+    };
+    const crash = { at: "" as "" | "completeLink" | "addPurchased:2" | "freeze" };
+    let purchasedCalls = 0;
+    const complete = accounts.completeLink.bind(accounts);
+    accounts.completeLink = async (pending) => {
+      if (crash.at === "completeLink") throw new Error("crash");
+      return complete(pending);
+    };
+    const addPurchased = accounts.addPurchased.bind(accounts);
+    accounts.addPurchased = async (mapping, input) => {
+      purchasedCalls += 1;
+      if (crash.at === "addPurchased:2" && purchasedCalls === 2) throw new Error("crash");
+      return addPurchased(mapping, input);
+    };
+    const freeze = accounts.freezeRemoteUser;
+    accounts.freezeRemoteUser = async (id) => {
+      if (crash.at === "freeze") throw new Error("crash");
+      return freeze(id);
+    };
+    return { accounts, frozen, crash };
+  }
+
+  async function expectFinished(store: Awaited<ReturnType<typeof legacyWorld>>["store"], accounts: ReturnType<typeof crashable>["accounts"]) {
+    const alex = store.getPokecollectorUserMapping(alexId)!;
+    const jordan = store.getPokecollectorUserMapping(jordanId)!;
+    expect(isReadyLink(alex) && isReadyLink(jordan)).toBe(true);
+    expect(alex.pokecollectorUserId).not.toBe(jordan.pokecollectorUserId);
+    // Every copy exactly once.
+    expect((await accounts.listCollection(alex)).map((c) => c.tcgdexId).sort()).toEqual(["base1-58", "swsh3-136"]);
+    expect((await accounts.listWishlist(alex)).map((c) => c.tcgdexId)).toEqual(["base1-4"]);
+    expect((await accounts.listCollection(jordan)).map((c) => c.tcgdexId)).toEqual(["swsh3-136"]);
+    expect(store.getPokecollectorUserMapping(GUEST)).toBeUndefined();
   }
 
   it("dry run: plans the relink and freezes, with no network call and no write", async () => {
@@ -276,39 +407,149 @@ describe("relink script (dry run by default; never run against a real server her
       },
     });
     const before = JSON.stringify(store.listPokecollectorUserMappings());
-    const result = await runPokecollectorRelink({ store, accounts, dryRun: true });
+    const state = memoryRelinkState();
+    const result = await runPokecollectorRelink({ store, accounts, dryRun: true, state });
     expect(networkCalls).toBe(0);
+    expect(state.saves).toBe(0);
     expect(JSON.stringify(store.listPokecollectorUserMappings())).toBe(before);
     expect(result.plan.freeze.map((f) => f.pokecollectorUserId).sort()).toEqual(["41", "42", "43"]);
     expect(result.plan.relink.map((r) => [r.userId, r.purchased, r.watchlist]).sort()).toEqual(
-      [[INVITED_USERS[0].userId, 1, 1], [INVITED_USERS[1].userId, 1, 0]].sort(),
+      [[alexId, 2, 1], [jordanId, 1, 0]].sort(),
     );
-    expect(result.plan.dropGuestLinks).toEqual(["guest_00000000-0000-4000-8000-000000000000"]);
+    expect(result.plan.dropGuestLinks).toEqual([GUEST]);
     expect(planPokecollectorRelink(store)).toEqual(result.plan);
   });
 
   it("apply (mock PokéCollector only): fresh opaque users rebuilt from CardFlow inventory, old users frozen", async () => {
     const { store } = await legacyWorld();
-    const accounts = createMockPokecollectorAccounts();
-    const frozen: string[] = [];
-    accounts.freezeRemoteUser = async (id) => {
-      frozen.push(id);
-      return true;
-    };
-    const result = await runPokecollectorRelink({ store, accounts, dryRun: false });
+    const { accounts, frozen } = crashable();
+    const result = await runPokecollectorRelink({ store, accounts, dryRun: false, state: memoryRelinkState() });
     expect(result.relinked).toBe(2);
-    expect(result.copiesWritten).toBe(3);
+    expect(result.copiesWritten).toBe(4);
     expect(result.guestLinksDropped).toBe(1);
     expect(frozen.sort()).toEqual(["41", "42", "43"]);
-    const alex = store.getPokecollectorUserMapping(INVITED_USERS[0].userId)!;
-    const jordan = store.getPokecollectorUserMapping(INVITED_USERS[1].userId)!;
-    expect(isReadyLink(alex) && isReadyLink(jordan)).toBe(true);
-    expect(alex.pokecollectorUserId).not.toBe(jordan.pokecollectorUserId);
-    expect((await accounts.listCollection(alex)).map((c) => c.tcgdexId)).toEqual(["base1-58"]);
-    expect((await accounts.listWishlist(alex)).map((c) => c.tcgdexId)).toEqual(["base1-4"]);
-    expect((await accounts.listCollection(jordan)).map((c) => c.tcgdexId)).toEqual(["swsh3-136"]);
-    expect(store.getPokecollectorUserMapping("guest_00000000-0000-4000-8000-000000000000")).toBeUndefined();
+    await expectFinished(store, accounts);
     // Running it again finds nothing left to do.
     expect(planPokecollectorRelink(store)).toEqual({ freeze: [], relink: [], dropGuestLinks: [] });
+  });
+
+  it("H2: the freeze list is saved before any write (a link row, once replaced, can't say what it pointed at)", async () => {
+    const { store } = await legacyWorld();
+    const { accounts, crash } = crashable();
+    crash.at = "completeLink";
+    const state = memoryRelinkState();
+    await expect(runPokecollectorRelink({ store, accounts, dryRun: false, state })).rejects.toThrow("crash");
+    expect(state.current!.freeze.map((f) => f.pokecollectorUserId).sort()).toEqual(["41", "42", "43"]);
+    // Alex's legacy row was already replaced by a pending one: the DB alone no longer knows "41".
+    expect(store.getPokecollectorUserMapping(alexId)!.pokecollectorUserId).toMatch(/^pending:/);
+    expect(planPokecollectorRelink(store).freeze.map((f) => f.pokecollectorUserId)).not.toContain("41");
+    expect(planPokecollectorRelink(store, state.load()).freeze.map((f) => f.pokecollectorUserId)).toContain("41");
+  });
+
+  it("H2: a rerun after a crash before linking reuses the pending row and its password", async () => {
+    const { store } = await legacyWorld();
+    const { accounts, crash, frozen } = crashable();
+    crash.at = "completeLink";
+    const state = memoryRelinkState();
+    await expect(runPokecollectorRelink({ store, accounts, dryRun: false, state })).rejects.toThrow("crash");
+    const pending = store.getPokecollectorUserMapping(alexId)!;
+    crash.at = "";
+    const result = await runPokecollectorRelink({ store, accounts, dryRun: false, state });
+    expect(result.plan.relink.find((r) => r.userId === alexId)?.reason).toBe("resume_pending");
+    const linked = store.getPokecollectorUserMapping(alexId)!;
+    // Same username and the same encrypted password: never a second remote user for one link.
+    expect(linked.pokecollectorUsername).toBe(pending.pokecollectorUsername);
+    expect(linked.passwordCiphertext).toBe(pending.passwordCiphertext);
+    expect([...accounts.remoteUsers.keys()].filter((name) => isOpaquePokecollectorUsername(name))).toHaveLength(2);
+    expect(frozen.sort()).toEqual(["41", "42", "43"]);
+    await expectFinished(store, accounts);
+  });
+
+  it("H2: a crash mid-copy resumes at the next copy (no duplicates, nothing missing)", async () => {
+    const { store } = await legacyWorld();
+    const { accounts, crash, frozen } = crashable();
+    crash.at = "addPurchased:2";
+    const state = memoryRelinkState();
+    await expect(runPokecollectorRelink({ store, accounts, dryRun: false, state })).rejects.toThrow("crash");
+    const done = Object.values(state.current!.progress).reduce((n, p) => n + p.purchased + p.watchlist, 0);
+    expect(done).toBe(1);
+    expect(frozen).toEqual([]);
+    crash.at = "";
+    const result = await runPokecollectorRelink({ store, accounts, dryRun: false, state });
+    expect(result.plan.relink.map((r) => r.reason)).toContain("resume_copies");
+    expect(result.copiesWritten).toBe(3);
+    expect(frozen.sort()).toEqual(["41", "42", "43"]);
+    await expectFinished(store, accounts);
+    expect(Object.values(state.current!.progress).every((p) => p.done)).toBe(true);
+  });
+
+  it("H2: a crash during the freeze is finished by a rerun, and a third run does nothing", async () => {
+    const { store } = await legacyWorld();
+    const { accounts, crash, frozen } = crashable();
+    crash.at = "freeze";
+    const state = memoryRelinkState();
+    await expect(runPokecollectorRelink({ store, accounts, dryRun: false, state })).rejects.toThrow("crash");
+    crash.at = "";
+    const second = await runPokecollectorRelink({ store, accounts, dryRun: false, state });
+    expect(second.copiesWritten).toBe(0);
+    expect(second.relinked).toBe(0);
+    expect(frozen.sort()).toEqual(["41", "42", "43"]);
+    await expectFinished(store, accounts);
+    const third = await runPokecollectorRelink({ store, accounts, dryRun: false, state });
+    expect([third.relinked, third.copiesWritten, third.frozen, third.strayFrozen]).toEqual([0, 0, 0, 0]);
+    expect(frozen).toHaveLength(3);
+  });
+
+  it("H2: ends by freezing every unlinked, non-opaque cardflow-* remote user (admin GET /api/auth/users)", async () => {
+    const { store } = await legacyWorld();
+    const { accounts, frozen } = crashable();
+    // Remote users whose link rows were lost: never in the DB, only on PokéCollector.
+    const strayId = accounts.seedRemoteUser("cardflow-sean");
+    const otherApp = accounts.seedRemoteUser("someone-not-cardflow");
+    const admin = accounts.seedRemoteUser("cardflow-admin", { role: "admin" });
+    const result = await runPokecollectorRelink({ store, accounts, dryRun: false, state: memoryRelinkState() });
+    expect(result.strayFrozen).toBe(1);
+    expect(frozen).toContain(strayId);
+    expect(frozen).not.toContain(otherApp);
+    expect(frozen).not.toContain(admin);
+    // The new opaque users stay active.
+    for (const id of [alexId, jordanId]) expect(frozen).not.toContain(store.getPokecollectorUserMapping(id)!.pokecollectorUserId);
+  });
+
+  it("freezes the 'hold' rows account deletion left (PR 96 queue) and clears them", async () => {
+    const { store } = await legacyWorld();
+    store.accounts.enqueuePokecollectorDeletion({ remoteUserId: "77", mode: "hold", at: "2026-10-17T00:00:00.000Z" });
+    const { accounts, frozen } = crashable();
+    const plan = planPokecollectorRelink(store);
+    expect(plan.freeze).toContainEqual(expect.objectContaining({ pokecollectorUserId: "77", source: "deletion_hold", pokecollectorUsername: null }));
+    await runPokecollectorRelink({ store, accounts, dryRun: false, state: memoryRelinkState() });
+    expect(frozen).toContain("77");
+    expect(store.accounts.listPokecollectorDeletions()).toEqual([]);
+  });
+
+  it("L3: stdout gets counts and hashed IDs only; the full plan goes to a 0600 file", async () => {
+    const { store } = await legacyWorld();
+    const result = await runPokecollectorRelink({ store, accounts: null, dryRun: true });
+    result.relinkFailed.push(alexId);
+    const summary = JSON.stringify(summarizeRelink(result));
+    for (const secret of [alexId, jordanId, GUEST, "cardflow-alex", "cardflow-jordan", "41"]) expect(summary).not.toContain(secret);
+    expect(summary).toContain(hashRelinkId(alexId));
+    const dir = mkdtempSync(path.join(tmpdir(), "cardflow-relink-"));
+    dirs.push(dir);
+    const planFile = path.join(dir, "plan.json");
+    writePrivateJson(planFile, result);
+    expect(statSync(planFile).mode & 0o777).toBe(0o600);
+    expect(readFileSync(planFile, "utf8")).toContain(alexId);
+    const stateFile = path.join(dir, "state.json");
+    const fileState = fileRelinkState(stateFile);
+    expect(fileState.load()).toBeNull();
+    fileState.save({ version: 1, freeze: [], frozen: ["1"], progress: {} });
+    expect(statSync(stateFile).mode & 0o777).toBe(0o600);
+    expect(fileState.load()?.frozen).toEqual(["1"]);
+  });
+
+  it("apply needs a state file", async () => {
+    const { store } = await legacyWorld();
+    await expect(runPokecollectorRelink({ store, accounts: createMockPokecollectorAccounts(), dryRun: false })).rejects.toThrow(/state file/);
   });
 });

@@ -1,6 +1,7 @@
 import { isGuestUserId, type InvitedIdentity } from "@cardflow/shared";
 import { createAccount, createGuestSession, createSession, getIdentity, listInventory, signInWithPassword } from "./api";
 import { resetAgeConfirmationCache } from "./age-confirmation";
+import { setDeviceItemIndexOwner } from "./device-item-index";
 import { resetCardSightConsentCache } from "./cardsight-consent";
 import { stopLiveVideoIdentify } from "./live-identify";
 import { clearLivestreamOverlay } from "./livestream";
@@ -28,6 +29,7 @@ export function peekActiveUserId(): string {
 
 function rememberIdentity(identity: InvitedIdentity | null) {
   cachedUserId = identity?.userId ?? null;
+  setDeviceItemIndexOwner(cachedUserId);
 }
 
 function toSession(result: {
@@ -116,9 +118,29 @@ async function restoreIdentitySession(): Promise<IdentitySession> {
   }
 }
 
+/**
+ * P4 account deletion: forget the session on this phone. The next screen that needs a
+ * session starts fresh (a new guest session when guest mode is on).
+ */
+export async function signOutLocally(): Promise<void> {
+  setSessionToken(null);
+  await persistSessionToken(null);
+  rememberIdentity(null);
+  restorePromise = null;
+  resetCardSightConsentCache();
+  resetAgeConfirmationCache();
+  stopLiveVideoIdentify();
+  clearLivestreamOverlay();
+}
+
 /** D9: true while the app runs on a guest session. */
 export function isGuestSession(): boolean {
   return isGuestUserId(cachedUserId);
+}
+
+/** Signed-up accounts (`acct_…`) have a password; guests and invite testers don't. */
+export function isPasswordAccountSession(): boolean {
+  return typeof cachedUserId === "string" && cachedUserId.startsWith("acct_");
 }
 
 export async function ensureIdentitySession(): Promise<IdentitySession> {

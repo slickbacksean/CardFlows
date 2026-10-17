@@ -142,10 +142,11 @@ export function createPricingFromEnv(env: Env = process.env): {
 }
 
 /**
- * Per-user PokéCollector accounts (opaque usernames, random per-link passwords). Fail closed:
- * without the admin token, CARD_FLOW_POKECOLLECTOR_USER_PEPPER and CARD_FLOW_POKECOLLECTOR_LINK_KEY
- * accounts stay off (catalog and pricing are unaffected). CARD_FLOW_POKECOLLECTOR_ACCOUNTS=false
- * turns them off on purpose (RELEASE_ENV: off in staging/prod until the relink script has run).
+ * Per-user PokéCollector accounts (opaque usernames, random per-link passwords). Re-review M3:
+ * OFF unless CARD_FLOW_POKECOLLECTOR_ACCOUNTS=true (RELEASE_ENV: keep it off in staging/prod
+ * until the relink script has run). Fail closed even then: without an admin token (or the admin's
+ * credentials), CARD_FLOW_POKECOLLECTOR_USER_PEPPER and CARD_FLOW_POKECOLLECTOR_LINK_KEY accounts
+ * stay off. Catalog and pricing are unaffected either way.
  */
 export function createPokecollectorAccountsFromEnv(env: Env = process.env): {
   accounts: PokecollectorAccounts;
@@ -161,9 +162,21 @@ export function createPokecollectorAccountsFromEnv(env: Env = process.env): {
     selection: { ...selection, kind: "off" as const, enabled: false, reason },
   });
   const flag = envValue(env, "CARD_FLOW_POKECOLLECTOR_ACCOUNTS")?.toLowerCase();
-  if (flag === "false" || flag === "0" || flag === "off") return off("CARD_FLOW_POKECOLLECTOR_ACCOUNTS=false");
-  if (!options.token) return off("CARD_FLOW_POKECOLLECTOR_TOKEN unset (fail closed)");
+  if (flag !== "true") return off("CARD_FLOW_POKECOLLECTOR_ACCOUNTS is not true (off by default)");
+  const adminCredentials = pokecollectorAdminCredentialsFromEnv(env);
+  if (!options.token && !adminCredentials) return off("CARD_FLOW_POKECOLLECTOR_TOKEN unset (fail closed)");
   const { secrets, problem } = pokecollectorLinkSecretsFromEnv(env);
   if (!secrets) return off(`${problem} (fail closed)`);
-  return { accounts: createPokecollectorAccounts({ ...options, secrets }), selection };
+  return { accounts: createPokecollectorAccounts({ ...options, secrets, adminCredentials }), selection };
+}
+
+/**
+ * Re-review M2: optional PokéCollector admin credentials. When set, CardFlow mints its admin token
+ * at first use and again when PokéCollector answers 401 (tokens last 7 days), so
+ * CARD_FLOW_POKECOLLECTOR_TOKEN can be left empty. Without them, refresh the token by hand.
+ */
+export function pokecollectorAdminCredentialsFromEnv(env: Env = process.env): { username: string; password: string } | null {
+  const username = envValue(env, "CARD_FLOW_POKECOLLECTOR_ADMIN_USERNAME");
+  const password = envValue(env, "CARD_FLOW_POKECOLLECTOR_ADMIN_PASSWORD");
+  return username && password ? { username, password } : null;
 }
