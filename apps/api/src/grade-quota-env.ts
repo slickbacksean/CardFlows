@@ -72,3 +72,12 @@ export function cardSightUserCapsFromEnv(env: Env = process.env): { signedIn: nu
     guest: capFromEnv(env.CARD_FLOW_CARDSIGHT_GUEST_MONTHLY_CAP, CARDSIGHT_GUEST_MONTHLY_CAP_DEFAULT),
   };
 }
+
+/**
+ * Sean: 18+ only. The age gate is always on outside tests and can't be turned off in production.
+ * Test suites opt in (`ageGate: true` or CARD_FLOW_AGE_GATE=on).
+ */
+export function ageGateEnabledFromEnv(env: Env = process.env): boolean {
+  if (!isTestEnv(env)) return true;
+  return flag(env.CARD_FLOW_AGE_GATE) === true || env.CARD_FLOW_AGE_GATE?.trim().toLowerCase() === "on";
+}

@@ -134,6 +134,13 @@
       "when": 1791177600000,
       "tag": "0018_provider_consents",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "6",
+      "when": 1791264000000,
+      "tag": "0019_age_confirmations",
+      "breakpoints": true
     }
   ]
 }

@@ -1,4 +1,4 @@
-import { BATCH_GRADE_HEADER, EMAIL_UNVERIFIED_CODE, EMAIL_VERIFICATION_COPY, PREMIUM_REQUIRED_CODE, SIGNUP_REQUIRED_CODE, isPremiumFeature, type PremiumFeature, type SignupReason } from "@cardflow/shared";
+import { AGE_CONFIRMATION_REQUIRED_CODE, AGE_GATE_COPY, AGE_GATE_VERSION, BATCH_GRADE_HEADER, EMAIL_UNVERIFIED_CODE, EMAIL_VERIFICATION_COPY, PREMIUM_REQUIRED_CODE, SIGNUP_REQUIRED_CODE, isPremiumFeature, type PremiumFeature, type SignupReason } from "@cardflow/shared";
 import {
   CARD_FLOW_REQUEST_TIMEOUT_MS,
   cardFlowHttpErrorMessage,
@@ -264,6 +264,14 @@ async function request<T>(
   }
   if (!response.ok) {
     // Sean: pre-grade estimates need a verified email; the app opens the code screen.
+    // Sean: 18+ only. A scan or upload without the age confirmation opens the age gate.
+    if (response.status === 403 && data.error === AGE_CONFIRMATION_REQUIRED_CODE) {
+      const required = new Error(AGE_GATE_COPY.required) as Error & { status?: number; ageRequired?: boolean };
+      required.status = 403;
+      required.ageRequired = true;
+      ageRequiredListener?.();
+      throw required;
+    }
     if (response.status === 403 && data.error === EMAIL_UNVERIFIED_CODE) {
       const unverified = new Error(EMAIL_VERIFICATION_COPY.required) as Error & { status?: number; emailUnverified?: boolean };
       unverified.status = 403;
@@ -989,8 +997,36 @@ export function confirmEmailVerification(code: string) {
   return callApi(apiContract.confirmEmailVerification, { body: { code } });
 }
 
+/** Sign-up carries the device's 18+ result (never a birth date). */
 export function createAccount(email: string, password: string) {
-  return callApi(apiContract.createAccount, { body: { email, password } });
+  return callApi(apiContract.createAccount, {
+    body: { email, password, ageConfirmed18Plus: true, ageGateVersion: AGE_GATE_VERSION },
+  });
+}
+
+/** Sean: 18+ only. */
+export function getAgeConfirmation() {
+  return callApi(apiContract.getAgeConfirmation);
+}
+
+/** Only the 18+ result and gate version are sent; the birth month and year stay on the phone. */
+export function confirmAgeOnServer() {
+  return callApi(apiContract.confirmAge, { body: { ageConfirmed18Plus: true, version: AGE_GATE_VERSION } });
+}
+
+/** Deletes everything for the current session (an account, or a guest's scans and photos). */
+export function deleteCurrentUserData() {
+  return callApi(apiContract.deleteAccountPhotos);
+}
+
+let ageRequiredListener: (() => void) | null = null;
+
+/** The root layout opens the age gate when the API refuses an upload without it. */
+export function onAgeConfirmationRequired(listener: () => void): () => void {
+  ageRequiredListener = listener;
+  return () => {
+    if (ageRequiredListener === listener) ageRequiredListener = null;
+  };
 }
 
 /** Forgot password: the answer is the same whether or not the email has an account. */

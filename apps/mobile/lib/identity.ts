@@ -1,5 +1,6 @@
 import { isGuestUserId, type InvitedIdentity } from "@cardflow/shared";
 import { createAccount, createGuestSession, createSession, getIdentity, listInventory, signInWithPassword } from "./api";
+import { loadAgeLockout, resetAgeGateCache } from "./age-gate";
 import { resetCardSightConsentCache } from "./cardsight-consent";
 import { stopLiveVideoIdentify } from "./live-identify";
 import { clearLivestreamOverlay } from "./livestream";
@@ -62,6 +63,7 @@ export async function signUpWithEmail(email: string, password: string, mode: "si
   rememberIdentity(session.identity);
   // A guest's CardSight answer moves with the account; anyone else is re-checked on next upload.
   resetCardSightConsentCache();
+  resetAgeGateCache();
   restorePromise = Promise.resolve(session);
   return session;
 }
@@ -73,6 +75,7 @@ export async function redeemInviteCode(inviteCode: string): Promise<IdentitySess
   rememberIdentity(session.identity);
   // A guest's CardSight answer moves with the account; anyone else is re-checked on next upload.
   resetCardSightConsentCache();
+  resetAgeGateCache();
   restorePromise = Promise.resolve(session);
   stopLiveVideoIdentify();
   clearLivestreamOverlay();
@@ -80,6 +83,11 @@ export async function redeemInviteCode(inviteCode: string): Promise<IdentitySess
 }
 
 async function restoreIdentitySession(): Promise<IdentitySession> {
+  // Sean: 18+ only. A phone locked out by the age gate sends nothing: no session, no guest.
+  if (await loadAgeLockout()) {
+    rememberIdentity(null);
+    return signedOut;
+  }
   const stored = await loadPersistedSessionToken();
   if (stored) {
     setSessionToken(stored);

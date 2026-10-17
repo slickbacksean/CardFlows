@@ -24,6 +24,21 @@ const CardSightConsentSchema = z.looseObject({
   needsPrompt: z.boolean(),
 });
 
+const AgeConfirmationSchema = z.looseObject({
+  confirmed: z.boolean(),
+  version: z.string().nullable(),
+  confirmedAt: z.string().nullable(),
+  currentVersion: z.string(),
+});
+
+/** Sign-up carries the device-side age check result (never a birth date). */
+const SignUpBody = z.object({
+  email: z.string(),
+  password: z.string(),
+  ageConfirmed18Plus: z.literal(true).optional(),
+  ageGateVersion: z.string().optional(),
+});
+
 const money = z.union([z.string(), z.number()]).nullable().optional();
 
 const PasswordBody = z.object({ email: z.string(), password: z.string() });
@@ -34,7 +49,7 @@ export const accountRoutes = {
     method: "POST",
     path: "/v1/accounts",
     bodyKind: "json",
-    body: PasswordBody,
+    body: SignUpBody,
     response: SessionResponse,
   }),
   signInWithPassword: defineRoute({
@@ -89,6 +104,21 @@ export const accountRoutes = {
     bodyKind: "json",
     body: z.object({ granted: z.boolean(), version: z.string().optional() }),
     response: z.looseObject({ ok: z.literal(true), consent: CardSightConsentSchema }),
+  }),
+  /** Sean: 18+ only. Whether this user (guest or account) confirmed the current age gate. */
+  getAgeConfirmation: defineRoute({
+    method: "GET",
+    path: "/v1/age-confirmation",
+    bodyKind: "none",
+    response: z.looseObject({ ok: z.literal(true), age: AgeConfirmationSchema }),
+  }),
+  /** The device checked month + year; only the 18+ result and gate version are sent. */
+  confirmAge: defineRoute({
+    method: "POST",
+    path: "/v1/age-confirmation",
+    bodyKind: "json",
+    body: z.object({ ageConfirmed18Plus: z.literal(true), version: z.string() }),
+    response: z.looseObject({ ok: z.literal(true), age: AgeConfirmationSchema }),
   }),
   /** D9: guest session (3 free scans). 404 when guest mode is off. */
   createGuestSession: defineRoute({

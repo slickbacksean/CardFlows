@@ -40,6 +40,10 @@ export function guestRouteAllowed(method: string, path: string): boolean {
   if (m === "POST" && (path === "/v1/scans" || path === "/v1/telemetry/perf")) return true;
   // The CardSight consent answer is asked before the first scan, so guests can give it too.
   if (m === "POST" && path === "/v1/consents/cardsight") return true;
+  // Sean: 18+ only. The age gate comes before the first upload, so guests confirm it too.
+  if (m === "POST" && path === "/v1/age-confirmation") return true;
+  // A guest can delete their own guest data (used when the age gate says under 18).
+  if (m === "POST" && path === "/v1/account/delete") return true;
   return false;
 }
 

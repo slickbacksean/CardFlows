@@ -184,11 +184,34 @@ Draft list for Settings:
 
 ---
 
-## 8. Age gate (draft placeholder)
+## 8. Age gate (18+ only)
 
-CardSight’s public terms say their software is not intended for personal information of anyone under 18.
+**Decided (Sean, Oct 16, 2026):** CardFlow is for adults 18 and older only, because CardSight's terms don't allow photos or personal information from anyone under 18.
 
-**Draft:** CardFlow is for users 18 or older. [**Open:** counsel must set the real age, parental-consent, and Pokémon-audience risk.]
+**How it works (`packages/shared/src/age-gate.ts`, `AGE_GATE_VERSION`):**
+- The app asks once for birth month and year. Both pickers start empty and nothing is pre-selected.
+- The phone checks the age, then throws the birth month and year away. They're never stored or sent.
+- The server stores only `age_confirmed_18plus`, a timestamp and the gate version (`age_confirmations`).
+- Guests answer before their first upload, and their confirmation moves to the account at sign-up.
+- Sign-up needs it: the sign-up screen shows the age gate first, and shows "By creating an account, you confirm you're 18 or older and agree to the Terms and Privacy Policy."
+- Testers and existing accounts are asked at their next launch.
+- The confirmation is deleted with the account.
+- Order before the first upload: age gate, then the CardSight prompt, then the upload.
+- The server refuses scans, photo uploads (pre-grade, grade jobs, livestream frames) and sign-up without the confirmation, and never calls CardSight without it.
+
+**Exact copy:** title "How old are you?"; body "CardFlow is for adults 18 and older. Enter your birth month and year."; button "Continue"; capture tip "Photograph only the card. Keep faces, hands, and personal details out of the shot."
+
+**Under 18:**
+- The app shows only "Sorry, CardFlow is only available to people 18 and older." There's no retry and no parent option.
+- Nothing is uploaded, and there's no sign-up. Nothing goes to CardSight or PostHog (analytics is switched off and anything queued is dropped).
+- Any guest data is deleted. That request carries no age or birth date.
+- The phone saves a lockout. A signed-in account is signed out on that phone.
+
+**Privacy policy draft: Age**
+
+> CardFlow is intended only for people 18 and older. We don't knowingly collect personal information from anyone under 18. If you believe someone under 18 has given us information, contact us at [contact email] and we'll delete it.
+
+**Counsel note:** check the Utah and Texas app-store age-verification laws (and any similar state laws) before launch. Also confirm whether a self-declared month/year gate is enough.
 
 ---
 
