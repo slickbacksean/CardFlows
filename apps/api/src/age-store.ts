@@ -3,10 +3,13 @@ import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import { AGE_GATE_VERSION, type AgeConfirmationState } from "@cardflow/shared";
 import { ageConfirmations, schema } from "./db/schema";
 
-/** Sean: 18+ only. The server keeps only that the user confirmed 18+, when, and the gate version. */
+/**
+ * Sean (Oct 17): accounts state 18+ at sign-up. The server keeps only that confirmation, when,
+ * and the statement version. Guests have no row.
+ */
 export interface AgeConfirmationRecord {
   ageConfirmed18Plus: true;
-  confirmedAt: string;
+  ageAttestedAt: string;
   version: string;
 }
 
@@ -20,14 +23,15 @@ export function ageConfirmationState(record: AgeConfirmationRecord | null): AgeC
   return {
     confirmed: Boolean(record?.ageConfirmed18Plus && record.version === AGE_GATE_VERSION),
     version: record?.version ?? null,
-    confirmedAt: record?.confirmedAt ?? null,
+    attestedAt: record?.ageAttestedAt ?? null,
     currentVersion: AGE_GATE_VERSION,
   };
 }
 
-/** Checked before scans, photo uploads, sign-up and CardSight. */
+/** True when this account stated 18+ with the current sign-up statement version. */
 export function hasAgeConfirmation(store: AgeConfirmationStore, userId: string): boolean {
-  return ageConfirmationState(store.get(userId)).confirmed;
+  const record = store.get(userId);
+  return Boolean(record?.ageConfirmed18Plus && record.version === AGE_GATE_VERSION);
 }
 
 export function createMemoryAgeConfirmationStore(): AgeConfirmationStore & {
@@ -40,14 +44,12 @@ export function createMemoryAgeConfirmationStore(): AgeConfirmationStore & {
       return row ? { ...row } : null;
     },
     confirm(userId, version, at) {
-      rows.set(userId, { ageConfirmed18Plus: true, confirmedAt: at, version });
+      rows.set(userId, { ageConfirmed18Plus: true, ageAttestedAt: at, version });
       return { ...rows.get(userId)! };
     },
     deleteUser: (userId) => (rows.delete(userId) ? 1 : 0),
-    /** Guest sign-up: the guest's confirmation carries over unless the account already has one. */
-    moveUser(fromUserId, toUserId) {
-      const guest = rows.get(fromUserId);
-      if (guest && !rows.has(toUserId)) rows.set(toUserId, guest);
+    /** Guests never attest (only accounts do), so nothing carries over; any guest row is dropped. */
+    moveUser(fromUserId) {
       rows.delete(fromUserId);
     },
   };
@@ -56,14 +58,14 @@ export function createMemoryAgeConfirmationStore(): AgeConfirmationStore & {
 export function createSqliteAgeConfirmationStore(db: BetterSQLite3Database<typeof schema>): AgeConfirmationStore {
   const get = (userId: string): AgeConfirmationRecord | null => {
     const row = db.select().from(ageConfirmations).where(eq(ageConfirmations.userId, userId)).get();
-    return row?.ageConfirmed18Plus ? { ageConfirmed18Plus: true, confirmedAt: row.confirmedAt, version: row.version } : null;
+    return row?.ageConfirmed18Plus ? { ageConfirmed18Plus: true, ageAttestedAt: row.ageAttestedAt, version: row.version } : null;
   };
   return {
     get,
     confirm(userId, version, at) {
       db.insert(ageConfirmations)
-        .values({ userId, ageConfirmed18Plus: true, confirmedAt: at, version })
-        .onConflictDoUpdate({ target: ageConfirmations.userId, set: { ageConfirmed18Plus: true, confirmedAt: at, version } })
+        .values({ userId, ageConfirmed18Plus: true, ageAttestedAt: at, version })
+        .onConflictDoUpdate({ target: ageConfirmations.userId, set: { ageConfirmed18Plus: true, ageAttestedAt: at, version } })
         .run();
       return get(userId)!;
     },

@@ -44,7 +44,7 @@ function setup(
   opts: {
     cardSightOk?: boolean;
     serverCache?: boolean;
-    cardSightUserCaps?: { signedIn: number; guest: number };
+    cardSightUserCaps?: { signedIn: number };
     cardSight?: CardRecognitionProvider;
     now?: () => Date;
     ageConfirmed?: boolean;
@@ -139,7 +139,26 @@ describe("CardSight consent: the server enforces it before calling the adapter",
   });
 });
 
-describe.each(["sqlite", "memory"] as const)("guest consent moves to the account at sign-up (%s)", (kind) => {
+describe.each(["sqlite", "memory"] as const)("Policy Reviewer: guests never get CardSight (%s)", (kind) => {
+  function open() {
+    const inner = kind === "sqlite" ? createSqliteStore({ sqlitePath: ":memory:" }) : createMemoryStore();
+    const store: StorePort = {
+      ...inner,
+      readStoredScanImage: (_scanId, storageRef) => ({ storageRef, mimeType: "image/jpeg", bytes: STORED_JPEG }),
+    };
+    const local = spy("mock");
+    const cardSight = spy("cardsight");
+    const app = createApp(store, {
+      devAutoSession: false,
+      guestMode: true,
+      ageGate: true,
+      recognition: local.provider,
+      cardSight: cardSight.provider,
+      liveIdentifyEnabled: true,
+      serverCache: false,
+    });
+    return { app, store, local, cardSight };
+  }
   async function req(app: App, pathName: string, init: { method?: string; body?: unknown; token?: string } = {}) {
     const res = await app.request(pathName, {
       method: init.method ?? (init.body !== undefined ? "POST" : "GET"),
@@ -148,44 +167,78 @@ describe.each(["sqlite", "memory"] as const)("guest consent moves to the account
     });
     return { status: res.status, body: (await res.json()) as Record<string, unknown> };
   }
-  let store: StorePort;
-  function open() {
-    store = kind === "sqlite" ? createSqliteStore({ sqlitePath: ":memory:" }) : createMemoryStore();
-    return createApp(store, { devAutoSession: false, guestMode: true });
+  async function scanAs(app: App, token: string) {
+    const form = new FormData();
+    form.append("captureMethod", "camera_photo");
+    form.append("image", new File([Uint8Array.from([0xff, 0xd8, 0xff, 0xd9])], "still.jpg", { type: "image/jpeg" }));
+    expect((await app.request("/v1/scans", { method: "POST", body: form, headers: { authorization: `Bearer ${token}` } })).status).toBe(201);
   }
+  const userIdOf = async (app: App, token: string) =>
+    ((await req(app, "/v1/identity", { token })).body.identity as { userId: string }).userId;
 
-  it("a guest's Allow is the new account's consent (same version and time)", async () => {
-    const app = open();
+  it("guests can't give consent or attest 18+, and are refused CardSight even with a stored consent", async () => {
+    const { app, store, local, cardSight } = open();
     const guest = (await req(app, "/v1/sessions/guest", { method: "POST" })).body.token as string;
-    // Guests can see and answer the prompt before their first upload.
-    expect(((await req(app, "/v1/consents/cardsight", { token: guest })).body.consent as Record<string, unknown>).needsPrompt).toBe(true);
-    const given = await req(app, "/v1/consents/cardsight", { body: { granted: true, version: CARDSIGHT_CONSENT_VERSION }, token: guest });
-    expect(given.status).toBe(200);
-    const grantedAt = (given.body.consent as { grantedAt: string }).grantedAt;
+    const consentTry = await req(app, "/v1/consents/cardsight", { body: { granted: true, version: CARDSIGHT_CONSENT_VERSION }, token: guest });
+    expect(consentTry.status).toBe(403);
+    expect(consentTry.body.code).toBe("signup_required");
+    expect((await req(app, "/v1/age-confirmation", { body: { ageConfirmed18Plus: true, version: AGE_GATE_VERSION }, token: guest })).status).toBe(403);
+    expect(((await req(app, "/v1/age-confirmation", { token: guest })).body.age as { confirmed: boolean }).confirmed).toBe(false);
 
-    const up = await req(app, "/v1/accounts", { body: { email: "guest@example.com", password: "correct horse battery" }, token: guest });
-    expect(up.status).toBe(200);
-    const account = await req(app, "/v1/consents/cardsight", { token: up.body.token as string });
-    expect(account.body.consent).toMatchObject({ granted: true, version: CARDSIGHT_CONSENT_VERSION, grantedAt, needsPrompt: false });
-    // The guest's consent history moves with it.
-    const accountId = ((await req(app, "/v1/identity", { token: up.body.token as string })).body.identity as { userId: string }).userId;
-    expect(store.consents.events(accountId).map((e) => [e.kind, e.at])).toEqual([["grant", grantedAt]]);
+    // Even rows written straight into the store don't open CardSight for a guest.
+    const guestId = await userIdOf(app, guest);
+    store.consents.grant(guestId, "cardsight", CARDSIGHT_CONSENT_VERSION, "2026-10-17T00:00:00.000Z");
+    store.ageConfirmations.confirm(guestId, AGE_GATE_VERSION, "2026-10-17T00:00:00.000Z");
+    await scanAs(app, guest);
+    expect(cardSight.calls).toHaveLength(0);
+    expect(local.calls.length).toBeGreaterThan(0);
   });
 
-  it("a guest's Don't allow moves too, and an account's own earlier answer wins on sign-in", async () => {
-    const app = open();
-    const g1 = (await req(app, "/v1/sessions/guest", { method: "POST" })).body.token as string;
-    await req(app, "/v1/consents/cardsight", { body: { granted: false }, token: g1 });
-    const up = await req(app, "/v1/accounts", { body: { email: "sam@example.com", password: "correct horse battery" }, token: g1 });
+  it("at sign-up no guest consent carries over, and the guest's earlier scans never go to CardSight", async () => {
+    const { app, store, cardSight } = open();
+    const guest = (await req(app, "/v1/sessions/guest", { method: "POST" })).body.token as string;
+    store.consents.grant(await userIdOf(app, guest), "cardsight", CARDSIGHT_CONSENT_VERSION, "2026-10-17T00:00:00.000Z");
+    await scanAs(app, guest);
+    await scanAs(app, guest);
+    const up = await req(app, "/v1/accounts", {
+      body: { email: "guest@example.com", password: "correct horse battery", ageConfirmed18Plus: true, ageGateVersion: AGE_GATE_VERSION },
+      token: guest,
+    });
+    expect(up.status).toBe(200);
     const token = up.body.token as string;
-    expect((await req(app, "/v1/consents/cardsight", { token })).body.consent).toMatchObject({ granted: false, needsPrompt: false });
-    await req(app, "/v1/consents/cardsight", { body: { granted: true, version: CARDSIGHT_CONSENT_VERSION }, token });
+    expect(up.body.movedScans).toBe(2);
+    // The account answers for itself: no consent, history or usage came from the guest.
+    expect((await req(app, "/v1/consents/cardsight", { token })).body.consent).toMatchObject({ granted: false, needsPrompt: true });
+    const accountId = await userIdOf(app, token);
+    expect(store.consents.events(accountId)).toEqual([]);
+    expect(cardSight.calls).toHaveLength(0);
 
-    // A later guest who declines, then signs in: the account keeps its own Allow.
-    const g2 = (await req(app, "/v1/sessions/guest", { method: "POST" })).body.token as string;
-    await req(app, "/v1/consents/cardsight", { body: { granted: false }, token: g2 });
-    const signIn = await req(app, "/v1/sessions/password", { body: { email: "sam@example.com", password: "correct horse battery" }, token: g2 });
-    expect((await req(app, "/v1/consents/cardsight", { token: signIn.body.token as string })).body.consent).toMatchObject({ granted: true });
+    // Only photos taken after consent go to CardSight.
+    await req(app, "/v1/consents/cardsight", { body: { granted: true, version: CARDSIGHT_CONSENT_VERSION }, token });
+    expect(cardSight.calls).toHaveLength(0);
+    await scanAs(app, token);
+    expect(cardSight.calls).toHaveLength(1);
+  });
+
+  it("an existing account (or tester) needs the in-app 18+ confirmation before CardSight; until then, our matcher", async () => {
+    const { app, store, local, cardSight } = open();
+    const up = await req(app, "/v1/accounts", {
+      body: { email: "old@example.com", password: "correct horse battery", ageConfirmed18Plus: true, ageGateVersion: AGE_GATE_VERSION },
+    });
+    const token = up.body.token as string;
+    const userId = await userIdOf(app, token);
+    store.ageConfirmations.deleteUser(userId); // as if created before the sign-up checkbox
+    await req(app, "/v1/consents/cardsight", { body: { granted: true, version: CARDSIGHT_CONSENT_VERSION }, token });
+    await scanAs(app, token);
+    expect(cardSight.calls).toHaveLength(0);
+    expect(local.calls.length).toBeGreaterThan(0);
+
+    expect((await req(app, "/v1/age-confirmation", { body: { ageConfirmed18Plus: false, version: AGE_GATE_VERSION }, token })).status).toBe(400);
+    expect((await req(app, "/v1/age-confirmation", { body: { ageConfirmed18Plus: true, version: "old" }, token })).status).toBe(409);
+    const confirmed = await req(app, "/v1/age-confirmation", { body: { ageConfirmed18Plus: true, version: AGE_GATE_VERSION }, token });
+    expect(confirmed.body.age).toMatchObject({ confirmed: true, version: AGE_GATE_VERSION, attestedAt: expect.any(String) });
+    await scanAs(app, token);
+    expect(cardSight.calls).toHaveLength(1);
   });
 });
 
@@ -294,7 +347,7 @@ describe("Backend review M4: consent history is append-only and a decline is nev
 describe("Backend review M5: per-user monthly CardSight cap", () => {
   it("signed-in users fall back to the local matcher once their cap is used; it resets next month", async () => {
     let at = new Date("2026-10-20T12:00:00.000Z");
-    const { app, store, local, cardSight } = setup({ cardSightUserCaps: { signedIn: 2, guest: 1 }, now: () => at });
+    const { app, store, local, cardSight } = setup({ cardSightUserCaps: { signedIn: 2 }, now: () => at });
     await consent(app, { granted: true, version: CARDSIGHT_CONSENT_VERSION });
     await scan(app);
     await scan(app);
@@ -310,7 +363,7 @@ describe("Backend review M5: per-user monthly CardSight cap", () => {
   });
 
   it("cache hits don't use up the cap", async () => {
-    const { app, store, cardSight } = setup({ cardSightUserCaps: { signedIn: 1, guest: 1 }, serverCache: true });
+    const { app, store, cardSight } = setup({ cardSightUserCaps: { signedIn: 1 }, serverCache: true });
     await consent(app, { granted: true, version: CARDSIGHT_CONSENT_VERSION });
     await scan(app);
     await scan(app);
@@ -319,45 +372,8 @@ describe("Backend review M5: per-user monthly CardSight cap", () => {
     expect(store.consents.monthlyUse(await currentUserId(app), month)).toBe(1);
   });
 
-  it.each(["memory", "sqlite"] as const)("%s: guests get the smaller cap (0 = never)", async (kind) => {
-    const inner = kind === "sqlite" ? createSqliteStore({ sqlitePath: ":memory:" }) : createMemoryStore();
-    const store: StorePort = {
-      ...inner,
-      readStoredScanImage: (_scanId, storageRef) => ({ storageRef, mimeType: "image/jpeg", bytes: STORED_JPEG }),
-    };
-    const local = spy("mock");
-    const cardSight = spy("cardsight");
-    const app = createApp(store, {
-      devAutoSession: false,
-      guestMode: true,
-      recognition: local.provider,
-      cardSight: cardSight.provider,
-      liveIdentifyEnabled: true,
-      serverCache: false,
-      cardSightUserCaps: { signedIn: 50, guest: 1 },
-    });
-    const guest = ((await (await app.request("/v1/sessions/guest", { method: "POST" })).json()) as { token: string }).token;
-    const auth = { authorization: `Bearer ${guest}` };
-    await app.request("/v1/age-confirmation", {
-      method: "POST",
-      headers: { ...auth, "content-type": "application/json" },
-      body: JSON.stringify({ ageConfirmed18Plus: true, version: AGE_GATE_VERSION }),
-    });
-    await app.request("/v1/consents/cardsight", {
-      method: "POST",
-      headers: { ...auth, "content-type": "application/json" },
-      body: JSON.stringify({ granted: true, version: CARDSIGHT_CONSENT_VERSION }),
-    });
-    for (let i = 0; i < 2; i += 1) {
-      const form = new FormData();
-      form.append("captureMethod", "camera_photo");
-      form.append("image", new File([Uint8Array.from([0xff, 0xd8, 0xff, 0xd9])], "still.jpg", { type: "image/jpeg" }));
-      expect((await app.request("/v1/scans", { method: "POST", body: form, headers: auth })).status).toBe(201);
-    }
-    expect(cardSight.calls).toHaveLength(1);
-    expect(local.calls.length).toBeGreaterThan(0);
-
-    const none = setup({ cardSightUserCaps: { signedIn: 0, guest: 0 } });
+  it("a cap of 0 turns CardSight off for accounts", async () => {
+    const none = setup({ cardSightUserCaps: { signedIn: 0 } });
     await consent(none.app, { granted: true, version: CARDSIGHT_CONSENT_VERSION });
     await scan(none.app);
     expect(none.cardSight.calls).toHaveLength(0);

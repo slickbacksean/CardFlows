@@ -1,4 +1,5 @@
 import {
+  AGE_GATE_COPY,
   MARKETPLACE_AUTOMATION_NO_ENABLE_COPY,
   PRACTICE_COPY,
   SETTINGS_KICKER,
@@ -21,6 +22,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { PreferencesScreenHeader } from "@/components/ui/preferences-screen-header";
 import { getHealth } from "@/lib/api";
 import {
+  isGuestSession,
   loadIdentitySession,
 } from "@/lib/identity";
 import { colors, space } from "@/lib/theme";
@@ -96,7 +98,12 @@ export default function SettingsScreen() {
 
         <JobRow label="Usage analytics" onPress={() => router.push("/analytics")} />
 
-        <JobRow label="Card recognition" onPress={() => router.push("/card-recognition")} />
+        {/* Policy Reviewer (Oct 17): guests get no provider toggle, only a sign-up row. */}
+        {isGuestSession() ? (
+          <JobRow label={AGE_GATE_COPY.guestSettings} onPress={() => router.push("/sign-up")} />
+        ) : (
+          <JobRow label="Card recognition" onPress={() => router.push("/card-recognition")} />
+        )}
 
         <Text style={styles.section}>{SETTINGS_STACK_SECTION_LABEL}</Text>
         {SETTINGS_STACK_STATUS_ROWS.map((row) => {

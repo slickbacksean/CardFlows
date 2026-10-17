@@ -727,7 +727,7 @@ export interface StorePort {
   idempotency: IdempotencyStore;
   /** Sean: CardSight consent (version + timestamps). */
   consents: ConsentStore;
-  /** Sean: 18+ only (confirmation, time and gate version; never a birth date). */
+  /** Sean (Oct 17): accounts' 18+ attestation (time + wording version; never a birth date). */
   ageConfirmations: AgeConfirmationStore;
   /** P2-07 pre-grade estimate history. */
   gradeHistory: GradeHistoryStore;
@@ -1166,10 +1166,10 @@ function createMemoryAccountStore(
       for (const [id, c] of store.confirmations) {
         if ((c as { userId?: string }).userId === fromUserId) store.confirmations.set(id, { ...c, userId: toUserId } as ConfirmationRecord);
       }
-      // Consent given as a guest carries over unless the account already answered; the guest's
-      // consent history and this month's CardSight use move with it (as SQLite does by user_id).
-      (port.consents as ConsentStore & { moveUser(from: string, to: string): void }).moveUser(fromUserId, toUserId);
-      // The guest's 18+ confirmation carries over too.
+      // Policy Reviewer (Oct 17): guests never get CardSight, so no guest CardSight consent,
+      // history or usage carries over at sign-up; the account answers for itself.
+      port.consents.deleteUser(fromUserId);
+      // Guests make no 18+ statement; nothing carries over (any stray row is dropped).
       (port.ageConfirmations as AgeConfirmationStore & { moveUser(from: string, to: string): void }).moveUser(fromUserId, toUserId);
       this.deleteSessionsForUser(fromUserId);
       return { scans, confirmEvents: 0 };

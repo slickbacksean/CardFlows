@@ -32,10 +32,10 @@ function foldersUpTo(lastTag: string): string {
   return dir;
 }
 
-describe("migrations 0000–0019", () => {
-  it("journal is ordered: idx 0..19 in order, `when` strictly increasing, files exist", () => {
+describe("migrations 0000–0020", () => {
+  it("journal is ordered: idx 0..20 in order, `when` strictly increasing, files exist", () => {
     const j = journal();
-    expect(j.entries.map((e) => e.idx)).toEqual(Array.from({ length: 20 }, (_, i) => i));
+    expect(j.entries.map((e) => e.idx)).toEqual(Array.from({ length: 21 }, (_, i) => i));
     for (let i = 1; i < j.entries.length; i += 1) expect(j.entries[i]!.when).toBeGreaterThan(j.entries[i - 1]!.when);
     expect(j.entries.slice(14).map((e) => e.tag)).toEqual([
       "0014_accounts_guest_sessions",
@@ -44,6 +44,7 @@ describe("migrations 0000–0019", () => {
       "0017_email_verification",
       "0018_provider_consents",
       "0019_age_confirmations",
+      "0020_age_attested_at",
     ]);
     for (const e of j.entries) expect(readFileSync(path.join(mvpMigrationsFolder(), `${e.tag}.sql`), "utf8").length).toBeGreaterThan(0);
   });
@@ -51,7 +52,7 @@ describe("migrations 0000–0019", () => {
   it("applies all of them to a fresh database", () => {
     const { sqlite } = applyMvpMigrations(path.join(tmp(), "fresh.sqlite"));
     const applied = sqlite.prepare("SELECT COUNT(*) AS n FROM __drizzle_migrations").get() as { n: number };
-    expect(applied.n).toBe(20);
+    expect(applied.n).toBe(21);
     sqlite.close();
   });
 
@@ -94,7 +95,7 @@ describe("migrations 0000–0019", () => {
     expect(usage("alex", alexPeriod.key)).toBe(3);
     expect(sqlite.prepare("SELECT anchor_at FROM grade_accounts WHERE user_id = 'jordan'").get()).toEqual({ anchor_at: jordanAnchor });
     expect(usage("jordan", quotaPeriodFor(jordanAnchor, new Date()).key)).toBe(2);
-    expect((sqlite.prepare("SELECT COUNT(*) AS n FROM __drizzle_migrations").get() as { n: number }).n).toBe(20);
+    expect((sqlite.prepare("SELECT COUNT(*) AS n FROM __drizzle_migrations").get() as { n: number }).n).toBe(21);
     sqlite.close();
   });
 
@@ -138,6 +139,20 @@ describe("migrations 0000–0019", () => {
     // Nobody is anchored to the deploy month's 1st unless that's their real history; reruns are no-ops.
     expect(quotaPeriodFor("2026-03-20T09:00:00.000Z", now).resetsAt).toBe("2026-10-20T09:00:00.000Z");
     expect(backfillQuotaAnchors(sqlite, now)).toBe(0);
+    sqlite.close();
+  });
+
+  it("0020: confirmed_at is renamed to age_attested_at and existing rows keep their time", () => {
+    const file = path.join(tmp(), "pre-0020.sqlite");
+    const old = new Database(file);
+    old.pragma("foreign_keys = OFF");
+    migrate(drizzle(old), { migrationsFolder: foldersUpTo("0019_age_confirmations") });
+    old.prepare("INSERT INTO age_confirmations (user_id, age_confirmed_18plus, confirmed_at, version) VALUES ('u1', 1, '2026-10-17T05:00:00.000Z', 'v1')").run();
+    old.close();
+    const { sqlite } = applyMvpMigrations(file);
+    expect(sqlite.prepare("SELECT * FROM age_confirmations").all()).toEqual([
+      { user_id: "u1", age_confirmed_18plus: 1, age_attested_at: "2026-10-17T05:00:00.000Z", version: "v1" },
+    ]);
     sqlite.close();
   });
 
