@@ -2,7 +2,8 @@
  * D14 (Sean-approved): premium tier. Placeholder prices until IAP ships (CARD_FLOW_IAP_ENABLED off).
  * Batch grading and full estimate history are premium-only. Free users see their 10 most recent
  * estimates per card; older ones keep saving on the server and show once the user upgrades.
- * Allowances and purchased credits reset monthly on the user's own date; nothing rolls over.
+ * The monthly allowance resets on the user's own date (billing date) and doesn't roll over.
+ * Bought credit packs never expire (Sean, Oct 16; Apple 3.1.1) and are spent after the allowance.
  */
 import { GRADE_HISTORY_FREE_VISIBLE } from "./grade-history";
 import { GRADE_QUOTA_FREE_PER_MONTH, GRADE_QUOTA_PREMIUM_PER_MONTH } from "./grade-quota";
@@ -15,8 +16,16 @@ export const PREMIUM_PLACEHOLDER_PRICING = {
   freeEstimatesPerMonth: GRADE_QUOTA_FREE_PER_MONTH,
   /** Sean: allowances reset monthly on the user's own date; unused estimates don't roll over. */
   estimatesRollOver: false,
-  /** Sean: purchased extra credits also reset monthly and don't roll over. */
-  creditsRollOver: false,
+  /** Sean (Oct 16): bought credit-pack credits never expire (Apple 3.1.1). */
+  creditsExpire: false,
+  /**
+   * Credit packs (Sean, Oct 16): Premium-only, built after the Apple developer account exists.
+   * Not for sale yet. Credits are spent only after the monthly allowance is used up.
+   */
+  creditPacks: [
+    { credits: 10, price: "$2.99" },
+    { credits: 25, price: "$5.99" },
+  ],
   freeHistoryVisible: GRADE_HISTORY_FREE_VISIBLE,
 } as const;
 
@@ -41,8 +50,18 @@ const FEATURE_LINE: Record<PremiumFeature, string> = {
 export const PREMIUM_PROMPT_COPY = {
   title: "Premium is coming",
   plans: `${PREMIUM_PLACEHOLDER_PRICING.monthly} or ${PREMIUM_PLACEHOLDER_PRICING.yearly}`,
-  includes: `${PREMIUM_PLACEHOLDER_PRICING.premiumEstimatesPerMonth} pre-grade estimates a month (free: ${PREMIUM_PLACEHOLDER_PRICING.freeEstimatesPerMonth}), batch pre-grade and full estimate history. Allowances and extra credits reset monthly and don't roll over.`,
+  includes: `${PREMIUM_PLACEHOLDER_PRICING.premiumEstimatesPerMonth} pre-grade estimates a month (free: ${PREMIUM_PLACEHOLDER_PRICING.freeEstimatesPerMonth}), batch pre-grade and full estimate history. The monthly allowance resets on your billing date and doesn't roll over.`,
   notYet: "Upgrades aren't available yet. Prices may change before launch.",
+} as const;
+
+/**
+ * For the credit-pack screen once packs ship (after the Apple account). Not shown yet: packs
+ * aren't for sale, so the app doesn't mention them until purchases are live.
+ */
+export const CREDIT_PACK_COPY = {
+  premiumOnly: "Credit packs are for Premium members.",
+  packs: PREMIUM_PLACEHOLDER_PRICING.creditPacks.map((p) => `${p.credits} pre-grade estimates for ${p.price}`),
+  neverExpire: "Bought credits never expire. They're used only after your monthly pre-grade estimates run out.",
 } as const;
 
 export function premiumFeatureLine(feature: PremiumFeature): string {

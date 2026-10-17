@@ -18,7 +18,7 @@ const isIso = (v: unknown): v is string => typeof v === "string" && Number.isFin
  *   3. the earliest known activity (scans, sessions, inventory, history …), else
  *   4. the earliest usage month (`YYYY-MM` → the 1st), else `updated_at`, else now.
  * The usage they already have this calendar month (`YYYY-MM`, the old key) becomes the usage of
- * their in-progress period, and their credits stay live in that period (no reset on migration).
+ * their in-progress period, and their bought credits are kept (they never expire).
  * Only rows with `anchor_at IS NULL` are touched, so this is safe to run on every start.
  */
 export function backfillQuotaAnchors(sqlite: Sqlite, now: Date = new Date()): number {
