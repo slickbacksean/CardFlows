@@ -4,8 +4,12 @@
  * pre-prompt always comes first. Denied camera still leaves a working path:
  * pick a photo or search by name.
  */
+/** Sean: permission text names where photos go (CardSight is named in the consent prompt). */
+export const PHOTO_PERMISSION_PURPOSE =
+  "Photos are uploaded to CardFlow, and to our card-recognition provider if you allow it, to identify your cards." as const;
+
 export const CAMERA_USAGE_DESCRIPTION =
-  "CardFlow uses the camera to photograph English Pokémon singles." as const;
+  "CardFlow uses the camera to photograph your Pokémon cards. Photos are uploaded to CardFlow, and to our card-recognition provider if you allow it, to identify your cards." as const;
 
 export const MOTION_USAGE_DESCRIPTION =
   "CardFlow uses motion to help you hold your phone level over a card." as const;

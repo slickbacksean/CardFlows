@@ -56,6 +56,8 @@ describe("MVP CRM schema", () => {
     expect(tables.map((row) => row.name)).toEqual([
       "card_external_ids",
       "cardflow_cards",
+      "cardsight_user_usage",
+      "consent_events",
       "crm_confirmations",
       "crm_grading_returned",
       "crm_grading_submitted",
@@ -75,6 +77,7 @@ describe("MVP CRM schema", () => {
       "idempotency_keys",
       "password_reset_tokens",
       "portfolio_value_snapshots",
+      "provider_consents",
       "purchase_events",
       "scan_confirm_events",
       "user_accounts",

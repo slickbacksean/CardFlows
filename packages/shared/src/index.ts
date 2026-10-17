@@ -714,6 +714,7 @@ export {
   CAMERA_PREPROMPT_CONTINUE,
   CAMERA_PREPROMPT_TITLE,
   CAMERA_USAGE_DESCRIPTION,
+  PHOTO_PERMISSION_PURPOSE,
   CHOOSE_A_PHOTO_LABEL,
   CHOOSE_PHOTO_LABEL,
   GRADE_CAMERA_PREPROMPT_BODY,
@@ -834,3 +835,4 @@ export * from "./premium";
 export * from "./quota-period";
 export * from "./account-auth";
 export * from "./email-verification";
+export * from "./cardsight-consent";

@@ -5,6 +5,9 @@ import { createApp } from "./app";
 import { createCatalogFromEnv } from "./catalog-env";
 import { createPricingFromEnv, createPokecollectorAccountsFromEnv } from "./pokecollector-env";
 import { createRecognitionFromEnv } from "./recognition-env";
+import { cardSightAdapterFromEnv } from "./cardsight-adapter";
+import { consumeCardSightBudget } from "./cardsight-budget";
+import { cardSightMonthlyBudgetFromEnv, cardSightUserCapsFromEnv } from "./grade-quota-env";
 import { createGradeEstimateFromEnv, gradeEngineProbeFromEnv } from "./grade-estimate-env";
 import { createSlabPricingFromEnv } from "./poketrace-env";
 import { resolveDevAutoSession } from "./session";
@@ -43,6 +46,12 @@ const gradeEngineProbe = gradeEngineProbeFromEnv(cardgrading);
 const { slabPricing, selection: slabPricingSelection } = createSlabPricingFromEnv();
 const { client: liveIdentityOpenclip, reason: openclipReason } =
   resolveLiveIdentityOpenclipFromEnv();
+// Sean: CardSight only with CARD_FLOW_CARDSIGHT_ADAPTER=on + CARDSIGHT_API_KEY, and the app calls
+// it only for users who allowed it (current consent version); everyone else gets the local matcher.
+const cardSightBudget = cardSightMonthlyBudgetFromEnv();
+const cardSight = cardSightAdapterFromEnv(process.env, {
+  consumeBudget: () => consumeCardSightBudget({ consume: store.consumeVendorQuota, cap: cardSightBudget, now: new Date() }),
+});
 const liveVideoYoloHolder: { detector: ObbDetector | null } = { detector: null };
 const app = createApp(store, {
   devAutoSession: resolveDevAutoSession(),
@@ -50,6 +59,8 @@ const app = createApp(store, {
   pricing,
   pokecollectorAccounts,
   recognition,
+  cardSight,
+  cardSightUserCaps: cardSightUserCapsFromEnv(),
   grading,
   cardgrading,
   gradeEngineProbe,

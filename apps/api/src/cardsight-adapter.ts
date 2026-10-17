@@ -201,7 +201,7 @@ export function createRecognitionWithFallback(
   };
 }
 
-/** Adapter only when explicitly enabled AND a key is present. Not wired yet (D3). */
+/** Adapter only when explicitly enabled AND a key is present. Called only with user consent (app.ts). */
 export function cardSightAdapterFromEnv(
   env: NodeJS.Dict<string | undefined>,
   extra: Omit<CardSightAdapterOptions, "apiKey"> = {},

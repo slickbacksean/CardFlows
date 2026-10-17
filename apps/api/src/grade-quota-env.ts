@@ -51,3 +51,24 @@ export function cardSightMonthlyBudgetFromEnv(env: Env = process.env): number | 
   if (isTestEnv(env) && !env.CARD_FLOW_CARDSIGHT_MONTHLY_BUDGET) return null;
   return positiveInt(env.CARD_FLOW_CARDSIGHT_MONTHLY_BUDGET, CARDSIGHT_MONTHLY_BUDGET_DEFAULT);
 }
+
+/** Backend review M5: default per-user CardSight calls per calendar month. */
+export const CARDSIGHT_USER_MONTHLY_CAP_DEFAULT = 50;
+export const CARDSIGHT_GUEST_MONTHLY_CAP_DEFAULT = 3;
+
+function capFromEnv(raw: string | undefined, fallback: number): number {
+  const value = raw?.trim();
+  if (!value || !/^\d+$/.test(value)) return fallback;
+  return Number(value);
+}
+
+/**
+ * Backend review M5: CARD_FLOW_CARDSIGHT_USER_MONTHLY_CAP (default 50) and
+ * CARD_FLOW_CARDSIGHT_GUEST_MONTHLY_CAP (default 3). 0 = that group never uses CardSight.
+ */
+export function cardSightUserCapsFromEnv(env: Env = process.env): { signedIn: number; guest: number } {
+  return {
+    signedIn: capFromEnv(env.CARD_FLOW_CARDSIGHT_USER_MONTHLY_CAP, CARDSIGHT_USER_MONTHLY_CAP_DEFAULT),
+    guest: capFromEnv(env.CARD_FLOW_CARDSIGHT_GUEST_MONTHLY_CAP, CARDSIGHT_GUEST_MONTHLY_CAP_DEFAULT),
+  };
+}

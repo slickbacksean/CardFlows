@@ -32,16 +32,17 @@ function foldersUpTo(lastTag: string): string {
   return dir;
 }
 
-describe("migrations 0000–0017", () => {
-  it("journal is ordered: idx 0..17 in order, `when` strictly increasing, files exist", () => {
+describe("migrations 0000–0018", () => {
+  it("journal is ordered: idx 0..18 in order, `when` strictly increasing, files exist", () => {
     const j = journal();
-    expect(j.entries.map((e) => e.idx)).toEqual(Array.from({ length: 18 }, (_, i) => i));
+    expect(j.entries.map((e) => e.idx)).toEqual(Array.from({ length: 19 }, (_, i) => i));
     for (let i = 1; i < j.entries.length; i += 1) expect(j.entries[i]!.when).toBeGreaterThan(j.entries[i - 1]!.when);
     expect(j.entries.slice(14).map((e) => e.tag)).toEqual([
       "0014_accounts_guest_sessions",
       "0015_purchase_events_idempotency",
       "0016_quota_anchor_credits_period",
       "0017_email_verification",
+      "0018_provider_consents",
     ]);
     for (const e of j.entries) expect(readFileSync(path.join(mvpMigrationsFolder(), `${e.tag}.sql`), "utf8").length).toBeGreaterThan(0);
   });
@@ -49,7 +50,7 @@ describe("migrations 0000–0017", () => {
   it("applies all of them to a fresh database", () => {
     const { sqlite } = applyMvpMigrations(path.join(tmp(), "fresh.sqlite"));
     const applied = sqlite.prepare("SELECT COUNT(*) AS n FROM __drizzle_migrations").get() as { n: number };
-    expect(applied.n).toBe(18);
+    expect(applied.n).toBe(19);
     sqlite.close();
   });
 
@@ -92,7 +93,7 @@ describe("migrations 0000–0017", () => {
     expect(usage("alex", alexPeriod.key)).toBe(3);
     expect(sqlite.prepare("SELECT anchor_at FROM grade_accounts WHERE user_id = 'jordan'").get()).toEqual({ anchor_at: jordanAnchor });
     expect(usage("jordan", quotaPeriodFor(jordanAnchor, new Date()).key)).toBe(2);
-    expect((sqlite.prepare("SELECT COUNT(*) AS n FROM __drizzle_migrations").get() as { n: number }).n).toBe(18);
+    expect((sqlite.prepare("SELECT COUNT(*) AS n FROM __drizzle_migrations").get() as { n: number }).n).toBe(19);
     sqlite.close();
   });
 

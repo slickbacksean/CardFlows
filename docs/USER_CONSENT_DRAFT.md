@@ -40,6 +40,16 @@ You can skip saving the photo after the scan if you only want a one-time check. 
 
 ## 2. Sending the selected image to CardSight
 
+**Decided (Sean, Oct 17):** a one-time prompt before the first photo is uploaded, with a Settings toggle to withdraw. The shipped text is `CARDSIGHT_CONSENT_COPY` in `packages/shared/src/cardsight-consent.ts`, version `CARDSIGHT_CONSENT_VERSION` (bumped to `2026-10-17.2` for the Policy Reviewer wording, so earlier answers are asked again). This disclosure is the only place CardFlow copy may say "AI"; estimate copy never does. It is stored on the server with its version and timestamps (`provider_consents`: granted, declined or withdrawn). A "Don't allow" is recorded as a decline, never as a grant. Every grant, decline and withdrawal is also appended to `consent_events`, a history that is never edited; it's deleted with the account. Each user also has a monthly CardSight cap (50 signed-in, 3 guests by default). Past it, that user's photos stay on CardFlow's own matcher until the next month. The server checks consent right before calling CardSight. Without consent, CardFlow's own matcher or manual search is used. Changing the wording or CardSight's terms means bumping the version, and everyone is asked again.
+
+> **Card recognition.** CardFlow can use CardSight, our card-recognition provider, to identify cards from your photos. If you allow it, your card photos are sent to CardSight. CardSight's terms let it keep these images and use them to train its AI models. Turning this off later stops new uploads but doesn't remove photos CardSight already has. If you don't allow it, CardFlow matches cards on its own servers, or you can search manually. You can change this anytime in Settings.
+>
+> **Settings > Card recognition** (toggle help): When on, card photos are also sent to CardSight, our card-recognition provider. CardSight's terms let it keep these images and use them to train its AI models. Turning this off stops new uploads but doesn't remove photos CardSight already has. When off, CardFlow matches cards on its own servers only.
+>
+> Buttons: **Allow CardSight** · **Don't allow**
+
+The earlier per-photo draft below is kept for counsel's reference.
+
 **Screen title (draft):** Send this photo for a card suggestion?
 
 **Body (draft):**
@@ -132,6 +142,10 @@ Marketplace apps have their own rules. Using overlays, bots, or scrapers can vio
 
 [ ] Share usage analytics (off by default)
 
+**Privacy policy draft: card-recognition provider (CardSight)**
+
+CardFlow can use **CardSight**, our card-recognition provider, to identify cards from your photos. If you allow it, your card photos are sent to CardSight. CardSight's terms let it keep these images and use them to train its AI models. Turning this off later (Settings > Card recognition) stops new uploads but doesn't remove photos CardSight already has, and deleting a scan or your account in CardFlow doesn't delete CardSight's copies. If you don't allow it, CardFlow matches cards on its own servers, or you can search manually. We send CardSight the photo and the fields its API needs, not your email. We record when you allowed or turned this off, and which version of this notice you saw.
+
 **Privacy policy draft: email service provider (Resend)**
 
 We use **Resend** (Resend, Inc.), an email service provider that processes data on our behalf, to send account emails: your sign-up verification code and password reset codes. Resend receives your email address and the message we send, including the code. It does not receive your photos, cards, prices or anything else in your account. We don't use Resend for marketing email.
@@ -161,7 +175,7 @@ If you turn on usage analytics, CardFlow sends counts and timings to **PostHog I
 Draft list for Settings:
 
 - Manual photo scans: always user-started
-- Send selected photo to CardSight: ask each time / ask once and remember [counsel to pick]
+- Use CardSight for card recognition: On / Off (decided: ask once, then this toggle; off = CardFlow's matcher only)
 - Save scan photos: On / Off
 - Usage analytics: On / Off (hidden if no SDK)
 - Live visual analysis: Off (unavailable in MVP)

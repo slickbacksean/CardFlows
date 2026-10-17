@@ -14,6 +14,16 @@ const SessionResponse = z.looseObject({
   emailVerified: z.boolean().optional(),
 });
 
+const CardSightConsentSchema = z.looseObject({
+  granted: z.boolean(),
+  version: z.string().nullable(),
+  grantedAt: z.string().nullable(),
+  declinedAt: z.string().nullable(),
+  withdrawnAt: z.string().nullable(),
+  currentVersion: z.string(),
+  needsPrompt: z.boolean(),
+});
+
 const money = z.union([z.string(), z.number()]).nullable().optional();
 
 const PasswordBody = z.object({ email: z.string(), password: z.string() });
@@ -64,6 +74,21 @@ export const accountRoutes = {
     bodyKind: "json",
     body: z.object({ code: z.string() }),
     response: z.looseObject({ ok: z.literal(true), emailVerified: z.literal(true) }),
+  }),
+  /** Sean: CardSight consent (version + timestamps). */
+  getCardSightConsent: defineRoute({
+    method: "GET",
+    path: "/v1/consents/cardsight",
+    bodyKind: "none",
+    response: z.looseObject({ ok: z.literal(true), consent: CardSightConsentSchema }),
+  }),
+  /** Allow (current version only, else 409) or decline/withdraw. */
+  setCardSightConsent: defineRoute({
+    method: "POST",
+    path: "/v1/consents/cardsight",
+    bodyKind: "json",
+    body: z.object({ granted: z.boolean(), version: z.string().optional() }),
+    response: z.looseObject({ ok: z.literal(true), consent: CardSightConsentSchema }),
   }),
   /** D9: guest session (3 free scans). 404 when guest mode is off. */
   createGuestSession: defineRoute({

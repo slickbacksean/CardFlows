@@ -38,6 +38,8 @@ export function guestRouteAllowed(method: string, path: string): boolean {
   const m = method.toUpperCase();
   if (m === "GET" || m === "HEAD") return true;
   if (m === "POST" && (path === "/v1/scans" || path === "/v1/telemetry/perf")) return true;
+  // The CardSight consent answer is asked before the first scan, so guests can give it too.
+  if (m === "POST" && path === "/v1/consents/cardsight") return true;
   return false;
 }
 
