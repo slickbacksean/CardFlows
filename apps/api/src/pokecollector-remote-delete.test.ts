@@ -8,7 +8,7 @@ import { createPokecollectorAccounts, type PokecollectorUserMapping } from "./po
  */
 type Call = { method: string; path: string; body: unknown; auth: string | null };
 
-function fakePokecollector(options: { adminDelete: number; adminPut?: number }) {
+function fakePokecollector(options: { adminDelete: number; adminDeleteBody?: unknown; adminPut?: number }) {
   const calls: Call[] = [];
   const collection = new Map([
     ["11", { id: 11, card_id: "sv1-1_en" }],
@@ -24,7 +24,7 @@ function fakePokecollector(options: { adminDelete: number; adminPut?: number }) 
     else if (init.body instanceof URLSearchParams) body = Object.fromEntries(init.body);
     calls.push({ method, path: url.pathname, body, auth });
     const reply = (status: number, value: unknown = {}) => new Response(JSON.stringify(value), { status });
-    if (method === "DELETE" && url.pathname === "/api/auth/users/7") return reply(options.adminDelete);
+    if (method === "DELETE" && url.pathname === "/api/auth/users/7") return reply(options.adminDelete, options.adminDeleteBody ?? {});
     if (method === "PUT" && url.pathname === "/api/auth/users/7") return reply(options.adminPut ?? 200);
     if (method === "POST" && url.pathname === "/api/auth/login") return reply(200, { access_token: "user-token", user: { id: 7 } });
     if (method === "GET" && url.pathname === "/api/collection/") return reply(200, [...collection.values()]);
@@ -40,12 +40,16 @@ function fakePokecollector(options: { adminDelete: number; adminPut?: number }) 
   return { calls, collection, wishlist, fetchImpl };
 }
 
-const mapping: PokecollectorUserMapping = {
+const link: PokecollectorUserMapping = {
   userId: "acct_1",
   pokecollectorUserId: "7",
   pokecollectorUsername: "cardflow-sean",
   updatedAt: "2026-10-17T00:00:00.000Z",
 };
+/** What the deletion queue passes while the deleting process still has the link in memory. */
+const mapping = { pokecollectorUserId: "7", mapping: link };
+/** After a restart the queue only has the remote ID. */
+const remoteOnly = { pokecollectorUserId: "7" };
 
 describe("PokéCollector remote delete on account deletion", () => {
   it("deletes the remote user with the admin API when allowed (strongest option)", async () => {
@@ -56,10 +60,27 @@ describe("PokéCollector remote delete on account deletion", () => {
     expect(fake.calls[0]!.auth).toBe("Bearer admin-token");
   });
 
-  it("an already-deleted remote user (404) counts as deleted", async () => {
-    const fake = fakePokecollector({ adminDelete: 404 });
+  it("a 404 counts as already deleted only when PokéCollector says \"User not found\"", async () => {
+    const gone = fakePokecollector({ adminDelete: 404, adminDeleteBody: { detail: "User not found" } });
+    const accounts = createPokecollectorAccounts({ baseUrl: "http://pc.test", token: "admin-token", passwordPepper: "pepper", fetchImpl: gone.fetchImpl, maxRetries: 0 });
+    expect(await accounts.deleteRemoteUser(remoteOnly)).toBe("user_deleted");
+    expect(gone.calls).toHaveLength(1);
+    // A 404 from a missing route (FastAPI's "Not Found", or a proxy page) is not proof.
+    for (const body of [{ detail: "Not Found" }, "<html>404</html>", {}]) {
+      const missing = fakePokecollector({ adminDelete: 404, adminDeleteBody: body, adminPut: 404 });
+      const other = createPokecollectorAccounts({ baseUrl: "http://pc.test", token: "admin-token", passwordPepper: "pepper", fetchImpl: missing.fetchImpl, maxRetries: 0 });
+      expect(await other.deleteRemoteUser(remoteOnly), JSON.stringify(body)).toBe("failed");
+    }
+  });
+
+  it("calls go through the pacer: one login, and a request for every call", async () => {
+    const fake = fakePokecollector({ adminDelete: 403, adminPut: 403 });
     const accounts = createPokecollectorAccounts({ baseUrl: "http://pc.test", token: "admin-token", passwordPepper: "pepper", fetchImpl: fake.fetchImpl, maxRetries: 0 });
-    expect(await accounts.deleteRemoteUser(mapping)).toBe("user_deleted");
+    const taken: string[] = [];
+    await accounts.deleteRemoteUser(mapping, { pacer: { take: async (kind) => void taken.push(kind) } });
+    expect(taken.filter((k) => k === "login")).toHaveLength(1);
+    // Every HTTP call took a slot (a login counts as a request too).
+    expect(taken.length).toBe(fake.calls.length);
   });
 
   it("without admin rights: deletes every collection and wishlist item as the user, then rotates the password", async () => {

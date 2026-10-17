@@ -79,6 +79,7 @@ describe("MVP CRM schema", () => {
       "idempotency_keys",
       "north_star_weekly_totals",
       "password_reset_tokens",
+      "pokecollector_pending_deletions",
       "portfolio_value_snapshots",
       "provider_consents",
       "purchase_events",

@@ -7,7 +7,17 @@ import { createMemoryAgeConfirmationStore, type AgeConfirmationStore } from "./a
 import { createMemoryConsentStore, type ConsentStore } from "./consent-store";
 import { createMemoryIdempotencyStore, type IdempotencyStore } from "./idempotency-store";
 import { createMemoryGradeHistoryStore, type GradeHistoryStore } from "./grade-history-store";
-import { EMAIL_CODE_MAX_ATTEMPTS, emailSendKey, normalizeEmail, type AccountRecord, type AccountStore, type DeletionAuditEntry } from "./account-store";
+import {
+  EMAIL_CODE_MAX_ATTEMPTS,
+  emailSendKey,
+  normalizeEmail,
+  resolveNorthStarTotals,
+  type AccountRecord,
+  type AccountStore,
+  type DeletionAuditEntry,
+  type PokecollectorDeletionMode,
+  type PokecollectorPendingDeletion,
+} from "./account-store";
 import {
   catalogFingerprint,
   cachedCatalogCardMatches,
@@ -1093,6 +1103,18 @@ function createMemoryAccountStore(
   const byEmail = new Map<string, string>();
   const deletionAudit: DeletionAuditEntry[] = [];
   const northStarTotals = new Map<string, NorthStarWeekTotal>();
+  const pendingDeletions = new Map<string, PokecollectorPendingDeletion>();
+  const enqueueDeletion = ({ remoteUserId, mode, at }: { remoteUserId: string; mode: PokecollectorDeletionMode; at: string }) => {
+    const existing = pendingDeletions.get(remoteUserId);
+    pendingDeletions.set(remoteUserId, {
+      remoteUserId,
+      mode,
+      attempts: existing?.attempts ?? 0,
+      nextAttemptAt: at,
+      createdAt: existing?.createdAt ?? at,
+      lastResult: existing?.lastResult ?? null,
+    });
+  };
   const live = (s: StoredSession, now: string) => s.expiresAt > now;
   return {
     createAccount({ email, passwordHash, at }) {
@@ -1219,7 +1241,7 @@ function createMemoryAccountStore(
     },
     deleteAllUserRows(userId, options = {}) {
       const counts: Record<string, number> = {};
-      for (const t of options.northStarTotals ?? []) {
+      for (const t of resolveNorthStarTotals(options.northStarTotals)) {
         const row = northStarTotals.get(t.weekStart) ?? { weekStart: t.weekStart, purchased: 0, scans: 0, activeResellers: 0 };
         northStarTotals.set(t.weekStart, {
           weekStart: t.weekStart,
@@ -1256,7 +1278,32 @@ function createMemoryAccountStore(
         accounts.delete(userId);
         counts.user_accounts = 1;
       }
+      const remote = options.pokecollectorRemote;
+      if (remote) {
+        const others = port.countPokecollectorLinks(remote.remoteUserId);
+        enqueueDeletion({ remoteUserId: remote.remoteUserId, mode: remote.hold || others > 0 ? "hold" : "delete", at: remote.at });
+      }
       return counts;
+    },
+    listPokecollectorDeletions() {
+      return [...pendingDeletions.values()]
+        .sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.remoteUserId.localeCompare(b.remoteUserId))
+        .map((row) => ({ ...row }));
+    },
+    listDuePokecollectorDeletions(now, limit) {
+      return [...pendingDeletions.values()]
+        .filter((row) => row.mode === "delete" && row.nextAttemptAt <= now)
+        .sort((a, b) => a.nextAttemptAt.localeCompare(b.nextAttemptAt) || a.remoteUserId.localeCompare(b.remoteUserId))
+        .slice(0, limit)
+        .map((row) => ({ ...row }));
+    },
+    enqueuePokecollectorDeletion: (entry) => enqueueDeletion(entry),
+    updatePokecollectorDeletion(remoteUserId, patch) {
+      const row = pendingDeletions.get(remoteUserId);
+      if (row) pendingDeletions.set(remoteUserId, { ...row, ...patch });
+    },
+    removePokecollectorDeletion(remoteUserId) {
+      pendingDeletions.delete(remoteUserId);
     },
     listNorthStarTotals() {
       return [...northStarTotals.values()].sort((a, b) => a.weekStart.localeCompare(b.weekStart)).map((t) => ({ ...t }));

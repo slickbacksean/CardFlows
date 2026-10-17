@@ -163,8 +163,9 @@ import {
   offPokecollectorAccounts,
   type PokecollectorAccounts,
   type PokecollectorCollectionCopy,
-  type PokecollectorRemoteDeletion,
 } from "./pokecollector-accounts";
+import { createPokecollectorDeletionQueue, type PokecollectorDeletionQueue } from "./pokecollector-deletion-queue";
+import type { PokecollectorPacer } from "./pokecollector-pacer";
 import { SCAN_IMAGE_MAX_BYTES, type ScanImageMimeType } from "./scan-image";
 import {
   gradeUploadCache as defaultGradeUploadCache,
@@ -359,6 +360,14 @@ export interface CreateAppOptions {
   /** Backend review M1 (P4): orphan sweep interval (0 = off; default 6 h) and a test handle. */
   orphanSweepIntervalMs?: number;
   onOrphanSweep?: (run: () => { accountsSwept: number; imagesSwept: number }) => void;
+  /**
+   * Backend re-review H1/M1 (P4): how often the PokéCollector deletion queue runs (default 1 min;
+   * 0 turns the timer off, tests run it through `onPokecollectorDeletionQueue`).
+   */
+  pokecollectorDeletionIntervalMs?: number;
+  onPokecollectorDeletionQueue?: (queue: PokecollectorDeletionQueue) => void;
+  /** Pacing for background PokéCollector calls (tests pass an unpaced one). */
+  pokecollectorPacer?: PokecollectorPacer;
   /** D9: guest sessions minted per client IP per hour (default 10). */
   guestMintsPerHour?: number;
   /** Catalog provider. Tests default to mock; local/staging may inject live TCGdex or PokéCollector. */
@@ -585,9 +594,10 @@ export function createApp(
   };
   // Before H2, deleted accounts' ledger rows stayed under `deleted_<uuid>`: fold them into the
   // totals once (they have no scans left) and delete them.
+  // Re-review L4: the counts are read inside the delete's transaction.
   for (const legacyId of store.purchaseLedger.listUserIds()) {
     if (!legacyId.startsWith(ANONYMIZED_USER_PREFIX)) continue;
-    store.accounts.deleteAllUserRows(legacyId, { northStarTotals: northStarTotalsFor(legacyId) });
+    store.accounts.deleteAllUserRows(legacyId, { northStarTotals: () => northStarTotalsFor(legacyId) });
   }
   const runGuestCleanup = () => {
     const at = now().toISOString();
@@ -599,7 +609,12 @@ export function createApp(
       if (store.accounts.hasLiveSession(userId, at)) continue;
       const scans = store.listScans(userId).length;
       store.deleteUserPhotos(userId);
-      store.accounts.deleteAllUserRows(userId, { northStarTotals: northStarTotalsFor(userId) });
+      // Re-review H1: a guest's PokéCollector user is shared (legacy `cardflow-guest`): held, never deleted.
+      const link = getPokecollectorUserMapping(userId);
+      store.accounts.deleteAllUserRows(userId, {
+        northStarTotals: () => northStarTotalsFor(userId),
+        pokecollectorRemote: link ? { remoteUserId: link.pokecollectorUserId, hold: true, at } : undefined,
+      });
       if (scans > 0) {
         guestsPurged += 1;
         scansDeleted += scans;
@@ -1985,41 +2000,63 @@ export function createApp(
   });
 
   /**
-   * Backend re-review (P4): delete the cards and wishlist CardFlow stored on PokéCollector for this
-   * link (the remote user itself when PokéCollector allows it). Never blocks or fails the account
-   * delete. A remote user other CardFlow users are also linked to (guests' shared legacy user, or
-   * a legacy email-derived name) is never destroyed; the opaque per-user accounts PR fixes that.
+   * Backend re-review H1/M1 (P4): what CardFlow stored on PokéCollector is deleted by a
+   * background queue (pokecollector-deletion-queue.ts): the remote user ID is queued in the same
+   * transaction as the account's rows, retried with backoff, paced under PokéCollector's limits,
+   * and the delete response never waits on PokéCollector. Guests and shared remote users are
+   * queued as "hold" (never deleted here; the opaque-accounts relink freezes them).
    */
-  const deletePokecollectorRemote = async (
-    userId: string,
-    link: ReturnType<typeof getPokecollectorUserMapping>,
-  ): Promise<PokecollectorRemoteDeletion | "not_linked"> => {
-    if (!link) return "not_linked";
-    if (isGuestUserId(userId) || store.countPokecollectorLinks(link.pokecollectorUserId) > 0) return "skipped";
-    try {
-      return await pokecollectorAccounts.deleteRemoteUser(link);
-    } catch {
-      return "failed";
-    }
-  };
+  const pokecollectorDeletions = createPokecollectorDeletionQueue({
+    accounts: store.accounts,
+    pokecollector: () => pokecollectorAccounts,
+    linksTo: (remoteUserId) => store.countPokecollectorLinks(remoteUserId),
+    now,
+    pacer: options.pokecollectorPacer,
+  });
+  options.onPokecollectorDeletionQueue?.(pokecollectorDeletions);
+  if (options.pokecollectorDeletionIntervalMs !== 0) {
+    const deletionTimer = setInterval(() => {
+      pokecollectorDeletions.run().catch(() => undefined);
+    }, options.pokecollectorDeletionIntervalMs ?? 60 * 1000);
+    deletionTimer.unref?.();
+  }
 
-  /** Everything for one user: rows (one transaction), then files, then staged uploads. */
-  const deleteUserEverything = (userId: string, kind: DeletionAuditKind) => {
+  /**
+   * Everything for one user: rows (one transaction), then files, then staged uploads.
+   * `activeWeeksCounted`: re-review edge case. When the orphan sweep deletes rows that showed up
+   * after the account was already deleted (a purchase or scan in flight), the account's active
+   * weeks were counted at its first delete, so only the stray purchases and scans are added.
+   */
+  const deleteUserEverything = (userId: string, kind: DeletionAuditKind, deleteOptions: { activeWeeksCounted?: boolean } = {}) => {
     // Data Engineer review: every user_id row in one transaction first, then the files (whose
     // locations were collected before the rows went). A crash in between leaves orphan files
     // with no personal rows, which the photo retention sweep removes, never rows without files.
     const removePhotos = store.prepareUserPhotoDeletion(userId);
     // Backend review H2 (P4): the user's weekly North Star counts become anonymous totals in the
     // same transaction that hard-deletes every row, including purchase_events, so past weeks
-    // keep their numbers and nothing per-user is left.
-    const northStarTotals = northStarTotalsFor(userId);
-    // The PokéCollector link (crm_pokecollector_users) is read first: the row goes with every
-    // other user_id row, then what CardFlow stored on PokéCollector is deleted (below).
+    // keep their numbers and nothing per-user is left (re-review L4: read inside it).
+    const northStarTotals = () => {
+      const totals = northStarTotalsFor(userId);
+      return deleteOptions.activeWeeksCounted ? totals.map((t) => ({ ...t, activeResellers: 0 })) : totals;
+    };
+    // The PokéCollector link (crm_pokecollector_users) goes with every other user_id row; its
+    // remote user ID is queued for deletion in that same transaction.
     const pokecollectorLink = getPokecollectorUserMapping(userId);
-    const rows = store.accounts.deleteAllUserRows(userId, { northStarTotals });
+    const pokecollectorRemote = pokecollectorLink
+      ? { remoteUserId: pokecollectorLink.pokecollectorUserId, hold: isGuestUserId(userId), at: now().toISOString() }
+      : undefined;
+    const rows = store.accounts.deleteAllUserRows(userId, { northStarTotals, pokecollectorRemote });
     const photos = removePhotos();
     const staged = gradeUploads.releaseUser(userId);
-    const pokecollector = deletePokecollectorRemote(userId, pokecollectorLink);
+    let pokecollector: "not_linked" | "queued" | "held" = "not_linked";
+    if (pokecollectorLink) {
+      const queued = store.accounts.listPokecollectorDeletions().find((row) => row.remoteUserId === pokecollectorLink.pokecollectorUserId);
+      pokecollector = queued?.mode === "delete" ? "queued" : "held";
+      if (pokecollector === "queued") {
+        pokecollectorDeletions.remember(pokecollectorLink);
+        pokecollectorDeletions.kick();
+      }
+    }
     // Backend review M1/L1: in-flight work is refused from now on, and in-memory state goes.
     pruneDeletionMemory();
     deletedUserIds.set(userId, now().getTime());
@@ -2082,10 +2119,13 @@ export function createApp(
       const goneAccount = userId.startsWith("acct_") && !store.accounts.getAccount(userId);
       if (!goneAccount && !wasDeleted(userId)) continue;
       if (store.accounts.hasLiveSession(userId, at)) continue;
-      deleteUserEverything(userId, "orphan_sweep");
+      // Re-review edge: these are stray rows of an account already deleted (and counted).
+      deleteUserEverything(userId, "orphan_sweep", { activeWeeksCounted: true });
       accountsSwept += 1;
     }
     const imagesSwept = store.sweepOrphanScanImages(new Date(now().getTime() - 60 * 60 * 1000));
+    // Re-review H1: the sweep also retries due PokéCollector deletes (the queue's timer does too).
+    pokecollectorDeletions.kick();
     return { accountsSwept, imagesSwept };
   };
   options.onOrphanSweep?.(sweepOrphanedUserData);
@@ -2138,7 +2178,8 @@ export function createApp(
     const token = parseBearerToken(c.req.header("authorization"));
     if (token) deletionReceipts.set(deletionReceiptKey(token), now().getTime());
     return c.json({
-      pokecollector: await pokecollector,
+      // Re-review M1: never waits on PokéCollector ("queued": deleted in the background).
+      pokecollector,
       ok: true,
       photosDeleted: photos.deleted + staged,
       salesDeleted: rows.user_card_sales ?? 0,

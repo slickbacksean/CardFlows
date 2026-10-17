@@ -13,6 +13,7 @@ import {
   throwForPokecollectorStatus,
   type PokecollectorHttpOptions,
 } from "./pokecollector-http";
+import { unpacedPokecollector, type PokecollectorPacer } from "./pokecollector-pacer";
 
 export interface PokecollectorUserMapping {
   userId: string;
@@ -51,24 +52,44 @@ export interface PokecollectorAccounts {
     input: PokecollectorCollectionWrite,
   ): Promise<PokecollectorCollectionCopy | null>;
   /**
-   * Account deletion (Backend re-review, P4): deletes what CardFlow stored on PokéCollector for
-   * this link, strongest option first (PokéCollector v1.51 API):
+   * Account deletion (Backend re-review, P4). Called by the background deletion queue
+   * (pokecollector-deletion-queue.ts), never on the request path. Strongest option first
+   * (PokéCollector v1.51 API):
    * 1. `DELETE /api/auth/users/{id}` (admin token): PokéCollector deletes the user and every row
-   *    it owns (collection, wishlist, binders, photos, settings). 404 counts as already gone.
-   * 2. Otherwise, signed in as the user: `DELETE /api/collection/{item}` and
-   *    `DELETE /api/wishlist/{item}` for every item, then the password is rotated to a random one
-   *    nobody keeps (`PUT /api/auth/users/{id}` with is_active false, or `PUT /api/auth/me/password`).
-   * Then the cached token is dropped. Never throws; the caller drops the mapping row either way.
+   *    it owns (collection, wishlist, binders, photos, settings). A 404 counts as already gone only
+   *    when the body says `"User not found"` (re-review H1; a missing route is also a 404).
+   * 2. Otherwise, signed in as the user (needs `target.mapping`, which the queue only has until
+   *    a restart): delete every `/api/collection/{item}` and `/api/wishlist/{item}`, then rotate
+   *    the password to a random one nobody keeps (`PUT /api/auth/users/{id}` with is_active false,
+   *    or `PUT /api/auth/me/password`).
+   * Every call goes through `options.pacer` (60 requests and 5 logins a minute per IP). Never throws.
    */
-  deleteRemoteUser(mapping: PokecollectorUserMapping): Promise<PokecollectorRemoteDeletion>;
+  deleteRemoteUser(target: PokecollectorDeletionTarget, options?: { pacer?: PokecollectorPacer }): Promise<PokecollectorRemoteDeletion>;
+}
+
+export interface PokecollectorDeletionTarget {
+  pokecollectorUserId: string;
+  /** The deleted user's link, while the process that deleted it is still running. */
+  mapping?: PokecollectorUserMapping | null;
 }
 
 /**
  * user_deleted: the PokéCollector user is gone. cards_deleted: every collection and wishlist item
- * was deleted and the password rotated. partial: some of that failed. skipped: nothing to do
- * (accounts off, or the remote user is shared and must not be destroyed). failed: unreachable.
+ * was deleted and the password rotated. partial: some of that failed (retried). skipped: accounts
+ * are off. failed: unreachable or refused (retried).
  */
 export type PokecollectorRemoteDeletion = "user_deleted" | "cards_deleted" | "partial" | "skipped" | "failed";
+
+/** Re-review H1: PokéCollector's own "no such user" answer (api/auth.py), not a missing route. */
+export async function isPokecollectorUserNotFound(response: Response): Promise<boolean> {
+  if (response.status !== 404) return false;
+  try {
+    const payload = (await response.clone().json()) as unknown;
+    return isRecord(payload) && payload.detail === "User not found";
+  } catch {
+    return false;
+  }
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -247,10 +268,10 @@ export function createMockPokecollectorAccounts(): MockPokecollectorAccounts {
     async addWatchlist(mapping, input) {
       return pushCopy(wishlists, mapping, input);
     },
-    async deleteRemoteUser(mapping) {
-      collections.delete(mapping.pokecollectorUserId);
-      wishlists.delete(mapping.pokecollectorUserId);
-      users.delete(mapping.userId);
+    async deleteRemoteUser(target) {
+      collections.delete(target.pokecollectorUserId);
+      wishlists.delete(target.pokecollectorUserId);
+      for (const [userId, mapping] of users) if (mapping.pokecollectorUserId === target.pokecollectorUserId) users.delete(userId);
       return "user_deleted";
     },
     seedCollection(pokecollectorUserId, items) {
@@ -363,7 +384,8 @@ export function createPokecollectorAccounts(
   }
 
   /** Raw item IDs (collection or wishlist) for the signed-in user. */
-  async function listItemIds(token: string, pathName: string): Promise<string[] | null> {
+  async function listItemIds(token: string, pathName: string, pacer: PokecollectorPacer): Promise<string[] | null> {
+    await pacer.take("request");
     const response = await userHttp(token).request(pathName);
     if (!response.ok) return null;
     return recordsFromUnknown(await readPokecollectorJson(response))
@@ -371,11 +393,12 @@ export function createPokecollectorAccounts(
       .filter((id): id is string => Boolean(id));
   }
 
-  async function deleteItems(token: string, basePath: string): Promise<boolean> {
-    const ids = await listItemIds(token, basePath);
+  async function deleteItems(token: string, basePath: string, pacer: PokecollectorPacer): Promise<boolean> {
+    const ids = await listItemIds(token, basePath, pacer);
     if (!ids) return false;
     let ok = true;
     for (const id of ids) {
+      await pacer.take("request");
       const response = await userHttp(token).request(`${basePath.replace(/\/+$/, "")}/${encodeURIComponent(id)}`, {
         method: "DELETE",
       });
@@ -385,15 +408,22 @@ export function createPokecollectorAccounts(
   }
 
   /** A random password nobody keeps, so the old login stops working. */
-  async function rotatePassword(mapping: PokecollectorUserMapping, token: string | null): Promise<boolean> {
+  async function rotatePassword(
+    remoteUserId: string,
+    mapping: PokecollectorUserMapping | null,
+    token: string | null,
+    pacer: PokecollectorPacer,
+  ): Promise<boolean> {
     const next = `cf-${randomBytes(24).toString("base64url")}`;
-    const admin = await adminHttp.request(`${POKECOLLECTOR_AUTH_USERS_PATH}/${encodeURIComponent(mapping.pokecollectorUserId)}`, {
+    await pacer.take("request");
+    const admin = await adminHttp.request(`${POKECOLLECTOR_AUTH_USERS_PATH}/${encodeURIComponent(remoteUserId)}`, {
       method: "PUT",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ password: next, is_active: false }),
     });
     if (admin.ok) return true;
-    if (!token) return false;
+    if (!token || !mapping) return false;
+    await pacer.take("request");
     const self = await userHttp(token).request(`${POKECOLLECTOR_AUTH_USERS_PATH.replace(/\/users$/, "")}/me/password`, {
       method: "PUT",
       headers: { "content-type": "application/json" },
@@ -405,17 +435,24 @@ export function createPokecollectorAccounts(
     return self.ok;
   }
 
-  async function deleteRemote(mapping: PokecollectorUserMapping): Promise<PokecollectorRemoteDeletion> {
-    const removed = await adminHttp.request(
-      `${POKECOLLECTOR_AUTH_USERS_PATH}/${encodeURIComponent(mapping.pokecollectorUserId)}`,
-      { method: "DELETE" },
-    );
-    if (removed.ok || removed.status === 404) return "user_deleted";
+  async function pacedLogin(username: string, pacer: PokecollectorPacer): Promise<string | null> {
+    if (!tokenByUsername.has(username)) await pacer.take("login");
+    return login(username);
+  }
+
+  async function deleteRemote(target: PokecollectorDeletionTarget, pacer: PokecollectorPacer): Promise<PokecollectorRemoteDeletion> {
+    const remoteUserId = target.pokecollectorUserId;
+    const mapping = target.mapping && target.mapping.pokecollectorUserId === remoteUserId ? target.mapping : null;
+    await pacer.take("request");
+    const removed = await adminHttp.request(`${POKECOLLECTOR_AUTH_USERS_PATH}/${encodeURIComponent(remoteUserId)}`, {
+      method: "DELETE",
+    });
+    if (removed.ok || (await isPokecollectorUserNotFound(removed))) return "user_deleted";
     // No admin rights (or PokéCollector refused): delete every item as the user, then lock it.
-    const token = await login(mapping.pokecollectorUsername);
-    const cards = token ? await deleteItems(token, POKECOLLECTOR_COLLECTION_PATH) : false;
-    const wishlist = token ? await deleteItems(token, POKECOLLECTOR_WISHLIST_PATH) : false;
-    const rotated = await rotatePassword(mapping, token);
+    const token = mapping ? await pacedLogin(mapping.pokecollectorUsername, pacer) : null;
+    const cards = token ? await deleteItems(token, POKECOLLECTOR_COLLECTION_PATH, pacer) : false;
+    const wishlist = token ? await deleteItems(token, POKECOLLECTOR_WISHLIST_PATH, pacer) : false;
+    const rotated = await rotatePassword(remoteUserId, mapping, token, pacer);
     if (cards && wishlist && rotated) return "cards_deleted";
     return token || rotated ? "partial" : "failed";
   }
@@ -477,13 +514,13 @@ export function createPokecollectorAccounts(
         return null;
       }
     },
-    async deleteRemoteUser(mapping) {
+    async deleteRemoteUser(target, deleteOptions = {}) {
       try {
-        return await deleteRemote(mapping);
+        return await deleteRemote(target, deleteOptions.pacer ?? unpacedPokecollector);
       } catch {
         return "failed";
       } finally {
-        tokenByUsername.delete(mapping.pokecollectorUsername);
+        if (target.mapping) tokenByUsername.delete(target.mapping.pokecollectorUsername);
       }
     },
   };

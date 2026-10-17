@@ -7,9 +7,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { emailSendKey } from "./account-store";
 import { createApp } from "./app";
 import { createIdempotencyRegistry } from "./idempotency";
-import { createMockPokecollectorAccounts, type PokecollectorUserMapping } from "./pokecollector-accounts";
 import { createSqliteStore, type SqliteStorePort } from "./sqlite-store";
-import { createMemoryStore } from "./store";
 
 /** P4: account deletion end to end, for every kind of session the app can hold. */
 const stores: SqliteStorePort[] = [];
@@ -127,86 +125,7 @@ describe("P4 account deletion end to end", () => {
     expect((await call(app, "/v1/account/delete", { method: "POST" })).status).toBe(401);
   });
 
-  it("deletes the PokéCollector link and the cards and wishlist CardFlow stored there", async () => {
-    const accounts = createMockPokecollectorAccounts();
-    const deleted: PokecollectorUserMapping[] = [];
-    const deleteRemoteUser = accounts.deleteRemoteUser.bind(accounts);
-    accounts.deleteRemoteUser = async (mapping) => {
-      deleted.push(mapping);
-      return deleteRemoteUser(mapping);
-    };
-    const { app, store } = open({ pokecollectorAccounts: accounts });
-    const { token, userId } = await signUp(app, "linked@example.com");
-    expect((await call(app, "/v1/identity", { token })).status).toBe(200);
-    const mapping = store.getPokecollectorUserMapping(userId)!;
-    expect(mapping).toBeDefined();
-    await accounts.addPurchased(mapping, { tcgdexId: "sv1-1" });
-    await accounts.addWatchlist(mapping, { tcgdexId: "sv1-2" });
-    expect(store.accounts.countUserRows(userId).crm_pokecollector_users).toBe(1);
-    const res = await deleteWith(app, token, PW);
-    expect(res.status).toBe(200);
-    expect(res.body.pokecollector).toBe("user_deleted");
-    expect(store.getPokecollectorUserMapping(userId)).toBeUndefined();
-    expect(remaining(store.accounts.countUserRows(userId))).toEqual([]);
-    expect(deleted.map((m) => m.userId)).toEqual([userId]);
-    expect(await accounts.listCollection(mapping)).toEqual([]);
-    expect(await accounts.listWishlist(mapping)).toEqual([]);
-  });
-
-  it("a PokéCollector user other CardFlow users are linked to is never destroyed", async () => {
-    const accounts = createMockPokecollectorAccounts();
-    let calls = 0;
-    accounts.deleteRemoteUser = async () => {
-      calls += 1;
-      return "user_deleted";
-    };
-    const fresh = createSqliteStore({ sqlitePath: ":memory:" });
-    stores.push(fresh);
-    // SQLite refuses a second link to one remote ID; the memory twin doesn't, so the guard is
-    // checked there (and on legacy data the opaque-accounts migration script cleans up).
-    const link = { userId: "u1", pokecollectorUserId: "9", pokecollectorUsername: "cardflow-sean", updatedAt: "2026-10-17T00:00:00.000Z" };
-    const sqliteRefused = (() => {
-      try {
-        fresh.savePokecollectorUserMapping(link);
-        fresh.savePokecollectorUserMapping({ ...link, userId: "u2", pokecollectorUsername: "x" });
-        return false;
-      } catch {
-        return true;
-      }
-    })();
-    expect(sqliteRefused).toBe(true);
-    const memory = createMemoryStore();
-    const memApp = createApp(memory, { devAutoSession: false, guestMode: true, orphanSweepIntervalMs: 0, pokecollectorAccounts: accounts });
-    const signed = await signUp(memApp, "shared-mem@example.com");
-    await call(memApp, "/v1/identity", { token: signed.token });
-    const memMapping = memory.getPokecollectorUserMapping(signed.userId)!;
-    memory.savePokecollectorUserMapping({ ...memMapping, userId: "someone-else" });
-    const res = await deleteWith(memApp, signed.token, PW);
-    expect(res.status).toBe(200);
-    expect(res.body.pokecollector).toBe("skipped");
-    expect(calls).toBe(0);
-  });
-
-  it("a PokéCollector failure never blocks the delete", async () => {
-    for (const failure of ["reject", "throw"] as const) {
-      const accounts = createMockPokecollectorAccounts();
-      accounts.deleteRemoteUser =
-        failure === "reject"
-          ? async () => {
-              throw new Error("pokecollector down");
-            }
-          : () => {
-              throw new Error("pokecollector down");
-            };
-      const { app, store } = open({ pokecollectorAccounts: accounts });
-      const { token, userId } = await signUp(app, `fail-${failure}@example.com`);
-      await call(app, "/v1/identity", { token });
-      const res = await deleteWith(app, token, PW);
-      expect(res.status, failure).toBe(200);
-      expect(res.body.pokecollector, failure).toBe("failed");
-      expect(remaining(store.accounts.countUserRows(userId)), failure).toEqual([]);
-    }
-  });
+  // PokéCollector deletion (queued, background, retries): pokecollector-deletion-queue.test.ts.
 
   it("L3: each delete leaves one audit row with no user ID, email or token", async () => {
     const { app, store } = open();
@@ -438,6 +357,39 @@ describe("Backend re-review (P4): sweep scope, memory image cutoff, peppered ema
     expect(store.accounts.listAllUserIds()).toContain("acct_ghost2");
     expect(sweep().accountsSwept).toBe(1);
     expect(remaining(store.accounts.countUserRows("acct_ghost2"))).toEqual([]);
+  });
+
+  it("edge: sweeping a deleted account's stray purchase adds the purchase but not a second active reseller", async () => {
+    let sweep!: () => { accountsSwept: number; imagesSwept: number };
+    const { app, store } = open({ onOrphanSweep: (run) => (sweep = run) });
+    const { token, userId } = await signUp(app, "stray@example.com");
+    const at = new Date().toISOString();
+    store.purchaseLedger.record(userId, { purchaseId: "p1", inventoryItemId: "i1", purchasedAt: at, snapshot: null, at });
+    expect((await deleteWith(app, token, PW)).status).toBe(200);
+    const after = store.accounts.listNorthStarTotals();
+    expect(after).toEqual([expect.objectContaining({ purchased: 1, activeResellers: 1 })]);
+    // A purchase that was in flight lands after the delete, in the same week.
+    store.purchaseLedger.record(userId, { purchaseId: "p2", inventoryItemId: "i2", purchasedAt: at, snapshot: null, at });
+    expect(sweep().accountsSwept).toBe(1);
+    expect(store.purchaseLedger.list(userId)).toEqual([]);
+    expect(store.accounts.listNorthStarTotals()).toEqual([expect.objectContaining({ weekStart: after[0]!.weekStart, purchased: 2, activeResellers: 1 })]);
+  });
+
+  it("L4: the weekly counts are read inside the delete's transaction", async () => {
+    const { applyMvpMigrations } = await import("./db/migrate");
+    const { createSqliteAccountStore } = await import("./account-store");
+    const { sqlite, db } = applyMvpMigrations(":memory:");
+    const accounts = createSqliteAccountStore(sqlite, db);
+    let inTransaction: boolean | null = null;
+    accounts.deleteAllUserRows("acct_x", {
+      northStarTotals: () => {
+        inTransaction = sqlite.inTransaction;
+        return [{ weekStart: "2026-10-12", purchased: 1, scans: 0, activeResellers: 1 }];
+      },
+    });
+    expect(inTransaction).toBe(true);
+    expect(accounts.listNorthStarTotals()).toEqual([{ weekStart: "2026-10-12", purchased: 1, scans: 0, activeResellers: 1 }]);
+    sqlite.close();
   });
 
   it("L1: in memory-image mode the sweep also leaves images younger than an hour", async () => {

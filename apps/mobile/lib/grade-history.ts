@@ -32,15 +32,22 @@ export async function clearLegacyGradeHistory(userId: string, inventoryItemIds: 
   lastSeen.clear();
   lockedCount = 0;
   nextCursor = null;
+  // Re-review L1: one failed delete doesn't stop the others; the step still reports the failure.
+  let failures = 0;
   for (const id of inventoryItemIds) {
     const key = legacyGradeHistoryKey(userId, id);
-    if (Platform.OS === "web") webMemory.delete(key);
-    else await SecureStore.deleteItemAsync(key);
+    try {
+      if (Platform.OS === "web") webMemory.delete(key);
+      else await SecureStore.deleteItemAsync(key);
+    } catch {
+      failures += 1;
+    }
   }
   if (Platform.OS === "web") {
     for (const key of [...webMemory.keys()]) if (key.startsWith(legacyGradeHistoryKey(userId, ""))) webMemory.delete(key);
   }
   forgetDeviceItemIds(userId);
+  if (failures > 0) throw new Error(`${failures} grade history entries could not be deleted`);
 }
 
 async function readLegacy(key: string): Promise<string | null> {

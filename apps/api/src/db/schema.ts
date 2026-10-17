@@ -576,6 +576,22 @@ export const northStarWeeklyTotals = sqliteTable("north_star_weekly_totals", {
   activeResellers: integer("active_resellers").notNull().default(0),
 });
 
+/**
+ * Backend re-review H1 (P4): PokéCollector users still to delete after a CardFlow account was
+ * deleted, retried by the background queue with backoff. Only PokéCollector's numeric user ID is
+ * kept (no CardFlow user ID, email or username). `mode` "hold" rows (a remote user shared with
+ * other CardFlow users, a guest's shared user, or a legacy link) are never deleted here; the
+ * opaque-accounts relink script freezes them.
+ */
+export const pokecollectorPendingDeletions = sqliteTable("pokecollector_pending_deletions", {
+  remoteUserId: text("remote_user_id").primaryKey(),
+  mode: text("mode").notNull(),
+  attempts: integer("attempts").notNull().default(0),
+  nextAttemptAt: text("next_attempt_at").notNull(),
+  createdAt: text("created_at").notNull(),
+  lastResult: text("last_result"),
+});
+
 /** Backend review M3: persisted Idempotency-Key results for queued writes (24 h). */
 export const idempotencyKeys = sqliteTable(
   "idempotency_keys",
@@ -617,6 +633,7 @@ export const schema = {
   emailSendCounts,
   accountDeletionAudit,
   northStarWeeklyTotals,
+  pokecollectorPendingDeletions,
   cardExternalIds,
   crmScans,
   crmConfirmations,

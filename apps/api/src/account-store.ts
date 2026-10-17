@@ -69,7 +69,18 @@ export interface AccountStore {
    * H2 (P4): `northStarTotals` (the user's weekly counts) are added to north_star_weekly_totals in
    * that same transaction, so the counts and the rows can't get out of step.
    */
-  deleteAllUserRows(userId: string, options?: { northStarTotals?: readonly NorthStarWeekTotal[] }): Record<string, number>;
+  deleteAllUserRows(userId: string, options?: DeleteAllUserRowsOptions): Record<string, number>;
+  /** Backend re-review H1 (P4): PokéCollector users waiting to be deleted (remote ID only). */
+  listPokecollectorDeletions(): PokecollectorPendingDeletion[];
+  /** Due "delete" rows, oldest attempt first. */
+  listDuePokecollectorDeletions(now: string, limit: number): PokecollectorPendingDeletion[];
+  /** Adds or replaces a row (a later decision for the same remote user wins; attempts are kept). */
+  enqueuePokecollectorDeletion(entry: { remoteUserId: string; mode: PokecollectorDeletionMode; at: string }): void;
+  updatePokecollectorDeletion(
+    remoteUserId: string,
+    patch: { mode?: PokecollectorDeletionMode; attempts?: number; nextAttemptAt?: string; lastResult?: string | null },
+  ): void;
+  removePokecollectorDeletion(remoteUserId: string): void;
   /** H2: deleted accounts' weekly totals, oldest week first. */
   listNorthStarTotals(): NorthStarWeekTotal[];
   /** Backend review M1 (P4): every distinct user_id in any table (the orphan sweep's input). */
@@ -79,6 +90,40 @@ export interface AccountStore {
   /** Backend review L3: one PII-free row per deletion (no user ID, email or token). */
   recordDeletionAudit(entry: DeletionAuditEntry): void;
   listDeletionAudit(): DeletionAuditEntry[];
+}
+
+/**
+ * "delete": the background queue deletes this remote user. "hold": never deleted here (shared with
+ * other CardFlow users, a guest's shared user, or a legacy link); the relink script freezes it.
+ */
+export type PokecollectorDeletionMode = "delete" | "hold";
+export interface PokecollectorPendingDeletion {
+  remoteUserId: string;
+  mode: PokecollectorDeletionMode;
+  attempts: number;
+  nextAttemptAt: string;
+  createdAt: string;
+  lastResult: string | null;
+}
+
+export interface DeleteAllUserRowsOptions {
+  /**
+   * Backend review H2 (P4): the user's weekly counts, added to north_star_weekly_totals in the same
+   * transaction. Backend re-review L4: pass a function so the counts are read inside that
+   * transaction (no write can land between reading and deleting).
+   */
+  northStarTotals?: readonly NorthStarWeekTotal[] | (() => readonly NorthStarWeekTotal[]);
+  /**
+   * Backend re-review H1 (P4): queue the user's PokéCollector user for deletion in the same
+   * transaction the link row goes in. `hold` forces "hold"; so does any other CardFlow user still
+   * linked to that remote user after this user's row is deleted.
+   */
+  pokecollectorRemote?: { remoteUserId: string; hold: boolean; at: string };
+}
+
+export function resolveNorthStarTotals(option: DeleteAllUserRowsOptions["northStarTotals"]): readonly NorthStarWeekTotal[] {
+  if (!option) return [];
+  return typeof option === "function" ? option() : option;
 }
 
 export type DeletionAuditKind = "self" | "under18_report" | "unverified_purge" | "orphan_sweep";
@@ -137,10 +182,37 @@ const DELETE_FIRST = [
   "scan_confirm_events",
 ];
 
+type DeletionRow = {
+  remote_user_id: string;
+  mode: PokecollectorDeletionMode;
+  attempts: number;
+  next_attempt_at: string;
+  created_at: string;
+  last_result: string | null;
+};
+function deletionFromRow(row: DeletionRow): PokecollectorPendingDeletion {
+  return {
+    remoteUserId: row.remote_user_id,
+    mode: row.mode === "hold" ? "hold" : "delete",
+    attempts: row.attempts,
+    nextAttemptAt: row.next_attempt_at,
+    createdAt: row.created_at,
+    lastResult: row.last_result,
+  };
+}
+
 export function createSqliteAccountStore(
   sqlite: Database.Database,
   db: BetterSQLite3Database<typeof schema>,
 ): AccountStore {
+  const enqueueDeletion = ({ remoteUserId, mode, at }: { remoteUserId: string; mode: PokecollectorDeletionMode; at: string }) => {
+    sqlite
+      .prepare(
+        "INSERT INTO pokecollector_pending_deletions (remote_user_id, mode, attempts, next_attempt_at, created_at, last_result) " +
+          "VALUES (?, ?, 0, ?, ?, NULL) ON CONFLICT(remote_user_id) DO UPDATE SET mode = excluded.mode, next_attempt_at = excluded.next_attempt_at",
+      )
+      .run(remoteUserId, mode, at, at);
+  };
   const toRecord = (row: typeof userAccounts.$inferSelect): AccountRecord => ({ ...row });
   const childDeletes = (userId: string, counts: Record<string, number>) => {
     // Child rows that carry no user_id of their own, keyed through the user's inventory/scans.
@@ -315,15 +387,52 @@ export function createSqliteAccountStore(
             "ON CONFLICT(week_start) DO UPDATE SET purchased = purchased + excluded.purchased, scans = scans + excluded.scans, " +
             "active_resellers = active_resellers + excluded.active_resellers",
         );
-        for (const t of options.northStarTotals ?? []) addTotal.run(t.weekStart, t.purchased, t.scans, t.activeResellers);
+        for (const t of resolveNorthStarTotals(options.northStarTotals)) addTotal.run(t.weekStart, t.purchased, t.scans, t.activeResellers);
         childDeletes(userId, counts);
         const tables = userIdTables(sqlite);
         const ordered = [...DELETE_FIRST.filter((t) => tables.includes(t)), ...tables.filter((t) => !DELETE_FIRST.includes(t))];
         for (const table of ordered) {
           counts[table] = (counts[table] ?? 0) + sqlite.prepare(`DELETE FROM \`${table}\` WHERE user_id = ?`).run(userId).changes;
         }
+        const remote = options.pokecollectorRemote;
+        if (remote) {
+          const others = (
+            sqlite.prepare("SELECT COUNT(*) AS n FROM crm_pokecollector_users WHERE pokecollector_user_id = ?").get(remote.remoteUserId) as {
+              n: number;
+            }
+          ).n;
+          enqueueDeletion({ remoteUserId: remote.remoteUserId, mode: remote.hold || others > 0 ? "hold" : "delete", at: remote.at });
+        }
         return counts;
       })();
+    },
+    listPokecollectorDeletions() {
+      return (sqlite.prepare("SELECT * FROM pokecollector_pending_deletions ORDER BY created_at, remote_user_id").all() as DeletionRow[]).map(
+        deletionFromRow,
+      );
+    },
+    listDuePokecollectorDeletions(now, limit) {
+      return (
+        sqlite
+          .prepare(
+            "SELECT * FROM pokecollector_pending_deletions WHERE mode = 'delete' AND next_attempt_at <= ? ORDER BY next_attempt_at, remote_user_id LIMIT ?",
+          )
+          .all(now, limit) as DeletionRow[]
+      ).map(deletionFromRow);
+    },
+    enqueuePokecollectorDeletion: (entry) => enqueueDeletion(entry),
+    updatePokecollectorDeletion(remoteUserId, patch) {
+      const row = sqlite.prepare("SELECT * FROM pokecollector_pending_deletions WHERE remote_user_id = ?").get(remoteUserId) as
+        | DeletionRow
+        | undefined;
+      if (!row) return;
+      const next = { ...deletionFromRow(row), ...patch };
+      sqlite
+        .prepare("UPDATE pokecollector_pending_deletions SET mode = ?, attempts = ?, next_attempt_at = ?, last_result = ? WHERE remote_user_id = ?")
+        .run(next.mode, next.attempts, next.nextAttemptAt, next.lastResult, remoteUserId);
+    },
+    removePokecollectorDeletion(remoteUserId) {
+      sqlite.prepare("DELETE FROM pokecollector_pending_deletions WHERE remote_user_id = ?").run(remoteUserId);
     },
     listNorthStarTotals() {
       return (

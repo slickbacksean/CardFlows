@@ -441,7 +441,7 @@ describe("P4: account deletion end to end", () => {
 
   it("Policy + Backend M3: exact deletion lines", () => {
     expect(POKECOLLECTOR_DELETION_LINE).toBe(
-      "If your account was linked to PokéCollector, CardFlow deletes the cards and wishlist it stored there and removes the link.",
+      "If your account was linked to PokéCollector, CardFlow removes the link and deletes the cards and wishlist it stored there. This can take up to a few days, and PokéCollector's own backups may keep a copy for a while.",
     );
     expect(ACCOUNT_DELETION_COPY.deletes).toContain(POKECOLLECTOR_DELETION_LINE);
     expect(ANONYMOUS_LEDGER_LINE).toBe("CardFlow keeps only anonymous totals that can't identify you. Purchases you made on a marketplace aren't affected.");
@@ -468,9 +468,26 @@ describe("P4: account deletion end to end", () => {
     expect(history).toContain("forgetDeviceItemIds(userId)");
   });
 
+  it("Backend re-review L1: index in the cache dir (not backed up), per-key deletes, cleared after the wipe", () => {
+    const index = read("apps/mobile/lib/device-item-index.ts");
+    expect(index).toContain("new File(Paths.cache, INDEX_FILE)");
+    expect(index).toContain("export const MAX_IDS_PER_USER = 5000;");
+    // The old document-directory file is moved once.
+    expect(index).toContain("legacy.delete()");
+    expect(index).toContain('if (owner === userId) owner = "";');
+    const history = read("apps/mobile/lib/grade-history.ts");
+    const loop = history.slice(history.indexOf("export async function clearLegacyGradeHistory"), history.indexOf("async function readLegacy"));
+    expect(loop.indexOf("try {")).toBeLessThan(loop.indexOf("SecureStore.deleteItemAsync(key)"));
+    expect(loop).toContain("failures += 1");
+    const lib = read("apps/mobile/lib/account-deletion.ts");
+    const wipe = lib.indexOf("await runLocalAccountWipe(");
+    expect(lib.indexOf("forgetDeviceItemIds(userId)")).toBeLessThan(wipe);
+    expect(lib.lastIndexOf("forgetDeviceItemIds(userId)")).toBeGreaterThan(wipe);
+  });
+
   it("H2: the anonymous-totals line is accurate (weekly totals table, ledger rows hard-deleted)", () => {
     const app = read("apps/api/src/app.ts");
-    expect(app).toContain("store.accounts.deleteAllUserRows(userId, { northStarTotals })");
+    expect(app).toContain("store.accounts.deleteAllUserRows(userId, { northStarTotals, pokecollectorRemote })");
     expect(app).toContain("totals: store.accounts.listNorthStarTotals()");
     expect(app).not.toContain("anonymizeUser");
     expect(read("apps/api/drizzle/0022_north_star_weekly_totals.sql")).toContain("CREATE TABLE `north_star_weekly_totals`");

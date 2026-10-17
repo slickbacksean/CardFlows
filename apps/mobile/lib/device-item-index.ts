@@ -6,23 +6,43 @@ import { Platform } from "react-native";
  * Account deletion uses them to find the on-phone grade history keys (SecureStore can't list
  * keys), so the wipe still works when listing inventory fails (e.g. a 401 on a retried delete).
  * Only opaque item IDs are stored, never card names, prices or photos.
+ *
+ * Re-review L1: the file lives in the cache directory, which iOS and Android leave out of
+ * device backups (the OS may also clear it; the wipe then still has the server's list). Capped at
+ * the newest MAX_IDS_PER_USER (5,000) IDs per user: on-phone history for older items beyond that
+ * is only found through the server's list.
  */
 const INDEX_FILE = "cardflow-item-index.json";
-const MAX_IDS_PER_USER = 5000;
+export const MAX_IDS_PER_USER = 5000;
 let webIndex: Record<string, string[]> = {};
 let owner = "";
 
 function indexFile(): File {
+  return new File(Paths.cache, INDEX_FILE);
+}
+
+/** Builds before re-review L1 wrote the index to the document directory (backed up). */
+function legacyIndexFile(): File {
   return new File(Paths.document, INDEX_FILE);
+}
+
+function parseIndex(text: string): Record<string, string[]> {
+  const parsed = JSON.parse(text) as unknown;
+  return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Record<string, string[]>) : {};
 }
 
 function readIndex(): Record<string, string[]> {
   if (Platform.OS === "web") return webIndex;
   try {
     const file = indexFile();
-    if (!file.exists) return {};
-    const parsed = JSON.parse(file.textSync()) as unknown;
-    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Record<string, string[]>) : {};
+    if (file.exists) return parseIndex(file.textSync());
+    const legacy = legacyIndexFile();
+    if (!legacy.exists) return {};
+    // Move it out of the backed-up directory once.
+    const moved = parseIndex(legacy.textSync());
+    legacy.delete();
+    writeIndex(moved);
+    return moved;
   } catch {
     return {};
   }
@@ -67,8 +87,12 @@ export function deviceItemIds(userId: string): string[] {
   return [...(readIndex()[userId] ?? [])];
 }
 
-/** Account deletion: the user's entry goes with the rest of the phone wipe. */
+/**
+ * Account deletion: the user's entry goes with the rest of the phone wipe. Re-review L1: the owner
+ * is cleared too, so an inventory list still in flight (or a refetch) can't write it back.
+ */
 export function forgetDeviceItemIds(userId: string): void {
+  if (owner === userId) owner = "";
   const index = readIndex();
   if (!(userId in index)) return;
   delete index[userId];
