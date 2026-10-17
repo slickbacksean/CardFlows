@@ -121,6 +121,20 @@ function schedule() {
   timer = setTimeout(() => void flushWriteQueue(), wait);
 }
 
+/** P4 account deletion: drop every pending write (they belong to the deleted account). */
+export function clearWriteQueue(): void {
+  if (timer) clearTimeout(timer);
+  timer = null;
+  state = emptyWriteQueue();
+  try {
+    const file = queueFile();
+    if (file.exists) file.delete();
+  } catch {
+    // Nothing on disk.
+  }
+  for (const listener of listeners) listener();
+}
+
 export type QueueableResult<T> = { queued: false; result: T } | { queued: true; queuedId: string };
 
 /**

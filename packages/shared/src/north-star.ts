@@ -26,6 +26,40 @@ export interface NorthStarWeek {
   scansPerActiveReseller: number | null;
 }
 
+/**
+ * Backend review H2 (P4): one deleted account's weekly counts, kept as anonymous totals so past
+ * weeks don't change after its rows are hard-deleted. activeResellers is 1 per week the account
+ * was active (each account is one distinct reseller, so totals add without double counting).
+ */
+export interface NorthStarWeekTotal {
+  weekStart: string;
+  purchased: number;
+  scans: number;
+  activeResellers: number;
+}
+
+/** Pure: a user's activity rolled into per-week totals (every week, not just the last N). */
+export function northStarUserWeekTotals(user: Pick<NorthStarUserActivity, "scans" | "purchases">): NorthStarWeekTotal[] {
+  const weeks = new Map<string, NorthStarWeekTotal>();
+  const week = (iso: string) => {
+    const t = new Date(iso);
+    if (Number.isNaN(t.getTime())) return undefined;
+    const weekStart = isoWeekStart(t).toISOString().slice(0, 10);
+    let row = weeks.get(weekStart);
+    if (!row) weeks.set(weekStart, (row = { weekStart, purchased: 0, scans: 0, activeResellers: 1 }));
+    return row;
+  };
+  for (const at of user.scans) {
+    const row = week(at);
+    if (row) row.scans += 1;
+  }
+  for (const at of user.purchases) {
+    const row = week(at);
+    if (row) row.purchased += 1;
+  }
+  return [...weeks.values()].sort((a, b) => a.weekStart.localeCompare(b.weekStart));
+}
+
 export function isoWeekStart(at: Date): Date {
   const d = new Date(Date.UTC(at.getUTCFullYear(), at.getUTCMonth(), at.getUTCDate()));
   const day = d.getUTCDay() || 7; // Monday = 1 … Sunday = 7
@@ -33,7 +67,10 @@ export function isoWeekStart(at: Date): Date {
   return d;
 }
 
-export function northStarWeekly(users: NorthStarUserActivity[], options: { weeks?: number; now?: Date } = {}): NorthStarWeek[] {
+export function northStarWeekly(
+  users: NorthStarUserActivity[],
+  options: { weeks?: number; now?: Date; totals?: readonly NorthStarWeekTotal[] } = {},
+): NorthStarWeek[] {
   const weeks = Math.min(52, Math.max(1, Math.floor(options.weeks ?? 8)));
   const current = isoWeekStart(options.now ?? new Date());
   const starts = Array.from({ length: weeks }, (_, i) => {
@@ -64,8 +101,17 @@ export function northStarWeekly(users: NorthStarUserActivity[], options: { weeks
       active[i]!.add(user.userId);
     }
   }
+  // Deleted accounts: their weekly totals (H2), added to the live rows.
+  const extraActive = new Array<number>(weeks).fill(0);
+  for (const total of options.totals ?? []) {
+    const i = index.get(total.weekStart);
+    if (i === undefined) continue;
+    purchased[i]! += total.purchased;
+    scans[i]! += total.scans;
+    extraActive[i]! += total.activeResellers;
+  }
   return starts.map((weekStart, i) => {
-    const n = active[i]!.size;
+    const n = active[i]!.size + extraActive[i]!;
     return {
       weekStart,
       purchased: purchased[i]!,

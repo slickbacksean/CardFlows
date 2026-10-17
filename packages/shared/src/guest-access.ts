@@ -38,6 +38,8 @@ export function guestRouteAllowed(method: string, path: string): boolean {
   const m = method.toUpperCase();
   if (m === "GET" || m === "HEAD") return true;
   if (m === "POST" && (path === "/v1/scans" || path === "/v1/telemetry/perf")) return true;
+  // P4: a guest can delete their own guest data now instead of waiting 24 hours.
+  if (m === "POST" && path === "/v1/account/delete") return true;
   // Policy Reviewer (Oct 17): guests never get CardSight, so they can't answer the CardSight
   // prompt or attest 18+ (POST /v1/consents/cardsight and /v1/age-confirmation are refused).
   return false;

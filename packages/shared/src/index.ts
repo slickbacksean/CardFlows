@@ -47,7 +47,7 @@ export type {
   HealthRecognition,
   HealthSlabPricing,
 } from "./health";
-export { scrubSentryEvent, REDACTED_EMAIL, REDACTED_IMAGE, REDACTED_VALUE } from "./sentry-scrub";
+export { scrubSentryEvent, REDACTED_BLOB, REDACTED_EMAIL, REDACTED_IMAGE, REDACTED_PHOTO_URI, REDACTED_TOKEN, REDACTED_VALUE, SECRET_KEY_SUFFIX } from "./sentry-scrub";
 export { catalogCardFromMapping, confirmIdentity } from "./confirm";
 export {
   CONFIDENCE_SCREEN_LABEL,
@@ -609,8 +609,8 @@ export {
   cardFlowHttpErrorMessage,
   cardFlowUnreachableMessage,
 } from "./cardflow-http-error";
-export { resolveClientApiUrl } from "./client-api-url";
-export type { ClientApiUrlInput } from "./client-api-url";
+export { isLoopbackOrLanHost, releaseApiUrlProblem, resolveClientApiUrl, ReleaseApiUrlError, RELEASE_API_URL_ERROR_COPY } from "./client-api-url";
+export type { ClientApiUrlInput, ReleaseApiUrlProblem } from "./client-api-url";
 export {
   PHOTO_PREGRADE_SOURCE,
   PREGRADE_DETECT_UNAVAILABLE_MESSAGE,
@@ -838,3 +838,6 @@ export * from "./account-auth";
 export * from "./email-verification";
 export * from "./cardsight-consent";
 export * from "./age-gate";
+export * from "./account-deletion";
+export * from "./sign-in-with-apple";
+export * from "./crash-reports";

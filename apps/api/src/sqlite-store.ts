@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { and, asc, desc, eq, gte, inArray, isNull } from "drizzle-orm";
 import type { ConfirmEvent, UserPriceSnapshot } from "@cardflow/shared";
@@ -260,6 +260,8 @@ export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStor
   const { sqlite, db } = applyMvpMigrations(options.sqlitePath);
   const purchaseLedger = createSqlitePurchaseLedger(db);
   const memoryImages = new Map<string, ScanImageBytes>();
+  /** Backend review L1 (P4): save time of each in-memory image, for the sweep's age cutoff. */
+  const memoryImageSavedAt = new WeakMap<ScanImageBytes, number>();
   const memoryGradeImages = new Map<string, GradeImageBytes>();
   const sqliteDir = isMemorySqlitePath(options.sqlitePath)
     ? null
@@ -320,6 +322,14 @@ export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStor
       pokecollectorUsername: row.pokecollectorUsername,
       updatedAt: row.updatedAt,
     };
+  }
+
+  function countPokecollectorLinks(pokecollectorUserId: string): number {
+    return db
+      .select({ userId: crmPokecollectorUsers.userId })
+      .from(crmPokecollectorUsers)
+      .where(eq(crmPokecollectorUsers.pokecollectorUserId, pokecollectorUserId))
+      .all().length;
   }
 
   function savePokecollectorUserMapping(
@@ -695,6 +705,7 @@ export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStor
     };
     if (!sqliteDir) {
       memoryImages.set(scanId, record);
+      memoryImageSavedAt.set(record, Date.now());
       return record;
     }
     const filePath = path.join(sqliteDir, record.storageRef);
@@ -868,6 +879,43 @@ export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStor
       deleted = true;
     }
     return deleted;
+  }
+
+  function discardScanImage(scanId: string, storageRef: string): boolean {
+    if (!isFirstPartyScanImageRef(storageRef) || !storageRef.startsWith(`scans/${scanId}.`)) return false;
+    let removed = memoryImages.delete(scanId);
+    const filePath = sqliteDir ? path.join(sqliteDir, storageRef) : null;
+    if (filePath && existsSync(filePath)) {
+      unlinkSync(filePath);
+      removed = true;
+    }
+    return removed;
+  }
+
+  /** Backend review M1: files under scans/ with no crm_scans row (older than `olderThan`). */
+  function sweepOrphanScanImages(olderThan: Date): number {
+    let removed = 0;
+    for (const [scanId, record] of [...memoryImages]) {
+      if ((memoryImageSavedAt.get(record) ?? 0) >= olderThan.getTime()) continue;
+      if (!db.select({ id: crmScans.scanId }).from(crmScans).where(eq(crmScans.scanId, scanId)).get()) {
+        memoryImages.delete(scanId);
+        removed += 1;
+      }
+    }
+    if (!sqliteDir) return removed;
+    const dir = path.join(sqliteDir, "scans");
+    if (!existsSync(dir)) return removed;
+    for (const name of readdirSync(dir)) {
+      const ref = `scans/${name}`;
+      if (!isFirstPartyScanImageRef(ref)) continue;
+      const scanId = name.replace(/\.[a-z]+$/i, "");
+      const filePath = path.join(dir, name);
+      if (statSync(filePath).mtimeMs >= olderThan.getTime()) continue;
+      if (db.select({ id: crmScans.scanId }).from(crmScans).where(eq(crmScans.scanId, scanId)).get()) continue;
+      unlinkSync(filePath);
+      removed += 1;
+    }
+    return removed;
   }
 
   /** D9: guest cleanup. Photos (files too), then the scan rows. Returns scans removed. */
@@ -2003,6 +2051,7 @@ export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStor
     getSessionByToken,
     getPokecollectorUserMapping,
     savePokecollectorUserMapping,
+    countPokecollectorLinks,
     listInvitedUsers,
     getPreferences,
     setPreferences,
@@ -2016,6 +2065,8 @@ export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStor
     readStoredScanImage,
     getScanImage,
     deleteScanImage,
+    discardScanImage,
+    sweepOrphanScanImages,
     saveGradeImage,
     getGradeImage,
     deleteGradeImage,

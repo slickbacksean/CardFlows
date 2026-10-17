@@ -11,7 +11,7 @@ afterEach(() => {
   for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
 });
 
-async function purchase(app: ReturnType<typeof createApp>, withPrice: boolean) {
+async function purchase(app: ReturnType<typeof createApp>, withPrice: boolean, purchasedAt = new Date().toISOString()) {
   const scan = (await (
     await app.request("/v1/scans", {
       method: "POST",
@@ -32,7 +32,7 @@ async function purchase(app: ReturnType<typeof createApp>, withPrice: boolean) {
     body: JSON.stringify({
       confirmationId: confirmed.confirmation.confirmationId,
       ...(withPrice
-        ? { purchasePrice: "5", purchasedAt: new Date().toISOString() }
+        ? { purchasePrice: "5", purchasedAt }
         : { detailsNeeded: true, platform: "whatnot", streamUrl: "https://www.whatnot.com" }),
     }),
   });
@@ -92,22 +92,62 @@ describe.each(stores)("purchase ledger (%s)", (_name, makeStore) => {
     expect(body.weeks.at(-1)?.purchased).toBe(1);
   });
 
-  it("account deletion anonymizes the ledger, so North Star past weeks don't shift", async () => {
+  it("H2: deletion rolls the user's weeks into anonymous totals, hard-deletes the ledger, and past weeks don't change", async () => {
     const store = makeStore();
     const app = createApp(store, { opsToken: "t" });
+    const weeksAgo = (n: number) => new Date(Date.now() - n * 7 * 86_400_000).toISOString();
+    await purchase(app, true, weeksAgo(3));
     await purchase(app, true);
     const owner = store.listInvitedUsers().map((u) => u.userId).find((id) => store.purchaseLedger.list(id).length > 0)!;
+    const other = store.listInvitedUsers().map((u) => u.userId).find((id) => id !== owner)!;
+    const scan = store.listScans(owner)[0]!;
+    // A scan-only week for the owner (5 weeks ago), and another reseller active this week and 3 weeks ago.
+    store.saveScan({ ...scan, scanId: "aaaaaaaa-0000-4000-8000-000000000001", capturedAt: weeksAgo(5) });
+    store.saveScan({ ...scan, scanId: "aaaaaaaa-0000-4000-8000-000000000002", userId: other, capturedAt: weeksAgo(3) });
+    store.saveScan({ ...scan, scanId: "aaaaaaaa-0000-4000-8000-000000000003", userId: other });
     const northStar = async () =>
-      ((await (await app.request("/ops/north-star?weeks=1", { headers: { authorization: "Bearer t" } })).json()) as {
-        weeks: Array<{ purchased: number }>;
-      }).weeks.at(-1)?.purchased;
-    expect(await northStar()).toBe(1);
+      ((await (await app.request("/ops/north-star?weeks=8", { headers: { authorization: "Bearer t" } })).json()) as {
+        weeks: Array<{ weekStart: string; purchased: number; activeResellers: number; scans: number; perActiveReseller: number | null; scansPerActiveReseller: number | null }>;
+      }).weeks;
+    const before = await northStar();
+    expect(before.at(-1)).toMatchObject({ purchased: 1, activeResellers: 2 });
+    expect(before.at(-4)).toMatchObject({ purchased: 1, activeResellers: 2, scans: 1 });
+    expect(before.at(-6)).toMatchObject({ purchased: 0, activeResellers: 1, scans: 1 });
     expect((await app.request("/v1/account/delete", { method: "POST" })).status).toBe(200);
+    // Hard-deleted: nothing under the user and no anonymized buckets.
     expect(store.purchaseLedger.list(owner)).toHaveLength(0);
-    const anon = store.purchaseLedger.listUserIds().filter((id) => id.startsWith("deleted_"));
-    expect(anon).toHaveLength(1);
-    expect(store.purchaseLedger.list(anon[0]!).every((row) => row.snapshot === null)).toBe(true);
-    expect(await northStar()).toBe(1);
+    expect(store.purchaseLedger.listUserIds().filter((id) => id === owner || id.startsWith("deleted_"))).toEqual([]);
+    expect(store.listScans(owner)).toEqual([]);
+    // Every past week (purchases, scans, active resellers and both ratios) is unchanged.
+    expect(await northStar()).toEqual(before);
+    // The totals carry counts per week only.
+    const totals = store.accounts.listNorthStarTotals();
+    expect(totals.reduce((n, t) => n + t.purchased, 0)).toBe(2);
+    for (const t of totals) expect(Object.keys(t).sort()).toEqual(["activeResellers", "purchased", "scans", "weekStart"]);
+  });
+
+  it("H2: legacy deleted_<uuid> ledger buckets are folded into the totals at startup", async () => {
+    const store = makeStore();
+    const at = new Date().toISOString();
+    store.purchaseLedger.record("deleted_00000000-0000-4000-8000-000000000000", {
+      purchaseId: "legacy-p",
+      inventoryItemId: "legacy-i",
+      purchasedAt: at,
+      snapshot: null,
+      at,
+    });
+    const app = createApp(store, { opsToken: "t" });
+    expect(store.purchaseLedger.listUserIds().filter((id) => id.startsWith("deleted_"))).toEqual([]);
+    const weeks = ((await (await app.request("/ops/north-star?weeks=1", { headers: { authorization: "Bearer t" } })).json()) as {
+      weeks: Array<{ purchased: number; activeResellers: number }>;
+    }).weeks;
+    expect(weeks.at(-1)?.purchased).toBe(1);
+    expect(store.accounts.listNorthStarTotals()).toEqual([
+      expect.objectContaining({ purchased: 1, scans: 0, activeResellers: 1 }),
+    ]);
+    // Folding again (a second start) adds nothing.
+    createApp(store, { opsToken: "t" });
+    expect(store.accounts.listNorthStarTotals().reduce((n, t) => n + t.purchased, 0)).toBe(1);
   });
 ;
 });
