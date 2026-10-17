@@ -4,6 +4,7 @@ import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   CARDSIGHT_CONSENT_COPY,
+  CAMERA_USAGE_DESCRIPTION,
   CARDSIGHT_CONSENT_VERSION,
   PHOTO_PERMISSION_PURPOSE,
   type CardRecognitionProvider,
@@ -155,7 +156,8 @@ describe("CardSight consent API", () => {
     expect(CARDSIGHT_CONSENT_COPY.body).toContain("CardSight, our card-recognition provider");
     expect(CARDSIGHT_CONSENT_COPY.body).toContain("CardSight's terms allow it to use these images to improve its service");
     expect(PHOTO_PERMISSION_PURPOSE).toContain("uploaded to CardFlow and our card-recognition provider");
-    const all = [...Object.values(CARDSIGHT_CONSENT_COPY), PHOTO_PERMISSION_PURPOSE].join(" ");
+    expect(CAMERA_USAGE_DESCRIPTION).toContain(PHOTO_PERMISSION_PURPOSE);
+    const all = [...Object.values(CARDSIGHT_CONSENT_COPY), CAMERA_USAGE_DESCRIPTION].join(" ");
     expect(all).not.toMatch(/\bAI\b|artificial intelligence|PSA|BGS|CGC/);
   });
 });

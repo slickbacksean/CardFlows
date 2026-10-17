@@ -28,3 +28,9 @@ If declared:
 
 ## Device model (perf timings)
 Perf timing batches include the **device model name** (`Device.modelName`), OS and a device class, and only when analytics is on. The server aggregates by stage and device class and does not store the model. Declare under Diagnostics > Performance Data (App Store) / App info and performance > Diagnostics (Play).
+
+## Photos (CardSight card recognition)
+Card photos are uploaded to CardFlow. With the user's consent (one-time prompt, can be withdrawn in Settings), they are also uploaded to **CardSight, our card-recognition provider**. CardSight's terms allow it to use these images to improve its service.
+- **App Store:** User Content > **Photos or Videos**, App Functionality, not linked to the user (no account ID or email is sent to CardSight), not tracking. In the privacy policy and review notes, say photos are shared with a third party (CardSight) for app functionality.
+- **Play Data safety:** Photos and videos > **Photos**: collected (required for scans), **shared with a third party (CardSight) for App functionality**, optional (the user can decline or withdraw and use CardFlow's matcher or manual search), encrypted in transit, deletable in the app.
+- **Permission strings** (`app.json`, `CAMERA_USAGE_DESCRIPTION`): "...Photos are uploaded to CardFlow and our card-recognition provider to identify your cards." The app uses the system photo picker, so no photo-library permission string is requested.

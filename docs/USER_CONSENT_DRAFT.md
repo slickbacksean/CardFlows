@@ -40,6 +40,14 @@ You can skip saving the photo after the scan if you only want a one-time check. 
 
 ## 2. Sending the selected image to CardSight
 
+**Decided (Sean, Oct 17):** a one-time prompt before the first photo is uploaded, with a Settings toggle to withdraw. The shipped text is `CARDSIGHT_CONSENT_COPY` in `packages/shared/src/cardsight-consent.ts`, version `CARDSIGHT_CONSENT_VERSION`. It is stored on the server with its version and timestamps (`provider_consents`). The server checks consent right before calling CardSight. Without consent, CardFlow's own matcher or manual search is used. Changing the wording or CardSight's terms means bumping the version, and everyone is asked again.
+
+> **Card recognition.** CardFlow uses CardSight, our card-recognition provider, to identify cards from your photos. If you allow it, your card photos are uploaded to CardFlow and CardSight. CardSight's terms allow it to use these images to improve its service. If you don't allow it, CardFlow matches cards on its own servers only, or you can search manually. You can change this anytime in Settings.
+>
+> Buttons: **Allow CardSight** · **Don't allow**
+
+The earlier per-photo draft below is kept for counsel's reference.
+
 **Screen title (draft):** Send this photo for a card suggestion?
 
 **Body (draft):**
@@ -132,6 +140,10 @@ Marketplace apps have their own rules. Using overlays, bots, or scrapers can vio
 
 [ ] Share usage analytics (off by default)
 
+**Privacy policy draft: card-recognition provider (CardSight)**
+
+If you allow it, CardFlow uploads your card photos to **CardSight**, our card-recognition provider, to identify the card. CardSight's terms allow it to use these images to improve its service. We send the image and the fields its API requires, not your email or other account details. If you don't allow it, or you turn it off in Settings (Card recognition), new photos are matched only by CardFlow's own servers. Turning it off doesn't recall photos CardSight has already received, and deleting a scan in CardFlow can't delete CardSight's copy. We record when you allowed or withdrew this, and which version of this notice you saw.
+
 **Privacy policy draft: analytics service provider**
 
 If you turn on usage analytics, CardFlow sends counts and timings to **PostHog Inc.**, a service provider that processes this data on our behalf and stores it in the **United States**. PostHog briefly receives your device's IP address when events arrive, but we have turned off its location lookup (GeoIP), so no location is derived or stored, and events are not linked to a person profile. We never send photos, card details, prices or anything you type. You can turn analytics off at any time in Settings; events not yet sent are deleted from your phone.
@@ -153,7 +165,7 @@ If you turn on usage analytics, CardFlow sends counts and timings to **PostHog I
 Draft list for Settings:
 
 - Manual photo scans: always user-started
-- Send selected photo to CardSight: ask each time / ask once and remember [counsel to pick]
+- Use CardSight for card recognition: On / Off (decided: ask once, then this toggle; off = CardFlow's matcher only)
 - Save scan photos: On / Off
 - Usage analytics: On / Off (hidden if no SDK)
 - Live visual analysis: Off (unavailable in MVP)
