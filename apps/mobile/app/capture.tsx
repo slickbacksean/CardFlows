@@ -27,9 +27,9 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { DevScenarioPanel } from "@/components/ui/dev-scenario-panel";
 import { PermissionGate } from "@/components/ui/permission-gate";
 import { createScan } from "@/lib/api";
-import { ensureAgeConfirmed } from "@/lib/age-gate";
+import { ensureAccountAgeConfirmed } from "@/lib/age-confirmation";
 import { askCardSightConsentOnce } from "@/lib/cardsight-consent";
-import { peekActiveUserId } from "@/lib/identity";
+import { isGuestSession } from "@/lib/identity";
 import { confirmGuestNoticeOnce } from "@/lib/guest-notice";
 import { getMockScenario } from "@/lib/mock-scenario";
 import { prepareScanStill, rememberScanCapture } from "@/lib/scan-capture";
@@ -83,12 +83,14 @@ export default function CaptureScreen() {
     imageMimeType?: string | null,
     size?: { width?: number; height?: number },
   ) {
-    // Sean: 18+ only. Order before the first upload: age gate, then the CardSight prompt.
-    if (!(await ensureAgeConfirmed(peekActiveUserId()))) return;
     // Guests see the 24-hour deletion note and the scan-count note before their first scan.
     if (!(await confirmGuestNoticeOnce())) return;
     // Sean: the one-time CardSight disclosure comes before the first photo is uploaded.
-    if (imageUri) await askCardSightConsentOnce();
+    // Policy Reviewer (Oct 17): guests never see it (they never get CardSight), and accounts
+    // confirm 18+ first (testers and existing accounts once; new accounts did at sign-up).
+    if (imageUri && !isGuestSession() && (await ensureAccountAgeConfirmed())) {
+      await askCardSightConsentOnce();
+    }
     const startedAt = Date.now();
     let uploadUri = imageUri;
     let uploadMime = imageMimeType ?? null;

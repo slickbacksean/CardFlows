@@ -85,6 +85,11 @@ function userIdTables(sqlite: Database.Database): string[] {
 
 /** Guest data that is never moved to the new account (deleted instead). */
 const NOT_MOVED = ["crm_sessions", "user_accounts", "password_reset_tokens", "email_verification_codes"];
+/**
+ * Policy Reviewer (Oct 17): guests never get CardSight and never attest 18+, so these guest rows
+ * are deleted at sign-up instead of moved.
+ */
+const DROPPED_AT_SIGNUP = ["provider_consents", "consent_events", "cardsight_user_usage", "age_confirmations"];
 
 /** Children before parents so foreign keys (purchases → inventory, confirmations → scans) hold. */
 const DELETE_FIRST = [
@@ -246,6 +251,10 @@ export function createSqliteAccountStore(
         const moved: Record<string, number> = {};
         for (const table of userIdTables(sqlite)) {
           if (NOT_MOVED.includes(table)) continue;
+          if (DROPPED_AT_SIGNUP.includes(table)) {
+            sqlite.prepare(`DELETE FROM \`${table}\` WHERE user_id = ?`).run(fromUserId);
+            continue;
+          }
           moved[table] = sqlite.prepare(`UPDATE OR IGNORE \`${table}\` SET user_id = ? WHERE user_id = ?`).run(toUserId, fromUserId).changes;
           sqlite.prepare(`DELETE FROM \`${table}\` WHERE user_id = ?`).run(fromUserId);
         }

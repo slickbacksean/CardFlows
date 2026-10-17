@@ -40,9 +40,9 @@ You can skip saving the photo after the scan if you only want a one-time check. 
 
 ## 2. Sending the selected image to CardSight
 
-**Decided (Sean, Oct 17):** a one-time prompt before the first photo is uploaded, with a Settings toggle to withdraw. The shipped text is `CARDSIGHT_CONSENT_COPY` in `packages/shared/src/cardsight-consent.ts`, version `CARDSIGHT_CONSENT_VERSION` (bumped to `2026-10-17.2` for the Policy Reviewer wording, so earlier answers are asked again). This disclosure is the only place CardFlow copy may say "AI"; estimate copy never does. It is stored on the server with its version and timestamps (`provider_consents`: granted, declined or withdrawn). A "Don't allow" is recorded as a decline, never as a grant. Every grant, decline and withdrawal is also appended to `consent_events`, a history that is never edited; it's deleted with the account. Each user also has a monthly CardSight cap (50 signed-in, 3 guests by default). Past it, that user's photos stay on CardFlow's own matcher until the next month. The server checks consent right before calling CardSight. Without consent, CardFlow's own matcher or manual search is used. Changing the wording or CardSight's terms means bumping the version, and everyone is asked again.
+**Decided (Sean, Oct 17):** a one-time prompt before the first photo is uploaded, with a Settings toggle to withdraw. The shipped text is `CARDSIGHT_CONSENT_COPY` in `packages/shared/src/cardsight-consent.ts`, version `CARDSIGHT_CONSENT_VERSION` (bumped to `2026-10-17.2` for the Policy Reviewer wording, so earlier answers are asked again). This disclosure is the only place CardFlow copy may say "AI"; estimate copy never does. It is stored on the server with its version and timestamps (`provider_consents`: granted, declined or withdrawn). A "Don't allow" is recorded as a decline, never as a grant. Every grant, decline and withdrawal is also appended to `consent_events`, a history that is never edited; it's deleted with the account. **Only for accounts that confirmed 18+ (Policy Reviewer, Oct 17): guests never get CardSight, never see this prompt or the Settings toggle (Settings shows "Sign up to use CardSight card recognition."), and no guest answer carries over at sign-up. A guest's earlier scans are never sent to CardSight; only photos taken after the account consents are.** Each account also has a monthly CardSight cap (50 by default; guests 0). Past it, that user's photos stay on CardFlow's own matcher until the next month. The server checks consent right before calling CardSight. Without consent, CardFlow's own matcher or manual search is used. Changing the wording or CardSight's terms means bumping the version, and everyone is asked again.
 
-> **Card recognition.** CardFlow can use CardSight, our card-recognition provider, to identify cards from your photos. If you allow it, your card photos are sent to CardSight. CardSight's terms let it keep these images and use them to train its AI models. Turning this off later stops new uploads but doesn't remove photos CardSight already has. If you don't allow it, CardFlow matches cards on its own servers, or you can search manually. You can change this anytime in Settings.
+> **Card recognition.** CardFlow can use CardSight, our card-recognition provider, to identify cards from your photos. If you have an account, have confirmed you're 18 or older, and allow it, your card photos are sent to CardSight. Guest photos are never sent to CardSight. CardSight's terms let it keep these images and use them to train its AI models. Turning this off later stops new uploads but doesn't remove photos CardSight already has. If you don't allow it, CardFlow matches cards on its own servers, or you can search manually. You can change this anytime in Settings.
 >
 > **Settings > Card recognition** (toggle help): When on, card photos are also sent to CardSight, our card-recognition provider. CardSight's terms let it keep these images and use them to train its AI models. Turning this off stops new uploads but doesn't remove photos CardSight already has. When off, CardFlow matches cards on its own servers only.
 >
@@ -184,34 +184,25 @@ Draft list for Settings:
 
 ---
 
-## 8. Age gate (18+ only)
+## 8. Age (18+ accounts)
 
-**Decided (Sean, Oct 16, 2026):** CardFlow is for adults 18 and older only, because CardSight's terms don't allow photos or personal information from anyone under 18.
+**Decided (Sean, Oct 17, 2026, 8:25 AM PT):** this replaces the birth month/year screen. All accounts must be 18+, stated at sign-up. There's no birth-date screen and no under-18 lockout.
 
-**How it works (`packages/shared/src/age-gate.ts`, `AGE_GATE_VERSION`):**
-- The app asks once for birth month and year. Both pickers start empty and nothing is pre-selected.
-- The phone checks the age, then throws the birth month and year away. They're never stored or sent.
-- The server stores only `age_confirmed_18plus`, a timestamp and the gate version (`age_confirmations`).
-- Guests answer before their first upload, and their confirmation moves to the account at sign-up.
-- Sign-up needs it: the sign-up screen shows the age gate first, and shows "By creating an account, you confirm you're 18 or older and agree to the Terms and Privacy Policy."
-- Testers and existing accounts are asked at their next launch.
-- The confirmation is deleted with the account.
-- Order before the first upload: age gate, then the CardSight prompt, then the upload.
-- The server refuses scans, photo uploads (pre-grade, grade jobs, livestream frames) and sign-up without the confirmation, and never calls CardSight without it.
-
-**Exact copy:** title "How old are you?"; body "CardFlow is for adults 18 and older. Enter your birth month and year."; button "Continue"; capture tip "Photograph only the card. Keep faces, hands, and personal details out of the shot."
-
-**Under 18:**
-- The app shows only "Sorry, CardFlow is only available to people 18 and older." There's no retry and no parent option.
-- Nothing is uploaded, and there's no sign-up. Nothing goes to CardSight or PostHog (analytics is switched off and anything queued is dropped).
-- Any guest data is deleted. That request carries no age or birth date.
-- The phone saves a lockout. A signed-in account is signed out on that phone.
+**How it works (`packages/shared/src/age-gate.ts`):**
+- **Sign-up:** a required checkbox, unchecked by default: "I confirm I'm 18 or older." The screen keeps the line "By creating an account, you confirm you're 18 or older and agree to the Terms and Privacy Policy." The server refuses `POST /v1/accounts` without `ageConfirmed18Plus` and stores only `age_attested_at` and the wording version (`age_confirmations`).
+- **Testers and existing accounts:** they confirm once in the app ("I confirm I'm 18 or older.") before any CardSight call. Until then, CardFlow's own matcher is used.
+- **CardSight:** called only for an account that has an 18+ confirmation AND current consent.
+- **Guests:** they make no age statement, so they never get CardSight, even if a consent is sent. Their photos are processed only by CardFlow.
+- **Under-18 reports:** an ops-only path (`POST /ops/under-18-report`, ops token) turns CardSight off and deletes the account and its data.
 
 **Privacy policy draft: Age**
 
-> CardFlow is intended only for people 18 and older. We don't knowingly collect personal information from anyone under 18. If you believe someone under 18 has given us information, contact us at [contact email] and we'll delete it.
+> CardFlow is intended for people 18 and older. Creating an account requires confirming you're 18 or older. Guests can try a few scans without an account; guest photos are processed only by CardFlow and deleted within 24 hours unless you sign up. We don't knowingly collect personal information from anyone under 18. If you believe someone under 18 has given us information, contact us at [contact email] and we'll delete it.
 
-**Counsel note:** check the Utah and Texas app-store age-verification laws (and any similar state laws) before launch. Also confirm whether a self-declared month/year gate is enough.
+**Counsel notes:**
+- Ask CardSight in writing whether self-attestation (a sign-up checkbox) is acceptable under their under-18 term.
+- Check the Utah and Texas app-store age-verification laws before launch.
+- Replace [contact email].
 
 ---
 

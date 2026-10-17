@@ -1,6 +1,6 @@
 import { isGuestUserId, type InvitedIdentity } from "@cardflow/shared";
 import { createAccount, createGuestSession, createSession, getIdentity, listInventory, signInWithPassword } from "./api";
-import { loadAgeLockout, resetAgeGateCache } from "./age-gate";
+import { resetAgeConfirmationCache } from "./age-confirmation";
 import { resetCardSightConsentCache } from "./cardsight-consent";
 import { stopLiveVideoIdentify } from "./live-identify";
 import { clearLivestreamOverlay } from "./livestream";
@@ -55,15 +55,20 @@ function requestStatus(error: unknown): number | undefined {
 }
 
 /** Open sign-up / sign-in. The guest bearer rides along so the API moves the guest's scans. */
-export async function signUpWithEmail(email: string, password: string, mode: "sign_up" | "sign_in"): Promise<IdentitySession> {
-  const result = mode === "sign_up" ? await createAccount(email, password) : await signInWithPassword(email, password);
+export async function signUpWithEmail(
+  email: string,
+  password: string,
+  mode: "sign_up" | "sign_in",
+  ageConfirmed18Plus = false,
+): Promise<IdentitySession> {
+  const result = mode === "sign_up" ? await createAccount(email, password, ageConfirmed18Plus) : await signInWithPassword(email, password);
   await persistSessionToken(result.token);
   setSessionToken(result.token);
   const session = { ...toSession(result), emailVerified: result.emailVerified };
   rememberIdentity(session.identity);
   // A guest's CardSight answer moves with the account; anyone else is re-checked on next upload.
   resetCardSightConsentCache();
-  resetAgeGateCache();
+  resetAgeConfirmationCache();
   restorePromise = Promise.resolve(session);
   return session;
 }
@@ -75,7 +80,7 @@ export async function redeemInviteCode(inviteCode: string): Promise<IdentitySess
   rememberIdentity(session.identity);
   // A guest's CardSight answer moves with the account; anyone else is re-checked on next upload.
   resetCardSightConsentCache();
-  resetAgeGateCache();
+  resetAgeConfirmationCache();
   restorePromise = Promise.resolve(session);
   stopLiveVideoIdentify();
   clearLivestreamOverlay();
@@ -83,11 +88,6 @@ export async function redeemInviteCode(inviteCode: string): Promise<IdentitySess
 }
 
 async function restoreIdentitySession(): Promise<IdentitySession> {
-  // Sean: 18+ only. A phone locked out by the age gate sends nothing: no session, no guest.
-  if (await loadAgeLockout()) {
-    rememberIdentity(null);
-    return signedOut;
-  }
   const stored = await loadPersistedSessionToken();
   if (stored) {
     setSessionToken(stored);

@@ -564,13 +564,16 @@ export const idempotencyKeys = sqliteTable(
   (table) => [primaryKey({ columns: [table.userId, table.idemKey] }), index("idempotency_keys_created_idx").on(table.createdAt)],
 );
 
-/** Sean: 18+ only. Only the confirmation, its time and gate version (never a birth date). */
+/**
+ * Sean (Oct 17): accounts attest 18+ (sign-up checkbox, or an in-app confirmation for testers and
+ * existing accounts). Only the attestation, its time and the wording version; never a birth date.
+ */
 export const ageConfirmations = sqliteTable(
   "age_confirmations",
   {
     userId: text("user_id").primaryKey(),
     ageConfirmed18Plus: integer("age_confirmed_18plus", { mode: "boolean" }).notNull(),
-    confirmedAt: text("confirmed_at").notNull(),
+    ageAttestedAt: text("age_attested_at").notNull(),
     version: text("version").notNull(),
   },
   (table) => [check("age_confirmations_true_chk", sql`${table.ageConfirmed18Plus} = 1`)],

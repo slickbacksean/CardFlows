@@ -141,6 +141,13 @@
       "when": 1791264000000,
       "tag": "0019_age_confirmations",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "6",
+      "when": 1791350400000,
+      "tag": "0020_age_attested_at",
+      "breakpoints": true
     }
   ]
 }
