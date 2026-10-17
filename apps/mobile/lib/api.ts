@@ -957,6 +957,15 @@ function notifySignupRequired(reason: SignupReason) {
   signupListener?.(reason);
 }
 
+/** Sean: CardSight consent (stored on the server with its version). */
+export function getCardSightConsent() {
+  return callApi(apiContract.getCardSightConsent);
+}
+
+export function setCardSightConsent(granted: boolean, version: string) {
+  return callApi(apiContract.setCardSightConsent, { body: granted ? { granted, version } : { granted } });
+}
+
 let emailUnverifiedListener: (() => void) | null = null;
 
 /** The root layout opens the verify-email screen when a pre-grade estimate is refused. */

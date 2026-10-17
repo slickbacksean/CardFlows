@@ -23,10 +23,6 @@ export const CARDSIGHT_CONSENT_COPY = {
   withdrawn: "CardSight is off. New photos are matched by CardFlow only.",
 } as const;
 
-/** Camera and photo-library permission text (app.json / Info.plist). */
-export const PHOTO_PERMISSION_PURPOSE =
-  "Card photos are uploaded to CardFlow and our card-recognition provider to identify cards and prepare pre-grade estimates.";
-
 export interface CardSightConsentState {
   granted: boolean;
   /** Version the user last answered (null if never asked). */

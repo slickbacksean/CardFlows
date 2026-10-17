@@ -11,7 +11,7 @@
       "supportsTablet": true,
       "bundleIdentifier": "app.cardflow.mobile",
       "infoPlist": {
-        "NSCameraUsageDescription": "CardFlow uses the camera to photograph English Pokémon singles.",
+        "NSCameraUsageDescription": "CardFlow uses the camera to photograph English Pokémon singles. Photos are uploaded to CardFlow and our card-recognition provider to identify your cards.",
         "NSMotionUsageDescription": "CardFlow uses motion to help you hold your phone level over a card."
       }
     },
@@ -41,7 +41,7 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "CardFlow uses the camera to photograph English Pokémon singles.",
+          "cameraPermission": "CardFlow uses the camera to photograph English Pokémon singles. Photos are uploaded to CardFlow and our card-recognition provider to identify your cards.",
           "microphonePermission": false,
           "recordAudioAndroid": false
         }

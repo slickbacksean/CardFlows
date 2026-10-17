@@ -26,6 +26,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { DevScenarioPanel } from "@/components/ui/dev-scenario-panel";
 import { PermissionGate } from "@/components/ui/permission-gate";
 import { createScan } from "@/lib/api";
+import { askCardSightConsentOnce } from "@/lib/cardsight-consent";
 import { confirmGuestNoticeOnce } from "@/lib/guest-notice";
 import { getMockScenario } from "@/lib/mock-scenario";
 import { prepareScanStill, rememberScanCapture } from "@/lib/scan-capture";
@@ -81,6 +82,8 @@ export default function CaptureScreen() {
   ) {
     // Guests see the 24-hour deletion note and the scan-count note before their first scan.
     if (!(await confirmGuestNoticeOnce())) return;
+    // Sean: the one-time CardSight disclosure comes before the first photo is uploaded.
+    if (imageUri) await askCardSightConsentOnce();
     const startedAt = Date.now();
     let uploadUri = imageUri;
     let uploadMime = imageMimeType ?? null;
