@@ -110,7 +110,7 @@ export function createMemoryConsentStore(): ConsentStore {
       for (const [key, row] of usage) if (row.userId === userId) usage.delete(key);
       return n;
     },
-    /** Memory-store only: guest sign-up carry-over (SQLite moves rows by user_id). */
+    /** Memory-store only. Not used at sign-up any more (guests never get CardSight). */
     moveUser(fromUserId: string, toUserId: string) {
       const guest = get(fromUserId, "cardsight");
       if (guest && !get(toUserId, "cardsight")) rows.set(k(toUserId, "cardsight"), { userId: toUserId, ...guest });

@@ -54,7 +54,8 @@ export function cardSightMonthlyBudgetFromEnv(env: Env = process.env): number | 
 
 /** Backend review M5: default per-user CardSight calls per calendar month. */
 export const CARDSIGHT_USER_MONTHLY_CAP_DEFAULT = 50;
-export const CARDSIGHT_GUEST_MONTHLY_CAP_DEFAULT = 3;
+/** Sean (Oct 17): guests make no 18+ statement, so they never get CardSight. Not configurable. */
+export const CARDSIGHT_GUEST_MONTHLY_CAP = 0;
 
 function capFromEnv(raw: string | undefined, fallback: number): number {
   const value = raw?.trim();
@@ -63,13 +64,12 @@ function capFromEnv(raw: string | undefined, fallback: number): number {
 }
 
 /**
- * Backend review M5: CARD_FLOW_CARDSIGHT_USER_MONTHLY_CAP (default 50) and
- * CARD_FLOW_CARDSIGHT_GUEST_MONTHLY_CAP (default 3). 0 = that group never uses CardSight.
+ * Backend review M5: CARD_FLOW_CARDSIGHT_USER_MONTHLY_CAP (default 50; 0 = off) for accounts.
+ * Guests are always 0 (CARDSIGHT_GUEST_MONTHLY_CAP); there is no guest setting.
  */
-export function cardSightUserCapsFromEnv(env: Env = process.env): { signedIn: number; guest: number } {
+export function cardSightUserCapsFromEnv(env: Env = process.env): { signedIn: number } {
   return {
     signedIn: capFromEnv(env.CARD_FLOW_CARDSIGHT_USER_MONTHLY_CAP, CARDSIGHT_USER_MONTHLY_CAP_DEFAULT),
-    guest: capFromEnv(env.CARD_FLOW_CARDSIGHT_GUEST_MONTHLY_CAP, CARDSIGHT_GUEST_MONTHLY_CAP_DEFAULT),
   };
 }
 

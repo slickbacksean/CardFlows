@@ -9,12 +9,11 @@ import {
 } from "@cardflow/shared";
 import { useRouter } from "expo-router";
 import { useState } from "react";
-import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { authStyles } from "@/components/ui/auth-styles";
 import { PreferencesScreenHeader } from "@/components/ui/preferences-screen-header";
 import { PrimaryButton } from "@/components/ui/primary-button";
-import { ensureAgeConfirmed } from "@/lib/age-gate";
-import { isGuestSession, peekActiveUserId, signUpWithEmail } from "@/lib/identity";
+import { isGuestSession, signUpWithEmail } from "@/lib/identity";
 import { flushScanQueue } from "@/lib/scan-queue";
 import { colors } from "@/lib/theme";
 
@@ -26,6 +25,8 @@ export default function SignUpScreen() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  // Policy Reviewer (Oct 17): required, unchecked by default.
+  const [over18, setOver18] = useState(false);
   const guest = isGuestSession();
 
   async function submit() {
@@ -33,13 +34,12 @@ export default function SignUpScreen() {
     if (mode === "sign_up") {
       const problem = passwordProblem(password);
       if (problem) return setError(problem);
-      // Sean: 18+ only. The age gate comes first (the server refuses sign-up without it).
-      if (!(await ensureAgeConfirmed(peekActiveUserId()))) return;
+      if (!over18) return setError(AGE_GATE_COPY.required);
     }
     setSaving(true);
     setError(null);
     try {
-      const session = await signUpWithEmail(email.trim(), password, mode);
+      const session = await signUpWithEmail(email.trim(), password, mode, mode === "sign_up" && over18);
       void flushScanQueue();
       // Sean: new accounts confirm their email (6-digit code) before pre-grade estimates.
       if (session.emailVerified === false) router.replace("/verify-email");
@@ -83,9 +83,21 @@ export default function SignUpScreen() {
           textContentType={mode === "sign_up" ? "newPassword" : "password"}
           value={password}
         />
-        {error ? <Text style={authStyles.error}>{error}</Text> : null}
+        {mode === "sign_up" ? (
+          <Pressable
+            accessibilityLabel={AGE_GATE_COPY.checkbox}
+            accessibilityRole="checkbox"
+            accessibilityState={{ checked: over18 }}
+            onPress={() => setOver18(!over18)}
+            style={styles.checkRow}
+          >
+            <View style={[styles.box, over18 ? styles.boxOn : null]}>{over18 ? <Text style={styles.tick}>✓</Text> : null}</View>
+            <Text style={styles.checkLabel}>{AGE_GATE_COPY.checkbox}</Text>
+          </Pressable>
+        ) : null}
         {mode === "sign_up" ? <Text style={authStyles.body}>{AGE_GATE_COPY.signUpLine}</Text> : null}
-        <PrimaryButton disabled={saving} label={title} onPress={() => void submit()} />
+        {error ? <Text style={authStyles.error}>{error}</Text> : null}
+        <PrimaryButton disabled={saving || (mode === "sign_up" && !over18)} label={title} onPress={() => void submit()} />
         <Pressable accessibilityRole="button" onPress={() => { setMode(mode === "sign_up" ? "sign_in" : "sign_up"); setError(null); }}>
           <Text style={authStyles.link}>{mode === "sign_up" ? "Already have an account? Sign in" : "New here? Create an account"}</Text>
         </Pressable>
@@ -101,3 +113,11 @@ export default function SignUpScreen() {
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  checkRow: { flexDirection: "row", alignItems: "center", gap: 12, minHeight: 44 },
+  box: { width: 24, height: 24, borderRadius: 6, borderWidth: 2, borderColor: colors.muted, alignItems: "center", justifyContent: "center" },
+  boxOn: { backgroundColor: colors.accent, borderColor: colors.accent },
+  tick: { color: colors.accentText, fontSize: 16, fontWeight: "700" },
+  checkLabel: { color: colors.text, fontSize: 16, flexShrink: 1 },
+});

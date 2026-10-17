@@ -27,6 +27,22 @@ export const metricsRoutes = {
     query: z.object({ weeks: z.string().optional() }),
     response: z.looseObject({ ok: z.literal(true), metric: z.string(), weeks: z.array(z.looseObject({})) }),
   }),
+  /**
+   * Policy Reviewer (Oct 17): under-18 report. Same bearer token as /ops/metrics (404 when unset).
+   * Turns CardSight off and deletes the account and all its data.
+   */
+  postUnder18Report: defineRoute({
+    method: "POST",
+    path: "/ops/under-18-report",
+    bodyKind: "json",
+    body: z.object({ email: z.string().optional(), userId: z.string().optional() }),
+    response: z.object({
+      ok: z.literal(true),
+      cardSightOff: z.boolean(),
+      photosDeleted: z.number(),
+      rowsDeleted: z.number(),
+    }),
+  }),
   /** P1-18 sampled on-device timings (no images). */
   postPerfTelemetry: defineRoute({
     method: "POST",

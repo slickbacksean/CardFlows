@@ -27,11 +27,11 @@ const CardSightConsentSchema = z.looseObject({
 const AgeConfirmationSchema = z.looseObject({
   confirmed: z.boolean(),
   version: z.string().nullable(),
-  confirmedAt: z.string().nullable(),
+  attestedAt: z.string().nullable(),
   currentVersion: z.string(),
 });
 
-/** Sign-up carries the device-side age check result (never a birth date). */
+/** Sean: sign-up states 18+ (required checkbox); no birth date is collected. */
 const SignUpBody = z.object({
   email: z.string(),
   password: z.string(),
@@ -105,14 +105,14 @@ export const accountRoutes = {
     body: z.object({ granted: z.boolean(), version: z.string().optional() }),
     response: z.looseObject({ ok: z.literal(true), consent: CardSightConsentSchema }),
   }),
-  /** Sean: 18+ only. Whether this user (guest or account) confirmed the current age gate. */
+  /** Whether this account attested 18+ (current wording). Guests are never confirmed. */
   getAgeConfirmation: defineRoute({
     method: "GET",
     path: "/v1/age-confirmation",
     bodyKind: "none",
     response: z.looseObject({ ok: z.literal(true), age: AgeConfirmationSchema }),
   }),
-  /** The device checked month + year; only the 18+ result and gate version are sent. */
+  /** Testers and existing accounts: the in-app "I confirm I'm 18 or older." Accounts only. */
   confirmAge: defineRoute({
     method: "POST",
     path: "/v1/age-confirmation",

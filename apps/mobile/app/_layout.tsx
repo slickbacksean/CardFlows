@@ -1,9 +1,7 @@
 import { QueryClientProvider } from "@tanstack/react-query";
 import { type ErrorBoundaryProps, Link, Stack, router } from "expo-router";
 import { EMAIL_VERIFICATION_COPY, GUEST_RETENTION_NOTE, GUEST_SCAN_WALL_NOTE, GUEST_SIGNUP_COPY, signupMessage } from "@cardflow/shared";
-import { onAgeConfirmationRequired, onEmailUnverified, onSignupRequired } from "@/lib/api";
-import { loadAgeLockout, needsAgeGate, onAgeLockout, registerAgeGateOpener } from "@/lib/age-gate";
-import { AgeLockout } from "@/components/ui/age-lockout";
+import { onEmailUnverified, onSignupRequired } from "@/lib/api";
 import { StatusBar } from "expo-status-bar";
 import { useEffect, useState } from "react";
 import { startWriteQueue } from "@/lib/write-queue";
@@ -12,7 +10,7 @@ import { flushProductEvents, loadAnalyticsPreference } from "@/lib/product-event
 import { Alert, AppState, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { PrimaryButton } from "@/components/ui/primary-button";
-import { ensureIdentitySession, isGuestSession, peekActiveUserId } from "@/lib/identity";
+import { ensureIdentitySession } from "@/lib/identity";
 import { cardFlowQueryClient } from "@/lib/query-client";
 import { captureMobileException, initMobileSentry } from "@/lib/sentry";
 import { colors, space } from "@/lib/theme";
@@ -38,7 +36,6 @@ export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
 
 export default function RootLayout() {
   const [ready, setReady] = useState(false);
-  const [lockedOut, setLockedOut] = useState(false);
 
   useEffect(() => {
     // D7: send queued opt-in events when the app goes to the background.
@@ -49,44 +46,11 @@ export default function RootLayout() {
   }, []);
 
   useEffect(() => {
-    // Sean: 18+ only. A phone locked out by the age gate loads nothing and sends nothing.
-    void loadAgeLockout().then((locked) => {
-      if (locked) {
-        setLockedOut(true);
-        return;
-      }
-      void loadAnalyticsPreference();
-      void ensureIdentitySession()
-        .catch(() => undefined)
-        .finally(() => setReady(true));
-    });
-    return onAgeLockout(() => setLockedOut(true));
+    void loadAnalyticsPreference();
+    void ensureIdentitySession()
+      .catch(() => undefined)
+      .finally(() => setReady(true));
   }, []);
-
-  // Age gate: before the first upload (then the CardSight prompt), when the API refuses an
-  // upload without it, and at launch for signed-in testers and accounts that haven't answered.
-  useEffect(() => {
-    if (!ready) return;
-    let open = false;
-    const show = () => {
-      if (open) return;
-      open = true;
-      router.push("/age-gate");
-      setTimeout(() => { open = false; }, 1000);
-    };
-    const offOpener = registerAgeGateOpener(show);
-    const offRequired = onAgeConfirmationRequired(show);
-    const userKey = peekActiveUserId();
-    if (userKey && !isGuestSession()) {
-      void needsAgeGate(userKey).then((needed) => {
-        if (needed) show();
-      });
-    }
-    return () => {
-      offOpener();
-      offRequired();
-    };
-  }, [ready]);
 
   // D9: one sign-up prompt when the API says a guest has to sign up.
   useEffect(() => {
@@ -116,7 +80,6 @@ export default function RootLayout() {
   useEffect(() => (ready ? startWriteQueue() : undefined), [ready]);
   useEffect(() => (ready ? startScanQueue() : undefined), [ready]);
 
-  if (lockedOut) return <AgeLockout />;
   if (!ready) return null;
 
   return (
@@ -149,7 +112,6 @@ export default function RootLayout() {
         <Stack.Screen name="watch" options={{ headerShown: false }} />
         <Stack.Screen name="verify-email" options={{ headerShown: false }} />
         <Stack.Screen name="card-recognition" options={{ headerShown: false }} />
-        <Stack.Screen name="age-gate" options={{ headerShown: false, gestureEnabled: false }} />
       </Stack>
       <StatusBar style="light" />
     </QueryClientProvider>
