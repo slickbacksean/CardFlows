@@ -341,7 +341,7 @@ export default function CollectionScreen() {
         <View style={styles.searchBox}>
           <Ionicons color={colors.muted} name="search" size={16} />
           <TextInput
-            accessibilityLabel="Search collection"
+            accessibilityLabel="Search MyDEX"
             autoCapitalize="none"
             autoCorrect={false}
             clearButtonMode="while-editing"

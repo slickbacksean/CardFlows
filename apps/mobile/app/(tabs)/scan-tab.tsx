@@ -129,7 +129,7 @@ export default function ScanTabScreen() {
       <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
         <View style={styles.errorBar}>
           <Pressable
-            accessibilityHint="Returns to Collection"
+            accessibilityHint="Returns to MyDEX"
             accessibilityLabel="Close"
             accessibilityRole="button"
             hitSlop={12}
@@ -148,7 +148,7 @@ export default function ScanTabScreen() {
             error={null}
             note={SCREEN_STATE_COPY.livePageMarketplaceNote}
             onRetry={retryLivePage}
-            secondary={{ label: "Open Collection", onPress: openCollection }}
+            secondary={{ label: "Open MyDEX", onPress: openCollection }}
             what={SCREEN_ERROR_WHAT.livePage}
           />
         </View>
@@ -161,7 +161,7 @@ export default function ScanTabScreen() {
       <View style={styles.chrome}>
         <View style={styles.urlBar}>
           <Pressable
-            accessibilityHint="Returns to Collection"
+            accessibilityHint="Returns to MyDEX"
             accessibilityLabel="Close"
             accessibilityRole="button"
             hitSlop={12}

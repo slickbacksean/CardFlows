@@ -99,7 +99,7 @@ export default function ExportScreen() {
       setItems(result.items);
       setError(null);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Couldn't load the collection");
+      setError(caught instanceof Error ? caught.message : "Couldn't load MyDEX");
     } finally {
       setIsLoading(false);
     }
@@ -158,7 +158,7 @@ export default function ExportScreen() {
       </Text>
 
       {isLoading ? (
-        <ActivityIndicator accessibilityLabel="Loading collection" color={colors.accent} />
+        <ActivityIndicator accessibilityLabel="Loading MyDEX" color={colors.accent} />
       ) : (
         <View style={styles.list}>
           <DestinationCard

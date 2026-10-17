@@ -308,7 +308,7 @@ describe("UX review: data, stale banner, slow loading", () => {
     expect(SCREEN_EMPTY_COPY.gradePrepareDone.body).toBe("Copies you've moved are under Submitted or Returned.");
     expect(SCREEN_EMPTY_COPY.gradeReturned.body).toBe("Copies you mark Returned show up here.");
     expect(SCREEN_EMPTY_COPY.gradePrepare.action).toBe(`Open ${COLLECTION_DESTINATION_NAME}`);
-    expect(SCREEN_ERROR_WHAT.collection).toBe(`your ${COLLECTION_DESTINATION_NAME}`);
+    expect(SCREEN_ERROR_WHAT.collection).toBe(COLLECTION_DESTINATION_NAME);
     expect(SCREEN_STATE_COPY.unknownBody).toBe("Try again. If it keeps happening, check Settings for CardFlow's status.");
     const component = read("components/ui/screen-state.tsx");
     // P1-10: empty-state actions are primary; P1-3: focus moves to the title; P2-5: busy state.

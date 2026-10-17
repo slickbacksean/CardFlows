@@ -813,7 +813,7 @@ export function createApp(
 
   const collectionUnavailable = {
     ok: false,
-    error: "Collection is temporarily unavailable. Confirm still works — try again in a moment.",
+    error: "MyDEX is temporarily unavailable. Confirm still works — try again in a moment.",
   };
 
   async function writePokecollectorCopy(

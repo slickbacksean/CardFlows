@@ -384,7 +384,7 @@ export const SCREEN_EMPTY_COPY = {
 
 /** Screen-reader labels for the loading skeletons. */
 export const SCREEN_LOADING_LABELS = {
-  collection: "Loading your collection",
+  collection: `Loading ${COLLECTION_DESTINATION_NAME}`,
   grade: "Loading your copies",
   settings: "Checking connection",
   livePage: "Loading the live page",
@@ -392,7 +392,7 @@ export const SCREEN_LOADING_LABELS = {
 
 /** What each main screen calls its content in the generic error title. */
 export const SCREEN_ERROR_WHAT = {
-  collection: `your ${COLLECTION_DESTINATION_NAME}`,
+  collection: COLLECTION_DESTINATION_NAME,
   grade: "your copies",
   livePage: "the live page",
 } as const;

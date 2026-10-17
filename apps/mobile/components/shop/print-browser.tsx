@@ -208,7 +208,7 @@ export function PrintBrowser({
           keyboardDismissMode="on-drag"
           ListEmptyComponent={
             <Text style={styles.message}>
-              {ownershipOn ? "None of these cards are in your collection." : "No cards match."}
+              {ownershipOn ? "None of these cards are in MyDEX." : "No cards match."}
             </Text>
           }
           numColumns={3}

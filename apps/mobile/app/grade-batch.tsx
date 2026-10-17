@@ -40,7 +40,7 @@ export default function GradeBatchScreen() {
       setItems((await listInventory()).items);
       setError(null);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Couldn't load the collection");
+      setError(caught instanceof Error ? caught.message : "Couldn't load MyDEX");
     }
   }, []);
 

@@ -395,7 +395,7 @@ export default function ScanScreen() {
         {scan && frame === "rejected" ? (
           <FailureBody
             title="Not this card"
-            body="This scan stays out of Collection. No card is added."
+            body="This scan stays out of MyDEX. No card is added."
             actionLabel="Retake photo"
             onAction={goToCapture}
             secondaryLabel="Back"

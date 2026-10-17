@@ -54,10 +54,10 @@ describe("accessibility pass (P1-23)", () => {
     expect(src).toContain('importantForAccessibility="no-hide-descendants"');
     expect(src).toContain("changeArrow(change)");
     expect(chartSummaryLabel({ todayDisplay: "$1,240.00", changePct: 6, rangeLabel: "30 days" })).toBe(
-      "Collection value. $1,240.00 today, up 6.0% over 30 days.",
+      "MyDEX value. $1,240.00 today, up 6.0% over 30 days.",
     );
     expect(chartSummaryLabel({ todayDisplay: null, changePct: null, rangeLabel: "30 days" })).toBe(
-      "Collection value. No estimate yet.",
+      "MyDEX value. No estimate yet.",
     );
     expect(signedPercent(-3)).toBe("\u22123.0%");
     expect(changeArrow(5)).toBe("\u25B2");

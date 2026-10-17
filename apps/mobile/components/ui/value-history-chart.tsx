@@ -107,7 +107,7 @@ export function ValueHistoryChart({
           rangeLabel: option.days ? `${option.days} days` : "all time",
         })}
       >
-      <Text style={styles.label}>Collection value</Text>
+      <Text style={styles.label}>MyDEX value</Text>
       <Text maxFontSizeMultiplier={1.5} style={styles.value}>
         {latestCents !== null ? formatUsd(latestCents) : loading ? "…" : "No estimate"}
       </Text>
