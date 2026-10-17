@@ -268,6 +268,14 @@ export function getPokecollectorUserMapping(userId: string): PokecollectorUserMa
   return store.pokecollectorUsers.get(userId);
 }
 
+export function listPokecollectorUserMappings(): PokecollectorUserMapping[] {
+  return [...store.pokecollectorUsers.values()].map((mapping) => ({ ...mapping }));
+}
+
+export function deletePokecollectorUserMapping(userId: string): boolean {
+  return store.pokecollectorUsers.delete(userId);
+}
+
 /** CardFlow users linked to this PokéCollector user (a remote user must never be shared). */
 export function countPokecollectorLinks(pokecollectorUserId: string): number {
   let n = 0;
@@ -757,6 +765,8 @@ export interface StorePort {
   getSessionByToken: typeof getSessionByToken;
   getPokecollectorUserMapping: typeof getPokecollectorUserMapping;
   savePokecollectorUserMapping: typeof savePokecollectorUserMapping;
+  listPokecollectorUserMappings: typeof listPokecollectorUserMappings;
+  deletePokecollectorUserMapping: typeof deletePokecollectorUserMapping;
   countPokecollectorLinks: typeof countPokecollectorLinks;
   listInvitedUsers: typeof listInvitedUsers;
   getPreferences: typeof getPreferences;
@@ -994,6 +1004,8 @@ export function createMemoryStore(): StorePort {
     getSessionByToken,
     getPokecollectorUserMapping,
     savePokecollectorUserMapping,
+    listPokecollectorUserMappings,
+    deletePokecollectorUserMapping,
     countPokecollectorLinks,
     listInvitedUsers,
     getPreferences,

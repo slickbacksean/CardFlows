@@ -68,12 +68,11 @@ export function requireInvitedIdentity(userId: string): InvitedIdentity {
   return identity;
 }
 
-/** Stable PokéCollector username for an invited tester. Server-side only. */
-export function pokecollectorUsernameForIdentity(identity: InvitedIdentity): string {
-  const local = identity.label.split("@")[0]?.trim().toLowerCase() || "tester";
-  const slug = local.replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "tester";
-  return `cardflow-${slug}`;
-}
+/*
+ * PokéCollector usernames are opaque per user (`cardflow-u-<HMAC>`, apps/api
+ * pokecollector-link-secrets.ts). Nothing derives one from the email or label any more: users
+ * whose email local parts matched used to share one remote user.
+ */
 
 export const ACCOUNT_SWITCH_SECTION_LABEL = "Invited testers";
 export const ACCOUNT_SWITCH_CONFIRM_TITLE = "Switch tester?";

@@ -161,6 +161,9 @@ import { unmappedSetNameCounts } from "./tcgdex-catalog";
 import { createMemoryStore, type InventoryItemRecord, type StorePort } from "./store";
 import {
   offPokecollectorAccounts,
+  isLegacyLink,
+  isPendingLink,
+  isReadyLink,
   type PokecollectorAccounts,
   type PokecollectorCollectionCopy,
 } from "./pokecollector-accounts";
@@ -613,7 +616,7 @@ export function createApp(
       const link = getPokecollectorUserMapping(userId);
       store.accounts.deleteAllUserRows(userId, {
         northStarTotals: () => northStarTotalsFor(userId),
-        pokecollectorRemote: link ? { remoteUserId: link.pokecollectorUserId, hold: true, at } : undefined,
+        pokecollectorRemote: link && !isPendingLink(link) ? { remoteUserId: link.pokecollectorUserId, hold: true, at } : undefined,
       });
       if (scans > 0) {
         guestsPurged += 1;
@@ -720,20 +723,38 @@ export function createApp(
   const liveVideoObb = options.liveVideoObb ?? (() => null);
   const gradeUploads = options.gradeUploads ?? defaultGradeUploadCache;
 
+  /**
+   * Opaque per-user PokéCollector accounts: every CardFlow user gets their own remote user
+   * (`cardflow-u-<HMAC>`), created fresh and never looked up by name or derived from the email or
+   * label. Guests are never bound. Legacy (email-derived) links are never used; the relink script
+   * moves them to an opaque user rebuilt from CardFlow's inventory.
+   */
   async function bindPokecollectorUser(identity: InvitedIdentity) {
+    const userId = identity.userId;
+    if (isGuestUserId(userId)) return undefined;
+    const existing = getPokecollectorUserMapping(userId);
+    if (isReadyLink(existing)) return existing;
+    if (existing && isLegacyLink(existing)) return undefined;
+    if (pokecollectorAccounts.name === "off") return undefined;
     try {
-      const mapping = await pokecollectorAccounts.upsertInvitedUser(identity);
-      if (!mapping) return getPokecollectorUserMapping(identity.userId);
-      return savePokecollectorUserMapping(mapping);
+      // Pending row first (encrypted password), so a crash after the remote create can finish.
+      const pending = existing ?? pokecollectorAccounts.newPendingLink(userId);
+      if (!pending) return undefined;
+      if (!existing) savePokecollectorUserMapping(pending);
+      const linked = await pokecollectorAccounts.completeLink(pending);
+      if (!linked) return undefined;
+      return savePokecollectorUserMapping(linked);
     } catch {
-      return getPokecollectorUserMapping(identity.userId);
+      return undefined;
     }
   }
 
   async function mappedPokecollectorUser(userId: string) {
+    if (isGuestUserId(userId)) return undefined;
     const identity = resolveIdentity(userId);
     if (!identity) return undefined;
-    return getPokecollectorUserMapping(userId) ?? (await bindPokecollectorUser(identity));
+    const existing = getPokecollectorUserMapping(userId);
+    return isReadyLink(existing) ? existing : await bindPokecollectorUser(identity);
   }
 
   async function collectionCopiesForUser(userId: string) {
@@ -886,7 +907,8 @@ export function createApp(
       purchasePrice?: string | number | null;
     },
   ) {
-    if (pokecollectorAccounts.name === "off") return { ok: true as const };
+    // Guests are never linked to PokéCollector: their cards stay in CardFlow only.
+    if (pokecollectorAccounts.name === "off" || isGuestUserId(userId)) return { ok: true as const };
     try {
       const mapping = await mappedPokecollectorUser(userId);
       if (!mapping) return collectionUnavailable;
@@ -2056,14 +2078,22 @@ export function createApp(
     // The PokéCollector link (crm_pokecollector_users) goes with every other user_id row; its
     // remote user ID is queued for deletion in that same transaction.
     const pokecollectorLink = getPokecollectorUserMapping(userId);
-    const pokecollectorRemote = pokecollectorLink
-      ? { remoteUserId: pokecollectorLink.pokecollectorUserId, hold: isGuestUserId(userId), at: now().toISOString() }
-      : undefined;
+    // Opaque accounts: a legacy (email-derived or shared) link is held for the relink freeze, never
+    // deleted here. A pending link has no remote ID yet: nothing was ever written to it, so there's
+    // nothing to queue (its random password goes with the row, so nobody can sign in to it).
+    const pokecollectorRemote =
+      pokecollectorLink && !isPendingLink(pokecollectorLink)
+        ? {
+            remoteUserId: pokecollectorLink.pokecollectorUserId,
+            hold: isGuestUserId(userId) || isLegacyLink(pokecollectorLink),
+            at: now().toISOString(),
+          }
+        : undefined;
     const rows = store.accounts.deleteAllUserRows(userId, { northStarTotals, pokecollectorRemote });
     const photos = removePhotos();
     const staged = gradeUploads.releaseUser(userId);
     let pokecollector: "not_linked" | "queued" | "held" = "not_linked";
-    if (pokecollectorLink) {
+    if (pokecollectorRemote && pokecollectorLink) {
       const queued = store.accounts.listPokecollectorDeletions().find((row) => row.remoteUserId === pokecollectorLink.pokecollectorUserId);
       pokecollector = queued?.mode === "delete" ? "queued" : "held";
       if (pokecollector === "queued") {
@@ -2203,7 +2233,8 @@ export function createApp(
   });
 
   app.get("/v1/identity", async (c) => {
-    await bindPokecollectorUser(c.get("identity"));
+    // Guests are never bound to a PokéCollector user (they all used to share `cardflow-guest`).
+    if (!isGuestUserId(c.get("userId"))) await bindPokecollectorUser(c.get("identity"));
     return c.json({
       ok: true,
       identity: c.get("identity"),
