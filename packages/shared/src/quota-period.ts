@@ -1,7 +1,7 @@
 /**
  * Sean: the monthly pre-grade estimate allowance resets on each user's billing date. Free users
- * (no billing date) reset on their account creation date. Unused estimates and purchased credits
- * don't roll over.
+ * (no billing date) reset on their account creation date. Unused estimates don't roll over.
+ * Bought credits never expire (Sean, Oct 16).
  */
 function daysInMonth(year: number, month: number): number {
   return new Date(Date.UTC(year, month + 1, 0)).getUTCDate();

@@ -1,8 +1,9 @@
 /**
  * Monthly pre-grade estimate quotas per account (P0-11 / D9).
  * Free: 5 per month. Premium: 30. The month runs from the user's own reset date (billing date,
- * or account creation date for free users), not the calendar month. Extra credits are spent
- * after the allowance and expire at the next reset: nothing rolls over. Copy never says "AI" and never
+ * or account creation date for free users), not the calendar month. Unused allowance doesn't roll
+ * over. Bought credits are spent only after the allowance and never expire (Sean, Oct 16; Apple
+ * 3.1.1). Copy never says "AI" and never
  * names a grading company.
  */
 import { resetDateLabel } from "./quota-period";
@@ -19,11 +20,16 @@ export const GRADE_QUOTA_PREMIUM_PER_MONTH = 30;
 /** Default CardSight identify budget (vendor free tier). */
 export const CARDSIGHT_MONTHLY_BUDGET_DEFAULT = 750;
 
+/** Policy Reviewer (exact copy): the allowance resets, bought credits never expire. */
+export const CREDITS_NEVER_EXPIRE_COPY =
+  "Your monthly allowance resets on your reset date and unused monthly estimates don't roll over. Credits you buy never expire.";
+
 export const GRADE_QUOTA_COPY = {
   remainingOne: "1 pre-grade estimate left this month",
   outOfGrades: "You're out of pre-grade estimates this month.",
   outOfGradesHint:
-    "Your allowance resets on your monthly reset date. Unused estimates and credits don't roll over.",
+    // Policy Reviewer (exact): only the monthly allowance resets; bought credits never expire.
+    "Your monthly allowance resets on your reset date and unused monthly estimates don't roll over. Credits you buy never expire.",
   creditsOne: "1 extra credit available",
   iapUnavailable: "Purchases aren't available yet.",
   getExtra: "Get extra estimates",

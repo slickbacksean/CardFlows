@@ -428,7 +428,7 @@ export const gradeAccounts = sqliteTable(
     anchorAt: text("anchor_at"),
     /** Billing date once premium billing exists; wins over anchor_at. */
     billingAnchorAt: text("billing_anchor_at"),
-    /** Period key the extra credits belong to; credits from an older period are void (no rollover). */
+    /** Period of the last credit purchase (informational). Bought credits never expire (Sean, Oct 16). */
     creditsPeriod: text("credits_period"),
   },
   (table) => [check("grade_accounts_plan_chk", sql`${table.plan} in ('free', 'premium')`)],

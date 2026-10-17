@@ -135,7 +135,7 @@ export interface InventoryItemRecord {
 
 export interface GradeAccountRecord {
   plan: GradePlan;
-  /** Raw stored credits; only usable while `creditsPeriod` is the current period. */
+  /** Bought credits. They never expire and are spent after the monthly allowance. */
   extraCredits: number;
   anchorAt?: string | null;
   billingAnchorAt?: string | null;
@@ -781,7 +781,7 @@ export interface StorePort {
   listPortfolioSnapshots: typeof listPortfolioSnapshots;
   getGradeAccount: (userId: string) => GradeAccountRecord;
   setGradePlan: (userId: string, plan: GradePlan, at: string) => GradeAccountRecord;
-  /** Purchased credits belong to `periodKey`; credits from an older period are replaced (no rollover). */
+  /** Bought credits add up and never expire. `periodKey` only records the period of the last purchase. */
   addGradeCredits: (userId: string, credits: number, at: string, periodKey?: string) => GradeAccountRecord;
   /** Creates the grade account if needed and sets `anchorAt` once. */
   ensureGradeAnchor: (userId: string, at: string) => GradeAccountRecord;
@@ -883,10 +883,9 @@ export function createMemoryStore(): StorePort {
     const add = Math.floor(credits);
     if (!Number.isFinite(add) || add <= 0) return getGradeAccount(userId);
     const current = getGradeAccount(userId);
-    const stale = periodKey !== undefined && current.creditsPeriod !== periodKey;
     const next = {
       ...current,
-      extraCredits: (stale ? 0 : current.extraCredits) + add,
+      extraCredits: current.extraCredits + add,
       creditsPeriod: periodKey ?? current.creditsPeriod ?? null,
     };
     gradeAccounts.set(userId, next);
@@ -912,8 +911,8 @@ export function createMemoryStore(): StorePort {
   function consumeGradeQuota(userId: string, input: GradeQuotaConsumeInput): GradeQuotaConsumeResult {
     const usedThisMonth = getGradeQuotaUsage(userId, input.monthKey);
     const stored = getGradeAccount(userId);
-    // No rollover: credits from an older period are void.
-    const account = stored.creditsPeriod === input.monthKey ? stored : { ...stored, extraCredits: 0 };
+    // Bought credits never expire (Sean, Oct 16); they're spent only after the monthly allowance.
+    const account = stored;
     const decision = decideGradeConsume({
       usedThisMonth,
       monthlyLimit: input.monthlyLimit,

@@ -1704,10 +1704,6 @@ export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStor
     return snapshot;
   }
 
-  function liveCredits(account: GradeAccountRecord, periodKey: string): number {
-    return account.creditsPeriod === periodKey ? account.extraCredits : 0;
-  }
-
   function getGradeAccount(userId: string): GradeAccountRecord {
     const row = db.select().from(gradeAccounts).where(eq(gradeAccounts.userId, userId)).get();
     if (!row) return { plan: "free", extraCredits: 0, anchorAt: null, billingAnchorAt: null, creditsPeriod: null };
@@ -1755,13 +1751,11 @@ export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStor
     return sqlite.transaction(() => {
       ensureGradeAccount(userId, at);
       if (periodKey !== undefined) {
-        // No rollover: credits from an older period are replaced, not added to.
+        // Bought credits never expire (Sean, Oct 16): always added. credits_period only records
+        // the period of the last purchase.
         sqlite
-          .prepare(
-            `UPDATE grade_accounts SET extra_credits = CASE WHEN credits_period IS ? THEN extra_credits + ? ELSE ? END,
-             credits_period = ?, updated_at = ? WHERE user_id = ?`,
-          )
-          .run(periodKey, add, add, periodKey, at, userId);
+          .prepare(`UPDATE grade_accounts SET extra_credits = extra_credits + ?, credits_period = ?, updated_at = ? WHERE user_id = ?`)
+          .run(add, periodKey, at, userId);
         return getGradeAccount(userId);
       }
       sqlite
@@ -1800,18 +1794,17 @@ export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStor
           ok: true as const,
           source: "monthly" as const,
           usedThisMonth: getGradeQuotaUsage(userId, input.monthKey),
-          extraCredits: liveCredits(getGradeAccount(userId), input.monthKey),
+          extraCredits: getGradeAccount(userId).extraCredits,
         };
       }
-      // No rollover: only credits bought in this period can be spent.
+      // Allowance used up: spend a bought credit. Bought credits never expire.
       const credit = sqlite
         .prepare(
           `UPDATE grade_accounts SET extra_credits = extra_credits - 1, updated_at = ?
-           WHERE user_id = ? AND extra_credits > 0 AND credits_period IS ?`,
+           WHERE user_id = ? AND extra_credits > 0`,
         )
-        .run(input.at, userId, input.monthKey);
-      const stored = getGradeAccount(userId);
-      const account = { ...stored, extraCredits: liveCredits(stored, input.monthKey) };
+        .run(input.at, userId);
+      const account = getGradeAccount(userId);
       const usedThisMonth = getGradeQuotaUsage(userId, input.monthKey);
       if (credit.changes === 1) {
         return {
