@@ -257,6 +257,14 @@ export function getPokecollectorUserMapping(userId: string): PokecollectorUserMa
   return store.pokecollectorUsers.get(userId);
 }
 
+export function listPokecollectorUserMappings(): PokecollectorUserMapping[] {
+  return [...store.pokecollectorUsers.values()].map((mapping) => ({ ...mapping }));
+}
+
+export function deletePokecollectorUserMapping(userId: string): boolean {
+  return store.pokecollectorUsers.delete(userId);
+}
+
 export function savePokecollectorUserMapping(
   mapping: PokecollectorUserMapping,
 ): PokecollectorUserMapping {
@@ -735,6 +743,8 @@ export interface StorePort {
   getSessionByToken: typeof getSessionByToken;
   getPokecollectorUserMapping: typeof getPokecollectorUserMapping;
   savePokecollectorUserMapping: typeof savePokecollectorUserMapping;
+  listPokecollectorUserMappings: typeof listPokecollectorUserMappings;
+  deletePokecollectorUserMapping: typeof deletePokecollectorUserMapping;
   listInvitedUsers: typeof listInvitedUsers;
   getPreferences: typeof getPreferences;
   setPreferences: typeof setPreferences;
@@ -967,6 +977,8 @@ export function createMemoryStore(): StorePort {
     getSessionByToken,
     getPokecollectorUserMapping,
     savePokecollectorUserMapping,
+    listPokecollectorUserMappings,
+    deletePokecollectorUserMapping,
     listInvitedUsers,
     getPreferences,
     setPreferences,

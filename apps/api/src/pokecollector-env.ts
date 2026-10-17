@@ -13,6 +13,7 @@ import {
   type PokecollectorAccounts,
 } from "./pokecollector-accounts";
 import type { PokecollectorHttpOptions } from "./pokecollector-http";
+import { pokecollectorLinkSecretsFromEnv } from "./pokecollector-link-secrets";
 
 export type PokecollectorKind = "pokecollector" | "off";
 
@@ -140,6 +141,12 @@ export function createPricingFromEnv(env: Env = process.env): {
   return { pricing: createPokecollectorPricingProvider(options), selection };
 }
 
+/**
+ * Per-user PokéCollector accounts (opaque usernames, random per-link passwords). Fail closed:
+ * without the admin token, CARD_FLOW_POKECOLLECTOR_USER_PEPPER and CARD_FLOW_POKECOLLECTOR_LINK_KEY
+ * accounts stay off (catalog and pricing are unaffected). CARD_FLOW_POKECOLLECTOR_ACCOUNTS=false
+ * turns them off on purpose (RELEASE_ENV: off in staging/prod until the relink script has run).
+ */
 export function createPokecollectorAccountsFromEnv(env: Env = process.env): {
   accounts: PokecollectorAccounts;
   selection: PokecollectorSelection;
@@ -149,5 +156,14 @@ export function createPokecollectorAccountsFromEnv(env: Env = process.env): {
   if (!options) {
     return { accounts: offPokecollectorAccounts, selection };
   }
-  return { accounts: createPokecollectorAccounts(options), selection };
+  const off = (reason: string) => ({
+    accounts: offPokecollectorAccounts,
+    selection: { ...selection, kind: "off" as const, enabled: false, reason },
+  });
+  const flag = envValue(env, "CARD_FLOW_POKECOLLECTOR_ACCOUNTS")?.toLowerCase();
+  if (flag === "false" || flag === "0" || flag === "off") return off("CARD_FLOW_POKECOLLECTOR_ACCOUNTS=false");
+  if (!options.token) return off("CARD_FLOW_POKECOLLECTOR_TOKEN unset (fail closed)");
+  const { secrets, problem } = pokecollectorLinkSecretsFromEnv(env);
+  if (!secrets) return off(`${problem} (fail closed)`);
+  return { accounts: createPokecollectorAccounts({ ...options, secrets }), selection };
 }

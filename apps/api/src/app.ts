@@ -160,6 +160,8 @@ import { unmappedSetNameCounts } from "./tcgdex-catalog";
 import { createMemoryStore, type InventoryItemRecord, type StorePort } from "./store";
 import {
   offPokecollectorAccounts,
+  isLegacyLink,
+  isReadyLink,
   type PokecollectorAccounts,
   type PokecollectorCollectionCopy,
 } from "./pokecollector-accounts";
@@ -660,20 +662,38 @@ export function createApp(
   const liveVideoObb = options.liveVideoObb ?? (() => null);
   const gradeUploads = options.gradeUploads ?? defaultGradeUploadCache;
 
+  /**
+   * Opaque per-user PokéCollector accounts: every CardFlow user gets their own remote user
+   * (`cardflow-u-<HMAC>`), created fresh and never looked up by name or derived from the email or
+   * label. Guests are never bound. Legacy (email-derived) links are never used; the relink script
+   * moves them to an opaque user rebuilt from CardFlow's inventory.
+   */
   async function bindPokecollectorUser(identity: InvitedIdentity) {
+    const userId = identity.userId;
+    if (isGuestUserId(userId)) return undefined;
+    const existing = getPokecollectorUserMapping(userId);
+    if (isReadyLink(existing)) return existing;
+    if (existing && isLegacyLink(existing)) return undefined;
+    if (pokecollectorAccounts.name === "off") return undefined;
     try {
-      const mapping = await pokecollectorAccounts.upsertInvitedUser(identity);
-      if (!mapping) return getPokecollectorUserMapping(identity.userId);
-      return savePokecollectorUserMapping(mapping);
+      // Pending row first (encrypted password), so a crash after the remote create can finish.
+      const pending = existing ?? pokecollectorAccounts.newPendingLink(userId);
+      if (!pending) return undefined;
+      if (!existing) savePokecollectorUserMapping(pending);
+      const linked = await pokecollectorAccounts.completeLink(pending);
+      if (!linked) return undefined;
+      return savePokecollectorUserMapping(linked);
     } catch {
-      return getPokecollectorUserMapping(identity.userId);
+      return undefined;
     }
   }
 
   async function mappedPokecollectorUser(userId: string) {
+    if (isGuestUserId(userId)) return undefined;
     const identity = resolveIdentity(userId);
     if (!identity) return undefined;
-    return getPokecollectorUserMapping(userId) ?? (await bindPokecollectorUser(identity));
+    const existing = getPokecollectorUserMapping(userId);
+    return isReadyLink(existing) ? existing : await bindPokecollectorUser(identity);
   }
 
   async function collectionCopiesForUser(userId: string) {
@@ -826,7 +846,8 @@ export function createApp(
       purchasePrice?: string | number | null;
     },
   ) {
-    if (pokecollectorAccounts.name === "off") return { ok: true as const };
+    // Guests are never linked to PokéCollector: their cards stay in CardFlow only.
+    if (pokecollectorAccounts.name === "off" || isGuestUserId(userId)) return { ok: true as const };
     try {
       const mapping = await mappedPokecollectorUser(userId);
       if (!mapping) return collectionUnavailable;
@@ -2002,7 +2023,8 @@ export function createApp(
   });
 
   app.get("/v1/identity", async (c) => {
-    await bindPokecollectorUser(c.get("identity"));
+    // Guests are never bound to a PokéCollector user (they all used to share `cardflow-guest`).
+    if (!isGuestUserId(c.get("userId"))) await bindPokecollectorUser(c.get("identity"));
     return c.json({
       ok: true,
       identity: c.get("identity"),

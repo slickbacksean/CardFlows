@@ -315,7 +315,11 @@ export const passwordResetTokens = sqliteTable(
   (table) => [index("password_reset_tokens_user_idx").on(table.userId)],
 );
 
-/** Server-side CardFlow invited user → PokéCollector user. Never a client JWT. */
+/**
+ * Server-side CardFlow user → their own PokéCollector user. Never a client JWT. Opaque accounts:
+ * `pokecollector_username` is `cardflow-u-<HMAC>`; `password_ciphertext` is the per-link random
+ * password, AES-256-GCM encrypted (null on legacy email-derived links, which are never used).
+ */
 export const crmPokecollectorUsers = sqliteTable(
   "crm_pokecollector_users",
   {
@@ -323,6 +327,7 @@ export const crmPokecollectorUsers = sqliteTable(
     pokecollectorUserId: text("pokecollector_user_id").notNull(),
     pokecollectorUsername: text("pokecollector_username").notNull(),
     updatedAt: text("updated_at").notNull(),
+    passwordCiphertext: text("password_ciphertext"),
   },
   (table) => [
     unique("crm_pokecollector_users_pokecollector_user_id").on(table.pokecollectorUserId),

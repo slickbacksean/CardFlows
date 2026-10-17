@@ -1,12 +1,18 @@
-import { createHash } from "node:crypto";
 import {
-  pokecollectorUsernameForIdentity,
   POKECOLLECTOR_AUTH_LOGIN_PATH,
   POKECOLLECTOR_AUTH_USERS_PATH,
   POKECOLLECTOR_COLLECTION_PATH,
   POKECOLLECTOR_WISHLIST_PATH,
-  type InvitedIdentity,
 } from "@cardflow/shared";
+import {
+  decryptLinkPassword,
+  encryptLinkPassword,
+  isOpaquePokecollectorUsername,
+  opaquePokecollectorUsername,
+  randomPokecollectorPassword,
+  requireLinkSecrets,
+  type PokecollectorLinkSecrets,
+} from "./pokecollector-link-secrets";
 import {
   createPokecollectorFetcher,
   readPokecollectorJson,
@@ -16,9 +22,44 @@ import {
 
 export interface PokecollectorUserMapping {
   userId: string;
+  /** `pending:<username>` until the remote user exists (see PENDING_LINK_PREFIX). */
   pokecollectorUserId: string;
   pokecollectorUsername: string;
   updatedAt: string;
+  /**
+   * AES-256-GCM ciphertext of this link's random PokéCollector password. Null on legacy links
+   * (email-derived username, pepper-derived password): those are never used and are moved to an
+   * opaque account by the relink script (pokecollector-relink.ts).
+   */
+  passwordCiphertext: string | null;
+}
+
+/**
+ * A link row is saved as pending (with its encrypted password) before the remote user is created,
+ * so a crash between the two can be finished later by signing in with that password. The remote
+ * user is never looked up by name.
+ */
+export const PENDING_LINK_PREFIX = "pending:";
+
+export function isPendingLink(mapping: PokecollectorUserMapping): boolean {
+  return mapping.pokecollectorUserId.startsWith(PENDING_LINK_PREFIX);
+}
+
+/** Usable link: created remotely, opaque username, encrypted per-link password. */
+export function isReadyLink(mapping: PokecollectorUserMapping | undefined): mapping is PokecollectorUserMapping {
+  return Boolean(
+    mapping &&
+      mapping.passwordCiphertext &&
+      !isPendingLink(mapping) &&
+      isOpaquePokecollectorUsername(mapping.pokecollectorUsername),
+  );
+}
+
+/** Email-derived or shared links from before opaque accounts. Never used; relinked by the script. */
+export function isLegacyLink(mapping: PokecollectorUserMapping | undefined): boolean {
+  if (!mapping || isReadyLink(mapping)) return false;
+  const row: PokecollectorUserMapping = mapping;
+  return !(isPendingLink(row) && row.passwordCiphertext);
 }
 
 export interface PokecollectorCollectionCopy {
@@ -39,7 +80,19 @@ export interface PokecollectorCollectionWrite {
 
 export interface PokecollectorAccounts {
   readonly name: "pokecollector" | "mock" | "off";
-  upsertInvitedUser(identity: InvitedIdentity): Promise<PokecollectorUserMapping | null>;
+  /**
+   * Step 1 of linking: a pending link for this CardFlow user with the opaque username and a fresh
+   * random password (encrypted). The caller saves it before step 2. Null when accounts are off.
+   */
+  newPendingLink(userId: string): PokecollectorUserMapping | null;
+  /**
+   * Step 2: always creates the remote user (`POST /api/auth/users`), never looks one up by name.
+   * If the name already exists, it is ours only if this link's own password signs in (a create
+   * that succeeded before a crash); otherwise null (fail closed, never bound to someone else).
+   */
+  completeLink(pending: PokecollectorUserMapping): Promise<PokecollectorUserMapping | null>;
+  /** Ops (relink script): rotate a remote user's password to a random one and deactivate it. */
+  freezeRemoteUser(pokecollectorUserId: string): Promise<boolean>;
   listCollection(mapping: PokecollectorUserMapping): Promise<PokecollectorCollectionCopy[]>;
   listWishlist(mapping: PokecollectorUserMapping): Promise<PokecollectorCollectionCopy[]>;
   addPurchased(
@@ -122,32 +175,32 @@ function copyFromWire(
   };
 }
 
-function mappingFromIdentity(
-  identity: InvitedIdentity,
-  pokecollectorUserId: string,
-  username = pokecollectorUsernameForIdentity(identity),
-): PokecollectorUserMapping {
-  return {
-    userId: identity.userId,
-    pokecollectorUserId,
-    pokecollectorUsername: username,
-    updatedAt: new Date().toISOString(),
-  };
+function linkedMapping(pending: PokecollectorUserMapping, pokecollectorUserId: string): PokecollectorUserMapping {
+  return { ...pending, pokecollectorUserId, updatedAt: new Date().toISOString() };
 }
 
-export function pokecollectorPasswordForUsername(username: string, pepper: string): string {
-  const digest = createHash("sha256")
-    .update(`${username}:${pepper || "cardflow-local"}`)
-    .digest("hex")
-    .slice(0, 32);
-  return `cf-${digest}`;
+function newPendingMapping(userId: string, secrets: PokecollectorLinkSecrets): PokecollectorUserMapping {
+  const username = opaquePokecollectorUsername(userId, secrets.userPepper);
+  return {
+    userId,
+    pokecollectorUserId: `${PENDING_LINK_PREFIX}${username}`,
+    pokecollectorUsername: username,
+    updatedAt: new Date().toISOString(),
+    passwordCiphertext: encryptLinkPassword(randomPokecollectorPassword(), userId, secrets.linkKey),
+  };
 }
 
 export function createOffPokecollectorAccounts(): PokecollectorAccounts {
   return {
     name: "off",
-    async upsertInvitedUser() {
+    newPendingLink() {
       return null;
+    },
+    async completeLink() {
+      return null;
+    },
+    async freezeRemoteUser() {
+      return false;
     },
     async listCollection() {
       return [];
@@ -169,10 +222,20 @@ export const offPokecollectorAccounts = createOffPokecollectorAccounts();
 export interface MockPokecollectorAccounts extends PokecollectorAccounts {
   seedCollection(pokecollectorUserId: string, items: PokecollectorCollectionCopy[]): void;
   seedWishlist(pokecollectorUserId: string, items: PokecollectorCollectionCopy[]): void;
+  /** Remote users by username (tests check that nothing is shared). */
+  readonly remoteUsers: ReadonlyMap<string, { id: string; frozen: boolean }>;
 }
 
-export function createMockPokecollectorAccounts(): MockPokecollectorAccounts {
-  const users = new Map<string, PokecollectorUserMapping>();
+/** Test-only secrets for the mock (never used by the real adapter). */
+export const MOCK_POKECOLLECTOR_SECRETS: PokecollectorLinkSecrets = {
+  userPepper: "mock-pokecollector-user-pepper-for-tests-only",
+  linkKey: Buffer.alloc(32, 7),
+};
+
+export function createMockPokecollectorAccounts(
+  secrets: PokecollectorLinkSecrets = MOCK_POKECOLLECTOR_SECRETS,
+): MockPokecollectorAccounts {
+  const remoteUsers = new Map<string, { id: string; frozen: boolean; password: string }>();
   const collections = new Map<string, PokecollectorCollectionCopy[]>();
   const wishlists = new Map<string, PokecollectorCollectionCopy[]>();
   let nextId = 1;
@@ -201,18 +264,31 @@ export function createMockPokecollectorAccounts(): MockPokecollectorAccounts {
 
   return {
     name: "mock",
-    async upsertInvitedUser(identity) {
-      const existing = users.get(identity.userId);
-      if (existing) return existing;
-      const mapping = mappingFromIdentity(identity, String(nextId++));
-      users.set(identity.userId, mapping);
-      if (!collections.has(mapping.pokecollectorUserId)) {
-        collections.set(mapping.pokecollectorUserId, []);
+    remoteUsers,
+    newPendingLink(userId) {
+      return newPendingMapping(userId, secrets);
+    },
+    async completeLink(pending) {
+      const password = decryptLinkPassword(pending.passwordCiphertext ?? "", pending.userId, secrets.linkKey);
+      const existing = remoteUsers.get(pending.pokecollectorUsername);
+      if (existing) {
+        // Same as PokéCollector: 400 "Username already exists"; ours only if our password works.
+        return existing.password === password && !existing.frozen ? linkedMapping(pending, existing.id) : null;
       }
-      if (!wishlists.has(mapping.pokecollectorUserId)) {
-        wishlists.set(mapping.pokecollectorUserId, []);
+      const id = String(nextId++);
+      remoteUsers.set(pending.pokecollectorUsername, { id, frozen: false, password });
+      collections.set(id, []);
+      wishlists.set(id, []);
+      return linkedMapping(pending, id);
+    },
+    async freezeRemoteUser(pokecollectorUserId) {
+      for (const user of remoteUsers.values()) {
+        if (user.id !== pokecollectorUserId) continue;
+        user.frozen = true;
+        user.password = randomPokecollectorPassword();
+        return true;
       }
-      return mapping;
+      return false;
     },
     async listCollection(mapping) {
       return [...(collections.get(mapping.pokecollectorUserId) ?? [])];
@@ -236,54 +312,23 @@ export function createMockPokecollectorAccounts(): MockPokecollectorAccounts {
 }
 
 export function createPokecollectorAccounts(
-  options: PokecollectorHttpOptions & { passwordPepper?: string },
+  options: PokecollectorHttpOptions & { secrets: PokecollectorLinkSecrets },
 ): PokecollectorAccounts {
+  // Fail closed: both secrets and the admin token are required, with no fallback value.
+  const secrets = requireLinkSecrets(options.secrets);
+  if (!options.token?.trim()) throw new Error("CARD_FLOW_POKECOLLECTOR_TOKEN (admin) is required for PokéCollector accounts");
   const adminHttp = createPokecollectorFetcher(options);
   const anonymousHttp = createPokecollectorFetcher({ ...options, token: null });
-  const pepper = options.passwordPepper ?? options.token ?? "";
-  const tokenByUsername = new Map<string, string>();
+  /** Access tokens by CardFlow user ID (memory only). */
+  const tokenByUserId = new Map<string, string>();
 
-  async function listUsers(): Promise<Record<string, unknown>[]> {
-    const response = await adminHttp.request(POKECOLLECTOR_AUTH_USERS_PATH);
-    throwForPokecollectorStatus(response);
-    if (!response.ok) return [];
-    return recordsFromUnknown(await readPokecollectorJson(response));
-  }
+  const passwordFor = (mapping: PokecollectorUserMapping) =>
+    decryptLinkPassword(mapping.passwordCiphertext ?? "", mapping.userId, secrets.linkKey);
 
-  async function findUserByUsername(username: string): Promise<Record<string, unknown> | null> {
-    const users = await listUsers();
-    return (
-      users.find((user) => asString(user.username)?.toLowerCase() === username.toLowerCase()) ??
-      null
-    );
-  }
-
-  async function createUser(username: string): Promise<Record<string, unknown> | null> {
-    const password = pokecollectorPasswordForUsername(username, pepper);
-    const response = await adminHttp.request(POKECOLLECTOR_AUTH_USERS_PATH, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        username,
-        password,
-        role: "trainer",
-        must_change_password: false,
-      }),
-    });
-    if (response.status === 400 || response.status === 409) return findUserByUsername(username);
-    throwForPokecollectorStatus(response);
-    if (!response.ok) return null;
-    const created = await readPokecollectorJson(response);
-    return isRecord(created) ? created : null;
-  }
-
-  async function login(username: string): Promise<string | null> {
-    const cached = tokenByUsername.get(username);
-    if (cached) return cached;
-    const password = pokecollectorPasswordForUsername(username, pepper);
+  async function signIn(mapping: PokecollectorUserMapping): Promise<{ token: string; remoteId: string | null } | null> {
     const body = new URLSearchParams({
-      username,
-      password,
+      username: mapping.pokecollectorUsername,
+      password: passwordFor(mapping),
       grant_type: "password",
     });
     const response = await anonymousHttp.request(POKECOLLECTOR_AUTH_LOGIN_PATH, {
@@ -294,8 +339,20 @@ export function createPokecollectorAccounts(
     if (!response.ok) return null;
     const payload = await readPokecollectorJson(response);
     const token = isRecord(payload) ? asString(payload.access_token) : null;
-    if (token) tokenByUsername.set(username, token);
-    return token;
+    if (!token) return null;
+    const user = isRecord(payload) && isRecord(payload.user) ? payload.user : null;
+    return { token, remoteId: user ? asString(user.id) : null };
+  }
+
+  async function login(mapping: PokecollectorUserMapping): Promise<string | null> {
+    if (!isReadyLink(mapping)) return null;
+    const cached = tokenByUserId.get(mapping.userId);
+    if (cached) return cached;
+    const signedIn = await signIn(mapping);
+    // Only the user this link created: a token for any other remote ID is never used.
+    if (!signedIn || (signedIn.remoteId && signedIn.remoteId !== mapping.pokecollectorUserId)) return null;
+    tokenByUserId.set(mapping.userId, signedIn.token);
+    return signedIn.token;
   }
 
   function userHttp(token: string) {
@@ -306,7 +363,7 @@ export function createPokecollectorAccounts(
     mapping: PokecollectorUserMapping,
     pathName: string,
   ): Promise<PokecollectorCollectionCopy[]> {
-    const token = await login(mapping.pokecollectorUsername);
+    const token = await login(mapping);
     if (!token) return [];
     const response = await userHttp(token).request(pathName);
     throwForPokecollectorStatus(response);
@@ -321,7 +378,7 @@ export function createPokecollectorAccounts(
     pathName: string,
     body: Record<string, unknown>,
   ): Promise<PokecollectorCollectionCopy | null> {
-    const token = await login(mapping.pokecollectorUsername);
+    const token = await login(mapping);
     if (!token) return null;
     const response = await userHttp(token).request(pathName, {
       method: "POST",
@@ -337,16 +394,48 @@ export function createPokecollectorAccounts(
 
   return {
     name: "pokecollector",
-    async upsertInvitedUser(identity) {
-      const username = pokecollectorUsernameForIdentity(identity);
+    newPendingLink(userId) {
+      return newPendingMapping(userId, secrets);
+    },
+    async completeLink(pending) {
       try {
-        const existing = await findUserByUsername(username);
-        const user = existing ?? (await createUser(username));
-        const pokecollectorUserId = user ? asString(user.id) : null;
-        if (!pokecollectorUserId) return null;
-        return mappingFromIdentity(identity, pokecollectorUserId, username);
+        const response = await adminHttp.request(POKECOLLECTOR_AUTH_USERS_PATH, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            username: pending.pokecollectorUsername,
+            password: passwordFor(pending),
+            role: "trainer",
+            must_change_password: false,
+          }),
+        });
+        if (response.ok) {
+          const created = await readPokecollectorJson(response);
+          const id = isRecord(created) ? asString(created.id) : null;
+          return id ? linkedMapping(pending, id) : null;
+        }
+        // PokéCollector v1.51 answers 400 "Username already exists". It's ours only if this
+        // link's own password signs in (an earlier create that we didn't get to save).
+        if (response.status === 400 || response.status === 409) {
+          const signedIn = await signIn(pending);
+          return signedIn?.remoteId ? linkedMapping(pending, signedIn.remoteId) : null;
+        }
+        throwForPokecollectorStatus(response);
+        return null;
       } catch {
         return null;
+      }
+    },
+    async freezeRemoteUser(pokecollectorUserId) {
+      try {
+        const response = await adminHttp.request(`${POKECOLLECTOR_AUTH_USERS_PATH}/${encodeURIComponent(pokecollectorUserId)}`, {
+          method: "PUT",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ password: randomPokecollectorPassword(), is_active: false }),
+        });
+        return response.ok;
+      } catch {
+        return false;
       }
     },
     async listCollection(mapping) {

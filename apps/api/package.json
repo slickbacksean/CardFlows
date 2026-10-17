@@ -12,7 +12,8 @@
     "db:generate": "drizzle-kit generate --name mvp_crm_schema",
     "db:migrate": "tsx src/db/apply-migration.ts",
     "report:mapping": "tsx scripts/mapping-report.ts",
-    "build:phash-index": "tsx scripts/build-english-phash-index.ts"
+    "build:phash-index": "tsx scripts/build-english-phash-index.ts",
+    "pokecollector:relink": "tsx scripts/pokecollector-relink.ts"
   },
   "dependencies": {
     "@cardflow/shared": "workspace:*",

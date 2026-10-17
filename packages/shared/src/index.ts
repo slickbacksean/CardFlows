@@ -146,7 +146,6 @@ export {
   invitedIdentityByUserId,
   isInvitedUserId,
   listInvitedIdentities,
-  pokecollectorUsernameForIdentity,
   requireInvitedIdentity,
   shouldConfirmAccountSwitch,
 } from "./identity";

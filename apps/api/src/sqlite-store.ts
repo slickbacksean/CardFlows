@@ -314,12 +314,26 @@ export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStor
       .where(eq(crmPokecollectorUsers.userId, userId))
       .get();
     if (!row) return undefined;
+    return mappingFromRow(row);
+  }
+
+  function mappingFromRow(row: typeof crmPokecollectorUsers.$inferSelect): PokecollectorUserMapping {
     return {
       userId: row.userId,
       pokecollectorUserId: row.pokecollectorUserId,
       pokecollectorUsername: row.pokecollectorUsername,
       updatedAt: row.updatedAt,
+      passwordCiphertext: row.passwordCiphertext ?? null,
     };
+  }
+
+  /** Relink script: every link row (legacy, pending and ready). */
+  function listPokecollectorUserMappings(): PokecollectorUserMapping[] {
+    return db.select().from(crmPokecollectorUsers).all().map(mappingFromRow);
+  }
+
+  function deletePokecollectorUserMapping(userId: string): boolean {
+    return db.delete(crmPokecollectorUsers).where(eq(crmPokecollectorUsers.userId, userId)).run().changes > 0;
   }
 
   function savePokecollectorUserMapping(
@@ -330,6 +344,7 @@ export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStor
       pokecollectorUserId: mapping.pokecollectorUserId,
       pokecollectorUsername: mapping.pokecollectorUsername,
       updatedAt: mapping.updatedAt,
+      passwordCiphertext: mapping.passwordCiphertext ?? null,
     };
     db.insert(crmPokecollectorUsers)
       .values(values)
@@ -339,6 +354,7 @@ export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStor
           pokecollectorUserId: values.pokecollectorUserId,
           pokecollectorUsername: values.pokecollectorUsername,
           updatedAt: values.updatedAt,
+          passwordCiphertext: values.passwordCiphertext,
         },
       })
       .run();
@@ -2003,6 +2019,8 @@ export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStor
     getSessionByToken,
     getPokecollectorUserMapping,
     savePokecollectorUserMapping,
+    listPokecollectorUserMappings,
+    deletePokecollectorUserMapping,
     listInvitedUsers,
     getPreferences,
     setPreferences,
