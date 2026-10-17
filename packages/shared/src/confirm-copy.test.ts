@@ -52,7 +52,7 @@ describe("Confirm fail-soft copy", () => {
       "We couldn't confirm this card — search by English set and number",
     );
     expect(CONFIRM_SEARCH_MANUALLY_LABEL).toBe("Search manually");
-    expect(CONFIRM_COULD_NOT_IDENTIFY_TITLE).toBe("Could not identify");
+    expect(CONFIRM_COULD_NOT_IDENTIFY_TITLE).toBe("Couldn't identify");
     expect(confirmFailSoftTitle("no-match")).toBe(CONFIRM_COULD_NOT_IDENTIFY_TITLE);
     expect(CONFIRM_AMBIGUOUS_TITLE).toContain("pick the print");
     expect(forbiddenConfirmClaim(CONFIRM_COULD_NOT_CONFIRM_MESSAGE)).toBeNull();

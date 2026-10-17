@@ -74,7 +74,7 @@ export default function MaxBuyRulesScreen() {
         .catch((caught: unknown) => {
           if (cancelled) return;
           applyPreferences(peekMaxBuyPreferences());
-          setError(caught instanceof Error ? caught.message : "Could not load rules");
+          setError(caught instanceof Error ? caught.message : "Couldn't load rules");
         });
       return () => {
         cancelled = true;
@@ -116,7 +116,7 @@ export default function MaxBuyRulesScreen() {
       setNotice("Rules saved. Max Buy guidance will recompute on saved cards.");
     } catch (caught) {
       setNotice(null);
-      setError(caught instanceof Error ? caught.message : "Could not save rules");
+      setError(caught instanceof Error ? caught.message : "Couldn't save rules");
     } finally {
       setIsSaving(false);
     }

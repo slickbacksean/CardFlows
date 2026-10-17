@@ -5,13 +5,17 @@ import {
   LIVESTREAM_SCANNER_UNAVAILABLE_MESSAGE,
   type LiveOverlayGuess,
   type LiveVideoIdentityResult,
+  actionErrorMessage,
+  purchasedFailureMessage,
+  SCREEN_ERROR_WHAT,
+  SCREEN_STATE_COPY,
 } from "@cardflow/shared";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { LivestreamBrowser, type LivestreamBrowserHandle } from "@/components/ui/livestream-browser";
-import { PrimaryButton } from "@/components/ui/primary-button";
+import { InlineError, ScreenError } from "@/components/ui/screen-state";
 import { ScreenerOverlay } from "@/components/ui/screener-overlay";
 import { undoLivestreamPurchase } from "@/lib/api";
 import { cancelQueuedWrite, isQueuedId, runQueueableWrite } from "@/lib/write-queue";
@@ -41,6 +45,8 @@ export default function ScanTabScreen() {
   const [canGoBack, setCanGoBack] = useState(false);
   const [canGoForward, setCanGoForward] = useState(false);
   const [browserEpoch, setBrowserEpoch] = useState(0);
+  // Purchase and undo failures show under the header, never over the live page.
+  const [purchaseError, setPurchaseError] = useState<string | null>(null);
   const [tabFocused, setTabFocused] = useState(true);
   const [liveIdentity, setLiveIdentity] = useState<LiveVideoIdentityResult | null>(null);
   const browserRef = useRef<LivestreamBrowserHandle>(null);
@@ -81,21 +87,33 @@ export default function ScanTabScreen() {
 
   async function onPurchased(guess: LiveOverlayGuess) {
     trackEvent("purchased", { source: "livestream" });
-    const saved = await runQueueableWrite("livestream_purchase", {
-      tcgdexId: guess.tcgdexId,
-      platform,
-      streamUrl: chrome.pageUrl,
-    });
-    // Offline: the tap is queued and synced later; Undo drops it from the queue.
-    return { inventoryItemId: saved.queued ? saved.queuedId : saved.result.item.inventoryItemId };
+    setPurchaseError(null);
+    try {
+      const saved = await runQueueableWrite("livestream_purchase", {
+        tcgdexId: guess.tcgdexId,
+        platform,
+        streamUrl: chrome.pageUrl,
+      });
+      // Offline: the tap is queued and synced later; Undo drops it from the queue.
+      return { inventoryItemId: saved.queued ? saved.queuedId : saved.result.item.inventoryItemId };
+    } catch (caught) {
+      setPurchaseError(purchasedFailureMessage(caught));
+      throw caught;
+    }
   }
 
   async function onUndoPurchased(inventoryItemId: string) {
+    setPurchaseError(null);
     if (isQueuedId(inventoryItemId)) {
       cancelQueuedWrite(inventoryItemId);
       return;
     }
-    await undoLivestreamPurchase(inventoryItemId);
+    try {
+      await undoLivestreamPurchase(inventoryItemId);
+    } catch (caught) {
+      setPurchaseError(actionErrorMessage(caught, "Couldn't undo. Try again."));
+      throw caught;
+    }
   }
 
   function toggleScanner() {
@@ -111,7 +129,7 @@ export default function ScanTabScreen() {
       <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
         <View style={styles.errorBar}>
           <Pressable
-            accessibilityHint="Returns to Collection"
+            accessibilityHint="Returns to MyDEX"
             accessibilityLabel="Close"
             accessibilityRole="button"
             hitSlop={12}
@@ -126,9 +144,13 @@ export default function ScanTabScreen() {
           <View style={styles.iconButton} />
         </View>
         <View style={styles.errorBody}>
-          <Text style={styles.errorMessage}>Could not load the live page.</Text>
-          <PrimaryButton label="Try again" onPress={retryLivePage} />
-          <PrimaryButton label="Open Collection" onPress={openCollection} tone="muted" />
+          <ScreenError
+            error={null}
+            note={SCREEN_STATE_COPY.livePageMarketplaceNote}
+            onRetry={retryLivePage}
+            secondary={{ label: "Open MyDEX", onPress: openCollection }}
+            what={SCREEN_ERROR_WHAT.livePage}
+          />
         </View>
       </SafeAreaView>
     );
@@ -139,7 +161,7 @@ export default function ScanTabScreen() {
       <View style={styles.chrome}>
         <View style={styles.urlBar}>
           <Pressable
-            accessibilityHint="Returns to Collection"
+            accessibilityHint="Returns to MyDEX"
             accessibilityLabel="Close"
             accessibilityRole="button"
             hitSlop={12}
@@ -221,6 +243,11 @@ export default function ScanTabScreen() {
             />
           ))}
         </View>
+        {purchaseError ? (
+          <View style={styles.purchaseError}>
+            <InlineError message={purchaseError} />
+          </View>
+        ) : null}
         {scannerUnavailable ? (
           <View
             accessibilityLabel={LIVESTREAM_SCANNER_UNAVAILABLE_MESSAGE}
@@ -310,6 +337,7 @@ function SegmentButton({ label, selected, onPress }: SegmentButtonProps) {
 }
 
 const styles = StyleSheet.create({
+  purchaseError: { paddingHorizontal: space.md, paddingBottom: space.xs },
   safe: { flex: 1, backgroundColor: colors.bg },
   chrome: {
     paddingBottom: space.sm,

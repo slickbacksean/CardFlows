@@ -28,6 +28,7 @@ import {
   formatPriceEstimateMeta,
   parseDollarsToCents,
   priceSourceLabel,
+  purchasedFailureMessage,
   resolvePriceSourceKind,
   type CardFlowCanonicalCard,
   type CardFlowPriceEstimate,
@@ -36,7 +37,7 @@ import {
 import { Image } from "expo-image";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { HowThisWorksSheet } from "@/components/ui/how-this-works-sheet";
@@ -86,6 +87,7 @@ export default function DecideScreen() {
   );
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const purchaseInFlightRef = useRef(false);
   const [watchlistOpen, setWatchlistOpen] = useState(false);
   const [howThisWorksOpen, setHowThisWorksOpen] = useState(false);
   const [referenceFetchedAt, setReferenceFetchedAt] = useState<string | null>(
@@ -245,12 +247,15 @@ export default function DecideScreen() {
 
   async function onAddCard(then: "collection" | "listing" = "collection") {
     if (!confirmationIdValue) return;
+    // Community review 4: duplicate guard (a double tap saves once).
+    if (purchaseInFlightRef.current) return;
     // Prices never block: your own typed price stands in when the estimate is unavailable.
     const marketPrice = marketEstimate?.amount ?? typedReference ?? pickedReference?.amount ?? null;
     if (!marketPrice) {
       setError(PRICE_ESTIMATE_UNAVAILABLE_COPY);
       return;
     }
+    purchaseInFlightRef.current = true;
     setIsSaving(true);
     setError(null);
     try {
@@ -273,8 +278,9 @@ export default function DecideScreen() {
         params: { segment: "purchased" },
       });
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Save failed");
+      setError(purchasedFailureMessage(caught));
     } finally {
+      purchaseInFlightRef.current = false;
       setIsSaving(false);
     }
   }
@@ -296,7 +302,8 @@ export default function DecideScreen() {
   }
 
   async function onWatchlistPurchased() {
-    if (!watchlistItemId) return;
+    if (!watchlistItemId || purchaseInFlightRef.current) return;
+    purchaseInFlightRef.current = true;
     setIsSaving(true);
     setError(null);
     try {
@@ -312,8 +319,9 @@ export default function DecideScreen() {
         },
       });
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Save failed");
+      setError(purchasedFailureMessage(caught));
     } finally {
+      purchaseInFlightRef.current = false;
       setIsSaving(false);
     }
   }

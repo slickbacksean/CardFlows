@@ -92,7 +92,7 @@ export function stillFromCameraCapture(input: {
   width?: number;
   height?: number;
 }): { still: PickedGradeStill } | { error: string } {
-  if (!input.uri) return { error: "Could not take a photo. Try again." };
+  if (!input.uri) return { error: "Couldn't take a photo. Try again." };
   if (
     typeof input.width === "number" &&
     typeof input.height === "number" &&

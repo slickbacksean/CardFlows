@@ -48,3 +48,27 @@ export const PREGRADE_BANNED_WORDS = [/\bAI\b/i, /\bPSA\b/i, /\bBGS\b/i, /\bCGC\
 export function pregradeCopyViolations(text: string): string[] {
   return PREGRADE_BANNED_WORDS.filter((word) => word.test(text)).map((word) => word.source);
 }
+
+/**
+ * Sean (Oct 17, 2026): the one exception. Graded-slab sold prices and comps (the shop card
+ * page's slab price picker and slab-pricing.ts) may name PSA, BGS and CGC, because those are
+ * real sold prices for slabs those companies graded. Nothing else may: pre-grade estimate copy
+ * never names a grading company, and no copy anywhere says AI. See
+ * docs/ESTIMATE_AND_PRICING_DISCLAIMER_DRAFT.md ("Grading-company names").
+ */
+export const SLAB_COMP_COPY_FILES = [
+  "apps/mobile/app/(tabs)/shop/card.tsx",
+  "packages/shared/src/slab-pricing.ts",
+] as const;
+
+/** Estimate wording: a chunk that says this, in any file, gets the full estimate rules. */
+const ESTIMATE_WORDING = /pre-?grade|estimate|official grade/i;
+
+/**
+ * Violations for slab-comp copy: company names are fine there, AI never is, and any chunk
+ * that reads as estimate copy still gets the full estimate rules.
+ */
+export function slabCompCopyViolations(text: string): string[] {
+  if (ESTIMATE_WORDING.test(text)) return pregradeCopyViolations(text);
+  return pregradeCopyViolations(text).filter((source) => source === /\bAI\b/i.source);
+}

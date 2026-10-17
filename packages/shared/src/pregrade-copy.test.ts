@@ -23,7 +23,7 @@ import {
   GRADE_FLOW_RETRY_LABEL,
   GRADE_FLOW_UNAVAILABLE_BODY,
 } from "./grade-flow-resilience";
-import { PREGRADE_COPY, pregradeCopyViolations } from "./pregrade-copy";
+import { PREGRADE_COPY, pregradeCopyViolations, SLAB_COMP_COPY_FILES, slabCompCopyViolations } from "./pregrade-copy";
 import { SHARE_CARD_COPY, shareCardVisibleCopy } from "./share-card-copy";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -226,5 +226,51 @@ describe("pre-grade copy", () => {
     expect(spec).toContain("PREGRADE_COPY");
     expect(spec).toContain("Pre-grade estimate");
     expect(spec).toContain("Estimate only. Not an official grade.");
+  });
+});
+
+describe("grading-company names: slab comps only (Sean, Oct 17)", () => {
+  const appDirs = [
+    path.join(REPO, "apps", "mobile", "app"),
+    path.join(REPO, "apps", "mobile", "components"),
+    path.join(REPO, "apps", "mobile", "lib"),
+    path.join(REPO, "packages", "shared", "src"),
+  ];
+  const slabFiles = new Set(SLAB_COMP_COPY_FILES.map((file) => path.join(REPO, file)));
+
+  it("the slab-comp files exist (so the exception can't silently widen)", () => {
+    for (const file of slabFiles) expect(existsSync(file), file).toBe(true);
+    expect(SLAB_COMP_COPY_FILES).toHaveLength(2);
+  });
+
+  // AI in estimate copy is covered file by file above; the CardSight consent text must be
+  // able to say "AI models", so this app-wide sweep checks company names only.
+  const companyOnly = (text: string) =>
+    pregradeCopyViolations(text).filter((source) => source !== /\bAI\b/i.source);
+
+  it("company names appear only in slab-comp copy, and never in estimate wording there", () => {
+    const offenders: string[] = [];
+    for (const file of appDirs.flatMap((dir) => sourceFiles(dir))) {
+      const check = slabFiles.has(file) ? slabCompCopyViolations : companyOnly;
+      readFileSync(file, "utf8")
+        .split("\n")
+        .forEach((line, index) => {
+          if (/^\s*(\/\/|\*|\/\*)/.test(line)) return;
+          for (const chunk of quotedUserFacingChunks(line)) {
+            if (check(chunk).length > 0) offenders.push(`${path.relative(REPO, file)}:${index + 1}: ${chunk}`);
+          }
+        });
+    }
+    expect(offenders).toEqual([]);
+  });
+
+  it("slab comps may name companies, but not AI and not in estimate wording", () => {
+    expect(slabCompCopyViolations('"PSA 10 sold"')).toEqual([]);
+    expect(slabCompCopyViolations('"BGS 9.5"')).toEqual([]);
+    expect(slabCompCopyViolations('"CGC"')).toEqual([]);
+    expect(slabCompCopyViolations('"AI slab price"')).toEqual([/\bAI\b/i.source]);
+    expect(slabCompCopyViolations('"Pre-grade estimate: PSA 9"')).toEqual([/\bPSA\b/i.source]);
+    expect(slabCompCopyViolations('"Estimate only. Not an official CGC grade."')).toEqual([/\bCGC\b/i.source]);
+    expect(pregradeCopyViolations('"PSA 10 sold"')).toEqual([/\bPSA\b/i.source]);
   });
 });

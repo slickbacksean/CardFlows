@@ -112,3 +112,18 @@ CardFlow helps you log Pokémon card photos you choose, get unofficial identity 
 - https://raw.githubusercontent.com/tcgdex/cards-database/master/README.md (no Nintendo/Pokémon affiliation)
 - Apple Guidelines 2.3 / 5.2 (accurate metadata; IP; no false endorsement) — https://developer.apple.com/app-store/review/guidelines/
 - Google Play Subscriptions / Deceptive Behavior themes (no misleading claims)
+
+---
+
+## Copy rules (in force)
+
+### Pre-grade estimate wording
+- Title: **"Pre-grade estimate"**. Disclaimer: **"Estimate only. Not an official grade."**
+- Never "AI". Never name a grading company (PSA, BGS, CGC) in estimate copy. No grade or profit promises.
+- Max Buy is never called a market price ("It is not a market price.").
+
+### Grading-company names (Sean, Oct 17, 2026)
+- **Allowed only in graded-slab sold prices and comps**: the shop card page's slab price picker (`apps/mobile/app/(tabs)/shop/card.tsx`) and `packages/shared/src/slab-pricing.ts`. Those are real sold prices for slabs graded by those companies, labelled as such.
+- **Still banned in all pre-grade estimate copy**, including inside those two files. Any string there that reads as estimate copy ("pre-grade", "estimate", "official grade") gets the full rules.
+- "AI" stays banned everywhere, slab comps included.
+- Enforced by `SLAB_COMP_COPY_FILES` / `slabCompCopyViolations` in `packages/shared/src/pregrade-copy.ts` and the app-wide copy test in `pregrade-copy.test.ts`.
