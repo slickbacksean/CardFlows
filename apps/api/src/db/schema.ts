@@ -225,6 +225,19 @@ export const userAccounts = sqliteTable(
   (table) => [unique("user_accounts_email").on(table.email)],
 );
 
+/** Forgot password: single-use, 1 h tokens. Only the SHA-256 of the token is stored. */
+export const passwordResetTokens = sqliteTable(
+  "password_reset_tokens",
+  {
+    tokenHash: text("token_hash").primaryKey(),
+    userId: text("user_id").notNull(),
+    createdAt: text("created_at").notNull(),
+    expiresAt: text("expires_at").notNull(),
+    usedAt: text("used_at"),
+  },
+  (table) => [index("password_reset_tokens_user_idx").on(table.userId)],
+);
+
 /** Server-side CardFlow invited user → PokéCollector user. Never a client JWT. */
 export const crmPokecollectorUsers = sqliteTable(
   "crm_pokecollector_users",
@@ -434,6 +447,7 @@ export const gradeEstimateHistory = sqliteTable(
 export const schema = {
   cardflowCards,
   userAccounts,
+  passwordResetTokens,
   cardExternalIds,
   crmScans,
   crmConfirmations,

@@ -8,12 +8,13 @@ import {
 } from "@cardflow/shared";
 import { useRouter } from "expo-router";
 import { useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import { authStyles } from "@/components/ui/auth-styles";
 import { PreferencesScreenHeader } from "@/components/ui/preferences-screen-header";
 import { PrimaryButton } from "@/components/ui/primary-button";
 import { isGuestSession, signUpWithEmail } from "@/lib/identity";
 import { flushScanQueue } from "@/lib/scan-queue";
-import { colors, space } from "@/lib/theme";
+import { colors } from "@/lib/theme";
 
 /** Open sign-up (email + password). Testers can still use an invite code. */
 export default function SignUpScreen() {
@@ -46,11 +47,11 @@ export default function SignUpScreen() {
 
   const title = mode === "sign_up" ? "Create account" : "Sign in";
   return (
-    <View style={styles.flex}>
+    <View style={authStyles.flex}>
       <PreferencesScreenHeader dismiss="back" title={title} />
-      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-        {guest ? <Text style={styles.body}>Your guest scans move to your account. {GUEST_RETENTION_NOTE}</Text> : null}
-        {mode === "sign_up" ? <Text style={styles.body}>{SIGNUP_FREE_PLAN_NOTE}</Text> : null}
+      <ScrollView contentContainerStyle={authStyles.content} keyboardShouldPersistTaps="handled">
+        {guest ? <Text style={authStyles.body}>Your guest scans move to your account. {GUEST_RETENTION_NOTE}</Text> : null}
+        {mode === "sign_up" ? <Text style={authStyles.body}>{SIGNUP_FREE_PLAN_NOTE}</Text> : null}
         <TextInput
           accessibilityLabel="Email"
           autoCapitalize="none"
@@ -60,7 +61,7 @@ export default function SignUpScreen() {
           onChangeText={setEmail}
           placeholder="Email"
           placeholderTextColor={colors.muted}
-          style={styles.input}
+          style={authStyles.input}
           textContentType="emailAddress"
           value={email}
         />
@@ -72,37 +73,24 @@ export default function SignUpScreen() {
           placeholder={mode === "sign_up" ? `Password (at least ${PASSWORD_MIN_LENGTH} characters)` : "Password"}
           placeholderTextColor={colors.muted}
           secureTextEntry
-          style={styles.input}
+          style={authStyles.input}
           textContentType={mode === "sign_up" ? "newPassword" : "password"}
           value={password}
         />
-        {error ? <Text style={styles.error}>{error}</Text> : null}
+        {error ? <Text style={authStyles.error}>{error}</Text> : null}
         <PrimaryButton disabled={saving} label={title} onPress={() => void submit()} />
         <Pressable accessibilityRole="button" onPress={() => { setMode(mode === "sign_up" ? "sign_in" : "sign_up"); setError(null); }}>
-          <Text style={styles.link}>{mode === "sign_up" ? "Already have an account? Sign in" : "New here? Create an account"}</Text>
+          <Text style={authStyles.link}>{mode === "sign_up" ? "Already have an account? Sign in" : "New here? Create an account"}</Text>
         </Pressable>
+        {mode === "sign_in" ? (
+          <Pressable accessibilityRole="button" onPress={() => router.push("/forgot-password")}>
+            <Text style={authStyles.link}>Forgot password?</Text>
+          </Pressable>
+        ) : null}
         <Pressable accessibilityRole="button" onPress={() => router.push("/switch-tester")}>
-          <Text style={styles.link}>Have a tester invite code?</Text>
+          <Text style={authStyles.link}>Have a tester invite code?</Text>
         </Pressable>
       </ScrollView>
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  flex: { flex: 1, backgroundColor: colors.bg },
-  content: { padding: space.lg, gap: space.md },
-  body: { color: colors.muted, fontSize: 16, lineHeight: 22 },
-  input: {
-    backgroundColor: colors.card,
-    borderColor: colors.cardBorder,
-    borderWidth: 1,
-    borderRadius: 12,
-    color: colors.text,
-    paddingHorizontal: space.md,
-    paddingVertical: 12,
-    fontSize: 16,
-  },
-  error: { color: colors.danger, fontSize: 14 },
-  link: { color: colors.accent, fontSize: 15, fontWeight: "600" },
-});

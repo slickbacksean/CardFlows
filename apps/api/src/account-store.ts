@@ -3,9 +3,9 @@
  * Every multi-table change runs in one SQLite transaction.
  */
 import type Database from "better-sqlite3";
-import { and, eq, lte } from "drizzle-orm";
+import { and, eq, isNull, lte } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
-import { crmSessions, schema, userAccounts } from "./db/schema";
+import { crmSessions, passwordResetTokens, schema, userAccounts } from "./db/schema";
 import { hashSessionToken, mintSessionToken } from "./session";
 
 export interface AccountRecord {
@@ -26,6 +26,11 @@ export interface AccountStore {
   createAccount(input: { email: string; passwordHash: string; at: string }): AccountRecord | null;
   findByEmail(email: string): AccountRecord | null;
   getAccount(userId: string): AccountRecord | null;
+  /** Forgot password: stores a reset token hash (earlier unused tokens for the user are voided). */
+  createPasswordReset(input: { userId: string; tokenHash: string; expiresAt: string; at: string }): void;
+  /** Single use: marks the token used and returns its user, or null if unknown, used or expired. */
+  consumePasswordReset(tokenHash: string, now: string): string | null;
+  setPasswordHash(userId: string, passwordHash: string): void;
   /** Every signed-up account's user ID (North Star counts them with invited testers). */
   listAccountUserIds(): string[];
   /** Session row for any user (account, guest). Guests get `isGuest`. */
@@ -57,6 +62,9 @@ function userIdTables(sqlite: Database.Database): string[] {
       (sqlite.prepare(`PRAGMA table_info(\`${name}\`)`).all() as Array<{ name: string }>).some((c) => c.name === "user_id"),
     );
 }
+
+/** Guest data that is never moved to the new account (deleted instead). */
+const NOT_MOVED = ["crm_sessions", "user_accounts", "password_reset_tokens"];
 
 /** Children before parents so foreign keys (purchases → inventory, confirmations → scans) hold. */
 const DELETE_FIRST = [
@@ -102,6 +110,30 @@ export function createSqliteAccountStore(
       const row = db.select().from(userAccounts).where(eq(userAccounts.email, normalizeEmail(email))).get();
       return row ? toRecord(row) : null;
     },
+    createPasswordReset({ userId, tokenHash, expiresAt, at }) {
+      sqlite.transaction(() => {
+        db.update(passwordResetTokens)
+          .set({ usedAt: at })
+          .where(and(eq(passwordResetTokens.userId, userId), isNull(passwordResetTokens.usedAt)))
+          .run();
+        db.insert(passwordResetTokens).values({ tokenHash, userId, createdAt: at, expiresAt }).run();
+      })();
+    },
+    consumePasswordReset(tokenHash, now) {
+      return sqlite.transaction(() => {
+        const row = db.select().from(passwordResetTokens).where(eq(passwordResetTokens.tokenHash, tokenHash)).get();
+        if (!row || row.usedAt || row.expiresAt <= now) return null;
+        const updated = db
+          .update(passwordResetTokens)
+          .set({ usedAt: now })
+          .where(and(eq(passwordResetTokens.tokenHash, tokenHash), isNull(passwordResetTokens.usedAt)))
+          .run();
+        return updated.changes === 1 ? row.userId : null;
+      })();
+    },
+    setPasswordHash(userId, passwordHash) {
+      db.update(userAccounts).set({ passwordHash }).where(eq(userAccounts.userId, userId)).run();
+    },
     listAccountUserIds() {
       return db.select({ userId: userAccounts.userId }).from(userAccounts).all().map((row) => row.userId);
     },
@@ -138,14 +170,20 @@ export function createSqliteAccountStore(
       return db.delete(crmSessions).where(eq(crmSessions.userId, userId)).run().changes;
     },
     moveGuestData(fromUserId, toUserId) {
+      // Data Engineer review: every table with a user_id (found from the live schema), so a new
+      // table is never missed. Sessions, accounts and reset tokens are not moved; the guest's
+      // sessions are deleted. UPDATE OR IGNORE keeps the account's own row where a table allows
+      // one row per user (preferences, plan), then any guest leftovers are deleted.
       return sqlite.transaction(() => {
-        const scans = sqlite.prepare("UPDATE crm_scans SET user_id = ? WHERE user_id = ?").run(toUserId, fromUserId).changes;
-        const confirmEvents = sqlite
-          .prepare("UPDATE scan_confirm_events SET user_id = ? WHERE user_id = ?")
-          .run(toUserId, fromUserId).changes;
-        sqlite.prepare("UPDATE crm_confirmations SET user_id = ? WHERE user_id = ?").run(toUserId, fromUserId);
+        const moved: Record<string, number> = {};
+        for (const table of userIdTables(sqlite)) {
+          if (NOT_MOVED.includes(table)) continue;
+          moved[table] = sqlite.prepare(`UPDATE OR IGNORE \`${table}\` SET user_id = ? WHERE user_id = ?`).run(toUserId, fromUserId).changes;
+          sqlite.prepare(`DELETE FROM \`${table}\` WHERE user_id = ?`).run(fromUserId);
+        }
         sqlite.prepare("DELETE FROM crm_sessions WHERE user_id = ?").run(fromUserId);
-        return { scans, confirmEvents };
+        sqlite.prepare("DELETE FROM password_reset_tokens WHERE user_id = ?").run(fromUserId);
+        return { scans: moved.crm_scans ?? 0, confirmEvents: moved.scan_confirm_events ?? 0 };
       })();
     },
     deleteAllUserRows(userId) {

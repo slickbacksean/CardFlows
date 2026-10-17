@@ -731,6 +731,8 @@ export interface StorePort {
   getGradeImage: typeof getGradeImage;
   deleteGradeImage: typeof deleteGradeImage;
   deleteUserPhotos: typeof deleteUserPhotos;
+  /** Collects photo locations now; the returned function deletes the files (after the rows). */
+  prepareUserPhotoDeletion: (userId: string) => () => PhotoPurgeResult;
   deleteUserScans: typeof deleteUserScans;
   listScanUserIds: typeof listScanUserIds;
   purgeExpiredGradePhotos: typeof purgeExpiredGradePhotos;
@@ -922,6 +924,11 @@ export function createMemoryStore(): StorePort {
     getGradeImage,
     deleteGradeImage,
     deleteUserPhotos,
+    // Memory store has no files; photos live in maps, so the count is taken up front.
+    prepareUserPhotoDeletion: (userId: string) => {
+      const result = deleteUserPhotos(userId);
+      return () => result;
+    },
     deleteUserScans,
     listScanUserIds,
     purgeExpiredGradePhotos,
@@ -980,6 +987,7 @@ function createMemoryAccountStore(
   extra: { gradeAccounts: Map<string, GradeAccountRecord>; gradeUsage: Map<string, number> },
 ): AccountStore {
   const accounts = new Map<string, AccountRecord>();
+  const resets = new Map<string, { userId: string; expiresAt: string; usedAt: string | null }>();
   const byEmail = new Map<string, string>();
   const live = (s: StoredSession, now: string) => s.expiresAt > now;
   return {
@@ -994,6 +1002,20 @@ function createMemoryAccountStore(
     findByEmail(email) {
       const id = byEmail.get(normalizeEmail(email));
       return id ? { ...accounts.get(id)! } : null;
+    },
+    createPasswordReset({ userId, tokenHash, expiresAt, at }) {
+      for (const reset of resets.values()) if (reset.userId === userId && !reset.usedAt) reset.usedAt = at;
+      resets.set(tokenHash, { userId, expiresAt, usedAt: null });
+    },
+    consumePasswordReset(tokenHash, now) {
+      const reset = resets.get(tokenHash);
+      if (!reset || reset.usedAt || reset.expiresAt <= now) return null;
+      reset.usedAt = now;
+      return reset.userId;
+    },
+    setPasswordHash(userId, passwordHash) {
+      const account = accounts.get(userId);
+      if (account) accounts.set(userId, { ...account, passwordHash });
     },
     listAccountUserIds() {
       return [...accounts.values()].map((account) => account.userId);
@@ -1055,6 +1077,7 @@ function createMemoryAccountStore(
       extra.gradeAccounts.delete(userId);
       for (const key of [...extra.gradeUsage.keys()]) if (key.startsWith(`${userId}\0`)) extra.gradeUsage.delete(key);
       counts.crm_sessions = this.deleteSessionsForUser(userId);
+      for (const [hash, reset] of resets) if (reset.userId === userId) resets.delete(hash);
       if (accounts.has(userId)) {
         byEmail.delete(accounts.get(userId)!.email);
         accounts.delete(userId);

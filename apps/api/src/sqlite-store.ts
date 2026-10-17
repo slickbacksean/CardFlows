@@ -885,6 +885,38 @@ export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStor
     return { deleted };
   }
 
+  /**
+   * Data Engineer review: account deletion removes rows first, then files. This collects the
+   * user's photo locations while the rows still exist; the returned function unlinks them.
+   */
+  function prepareUserPhotoDeletion(userId: string): () => PhotoPurgeResult {
+    const scanIds = listScans(userId).map((scan) => scan.scanId);
+    const storageRefs = listScans(userId).flatMap((scan) => (scan.imageStorageRef ? [scan.imageStorageRef] : []));
+    const gradeCandidates = listInventory(userId).flatMap((item) =>
+      GRADE_SIDES.flatMap((side) => gradeImageStorageCandidates(item.inventoryItemId, side)),
+    );
+    return () => {
+      let deleted = 0;
+      for (const id of scanIds) if (memoryImages.delete(id)) deleted += 1;
+      for (const ref of storageRefs) {
+        const filePath = sqliteDir ? path.join(sqliteDir, ref) : null;
+        if (filePath && existsSync(filePath)) {
+          unlinkSync(filePath);
+          deleted += 1;
+        }
+      }
+      for (const candidate of gradeCandidates) {
+        if (memoryGradeImages.delete(candidate)) deleted += 1;
+        const filePath = sqliteDir ? path.join(sqliteDir, candidate) : null;
+        if (filePath && existsSync(filePath)) {
+          unlinkSync(filePath);
+          deleted += 1;
+        }
+      }
+      return { deleted };
+    };
+  }
+
   function purgeExpiredGradePhotos(now: Date = new Date()): PhotoPurgeResult {
     const rows = db.select().from(gradePhotoObjects).all();
     let deleted = 0;
@@ -1943,6 +1975,7 @@ export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStor
     getGradeImage,
     deleteGradeImage,
     deleteUserPhotos,
+    prepareUserPhotoDeletion,
     deleteUserScans,
     listScanUserIds,
     purgeExpiredGradePhotos,

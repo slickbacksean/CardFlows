@@ -108,6 +108,31 @@ describe("D9 guest scans", () => {
     expect(store.listScans(accountId)).toHaveLength(1);
   });
 
+  it("sign-up moves every guest row (schema discovery): zero guest rows remain", async () => {
+    const store = createSqliteStore({ sqlitePath: ":memory:" });
+    stores.push(store);
+    const app = createApp(store, { devAutoSession: false, guestMode: true });
+    const guest = await call(app, "/v1/sessions/guest", { method: "POST" });
+    const token = guest.body.token as string;
+    const guestId = (guest.body.identity as { userId: string } | undefined)?.userId
+      ?? store.listScanUserIds("guest").at(0);
+    for (let i = 0; i < 2; i += 1) await call(app, "/v1/scans", { method: "POST", body: scanBody, token });
+    const id = guestId ?? store.listScanUserIds("guest")[0]!;
+    // A row in a table moveGuestData never named explicitly, to prove discovery covers it.
+    store.setPreferences(id, store.getPreferences(id));
+    const signup = await call(app, "/v1/accounts", {
+      method: "POST",
+      body: JSON.stringify({ email: "moved@example.com", password: "correct horse battery" }),
+      token,
+    });
+    expect(signup.status).toBe(200);
+    expect(signup.body.movedScans).toBe(2);
+    const left = store.accounts.countUserRows(id);
+    expect(Object.entries(left).filter(([, n]) => n > 0)).toEqual([]);
+    const newId = (signup.body.identity as { userId: string }).userId;
+    expect(store.accounts.countUserRows(newId).crm_scans).toBe(2);
+  });
+
   it("parallel guest scans can't pass the 3-scan limit", async () => {
     const app = open();
     const token = (await call(app, "/v1/sessions/guest", { method: "POST" })).body.token as string;

@@ -945,6 +945,15 @@ export function createAccount(email: string, password: string) {
   return callApi(apiContract.createAccount, { body: { email, password } });
 }
 
+/** Forgot password: the answer is the same whether or not the email has an account. */
+export function requestPasswordReset(email: string) {
+  return callApi(apiContract.requestPasswordReset, { body: { email } });
+}
+
+export function confirmPasswordReset(token: string, password: string) {
+  return callApi(apiContract.confirmPasswordReset, { body: { token, password } });
+}
+
 export function signInWithPassword(email: string, password: string) {
   return callApi(apiContract.signInWithPassword, { body: { email, password } });
 }

@@ -12,12 +12,18 @@ export const SIGNUP_FREE_PLAN_NOTE =
   `Free accounts get ${GRADE_QUOTA_FREE_PER_MONTH} pre-grade estimates a month. The allowance resets each month on the date you sign up, and unused estimates don't roll over. ` +
   "You can see your 10 most recent pre-grade estimates; older ones stay saved, not deleted, and Premium shows them.";
 
+/** Forgot password: reset codes work once and expire after 1 hour. */
+export const PASSWORD_RESET_TTL_MS = 60 * 60 * 1000;
+
 export const ACCOUNT_AUTH_COPY = {
   signInFailed: "Email or password is incorrect.",
   signUpFailed: "We couldn't create an account with those details. If you already have one, sign in instead.",
   badEmail: "Enter a valid email address.",
   badPassword: `Use at least ${PASSWORD_MIN_LENGTH} characters for your password.`,
   tooMany: "Too many attempts. Try again later.",
+  resetRequested: "If an account uses that email, we've sent a reset code. It works once and expires in 1 hour.",
+  resetInvalid: "This reset code is invalid or has expired. Request a new one.",
+  resetDone: "Your password is reset. Sign in with your new password.",
 } as const;
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;

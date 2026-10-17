@@ -15,8 +15,9 @@ describe("open sign-up rules", () => {
   });
   it("guest copy separates scans from estimates and states the 24-hour deletion", () => {
     expect(GUEST_SESSION_TTL_MS).toBe(24 * 60 * 60 * 1000);
-    expect(GUEST_SCAN_WALL_NOTE).toMatch(/counts scans only/);
-    expect(GUEST_SIGNUP_COPY.scanLimit).toMatch(/not pre-grade estimates/);
+    // Policy Reviewer: exact copy.
+    expect(GUEST_SCAN_WALL_NOTE).toBe("Guests get 3 free card scans. Pre-grade estimates have their own monthly allowance once you sign up.");
+    expect(GUEST_SIGNUP_COPY.scanLimit).toBe("You've used your 3 free scans. Sign up free to keep scanning. Pre-grade estimates are counted separately.");
     expect(GUEST_RETENTION_NOTE).toMatch(/within 24 hours/);
   });
 });

@@ -126,3 +126,70 @@ describe("North Star counts signed-up accounts", () => {
     expect(body.weeks.at(-1)?.activeResellers).toBe(1);
   });
 });
+
+describe("forgot password", () => {
+  it("same answer for known and unknown emails; single-use 1 h token; signs out old sessions", async () => {
+    const sent: Array<{ email: string; token: string }> = [];
+    let clock = new Date("2026-10-16T12:00:00Z");
+    const { app } = open({ deliverPasswordReset: (email, token) => sent.push({ email, token }), now: () => clock });
+    const up = await call(app, "/v1/accounts", { body: { email: "reset@example.com", password: PW } });
+    const known = await call(app, "/v1/password-resets", { body: { email: "Reset@Example.com" } });
+    const unknown = await call(app, "/v1/password-resets", { body: { email: "nobody@example.com" } });
+    expect(known).toEqual(unknown);
+    expect(known).toEqual({ status: 202, body: { ok: true, message: ACCOUNT_AUTH_COPY.resetRequested } });
+    expect(sent).toHaveLength(1);
+    const token = sent[0]!.token;
+    const NEW = "brand new password 1";
+    expect((await call(app, "/v1/password-resets/confirm", { body: { token, password: "short" } })).status).toBe(400);
+    const done = await call(app, "/v1/password-resets/confirm", { body: { token, password: NEW } });
+    expect(done.status).toBe(200);
+    expect((await call(app, "/v1/identity", { token: up.body.token as string })).status).toBe(401);
+    expect((await call(app, "/v1/sessions/password", { body: { email: "reset@example.com", password: NEW } })).status).toBe(200);
+    expect((await call(app, "/v1/sessions/password", { body: { email: "reset@example.com", password: PW } })).status).toBe(401);
+    const reused = await call(app, "/v1/password-resets/confirm", { body: { token, password: "another password 2" } });
+    expect(reused).toEqual({ status: 400, body: { ok: false, error: ACCOUNT_AUTH_COPY.resetInvalid } });
+
+    await call(app, "/v1/password-resets", { body: { email: "reset@example.com" } });
+    clock = new Date(clock.getTime() + 61 * 60 * 1000);
+    expect((await call(app, "/v1/password-resets/confirm", { body: { token: sent[1]!.token, password: "another password 2" } })).status).toBe(400);
+  });
+
+  it("a newer reset voids the older code", async () => {
+    const sent: string[] = [];
+    const { app } = open({ deliverPasswordReset: (_e, token) => sent.push(token) });
+    await call(app, "/v1/accounts", { body: { email: "two@example.com", password: PW } });
+    await call(app, "/v1/password-resets", { body: { email: "two@example.com" } });
+    await call(app, "/v1/password-resets", { body: { email: "two@example.com" } });
+    expect((await call(app, "/v1/password-resets/confirm", { body: { token: sent[0], password: "another password 2" } })).status).toBe(400);
+    expect((await call(app, "/v1/password-resets/confirm", { body: { token: sent[1], password: "another password 2" } })).status).toBe(200);
+  });
+});
+
+describe("backend review: auth limits and scrypt", () => {
+  it("H1: successful sign-ins don't count; failures are keyed by email + IP", async () => {
+    const { app } = open({ authLimits: { signInPerIp: 100, perEmail: 2 } });
+    await call(app, "/v1/accounts", { body: { email: "ok@example.com", password: PW } });
+    for (let i = 0; i < 5; i += 1) {
+      expect((await call(app, "/v1/sessions/password", { body: { email: "ok@example.com", password: PW } })).status).toBe(200);
+    }
+    for (let i = 0; i < 2; i += 1) await call(app, "/v1/sessions/password", { body: { email: "ok@example.com", password: "wrong password" } });
+    expect((await call(app, "/v1/sessions/password", { body: { email: "ok@example.com", password: PW } })).status).toBe(429);
+  });
+
+  it("M4: invite-code sign-in is rate-limited per IP", async () => {
+    const { app } = open({ authLimits: { invitePerIp: 3 } });
+    for (let i = 0; i < 3; i += 1) await call(app, "/v1/sessions", { body: { inviteCode: `guess-${i}` } });
+    expect((await call(app, "/v1/sessions", { body: { inviteCode: JORDAN_INVITE_CODE } })).status).toBe(429);
+  });
+
+  it("L2: production scrypt is N=2^17 and stored params keep older hashes verifying", async () => {
+    const { SCRYPT_DEFAULT_N, scryptN } = await import("./password");
+    expect(SCRYPT_DEFAULT_N).toBe(2 ** 17);
+    expect(scryptN({ NODE_ENV: "production", CARD_FLOW_SCRYPT_N: "1024" })).toBe(2 ** 17);
+    const strong = await hashPassword(PW, 2 ** 17);
+    expect(strong.startsWith(`scrypt$${2 ** 17}$8$1$`)).toBe(true);
+    expect(await verifyPassword(PW, strong)).toBe(true);
+    const old = await hashPassword(PW, 2 ** 14);
+    expect(await verifyPassword(PW, old)).toBe(true);
+  });
+});

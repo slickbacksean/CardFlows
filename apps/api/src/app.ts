@@ -1,6 +1,7 @@
-import { createHash, timingSafeEqual } from "node:crypto";
+import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
+import { normalizeEmail } from "./account-store";
 import { routePath } from "hono/route";
-import { ACCOUNT_AUTH_COPY, GUEST_MINT_WINDOW_MS, GUEST_SESSION_TTL_MS, isValidEmail, passwordProblem, GUEST_FREE_SCANS, GUEST_USER_PREFIX, SIGNUP_REQUIRED_CODE, guestIdentity, guestRouteAllowed, isGuestUserId, isHot, parsePerfBatch, signupMessage, type SignupReason } from "@cardflow/shared";
+import { ACCOUNT_AUTH_COPY, PASSWORD_RESET_TTL_MS, GUEST_MINT_WINDOW_MS, GUEST_SESSION_TTL_MS, isValidEmail, passwordProblem, GUEST_FREE_SCANS, GUEST_USER_PREFIX, SIGNUP_REQUIRED_CODE, guestIdentity, guestRouteAllowed, isGuestUserId, isHot, parsePerfBatch, signupMessage, type SignupReason } from "@cardflow/shared";
 import { NORTH_STAR_NAME, northStarWeekly } from "@cardflow/shared";
 import { opsMetrics, type OpsMetrics } from "./ops-metrics";
 import { parseUserPriceAmount } from "@cardflow/shared";
@@ -230,7 +231,14 @@ async function boundedProbe(
 function isPublicV1Path(method: string, pathName: string): boolean {
   return (
     method === "POST" &&
-    ["/v1/sessions", "/v1/sessions/guest", "/v1/sessions/password", "/v1/accounts"].includes(pathName)
+    [
+      "/v1/sessions",
+      "/v1/sessions/guest",
+      "/v1/sessions/password",
+      "/v1/accounts",
+      "/v1/password-resets",
+      "/v1/password-resets/confirm",
+    ].includes(pathName)
   );
 }
 
@@ -314,7 +322,9 @@ export interface CreateAppOptions {
   /** D9 tests: receives the cleanup function so a test can run it on demand. */
   onGuestCleanup?: (run: () => { guestsPurged: number; scansDeleted: number }) => void;
   /** Open sign-up limits (per IP / per email). */
-  authLimits?: { signupPerIp?: number; signInPerIp?: number; perEmail?: number };
+  authLimits?: { signupPerIp?: number; signInPerIp?: number; perEmail?: number; invitePerIp?: number };
+  /** Forgot password delivery (tests). Default: CARD_FLOW_EMAIL_SENDER check, dev-only log. */
+  deliverPasswordReset?: (email: string, token: string) => void;
   /** D9: guest sessions minted per client IP per hour (default 10). */
   guestMintsPerHour?: number;
   /** Catalog provider. Tests default to mock; local/staging may inject live TCGdex or PokéCollector. */
@@ -1506,8 +1516,42 @@ export function createApp(
     return c.json({ ok: true, returned: listGradingReturned(userId) });
   });
 
+  /** Fixed-window limiter for auth routes. Keys are pruned as they expire. */
+  const authHits = new Map<string, { windowStart: number; count: number }>();
+  const overLimit = (key: string, limit: number, windowMs: number): boolean => {
+    const nowMs = now().getTime();
+    if (authHits.size > 10_000) {
+      for (const [k, v] of authHits) if (nowMs - v.windowStart >= 60 * 60 * 1000) authHits.delete(k);
+    }
+    const hit = authHits.get(key);
+    if (!hit || nowMs - hit.windowStart >= windowMs) {
+      authHits.set(key, { windowStart: nowMs, count: 1 });
+      return false;
+    }
+    hit.count += 1;
+    return hit.count > limit;
+  };
+  /** Peek without counting (H1: only failed sign-ins count). */
+  const isLimited = (key: string, limit: number, windowMs: number): boolean => {
+    const hit = authHits.get(key);
+    return Boolean(hit && now().getTime() - hit.windowStart < windowMs && hit.count >= limit);
+  };
+  const authLimits = {
+    signupPerIp: options.authLimits?.signupPerIp ?? 10,
+    signInPerIp: options.authLimits?.signInPerIp ?? 30,
+    perEmail: options.authLimits?.perEmail ?? 10,
+    invitePerIp: options.authLimits?.invitePerIp ?? 20,
+  };
+  const tooMany = (c: Context) => {
+    c.header("Retry-After", "900");
+    return c.json({ ok: false, error: ACCOUNT_AUTH_COPY.tooMany }, 429);
+  };
+
+  // Backend review M4: invite-code sign-in is rate-limited per IP (codes are guessable otherwise).
   app.post("/v1/sessions", async (c) => {
-    const body = await c.req.json<{ inviteCode?: unknown }>();
+    const inviteIp = clientIp(c, trustProxyHops, socketAddress) ?? "unknown";
+    if (overLimit(`invite-ip:${inviteIp}`, authLimits.invitePerIp, 15 * 60 * 1000)) return tooMany(c);
+    const body = await c.req.json<{ inviteCode?: unknown }>().catch(() => ({}) as { inviteCode?: unknown });
     if (typeof body.inviteCode !== "string" || body.inviteCode.trim() === "") {
       return c.json({ ok: false, error: "Unknown invite code" }, 400);
     }
@@ -1527,30 +1571,6 @@ export function createApp(
     });
   });
 
-  /** Fixed-window limiter for auth routes. Keys are pruned as they expire. */
-  const authHits = new Map<string, { windowStart: number; count: number }>();
-  const overLimit = (key: string, limit: number, windowMs: number): boolean => {
-    const nowMs = now().getTime();
-    if (authHits.size > 10_000) {
-      for (const [k, v] of authHits) if (nowMs - v.windowStart >= 60 * 60 * 1000) authHits.delete(k);
-    }
-    const hit = authHits.get(key);
-    if (!hit || nowMs - hit.windowStart >= windowMs) {
-      authHits.set(key, { windowStart: nowMs, count: 1 });
-      return false;
-    }
-    hit.count += 1;
-    return hit.count > limit;
-  };
-  const authLimits = {
-    signupPerIp: options.authLimits?.signupPerIp ?? 10,
-    signInPerIp: options.authLimits?.signInPerIp ?? 30,
-    perEmail: options.authLimits?.perEmail ?? 10,
-  };
-  const tooMany = (c: Context) => {
-    c.header("Retry-After", "900");
-    return c.json({ ok: false, error: ACCOUNT_AUTH_COPY.tooMany }, 429);
-  };
   const readCredentials = async (c: Context) => {
     const body = await c.req.json<{ email?: unknown; password?: unknown }>().catch(() => ({}) as Record<string, unknown>);
     const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
@@ -1593,23 +1613,88 @@ export function createApp(
 
   app.post("/v1/sessions/password", async (c) => {
     const ip = clientIp(c, trustProxyHops, socketAddress) ?? "unknown";
-    if (overLimit(`signin-ip:${ip}`, authLimits.signInPerIp, 15 * 60 * 1000)) return tooMany(c);
     const { email, password } = await readCredentials(c);
-    if (overLimit(`email:${email}`, authLimits.perEmail, 15 * 60 * 1000)) return tooMany(c);
+    // Backend review H1: only failed sign-ins count, keyed by email + IP (and per IP overall),
+    // so a stranger can't lock someone out of their account from another network.
+    const failKey = `signin-fail:${email}:${ip}`;
+    const ipFailKey = `signin-fail-ip:${ip}`;
+    const window = 15 * 60 * 1000;
+    if (isLimited(failKey, authLimits.perEmail, window) || isLimited(ipFailKey, authLimits.signInPerIp, window)) return tooMany(c);
     const existing = email ? store.accounts.findByEmail(email) : null;
     const ok = existing ? await verifyPassword(password, existing.passwordHash) : await verifyAgainstDummy(password);
-    if (!existing || !ok) return c.json({ ok: false, error: ACCOUNT_AUTH_COPY.signInFailed }, 401);
+    if (!existing || !ok) {
+      overLimit(failKey, authLimits.perEmail, window);
+      overLimit(ipFailKey, authLimits.signInPerIp, window);
+      return c.json({ ok: false, error: ACCOUNT_AUTH_COPY.signInFailed }, 401);
+    }
     const moved = adoptGuestData(c.req.header("authorization"), existing.userId);
     const session = accountSession(existing);
     return c.json({ ok: true as const, ...session, invitedUsers: [session.identity], movedScans: moved?.scans ?? 0 });
   });
 
+  /**
+   * Forgot password. Delivery waits for an email sender (CARD_FLOW_EMAIL_SENDER). Until one is
+   * wired, the token is logged in development only (never in production). The answer is the same
+   * whether or not the email has an account (no enumeration).
+   */
+  const deliverResetToken = options.deliverPasswordReset ?? ((email: string, token: string) => {
+    const sender = process.env.CARD_FLOW_EMAIL_SENDER?.trim();
+    if (sender) {
+      // TODO(email sender): send `token` to `email` via the configured provider.
+      console.warn(`[password-reset] CARD_FLOW_EMAIL_SENDER=${sender} is set but no sender is wired yet; nothing sent.`);
+      return;
+    }
+    if (process.env.NODE_ENV !== "production") {
+      console.info(`[password-reset] dev only, no email sender: reset code for ${email}: ${token}`);
+    }
+  });
+  app.post("/v1/password-resets", async (c) => {
+    const ip = clientIp(c, trustProxyHops, socketAddress) ?? "unknown";
+    if (overLimit(`reset-ip:${ip}`, authLimits.signInPerIp, 15 * 60 * 1000)) return tooMany(c);
+    const body = await c.req.json<{ email?: unknown }>().catch(() => ({}) as Record<string, unknown>);
+    const email = typeof body.email === "string" ? normalizeEmail(body.email) : "";
+    const generic = { ok: true as const, message: ACCOUNT_AUTH_COPY.resetRequested };
+    if (!isValidEmail(email)) return c.json(generic, 202);
+    if (overLimit(`reset-email:${email}`, authLimits.perEmail, 60 * 60 * 1000)) return c.json(generic, 202);
+    const account = store.accounts.findByEmail(email);
+    if (account) {
+      const token = randomBytes(32).toString("base64url");
+      const at = now();
+      store.accounts.createPasswordReset({
+        userId: account.userId,
+        tokenHash: hashSessionToken(token),
+        at: at.toISOString(),
+        expiresAt: new Date(at.getTime() + PASSWORD_RESET_TTL_MS).toISOString(),
+      });
+      deliverResetToken(account.email, token);
+    }
+    return c.json(generic, 202);
+  });
+  app.post("/v1/password-resets/confirm", async (c) => {
+    const ip = clientIp(c, trustProxyHops, socketAddress) ?? "unknown";
+    if (overLimit(`reset-confirm-ip:${ip}`, authLimits.signInPerIp, 15 * 60 * 1000)) return tooMany(c);
+    const body = await c.req.json<{ token?: unknown; password?: unknown }>().catch(() => ({}) as Record<string, unknown>);
+    const token = typeof body.token === "string" ? body.token.trim() : "";
+    const password = typeof body.password === "string" ? body.password : "";
+    const problem = passwordProblem(password);
+    if (problem) return c.json({ ok: false, error: problem }, 400);
+    const userId = token ? store.accounts.consumePasswordReset(hashSessionToken(token), now().toISOString()) : null;
+    if (!userId) return c.json({ ok: false, error: ACCOUNT_AUTH_COPY.resetInvalid }, 400);
+    store.accounts.setPasswordHash(userId, await hashPassword(password));
+    // Every existing session (possibly an attacker's) is signed out.
+    store.accounts.deleteSessionsForUser(userId);
+    return c.json({ ok: true as const });
+  });
+
   app.post("/v1/account/delete", (c) => {
     const userId = c.get("userId");
-    const photos = deleteUserPhotos(userId);
-    const staged = gradeUploads.releaseUser(userId);
-    // Files first (they can't join a transaction), then every user_id row in one transaction.
+    // Data Engineer review: every user_id row in one transaction first, then the files (whose
+    // locations were collected before the rows went). A crash in between leaves orphan files
+    // with no personal rows, which the photo retention sweep removes, never rows without files.
+    const removePhotos = store.prepareUserPhotoDeletion(userId);
     const rows = store.accounts.deleteAllUserRows(userId);
+    const photos = removePhotos();
+    const staged = gradeUploads.releaseUser(userId);
     return c.json({
       ok: true,
       photosDeleted: photos.deleted + staged,

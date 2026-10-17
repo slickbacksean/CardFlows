@@ -12,7 +12,7 @@ export type SignupReason = "scan_limit" | "save";
 
 export const GUEST_SIGNUP_COPY = {
   title: "Sign up to keep going",
-  scanLimit: `You've used your ${GUEST_FREE_SCANS} free card scans (this counts scans, not pre-grade estimates). Sign up to keep scanning.`,
+  scanLimit: "You've used your 3 free scans. Sign up free to keep scanning. Pre-grade estimates are counted separately.",
   save: "Sign up to save cards, track purchases and build listings.",
   action: "Sign up",
   dismiss: "Not now",
@@ -54,4 +54,4 @@ export const GUEST_RETENTION_NOTE =
   "Guest scans and photos are deleted within 24 hours after your guest session ends, unless you sign up. Signing up keeps them.";
 
 /** The guest wall counts scans; pre-grade estimates are a separate monthly allowance. */
-export const GUEST_SCAN_WALL_NOTE = `Guests get ${GUEST_FREE_SCANS} free card scans. This counts scans only; pre-grade estimates have their own monthly allowance after you sign up.`;
+export const GUEST_SCAN_WALL_NOTE = "Guests get 3 free card scans. Pre-grade estimates have their own monthly allowance once you sign up.";
