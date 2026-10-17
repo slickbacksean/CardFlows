@@ -1,4 +1,5 @@
 import {
+  AGE_GATE_COPY,
   CAMERA_ALLOW_LABEL,
   CAMERA_DENIED_BODY,
   CAMERA_DENIED_TITLE,
@@ -26,7 +27,9 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { DevScenarioPanel } from "@/components/ui/dev-scenario-panel";
 import { PermissionGate } from "@/components/ui/permission-gate";
 import { createScan } from "@/lib/api";
+import { ensureAgeConfirmed } from "@/lib/age-gate";
 import { askCardSightConsentOnce } from "@/lib/cardsight-consent";
+import { peekActiveUserId } from "@/lib/identity";
 import { confirmGuestNoticeOnce } from "@/lib/guest-notice";
 import { getMockScenario } from "@/lib/mock-scenario";
 import { prepareScanStill, rememberScanCapture } from "@/lib/scan-capture";
@@ -80,6 +83,8 @@ export default function CaptureScreen() {
     imageMimeType?: string | null,
     size?: { width?: number; height?: number },
   ) {
+    // Sean: 18+ only. Order before the first upload: age gate, then the CardSight prompt.
+    if (!(await ensureAgeConfirmed(peekActiveUserId()))) return;
     // Guests see the 24-hour deletion note and the scan-count note before their first scan.
     if (!(await confirmGuestNoticeOnce())) return;
     // Sean: the one-time CardSight disclosure comes before the first photo is uploaded.
@@ -444,6 +449,7 @@ function CameraSurface({
       <Text style={styles.copy}>
         Take a still photo of one English raw single to identify it.
       </Text>
+      <Text style={styles.copy}>{AGE_GATE_COPY.captureTip}</Text>
     </View>
   );
 }

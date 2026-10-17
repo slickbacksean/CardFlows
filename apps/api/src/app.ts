@@ -1,7 +1,9 @@
 import { createHash, randomBytes, randomInt, timingSafeEqual } from "node:crypto";
 import { emailSenderFromEnv, type EmailSender } from "./email-sender";
 import { cardSightMonthKey, consentState, hasActiveConsent } from "./consent-store";
-import { CARDSIGHT_GUEST_MONTHLY_CAP_DEFAULT, CARDSIGHT_USER_MONTHLY_CAP_DEFAULT } from "./grade-quota-env";
+import { ageConfirmationState, hasAgeConfirmation } from "./age-store";
+import { AGE_CONFIRMATION_REQUIRED_CODE, AGE_GATE_COPY, AGE_GATE_VERSION } from "@cardflow/shared";
+import { ageGateEnabledFromEnv, CARDSIGHT_GUEST_MONTHLY_CAP_DEFAULT, CARDSIGHT_USER_MONTHLY_CAP_DEFAULT } from "./grade-quota-env";
 import { createRecognitionWithFallback } from "./cardsight-adapter";
 import { normalizeEmail } from "./account-store";
 import { routePath } from "hono/route";
@@ -234,6 +236,15 @@ async function boundedProbe(
   }
 }
 
+/** Sean: 18+ only. Routes that take a photo or start a scan (POST only) need age confirmation. */
+export function requiresAgeConfirmation(pathName: string): boolean {
+  return (
+    pathName === "/v1/scans" ||
+    pathName === "/v1/livestream/identify" ||
+    requiresVerifiedEmail(pathName)
+  );
+}
+
 /** Pre-grade estimate routes that need a verified email (POST only). */
 export function requiresVerifiedEmail(pathName: string): boolean {
   return (
@@ -345,6 +356,11 @@ export interface CreateAppOptions {
   emailSender?: EmailSender;
   /** Hourly purge of accounts unverified after 7 days. 0 turns the timer off (tests). */
   unverifiedPurgeIntervalMs?: number;
+  /**
+   * Sean: 18+ only. Scans, photo uploads and sign-up need the user's age confirmation. Always on
+   * outside tests (see ageGateEnabledFromEnv). CardSight always needs it, whatever this says.
+   */
+  ageGate?: boolean;
   /** Tests: receives the purge so it can run on demand. */
   onUnverifiedPurge?: (run: () => { accountsPurged: number }) => void;
   /** D9: guest sessions minted per client IP per hour (default 10). */
@@ -1131,6 +1147,17 @@ export function createApp(
     return c.json({ ok: false, error: EMAIL_UNVERIFIED_CODE, message: EMAIL_VERIFICATION_COPY.required }, 403);
   });
 
+  // Sean: 18+ only (CardSight forbids photos from under-18s). The device checks birth month and
+  // year and discards them; without the stored confirmation nothing is scanned or uploaded.
+  const ageGate = options.ageGate ?? ageGateEnabledFromEnv();
+  const ageRequired = (c: Context) =>
+    c.json({ ok: false, error: AGE_CONFIRMATION_REQUIRED_CODE, message: AGE_GATE_COPY.required }, 403);
+  app.use("/v1/*", async (c, next) => {
+    if (!ageGate || c.req.method !== "POST" || !requiresAgeConfirmation(c.req.path) || c.get("internalOwner")) return next();
+    if (hasAgeConfirmation(store.ageConfirmations, c.get("userId"))) return next();
+    return ageRequired(c);
+  });
+
   app.get("/health", async (c) => {
     const catalogStatus = catalogHealth(catalog.name);
     const recognitionStatus = recognitionHealth(recognitionProvider.name);
@@ -1692,6 +1719,13 @@ export function createApp(
     if (overLimit(`email:${email}`, authLimits.perEmail, 15 * 60 * 1000)) return tooMany(c);
     const problem = passwordProblem(password);
     if (problem) return c.json({ ok: false, error: problem }, 400);
+    // Sean: 18+ only. Sign-up carries the device's 18+ confirmation, or the guest already gave it.
+    const signUpBody = await c.req.json<Record<string, unknown>>().catch(() => ({}) as Record<string, unknown>);
+    const bodyConfirmed = signUpBody.ageConfirmed18Plus === true && signUpBody.ageGateVersion === AGE_GATE_VERSION;
+    const guestToken = parseBearerToken(c.req.header("authorization"));
+    const guestSession = guestToken ? getSessionByToken(guestToken, now()) : null;
+    const guestConfirmed = Boolean(guestSession?.isGuest && hasAgeConfirmation(store.ageConfirmations, guestSession.userId));
+    if (ageGate && !bodyConfirmed && !guestConfirmed) return ageRequired(c);
     const passwordHash = await hashPassword(password);
     const created = store.accounts.createAccount({ email, passwordHash, at: now().toISOString() });
     let account = created;
@@ -1705,6 +1739,9 @@ export function createApp(
     }
     if (created) sendVerificationCode(created);
     const moved = adoptGuestData(c.req.header("authorization"), account.userId);
+    if (bodyConfirmed && !hasAgeConfirmation(store.ageConfirmations, account.userId)) {
+      store.ageConfirmations.confirm(account.userId, AGE_GATE_VERSION, now().toISOString());
+    }
     const session = accountSession(account);
     return c.json({
       ok: true as const,
@@ -1789,6 +1826,25 @@ export function createApp(
     });
     return "sent";
   };
+
+  // Sean: 18+ only. Only the result of the device-side check is stored (never a birth date).
+  app.get("/v1/age-confirmation", (c) =>
+    c.json({ ok: true as const, age: ageConfirmationState(store.ageConfirmations.get(c.get("userId"))) }),
+  );
+  app.post("/v1/age-confirmation", async (c) => {
+    const body = await c.req.json<Record<string, unknown>>().catch(() => ({}) as Record<string, unknown>);
+    // Policy Reviewer: the birth date stays on the phone. Refuse it rather than receive it.
+    if (Object.keys(body).some((k) => /birth|dob|age(?!Confirmed18Plus)|year|month/i.test(k))) {
+      return c.json({ ok: false, error: "Send only the confirmation, not a birth date." }, 400);
+    }
+    if (body.ageConfirmed18Plus !== true) return c.json({ ok: false, error: "ageConfirmed18Plus must be true" }, 400);
+    if (body.version !== AGE_GATE_VERSION) {
+      return c.json({ ok: false, error: "Age check is out of date. Reload and try again.", currentVersion: AGE_GATE_VERSION }, 409);
+    }
+    const userId = c.get("userId");
+    store.ageConfirmations.confirm(userId, AGE_GATE_VERSION, now().toISOString());
+    return c.json({ ok: true as const, age: ageConfirmationState(store.ageConfirmations.get(userId)) });
+  });
 
   // Sean: CardSight disclosure + consent, stored with its version and timestamps.
   app.get("/v1/consents/cardsight", (c) =>
@@ -2184,6 +2240,7 @@ export function createApp(
             openclip: liveIdentityOpenclip,
             catalog,
           });
+        // Sean: 18+ only, so CardSight also needs the age confirmation (always, even in tests).
         // Sean: the photo goes to CardSight only with this user's current consent, checked here,
         // right before the adapter. Without it (or if CardSight misses) the local matcher runs.
         // Backend review M5: also only while this user's monthly CardSight cap has room. A use is
@@ -2191,7 +2248,10 @@ export function createApp(
         const monthKey = cardSightMonthKey(now());
         const userCap = isGuestUserId(userId) ? cardSightUserCaps.guest : cardSightUserCaps.signedIn;
         const cardSight =
-          options.cardSight && hasActiveConsent(store.consents, userId) && store.consents.monthlyUse(userId, monthKey) < userCap
+          options.cardSight &&
+          hasAgeConfirmation(store.ageConfirmations, userId) &&
+          hasActiveConsent(store.consents, userId) &&
+          store.consents.monthlyUse(userId, monthKey) < userCap
             ? options.cardSight
             : null;
         const runLive = cardSight

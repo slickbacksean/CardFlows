@@ -2,6 +2,7 @@ import type { ConfirmEvent } from "@cardflow/shared";
 import type { UserPriceSnapshot } from "@cardflow/shared";
 import { createMemorySalesStore, type SalesStore } from "./sales-store";
 import { createMemoryPurchaseLedger, type PurchaseLedger } from "./purchase-ledger";
+import { createMemoryAgeConfirmationStore, type AgeConfirmationStore } from "./age-store";
 import { createMemoryConsentStore, type ConsentStore } from "./consent-store";
 import { createMemoryIdempotencyStore, type IdempotencyStore } from "./idempotency-store";
 import { createMemoryGradeHistoryStore, type GradeHistoryStore } from "./grade-history-store";
@@ -726,6 +727,8 @@ export interface StorePort {
   idempotency: IdempotencyStore;
   /** Sean: CardSight consent (version + timestamps). */
   consents: ConsentStore;
+  /** Sean: 18+ only (confirmation, time and gate version; never a birth date). */
+  ageConfirmations: AgeConfirmationStore;
   /** P2-07 pre-grade estimate history. */
   gradeHistory: GradeHistoryStore;
   createSession: typeof createSession;
@@ -959,6 +962,7 @@ export function createMemoryStore(): StorePort {
     purchaseLedger,
     idempotency: createMemoryIdempotencyStore(),
     consents: createMemoryConsentStore(),
+    ageConfirmations: createMemoryAgeConfirmationStore(),
     gradeHistory: createMemoryGradeHistoryStore(),
     createSession,
     getSessionByToken,
@@ -1166,6 +1170,8 @@ function createMemoryAccountStore(
       // Consent given as a guest carries over unless the account already answered; the guest's
       // consent history and this month's CardSight use move with it (as SQLite does by user_id).
       (port.consents as ConsentStore & { moveUser(from: string, to: string): void }).moveUser(fromUserId, toUserId);
+      // The guest's 18+ confirmation carries over too.
+      (port.ageConfirmations as AgeConfirmationStore & { moveUser(from: string, to: string): void }).moveUser(fromUserId, toUserId);
       this.deleteSessionsForUser(fromUserId);
       return { scans, confirmEvents: 0 };
     },
@@ -1181,6 +1187,7 @@ function createMemoryAccountStore(
       counts.purchase_events_anonymized = port.purchaseLedger.anonymizeUser(userId);
       counts.idempotency_keys = port.idempotency.deleteUser(userId);
       counts.provider_consents = port.consents.deleteUser(userId);
+      counts.age_confirmations = port.ageConfirmations.deleteUser(userId);
       for (const item of port.listInventory(userId)) port.deleteInventoryItem(userId, item.inventoryItemId);
       store.inventory = store.inventory.filter((item) => item.userId !== userId);
       for (const [id, c] of store.confirmations) if ((c as { userId?: string }).userId === userId) store.confirmations.delete(id);

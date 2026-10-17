@@ -1,5 +1,6 @@
 import {
   ACCOUNT_AUTH_COPY,
+  AGE_GATE_COPY,
   GUEST_RETENTION_NOTE,
   PASSWORD_MIN_LENGTH,
   SIGNUP_ALLOWANCE_NOTE,
@@ -12,7 +13,8 @@ import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { authStyles } from "@/components/ui/auth-styles";
 import { PreferencesScreenHeader } from "@/components/ui/preferences-screen-header";
 import { PrimaryButton } from "@/components/ui/primary-button";
-import { isGuestSession, signUpWithEmail } from "@/lib/identity";
+import { ensureAgeConfirmed } from "@/lib/age-gate";
+import { isGuestSession, peekActiveUserId, signUpWithEmail } from "@/lib/identity";
 import { flushScanQueue } from "@/lib/scan-queue";
 import { colors } from "@/lib/theme";
 
@@ -31,6 +33,8 @@ export default function SignUpScreen() {
     if (mode === "sign_up") {
       const problem = passwordProblem(password);
       if (problem) return setError(problem);
+      // Sean: 18+ only. The age gate comes first (the server refuses sign-up without it).
+      if (!(await ensureAgeConfirmed(peekActiveUserId()))) return;
     }
     setSaving(true);
     setError(null);
@@ -80,6 +84,7 @@ export default function SignUpScreen() {
           value={password}
         />
         {error ? <Text style={authStyles.error}>{error}</Text> : null}
+        {mode === "sign_up" ? <Text style={authStyles.body}>{AGE_GATE_COPY.signUpLine}</Text> : null}
         <PrimaryButton disabled={saving} label={title} onPress={() => void submit()} />
         <Pressable accessibilityRole="button" onPress={() => { setMode(mode === "sign_up" ? "sign_in" : "sign_up"); setError(null); }}>
           <Text style={authStyles.link}>{mode === "sign_up" ? "Already have an account? Sign in" : "New here? Create an account"}</Text>

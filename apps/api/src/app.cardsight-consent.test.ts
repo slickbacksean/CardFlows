@@ -3,6 +3,8 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
+  AGE_GATE_VERSION,
+  DEFAULT_INVITED_USER_ID,
   CARDSIGHT_CONSENT_COPY,
   CAMERA_USAGE_DESCRIPTION,
   CARDSIGHT_CONSENT_VERSION,
@@ -45,9 +47,12 @@ function setup(
     cardSightUserCaps?: { signedIn: number; guest: number };
     cardSight?: CardRecognitionProvider;
     now?: () => Date;
+    ageConfirmed?: boolean;
   } = {},
 ) {
   const inner = createMemoryStore();
+  // Sean: 18+ only. CardSight also needs the age confirmation; the dev user has given it.
+  if (opts.ageConfirmed ?? true) inner.ageConfirmations.confirm(DEFAULT_INVITED_USER_ID, AGE_GATE_VERSION, "2026-10-17T00:00:00.000Z");
   const store: StorePort = {
     ...inner,
     readStoredScanImage: (_scanId, storageRef) => ({ storageRef, mimeType: "image/jpeg", bytes: STORED_JPEG }),
@@ -106,6 +111,14 @@ describe("CardSight consent: the server enforces it before calling the adapter",
     expect(off.body.consent!.withdrawnAt).toEqual(expect.any(String));
     await scan(app);
     expect(cardSight.calls).toHaveLength(1);
+    expect(local.calls.length).toBeGreaterThan(0);
+  });
+
+  it("without the 18+ confirmation, photos never reach CardSight even with consent", async () => {
+    const { app, local, cardSight } = setup({ ageConfirmed: false });
+    await consent(app, { granted: true, version: CARDSIGHT_CONSENT_VERSION });
+    await scan(app);
+    expect(cardSight.calls).toHaveLength(0);
     expect(local.calls.length).toBeGreaterThan(0);
   });
 
@@ -325,6 +338,11 @@ describe("Backend review M5: per-user monthly CardSight cap", () => {
     });
     const guest = ((await (await app.request("/v1/sessions/guest", { method: "POST" })).json()) as { token: string }).token;
     const auth = { authorization: `Bearer ${guest}` };
+    await app.request("/v1/age-confirmation", {
+      method: "POST",
+      headers: { ...auth, "content-type": "application/json" },
+      body: JSON.stringify({ ageConfirmed18Plus: true, version: AGE_GATE_VERSION }),
+    });
     await app.request("/v1/consents/cardsight", {
       method: "POST",
       headers: { ...auth, "content-type": "application/json" },

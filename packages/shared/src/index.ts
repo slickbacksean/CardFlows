@@ -836,3 +836,4 @@ export * from "./quota-period";
 export * from "./account-auth";
 export * from "./email-verification";
 export * from "./cardsight-consent";
+export * from "./age-gate";

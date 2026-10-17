@@ -40,6 +40,7 @@ import {
 import { catalogDisplayFromCard } from "./listing";
 import { createSqliteSalesStore } from "./sales-store";
 import { createSqlitePurchaseLedger } from "./purchase-ledger";
+import { createSqliteAgeConfirmationStore } from "./age-store";
 import { createSqliteConsentStore } from "./consent-store";
 import { createSqliteIdempotencyStore } from "./idempotency-store";
 import { createSqliteGradeHistoryStore } from "./grade-history-store";
@@ -2002,6 +2003,7 @@ export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStor
     purchaseLedger,
     idempotency: createSqliteIdempotencyStore(db),
     consents: createSqliteConsentStore(db),
+    ageConfirmations: createSqliteAgeConfirmationStore(db),
     gradeHistory: createSqliteGradeHistoryStore(db),
     accounts: createSqliteAccountStore(sqlite, db),
     createSession,
