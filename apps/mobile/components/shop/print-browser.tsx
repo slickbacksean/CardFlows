@@ -193,7 +193,7 @@ export function PrintBrowser({
       ) : null}
       {status === "error" ? (
         <View style={styles.center}>
-          <Text style={styles.message}>Could not load these cards.</Text>
+          <Text style={styles.message}>{"Couldn't load these cards."}</Text>
           <Pressable accessibilityRole="button" onPress={onRetry} style={styles.retry}>
             <Text style={styles.retryLabel}>Try again</Text>
           </Pressable>

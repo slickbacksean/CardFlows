@@ -730,6 +730,8 @@ export {
   PREGRADE_DISCLAIMER_TEXT,
   PREGRADE_TITLE,
   pregradeCopyViolations,
+  SLAB_COMP_COPY_FILES,
+  slabCompCopyViolations,
 } from "./pregrade-copy";
 export {
   CARDSIGHT_MONTHLY_BUDGET_DEFAULT,

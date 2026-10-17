@@ -14,15 +14,18 @@ import {
   type CardFlowHealth,
   type InvitedIdentity,
   type SettingsStackLoad,
-  actionErrorMessage,
+  classifyLoadError,
+  SCREEN_LOADING_LABELS,
   SCREEN_STATE_COPY,
+  SETTINGS_STATUS_COPY,
 } from "@cardflow/shared";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { PreferencesScreenHeader } from "@/components/ui/preferences-screen-header";
-import { InlineError } from "@/components/ui/screen-state";
+import { PrimaryButton } from "@/components/ui/primary-button";
+import { InfoRow } from "@/components/ui/screen-state";
 import { getHealth } from "@/lib/api";
 import {
   isGuestSession,
@@ -51,7 +54,12 @@ export default function SettingsScreen() {
         if (isCancelled()) return;
         setStack(null);
         setStackLoad("unavailable");
-        setStackError(actionErrorMessage(caught, "Couldn't check CardFlow's status."));
+        // UX review P1-6: information, not a user error. Offline says so.
+        setStackError(
+          classifyLoadError(caught) === "offline"
+            ? `${SCREEN_STATE_COPY.offlineTitle}. ${SCREEN_STATE_COPY.offlineBody}`
+            : SETTINGS_STATUS_COPY.checkFailed,
+        );
       });
   }, []);
 
@@ -133,12 +141,20 @@ export default function SettingsScreen() {
           );
         })}
 
+        {stackLoad === "checking" ? (
+          <Text accessibilityLiveRegion="polite" style={styles.body}>
+            {SCREEN_LOADING_LABELS.settings}
+          </Text>
+        ) : null}
         {stackLoad === "unavailable" ? (
           <>
-            <InlineError message={stackError} />
-            <Pressable accessibilityRole="button" hitSlop={8} onPress={() => checkHealth()}>
-              <Text style={styles.retry}>{SCREEN_STATE_COPY.retry}</Text>
-            </Pressable>
+            <InfoRow message={stackError} />
+            <PrimaryButton
+              accessibilityLabel={SETTINGS_STATUS_COPY.retryLabel}
+              label={SCREEN_STATE_COPY.retry}
+              onPress={() => checkHealth()}
+              tone="muted"
+            />
           </>
         ) : null}
 
@@ -195,7 +211,6 @@ const styles = StyleSheet.create({
     gap: space.sm,
   },
   kicker: { color: colors.accent, fontWeight: "700", letterSpacing: 0.6 },
-  retry: { color: colors.accent, fontSize: 15, fontWeight: "700", paddingVertical: 6 },
   sectionFirst: {
     color: colors.text,
     fontSize: 16,

@@ -143,7 +143,7 @@ describe("cardgrading mapper (GitHub contract)", () => {
 
   it("reports an undecodable photo as unreadable, not as card not found", () => {
     const mapped = mapDetectReport(
-      { ok: false, has_crop: false, gates: [{ name: "card_detection", passed: false, detail: "could not decode image", hard: true }] },
+      { ok: false, has_crop: false, gates: [{ name: "card_detection", passed: false, detail: "couldn't decode image", hard: true }] },
       "front",
       null,
     );

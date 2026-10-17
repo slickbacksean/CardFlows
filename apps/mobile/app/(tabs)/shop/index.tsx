@@ -76,7 +76,7 @@ export default function ShopDexScreen() {
       ) : null}
       {status === "error" ? (
         <View style={styles.center}>
-          <Text style={styles.message}>Could not load the Pokédex.</Text>
+          <Text style={styles.message}>{"Couldn't load the Pokédex."}</Text>
           <Pressable accessibilityRole="button" onPress={retry} style={styles.retry}>
             <Text style={styles.retryLabel}>Try again</Text>
           </Pressable>

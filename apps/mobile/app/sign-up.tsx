@@ -8,9 +8,9 @@ import {
   passwordProblem,
   actionErrorMessage,
 } from "@cardflow/shared";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { authStyles } from "@/components/ui/auth-styles";
 import { PreferencesScreenHeader } from "@/components/ui/preferences-screen-header";
 import { PrimaryButton } from "@/components/ui/primary-button";
@@ -22,7 +22,9 @@ import { colors } from "@/lib/theme";
 /** Open sign-up (email + password). Testers can still use an invite code. */
 export default function SignUpScreen() {
   const router = useRouter();
-  const [mode, setMode] = useState<"sign_up" | "sign_in">("sign_up");
+  // UX review P1-4: "Sign in" from a session-ended error opens this screen in sign-in mode.
+  const params = useLocalSearchParams<{ mode?: string }>();
+  const [mode, setMode] = useState<"sign_up" | "sign_in">(() => (params.mode === "sign_in" ? "sign_in" : "sign_up"));
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -44,10 +46,10 @@ export default function SignUpScreen() {
       const session = await signUpWithEmail(email.trim(), password, mode, mode === "sign_up" && over18);
       void flushScanQueue();
       // Sean: new accounts confirm their email (6-digit code) before pre-grade estimates.
-      if (session.emailVerified === false) router.replace("/verify-email");
+      if (session.emailVerified === false) router.replace({ pathname: "/verify-email", params: { email: email.trim() } });
       else router.back();
     } catch (caught) {
-      setError(actionErrorMessage(caught, ACCOUNT_AUTH_COPY.signInFailed));
+      setError(actionErrorMessage(caught, mode === "sign_up" ? ACCOUNT_AUTH_COPY.signUpFailed : ACCOUNT_AUTH_COPY.signInFailed));
     } finally {
       setSaving(false);
     }
@@ -97,9 +99,10 @@ export default function SignUpScreen() {
             <Text style={styles.checkLabel}>{AGE_GATE_COPY.checkbox}</Text>
           </Pressable>
         ) : null}
+        {mode === "sign_up" && !over18 ? <Text style={authStyles.body}>{AGE_GATE_COPY.disabledCaption}</Text> : null}
         {mode === "sign_up" ? <Text style={authStyles.body}>{AGE_GATE_COPY.signUpLine}</Text> : null}
         <InlineError message={error} />
-        <PrimaryButton disabled={saving || (mode === "sign_up" && !over18)} label={saving ? (mode === "sign_up" ? "Creating account…" : "Signing in…") : title} onPress={() => void submit()} />
+        <PrimaryButton accessibilityHint={mode === "sign_up" && !over18 ? AGE_GATE_COPY.disabledHint : undefined} disabled={saving || (mode === "sign_up" && !over18)} label={saving ? (mode === "sign_up" ? "Creating account…" : "Signing in…") : title} onPress={() => void submit()} />
         <Pressable accessibilityRole="button" onPress={() => { setMode(mode === "sign_up" ? "sign_in" : "sign_up"); setError(null); }}>
           <Text style={authStyles.link}>{mode === "sign_up" ? "Already have an account? Sign in" : "New here? Create an account"}</Text>
         </Pressable>
@@ -117,7 +120,7 @@ export default function SignUpScreen() {
 }
 
 const styles = StyleSheet.create({
-  checkRow: { flexDirection: "row", alignItems: "center", gap: 12, minHeight: 44 },
+  checkRow: { flexDirection: "row", alignItems: "center", gap: 12, minHeight: Platform.OS === "android" ? 48 : 44 },
   box: { width: 24, height: 24, borderRadius: 6, borderWidth: 2, borderColor: colors.muted, alignItems: "center", justifyContent: "center" },
   boxOn: { backgroundColor: colors.accent, borderColor: colors.accent },
   tick: { color: colors.accentText, fontSize: 16, fontWeight: "700" },

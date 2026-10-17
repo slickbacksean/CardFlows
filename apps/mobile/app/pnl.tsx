@@ -68,7 +68,7 @@ export default function PnlScreen() {
       setEntries(loaded.entries);
       setError(loaded.offline ? "Offline. Showing sales saved on this phone; they sync when you reconnect." : null);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not load the collection");
+      setError(caught instanceof Error ? caught.message : "Couldn't load the collection");
     } finally {
       setLoading(false);
     }

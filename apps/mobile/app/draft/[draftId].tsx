@@ -230,7 +230,7 @@ export default function DraftScreen() {
         result.allInTotal ?? result.costToAsk?.allInTotal ?? null,
       );
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not mark ready");
+      setError(caught instanceof Error ? caught.message : "Couldn't mark ready");
     } finally {
       setIsSaving(false);
     }

@@ -7,6 +7,8 @@ import {
   CAMERA_PREPROMPT_TITLE,
   PHOTO_PICKER_UNAVAILABLE_COPY,
   actionErrorMessage,
+  classifyLoadError,
+  SCAN_SESSION_ENDED_COPY,
 } from "@cardflow/shared";
 import { isOfflineScanError, isSignupRequiredError, queueOfflineScan } from "@/lib/scan-queue";
 import { trackScanStarted } from "@/lib/product-events";
@@ -160,18 +162,18 @@ export default function CaptureScreen() {
         try {
           const imageUri = await takeStillPhoto(cameraRef.current);
           if (!imageUri) {
-            setError("Could not take a photo. Try again.");
+            setError("Couldn't take a photo. Try again.");
             return;
           }
           await postScan("camera_photo", imageUri, "image/jpeg");
           return;
         } catch (caught) {
-          setError(scanFailureMessage(caught, "Could not take a photo. Try again."));
+          setError(scanFailureMessage(caught, "Couldn't take a photo. Try again."));
           return;
         }
       }
       if (IS_NATIVE && permission?.granted === true && !cameraMountFailed) {
-        setError("Could not take a photo. Try again.");
+        setError("Couldn't take a photo. Try again.");
         return;
       }
       if (Platform.OS === "web") {
@@ -196,7 +198,7 @@ export default function CaptureScreen() {
       if (!asset) return;
       const uri = asset.uri ?? null;
       if (!uri) {
-        setError("Could not read that photo. Try another.");
+        setError("Couldn't read that photo. Try another.");
         return;
       }
       setIsSubmitting(true);
@@ -372,8 +374,9 @@ export default function CaptureScreen() {
 }
 
 function scanFailureMessage(caught: unknown, fallback: string): string {
-  if (caught instanceof Error && caught.message === "Unauthorized") {
-    return "Invite session expired. Open Settings, enter your invite code, then take the photo again.";
+  // UX review P1-4: accounts, not invite codes, now.
+  if (classifyLoadError(caught) === "auth" || (caught instanceof Error && caught.message === "Unauthorized")) {
+    return SCAN_SESSION_ENDED_COPY;
   }
   // P5: shared offline / can't-reach / server wording.
   return actionErrorMessage(caught, fallback);

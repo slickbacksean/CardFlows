@@ -92,7 +92,7 @@ export default function ScanScreen() {
         setError(null);
       } catch (caught) {
         if (!cancelled) {
-          setError(caught instanceof Error ? caught.message : "Could not load scan");
+          setError(caught instanceof Error ? caught.message : "Couldn't load scan");
         }
       }
     }
@@ -221,7 +221,7 @@ export default function ScanScreen() {
       setRejected(true);
       trackEvent("reject", { ms_since_scan: msSinceScan(scan.scanId) });
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not reject that scan");
+      setError(caught instanceof Error ? caught.message : "Couldn't reject that scan");
     } finally {
       setIsConfirming(false);
     }
@@ -286,7 +286,7 @@ export default function ScanScreen() {
         {!scan && !error ? <Text style={styles.body}>Loading scan…</Text> : null}
         {!scan && error ? (
           <FailureBody
-            title="Could not load scan"
+            title="Couldn't load scan"
             body={error}
             actionLabel="Retake"
             onAction={goToCapture}
