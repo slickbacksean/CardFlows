@@ -1,7 +1,16 @@
+import { GRADE_QUOTA_FREE_PER_MONTH } from "./grade-quota";
 /** Open sign-up (email + password). Rules shared by the API and the app. */
 export const PASSWORD_MIN_LENGTH = 10;
 export const PASSWORD_MAX_LENGTH = 128;
 export const EMAIL_MAX_LENGTH = 254;
+
+/**
+ * Shown on the sign-up screen: what a free account includes (allowance resets monthly on the
+ * sign-up date, no rollover; free accounts see their 10 most recent estimates).
+ */
+export const SIGNUP_FREE_PLAN_NOTE =
+  `Free accounts get ${GRADE_QUOTA_FREE_PER_MONTH} pre-grade estimates a month. The allowance resets each month on the date you sign up, and unused estimates don't roll over. ` +
+  "You can see your 10 most recent pre-grade estimates; older ones stay saved, not deleted, and Premium shows them.";
 
 export const ACCOUNT_AUTH_COPY = {
   signInFailed: "Email or password is incorrect.",

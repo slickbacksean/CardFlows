@@ -835,10 +835,12 @@ export function createApp(
     if (!given || !timingSafeEqualString(given, expected)) {
       return c.json({ ok: false, error: "Unauthorized" }, 401);
     }
-    const users = store.listInvitedUsers().map((user) => ({
-      userId: user.userId,
-      scans: listScans(user.userId).map((scan) => scan.capturedAt),
-      purchases: listInventory(user.userId)
+    // Open sign-up: signed-up accounts count alongside invited testers (guests do not).
+    const userIds = [...new Set([...store.listInvitedUsers().map((user) => user.userId), ...store.accounts.listAccountUserIds()])];
+    const users = userIds.map((userId) => ({
+      userId,
+      scans: listScans(userId).map((scan) => scan.capturedAt),
+      purchases: listInventory(userId)
         .filter((item) => item.intent === "purchased" && item.purchase)
         .map((item) => item.purchase!.purchasedAt),
     }));

@@ -995,6 +995,9 @@ function createMemoryAccountStore(
       const id = byEmail.get(normalizeEmail(email));
       return id ? { ...accounts.get(id)! } : null;
     },
+    listAccountUserIds() {
+      return [...accounts.values()].map((account) => account.userId);
+    },
     getAccount(userId) {
       const row = accounts.get(userId);
       return row ? { ...row } : null;

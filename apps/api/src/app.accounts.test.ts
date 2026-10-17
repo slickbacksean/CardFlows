@@ -114,3 +114,15 @@ describe("open sign-up", () => {
     expect((await call(app, "/v1/sessions/password", { body: { email: "del@example.com", password: PW } })).status).toBe(401);
   });
 });
+
+describe("North Star counts signed-up accounts", () => {
+  it("an account's scans count toward weekly active resellers", async () => {
+    const { app } = open({ opsToken: "t" });
+    const up = await call(app, "/v1/accounts", { body: { email: "ns@example.com", password: PW } });
+    const scan = await call(app, "/v1/scans", { body: { captureMethod: "camera_photo" }, token: up.body.token as string });
+    expect(scan.status).toBe(201);
+    const res = await app.request("/ops/north-star?weeks=1", { headers: { authorization: "Bearer t" } });
+    const body = (await res.json()) as { weeks: Array<{ activeResellers: number }> };
+    expect(body.weeks.at(-1)?.activeResellers).toBe(1);
+  });
+});

@@ -26,6 +26,8 @@ export interface AccountStore {
   createAccount(input: { email: string; passwordHash: string; at: string }): AccountRecord | null;
   findByEmail(email: string): AccountRecord | null;
   getAccount(userId: string): AccountRecord | null;
+  /** Every signed-up account's user ID (North Star counts them with invited testers). */
+  listAccountUserIds(): string[];
   /** Session row for any user (account, guest). Guests get `isGuest`. */
   mintSession(userId: string, input: { guest: boolean; expiresAt: string; at: string }): MintedSession;
   /** Removes expired guest sessions; returns the guest user IDs that now have no live session. */
@@ -99,6 +101,9 @@ export function createSqliteAccountStore(
     findByEmail(email) {
       const row = db.select().from(userAccounts).where(eq(userAccounts.email, normalizeEmail(email))).get();
       return row ? toRecord(row) : null;
+    },
+    listAccountUserIds() {
+      return db.select({ userId: userAccounts.userId }).from(userAccounts).all().map((row) => row.userId);
     },
     getAccount(userId) {
       const row = db.select().from(userAccounts).where(eq(userAccounts.userId, userId)).get();
