@@ -10,7 +10,7 @@ const ALERT_COOLDOWN_MS = 30 * 60_000;
 export const ERROR_SPIKE_MIN_REQUESTS = 20;
 export const ERROR_SPIKE_RATE = 0.05;
 
-export type OpsAlertKind = "vendor_401" | "vendor_5xx" | "server_5xx_spike";
+export type OpsAlertKind = "vendor_401" | "vendor_5xx" | "server_5xx_spike" | "pokecollector_deletion_failed";
 
 export interface OpsAlert {
   kind: OpsAlertKind;
@@ -79,6 +79,17 @@ export class OpsMetrics {
   }
 
   /** P1-18: on-device stage timings, keyed by stage and device class. */
+  /** Backend final review R3: a PokéCollector delete gave up (max attempts). Counted and alerted. */
+  pokecollectorDeletionsFailed = 0;
+  recordPokecollectorDeletionFailed() {
+    this.pokecollectorDeletionsFailed += 1;
+    this.alert(
+      "pokecollector_deletion_failed",
+      "pokecollector_deletion_failed",
+      "A PokéCollector account deletion gave up after the maximum attempts. See /ops/pokecollector-deletions and RELEASE_ENV.",
+    );
+  }
+
   recordDeviceStage(stage: string, deviceClass: string, ms: number, hot: boolean) {
     const key = `${stage}|${deviceClass}`;
     const list = this.device.get(key) ?? [];
@@ -158,7 +169,14 @@ export class OpsMetrics {
         hotP95Ms: percentile(hot.map((s) => s.ms).sort((a, b) => a - b), 95),
       };
     });
-    return { windowMs: OPS_WINDOW_MS, devices, routes: routes.sort((a, b) => a.route.localeCompare(b.route)), vendors, alerts: [...this.alerts] };
+    return {
+      windowMs: OPS_WINDOW_MS,
+      devices,
+      routes: routes.sort((a, b) => a.route.localeCompare(b.route)),
+      vendors,
+      pokecollectorDeletionsFailed: this.pokecollectorDeletionsFailed,
+      alerts: [...this.alerts],
+    };
   }
 }
 

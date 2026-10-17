@@ -88,11 +88,19 @@ export function deviceItemIds(userId: string): string[] {
 }
 
 /**
- * Account deletion: the user's entry goes with the rest of the phone wipe. Re-review L1: the owner
- * is cleared too, so an inventory list still in flight (or a refetch) can't write it back.
+ * Re-review L1: stop recording IDs for this user (account deletion), so an inventory list still in
+ * flight (or a refetch) can't add to the entry. The entry itself stays until forgetDeviceItemIds.
+ */
+export function stopRecordingDeviceItemIds(userId: string): void {
+  if (owner === userId) owner = "";
+}
+
+/**
+ * Account deletion: the user's entry goes once the grade history it points at is gone. Backend
+ * final review R5: only after every delete succeeded, so a later wipe can retry the rest.
  */
 export function forgetDeviceItemIds(userId: string): void {
-  if (owner === userId) owner = "";
+  stopRecordingDeviceItemIds(userId);
   const index = readIndex();
   if (!(userId in index)) return;
   delete index[userId];

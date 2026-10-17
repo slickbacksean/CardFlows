@@ -27,6 +27,21 @@ export const metricsRoutes = {
     query: z.object({ weeks: z.string().optional() }),
     response: z.looseObject({ ok: z.literal(true), metric: z.string(), weeks: z.array(z.looseObject({})) }),
   }),
+  /** Backend final review R3: PokéCollector deletion queue counts (no IDs); same bearer token. */
+  getPokecollectorDeletions: defineRoute({
+    method: "GET",
+    path: "/ops/pokecollector-deletions",
+    bodyKind: "none",
+    response: z.object({
+      ok: z.literal(true),
+      pending: z.number(),
+      held: z.number(),
+      failed: z.number(),
+      stuck: z.number(),
+      oldestPendingAt: z.string().nullable(),
+      maxAttempts: z.number(),
+    }),
+  }),
   /**
    * Policy Reviewer (Oct 17): under-18 report. Same bearer token as /ops/metrics (404 when unset).
    * Turns CardSight off and deletes the account and all its data.

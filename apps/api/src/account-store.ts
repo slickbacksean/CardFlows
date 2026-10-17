@@ -94,9 +94,11 @@ export interface AccountStore {
 
 /**
  * "delete": the background queue deletes this remote user. "hold": never deleted here (shared with
- * other CardFlow users, a guest's shared user, or a legacy link); the relink script freezes it.
+ * other CardFlow users, a guest's shared user, or a legacy link); the relink script handles it.
+ * "failed" (Backend final review R3): gave up after POKECOLLECTOR_DELETION_MAX_ATTEMPTS; needs ops
+ * (see /ops/pokecollector-deletions and RELEASE_ENV).
  */
-export type PokecollectorDeletionMode = "delete" | "hold";
+export type PokecollectorDeletionMode = "delete" | "hold" | "failed";
 export interface PokecollectorPendingDeletion {
   remoteUserId: string;
   mode: PokecollectorDeletionMode;
@@ -193,7 +195,7 @@ type DeletionRow = {
 function deletionFromRow(row: DeletionRow): PokecollectorPendingDeletion {
   return {
     remoteUserId: row.remote_user_id,
-    mode: row.mode === "hold" ? "hold" : "delete",
+    mode: row.mode === "hold" || row.mode === "failed" ? row.mode : "delete",
     attempts: row.attempts,
     nextAttemptAt: row.next_attempt_at,
     createdAt: row.created_at,

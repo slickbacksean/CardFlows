@@ -9,7 +9,7 @@ import {
 import { Directory, File, Paths } from "expo-file-system";
 import { apiErrorStatus, deleteAccount, listInventory } from "./api";
 import { gradeFlowSession } from "./grade-flow-session";
-import { deviceItemIds, forgetDeviceItemIds } from "./device-item-index";
+import { deviceItemIds, forgetDeviceItemIds, stopRecordingDeviceItemIds } from "./device-item-index";
 import { clearLegacyGradeHistory } from "./grade-history";
 import { peekActiveUserId, signOutLocally } from "./identity";
 import { setAnalyticsEnabled } from "./product-events";
@@ -72,7 +72,7 @@ export async function deleteAccountEverywhere(password?: string): Promise<Accoun
   }
   if (!wipesPhone(outcome)) return { outcome, localFailed: [] };
   // Re-review L1: stop recording item IDs for this user before anything refetches.
-  forgetDeviceItemIds(userId);
+  stopRecordingDeviceItemIds(userId);
   const { failed } = await runLocalAccountWipe({
     write_queue: () => clearWriteQueue(),
     scan_queue: () => clearScanQueue(),
@@ -86,11 +86,16 @@ export async function deleteAccountEverywhere(password?: string): Promise<Accoun
     analytics_install_id: () => setAnalyticsEnabled(false),
     session: () => signOutLocally(),
   });
-  // Re-review L1: and clear it again after the wipe, so nothing that ran during it is left.
-  try {
-    forgetDeviceItemIds(userId);
-  } catch {
-    // Best effort; the index holds only opaque item IDs.
+  // Re-review L1 / final review R5: the index entry goes only when the grade history step fully
+  // succeeded; otherwise it stays (no new IDs are recorded) so a later wipe can retry those keys.
+  if (!failed.includes("grade_history")) {
+    try {
+      forgetDeviceItemIds(userId);
+    } catch {
+      // Best effort; the index holds only opaque item IDs.
+    }
+  } else {
+    stopRecordingDeviceItemIds(userId);
   }
   return { outcome, localFailed: failed };
 }

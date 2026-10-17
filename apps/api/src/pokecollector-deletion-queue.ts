@@ -22,6 +22,13 @@ export const POKECOLLECTOR_DELETION_BACKOFF_MS = [
   12 * 3_600_000,
   24 * 3_600_000,
 ] as const;
+/**
+ * Backend final review R3: after this many failed attempts (about 9 days with the backoff above) a
+ * row is marked "failed", the queue stops trying, and ops gets an alert.
+ */
+export const POKECOLLECTOR_DELETION_MAX_ATTEMPTS = 14;
+/** A "delete" row older than this counts as stuck in /ops/pokecollector-deletions. */
+export const POKECOLLECTOR_DELETION_STUCK_AFTER_MS = 3 * 86_400_000;
 /** Rows handled per run; the rest wait for the next tick. */
 export const POKECOLLECTOR_DELETIONS_PER_RUN = 10;
 
@@ -35,6 +42,7 @@ export interface PokecollectorDeletionRun {
   deleted: number;
   retrying: number;
   held: number;
+  failed: number;
 }
 
 export interface PokecollectorDeletionQueue {
@@ -58,6 +66,9 @@ export function createPokecollectorDeletionQueue(options: {
   now?: () => Date;
   pacer?: PokecollectorPacer;
   perRun?: number;
+  maxAttempts?: number;
+  /** Called once when a row is marked "failed" (ops alert and log; no CardFlow user data in it). */
+  onGaveUp?: (row: { remoteUserId: string; attempts: number; lastResult: string }) => void;
 }): PokecollectorDeletionQueue {
   const now = options.now ?? (() => new Date());
   const pacer = options.pacer ?? createPokecollectorPacer();
@@ -99,6 +110,16 @@ export function createPokecollectorDeletionQueue(options: {
       return;
     }
     const attempts = row.attempts + 1;
+    if (attempts >= (options.maxAttempts ?? POKECOLLECTOR_DELETION_MAX_ATTEMPTS)) {
+      options.accounts.updatePokecollectorDeletion(row.remoteUserId, { mode: "failed", attempts, lastResult: outcome });
+      result.failed += 1;
+      try {
+        options.onGaveUp?.({ remoteUserId: row.remoteUserId, attempts, lastResult: outcome });
+      } catch {
+        // An alert sink must never break the queue.
+      }
+      return;
+    }
     options.accounts.updatePokecollectorDeletion(row.remoteUserId, {
       attempts,
       nextAttemptAt: nextPokecollectorDeletionAttempt(attempts, now()),
@@ -108,7 +129,7 @@ export function createPokecollectorDeletionQueue(options: {
   }
 
   async function runOnce(): Promise<PokecollectorDeletionRun> {
-    const result: PokecollectorDeletionRun = { deleted: 0, retrying: 0, held: 0 };
+    const result: PokecollectorDeletionRun = { deleted: 0, retrying: 0, held: 0, failed: 0 };
     const due = options.accounts.listDuePokecollectorDeletions(now().toISOString(), options.perRun ?? POKECOLLECTOR_DELETIONS_PER_RUN);
     for (const row of due) await attempt(row, result);
     return result;
@@ -133,4 +154,28 @@ export function createPokecollectorDeletionQueue(options: {
     },
   };
   return queue;
+}
+
+export interface PokecollectorDeletionCounts {
+  pending: number;
+  held: number;
+  failed: number;
+  /** "delete" rows older than POKECOLLECTOR_DELETION_STUCK_AFTER_MS. */
+  stuck: number;
+  oldestPendingAt: string | null;
+  maxAttempts: number;
+}
+
+/** R3: counts only (no remote or CardFlow IDs) for /ops/pokecollector-deletions. */
+export function pokecollectorDeletionCounts(rows: readonly PokecollectorPendingDeletion[], now: Date): PokecollectorDeletionCounts {
+  const pending = rows.filter((r) => r.mode === "delete");
+  const stuckBefore = now.getTime() - POKECOLLECTOR_DELETION_STUCK_AFTER_MS;
+  return {
+    pending: pending.length,
+    held: rows.filter((r) => r.mode === "hold").length,
+    failed: rows.filter((r) => r.mode === "failed").length,
+    stuck: pending.filter((r) => Date.parse(r.createdAt) < stuckBefore).length,
+    oldestPendingAt: pending.map((r) => r.createdAt).sort()[0] ?? null,
+    maxAttempts: POKECOLLECTOR_DELETION_MAX_ATTEMPTS,
+  };
 }
