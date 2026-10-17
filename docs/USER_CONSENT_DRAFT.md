@@ -40,9 +40,11 @@ You can skip saving the photo after the scan if you only want a one-time check. 
 
 ## 2. Sending the selected image to CardSight
 
-**Decided (Sean, Oct 17):** a one-time prompt before the first photo is uploaded, with a Settings toggle to withdraw. The shipped text is `CARDSIGHT_CONSENT_COPY` in `packages/shared/src/cardsight-consent.ts`, version `CARDSIGHT_CONSENT_VERSION`. It is stored on the server with its version and timestamps (`provider_consents`). The server checks consent right before calling CardSight. Without consent, CardFlow's own matcher or manual search is used. Changing the wording or CardSight's terms means bumping the version, and everyone is asked again.
+**Decided (Sean, Oct 17):** a one-time prompt before the first photo is uploaded, with a Settings toggle to withdraw. The shipped text is `CARDSIGHT_CONSENT_COPY` in `packages/shared/src/cardsight-consent.ts`, version `CARDSIGHT_CONSENT_VERSION` (bumped to `2026-10-17.2` for the Policy Reviewer wording, so earlier answers are asked again). This disclosure is the only place CardFlow copy may say "AI"; estimate copy never does. It is stored on the server with its version and timestamps (`provider_consents`). The server checks consent right before calling CardSight. Without consent, CardFlow's own matcher or manual search is used. Changing the wording or CardSight's terms means bumping the version, and everyone is asked again.
 
-> **Card recognition.** CardFlow uses CardSight, our card-recognition provider, to identify cards from your photos. If you allow it, your card photos are uploaded to CardFlow and CardSight. CardSight's terms allow it to use these images to improve its service. If you don't allow it, CardFlow matches cards on its own servers only, or you can search manually. You can change this anytime in Settings.
+> **Card recognition.** CardFlow can use CardSight, our card-recognition provider, to identify cards from your photos. If you allow it, your card photos are sent to CardSight. CardSight's terms let it keep these images and use them to train its AI models. Turning this off later stops new uploads but doesn't remove photos CardSight already has. If you don't allow it, CardFlow matches cards on its own servers, or you can search manually. You can change this anytime in Settings.
+>
+> **Settings > Card recognition** (toggle help): When on, card photos are also sent to CardSight, our card-recognition provider. CardSight's terms let it keep these images and use them to train its AI models. Turning this off stops new uploads but doesn't remove photos CardSight already has. When off, CardFlow matches cards on its own servers only.
 >
 > Buttons: **Allow CardSight** · **Don't allow**
 
@@ -142,7 +144,7 @@ Marketplace apps have their own rules. Using overlays, bots, or scrapers can vio
 
 **Privacy policy draft: card-recognition provider (CardSight)**
 
-If you allow it, CardFlow uploads your card photos to **CardSight**, our card-recognition provider, to identify the card. CardSight's terms allow it to use these images to improve its service. We send the image and the fields its API requires, not your email or other account details. If you don't allow it, or you turn it off in Settings (Card recognition), new photos are matched only by CardFlow's own servers. Turning it off doesn't recall photos CardSight has already received, and deleting a scan in CardFlow can't delete CardSight's copy. We record when you allowed or withdrew this, and which version of this notice you saw.
+CardFlow can use **CardSight**, our card-recognition provider, to identify cards from your photos. If you allow it, your card photos are sent to CardSight. CardSight's terms let it keep these images and use them to train its AI models. Turning this off later (Settings > Card recognition) stops new uploads but doesn't remove photos CardSight already has, and deleting a scan or your account in CardFlow doesn't delete CardSight's copies. If you don't allow it, CardFlow matches cards on its own servers, or you can search manually. We send CardSight the photo and the fields its API needs, not your email. We record when you allowed or turned this off, and which version of this notice you saw.
 
 **Privacy policy draft: email service provider (Resend)**
 

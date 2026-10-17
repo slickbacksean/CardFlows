@@ -1,5 +1,6 @@
 import { isGuestUserId, type InvitedIdentity } from "@cardflow/shared";
 import { createAccount, createGuestSession, createSession, getIdentity, listInventory, signInWithPassword } from "./api";
+import { resetCardSightConsentCache } from "./cardsight-consent";
 import { stopLiveVideoIdentify } from "./live-identify";
 import { clearLivestreamOverlay } from "./livestream";
 import {
@@ -59,6 +60,8 @@ export async function signUpWithEmail(email: string, password: string, mode: "si
   setSessionToken(result.token);
   const session = { ...toSession(result), emailVerified: result.emailVerified };
   rememberIdentity(session.identity);
+  // A guest's CardSight answer moves with the account; anyone else is re-checked on next upload.
+  resetCardSightConsentCache();
   restorePromise = Promise.resolve(session);
   return session;
 }
@@ -68,6 +71,8 @@ export async function redeemInviteCode(inviteCode: string): Promise<IdentitySess
   await persistSessionToken(result.token);
   const session = toSession(result);
   rememberIdentity(session.identity);
+  // A guest's CardSight answer moves with the account; anyone else is re-checked on next upload.
+  resetCardSightConsentCache();
   restorePromise = Promise.resolve(session);
   stopLiveVideoIdentify();
   clearLivestreamOverlay();

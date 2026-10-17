@@ -109,6 +109,52 @@ describe("CardSight consent: the server enforces it before calling the adapter",
   });
 });
 
+describe.each(["sqlite", "memory"] as const)("guest consent moves to the account at sign-up (%s)", (kind) => {
+  async function req(app: App, pathName: string, init: { method?: string; body?: unknown; token?: string } = {}) {
+    const res = await app.request(pathName, {
+      method: init.method ?? (init.body !== undefined ? "POST" : "GET"),
+      headers: { "content-type": "application/json", ...(init.token ? { authorization: `Bearer ${init.token}` } : {}) },
+      body: init.body !== undefined ? JSON.stringify(init.body) : undefined,
+    });
+    return { status: res.status, body: (await res.json()) as Record<string, unknown> };
+  }
+  function open() {
+    const store = kind === "sqlite" ? createSqliteStore({ sqlitePath: ":memory:" }) : createMemoryStore();
+    return createApp(store, { devAutoSession: false, guestMode: true });
+  }
+
+  it("a guest's Allow is the new account's consent (same version and time)", async () => {
+    const app = open();
+    const guest = (await req(app, "/v1/sessions/guest", { method: "POST" })).body.token as string;
+    // Guests can see and answer the prompt before their first upload.
+    expect(((await req(app, "/v1/consents/cardsight", { token: guest })).body.consent as Record<string, unknown>).needsPrompt).toBe(true);
+    const given = await req(app, "/v1/consents/cardsight", { body: { granted: true, version: CARDSIGHT_CONSENT_VERSION }, token: guest });
+    expect(given.status).toBe(200);
+    const grantedAt = (given.body.consent as { grantedAt: string }).grantedAt;
+
+    const up = await req(app, "/v1/accounts", { body: { email: "guest@example.com", password: "correct horse battery" }, token: guest });
+    expect(up.status).toBe(200);
+    const account = await req(app, "/v1/consents/cardsight", { token: up.body.token as string });
+    expect(account.body.consent).toMatchObject({ granted: true, version: CARDSIGHT_CONSENT_VERSION, grantedAt, needsPrompt: false });
+  });
+
+  it("a guest's Don't allow moves too, and an account's own earlier answer wins on sign-in", async () => {
+    const app = open();
+    const g1 = (await req(app, "/v1/sessions/guest", { method: "POST" })).body.token as string;
+    await req(app, "/v1/consents/cardsight", { body: { granted: false }, token: g1 });
+    const up = await req(app, "/v1/accounts", { body: { email: "sam@example.com", password: "correct horse battery" }, token: g1 });
+    const token = up.body.token as string;
+    expect((await req(app, "/v1/consents/cardsight", { token })).body.consent).toMatchObject({ granted: false, needsPrompt: false });
+    await req(app, "/v1/consents/cardsight", { body: { granted: true, version: CARDSIGHT_CONSENT_VERSION }, token });
+
+    // A later guest who declines, then signs in: the account keeps its own Allow.
+    const g2 = (await req(app, "/v1/sessions/guest", { method: "POST" })).body.token as string;
+    await req(app, "/v1/consents/cardsight", { body: { granted: false }, token: g2 });
+    const signIn = await req(app, "/v1/sessions/password", { body: { email: "sam@example.com", password: "correct horse battery" }, token: g2 });
+    expect((await req(app, "/v1/consents/cardsight", { token: signIn.body.token as string })).body.consent).toMatchObject({ granted: true });
+  });
+});
+
 describe("CardSight consent API", () => {
   it("starts unanswered; agreeing needs the current version; stores version + timestamp", async () => {
     const { app } = setup();
@@ -152,12 +198,14 @@ describe("CardSight consent API", () => {
     second.close();
   });
 
-  it("disclosure names CardSight and its image-use terms; permission text names the provider; no AI wording", () => {
+  it("disclosure names CardSight and says what its terms allow; only the two disclosure strings mention AI", () => {
     expect(CARDSIGHT_CONSENT_COPY.body).toContain("CardSight, our card-recognition provider");
-    expect(CARDSIGHT_CONSENT_COPY.body).toContain("CardSight's terms allow it to use these images to improve its service");
-    expect(PHOTO_PERMISSION_PURPOSE).toContain("uploaded to CardFlow and our card-recognition provider");
+    expect(CARDSIGHT_CONSENT_COPY.body).toContain("CardSight's terms let it keep these images and use them to train its AI models");
+    expect(CARDSIGHT_CONSENT_COPY.settingsHelp).toContain("doesn't remove photos CardSight already has");
     expect(CAMERA_USAGE_DESCRIPTION).toContain(PHOTO_PERMISSION_PURPOSE);
-    const all = [...Object.values(CARDSIGHT_CONSENT_COPY), CAMERA_USAGE_DESCRIPTION].join(" ");
-    expect(all).not.toMatch(/\bAI\b|artificial intelligence|PSA|BGS|CGC/);
+    const { body, settingsHelp, ...rest } = CARDSIGHT_CONSENT_COPY;
+    expect(body && settingsHelp).toBeTruthy();
+    expect([...Object.values(rest), CAMERA_USAGE_DESCRIPTION].join(" ")).not.toMatch(/\bAI\b|artificial intelligence|PSA|BGS|CGC/);
   });
+
 });

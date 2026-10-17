@@ -44,6 +44,11 @@ export async function askCardSightConsentOnce(): Promise<void> {
   return asking;
 }
 
+/** A different user (sign-up, sign-in, invite) gets asked unless the server already has their answer. */
+export function resetCardSightConsentCache(): void {
+  answered = false;
+}
+
 /** Settings toggle and the prompt. Returns the server's state (null if it couldn't be saved). */
 export async function saveCardSightConsent(granted: boolean): Promise<CardSightConsentState | null> {
   try {
