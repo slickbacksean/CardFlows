@@ -76,10 +76,11 @@ export default function SettingsScreen() {
       <ScrollView contentContainerStyle={styles.content} style={styles.flex}>
         <Text style={styles.kicker}>{kicker}</Text>
 
-        <Text style={styles.sectionFirst}>This tester</Text>
-        <Text style={styles.body}>{identity?.label ?? "No invite session"}</Text>
+        <Text style={styles.sectionFirst}>Account</Text>
+        <Text style={styles.body}>{identity?.label ?? "Not signed in"}</Text>
+        <JobRow label="Sign in or sign up" onPress={() => router.push("/sign-up")} />
         <JobRow
-          label="Use a different invite code"
+          label="Use a tester invite code"
           onPress={() => router.push("/switch-tester")}
         />
 

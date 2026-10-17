@@ -1,6 +1,6 @@
 import { QueryClientProvider } from "@tanstack/react-query";
 import { type ErrorBoundaryProps, Link, Stack, router } from "expo-router";
-import { GUEST_SIGNUP_COPY, signupMessage } from "@cardflow/shared";
+import { GUEST_RETENTION_NOTE, GUEST_SCAN_WALL_NOTE, GUEST_SIGNUP_COPY, signupMessage } from "@cardflow/shared";
 import { onSignupRequired } from "@/lib/api";
 import { StatusBar } from "expo-status-bar";
 import { useEffect, useState } from "react";
@@ -58,9 +58,10 @@ export default function RootLayout() {
     return onSignupRequired((reason) => {
       if (showing) return;
       showing = true;
-      Alert.alert(GUEST_SIGNUP_COPY.title, signupMessage(reason), [
+      const message = `${signupMessage(reason)}\n\n${reason === "scan_limit" ? GUEST_SCAN_WALL_NOTE : GUEST_RETENTION_NOTE}`;
+      Alert.alert(GUEST_SIGNUP_COPY.title, message, [
         { text: GUEST_SIGNUP_COPY.dismiss, style: "cancel", onPress: () => { showing = false; } },
-        { text: GUEST_SIGNUP_COPY.action, onPress: () => { showing = false; router.push("/switch-tester"); /* no public sign-up screen yet; invite code is sign-up */ } },
+        { text: GUEST_SIGNUP_COPY.action, onPress: () => { showing = false; router.push("/sign-up"); } },
       ], { cancelable: true, onDismiss: () => { showing = false; } });
     });
   }, []);
@@ -91,6 +92,7 @@ export default function RootLayout() {
         <Stack.Screen name="draft/[draftId]" options={{ headerShown: false }} />
         <Stack.Screen name="settings" options={{ headerShown: false }} />
         <Stack.Screen name="switch-tester" options={{ headerShown: false }} />
+        <Stack.Screen name="sign-up" options={{ headerShown: false }} />
         <Stack.Screen name="about" options={{ headerShown: false }} />
         <Stack.Screen name="analytics" options={{ headerShown: false }} />
         <Stack.Screen name="practice" options={{ headerShown: false }} />

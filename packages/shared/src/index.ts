@@ -831,3 +831,4 @@ export * from "./posthog-sink";
 export * from "./perf-outbox";
 export * from "./north-star";
 export * from "./premium";
+export * from "./account-auth";

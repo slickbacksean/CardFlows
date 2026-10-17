@@ -69,6 +69,11 @@ export function createIdempotencyRegistry<T>(now: () => number = Date.now, max =
         },
       };
     },
+    /** True when the key is in flight or answered within 24 h (a replay, not a new request). */
+    peek(key: string): boolean {
+      const existing = entries.get(key);
+      return Boolean(existing && now() - existing.at < IDEMPOTENCY_TTL_MS);
+    },
     prune,
     size: () => entries.size,
   };

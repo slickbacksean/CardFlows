@@ -16,10 +16,12 @@ import { resolveLiveIdentityOpenclipFromEnv } from "./live-identity-openclip";
 import { resolveLiveVideoObbDetector } from "./live-video-obb";
 import type { ObbDetector } from "@cardflow/shared";
 import { opsMetrics, webhookAlertSink } from "./ops-metrics";
+import { assertProductionConfig } from "./production-config";
 
 installUnmappedSetNameLogger();
 
 loadLocalApiEnv();
+assertProductionConfig();
 initApiSentry();
 
 // P1-17 alerts: always logged; sent to Sentry when SENTRY_DSN is set and to a webhook when configured.

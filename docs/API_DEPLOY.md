@@ -30,3 +30,16 @@ Checked against `apps/api` (the hosting plan was written for the old `packages/a
 | Temp files | Grader output goes to a per-request temp dir that is deleted in `finally`. Debug PNGs only with `CARDFLOW_GRADE_DEBUG_IMAGES=1`. |
 
 Still open (Sean): hosting provider, hosted DB, photo retention, and the right `MAX_CONCURRENT_GRADES` for the chosen instance size.
+
+## Forgot password needs an email sender
+
+`POST /v1/password-resets` always answers 202 with the same message, so nobody can tell whether an email has an account. Reset codes are single use, expire after 1 hour, and only their SHA-256 is stored. A successful reset signs out every session. Delivery checks `CARD_FLOW_EMAIL_SENDER`: when it is unset, the code is logged in development only, and in production nothing is logged or sent. Wiring a provider is the remaining step (a TODO in `app.ts`).
+
+## Production must set `CARD_FLOW_TRUST_PROXY_HOPS`
+
+The API **refuses to start** with `NODE_ENV=production` unless this is set to a number (`0` when nothing sits in front of it).
+Behind a load balancer or reverse proxy, set `CARD_FLOW_TRUST_PROXY_HOPS` to the number of proxies that append to `X-Forwarded-For` (usually `1`). With the default `0`, every request appears to come from the proxy's IP. Per-IP limits (guest mints, sign-up, sign-in, grading) then become one shared bucket. Setting it too high lets clients spoof their IP. Tests cover the default: a spoofed `X-Forwarded-For` does not reset the guest mint limit.
+
+## Open sign-up env
+- `CARD_FLOW_GUEST_SCANS=true` turns on guest sessions (3 scans, 24-hour sessions in `crm_sessions`).
+- `CARD_FLOW_INVITE_ALEX` / `CARD_FLOW_INVITE_JORDAN` are tester invite codes. **There are no defaults;** unset means invite sign-in is off for that tester.
