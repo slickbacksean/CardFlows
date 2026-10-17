@@ -136,6 +136,11 @@ export function isGuestSession(): boolean {
   return isGuestUserId(cachedUserId);
 }
 
+/** Signed-up accounts (`acct_…`) have a password; guests and invite testers don't. */
+export function isPasswordAccountSession(): boolean {
+  return typeof cachedUserId === "string" && cachedUserId.startsWith("acct_");
+}
+
 export async function ensureIdentitySession(): Promise<IdentitySession> {
   if (!restorePromise) {
     restorePromise = withSessionBootstrap(restoreIdentitySession).catch((error) => {

@@ -550,6 +550,21 @@ export const purchaseEvents = sqliteTable(
   ],
 );
 
+/**
+ * Backend review L3 (P4): one row per account deletion, with no PII (no user_id, email or token).
+ * kind: self | under18_report | unverified_purge | orphan_sweep.
+ */
+export const accountDeletionAudit = sqliteTable(
+  "account_deletion_audit",
+  {
+    seq: integer("seq").primaryKey({ autoIncrement: true }),
+    at: text("at").notNull(),
+    kind: text("kind").notNull(),
+    rowsDeleted: integer("rows_deleted").notNull(),
+  },
+  (table) => [check("account_deletion_audit_kind_chk", sql`${table.kind} in ('self', 'under18_report', 'unverified_purge', 'orphan_sweep')`)],
+);
+
 /** Backend review M3: persisted Idempotency-Key results for queued writes (24 h). */
 export const idempotencyKeys = sqliteTable(
   "idempotency_keys",
@@ -589,6 +604,7 @@ export const schema = {
   consentEvents,
   cardsightUserUsage,
   emailSendCounts,
+  accountDeletionAudit,
   cardExternalIds,
   crmScans,
   crmConfirmations,

@@ -2,6 +2,7 @@
  * Open sign-up accounts, DB-backed guest sessions, and whole-user data moves/deletes.
  * Every multi-table change runs in one SQLite transaction.
  */
+import { createHash } from "node:crypto";
 import type Database from "better-sqlite3";
 import { and, eq, isNull, lte } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
@@ -65,6 +66,24 @@ export interface AccountStore {
   deleteAllUserRows(userId: string): Record<string, number>;
   /** Test/ops helper: rows left for a user_id across every table. */
   countUserRows(userId: string): Record<string, number>;
+  /** Backend review L3: one PII-free row per deletion (no user ID, email or token). */
+  recordDeletionAudit(entry: DeletionAuditEntry): void;
+  listDeletionAudit(): DeletionAuditEntry[];
+}
+
+export type DeletionAuditKind = "self" | "under18_report" | "unverified_purge" | "orphan_sweep";
+export interface DeletionAuditEntry {
+  at: string;
+  kind: DeletionAuditKind;
+  rowsDeleted: number;
+}
+
+/**
+ * Backend review L1: email_send_counts keys on a hash of the normalized address, never the
+ * address itself, so the per-address email cap survives an account delete without keeping the email.
+ */
+export function emailSendKey(email: string): string {
+  return createHash("sha256").update(`cardflow-email-send\0${normalizeEmail(email)}`).digest("hex");
 }
 
 export function normalizeEmail(email: string): string {
@@ -172,7 +191,7 @@ export function createSqliteAccountStore(
     },
     takeEmailSendForAddress(email, day, cap) {
       return sqlite.transaction(() => {
-        const address = normalizeEmail(email);
+        const address = emailSendKey(email);
         sqlite.prepare("DELETE FROM email_send_counts WHERE day < date(?, '-1 day')").run(day);
         sqlite.prepare("INSERT OR IGNORE INTO email_send_counts (email, day, count) VALUES (?, ?, 0)").run(address, day);
         return (
@@ -206,6 +225,18 @@ export function createSqliteAccountStore(
         db.update(userAccounts).set({ emailVerifiedAt: now }).where(and(eq(userAccounts.userId, userId), isNull(userAccounts.emailVerifiedAt))).run();
         return "verified";
       })();
+    },
+    recordDeletionAudit({ at, kind, rowsDeleted }) {
+      sqlite.prepare("INSERT INTO account_deletion_audit (at, kind, rows_deleted) VALUES (?, ?, ?)").run(at, kind, rowsDeleted);
+    },
+    listDeletionAudit() {
+      return (
+        sqlite.prepare("SELECT at, kind, rows_deleted FROM account_deletion_audit ORDER BY seq").all() as Array<{
+          at: string;
+          kind: DeletionAuditKind;
+          rows_deleted: number;
+        }>
+      ).map((row) => ({ at: row.at, kind: row.kind, rowsDeleted: row.rows_deleted }));
     },
     listAccountUserIds() {
       return db.select({ userId: userAccounts.userId }).from(userAccounts).all().map((row) => row.userId);

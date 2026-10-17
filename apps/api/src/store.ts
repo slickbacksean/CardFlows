@@ -6,7 +6,7 @@ import { createMemoryAgeConfirmationStore, type AgeConfirmationStore } from "./a
 import { createMemoryConsentStore, type ConsentStore } from "./consent-store";
 import { createMemoryIdempotencyStore, type IdempotencyStore } from "./idempotency-store";
 import { createMemoryGradeHistoryStore, type GradeHistoryStore } from "./grade-history-store";
-import { EMAIL_CODE_MAX_ATTEMPTS, normalizeEmail, type AccountRecord, type AccountStore } from "./account-store";
+import { EMAIL_CODE_MAX_ATTEMPTS, emailSendKey, normalizeEmail, type AccountRecord, type AccountStore, type DeletionAuditEntry } from "./account-store";
 import {
   catalogFingerprint,
   cachedCatalogCardMatches,
@@ -746,6 +746,10 @@ export interface StorePort {
   readStoredScanImage: typeof readStoredScanImage;
   getScanImage: typeof getScanImage;
   deleteScanImage: typeof deleteScanImage;
+  /** Backend review M1: drops a temp image whose scan was never saved (account deleted mid-scan). */
+  discardScanImage: (scanId: string, storageRef: string) => boolean;
+  /** Backend review M1: scan image files with no crm_scans row, older than `olderThan`. Returns files removed. */
+  sweepOrphanScanImages: (olderThan: Date) => number;
   saveGradeImage: typeof saveGradeImage;
   getGradeImage: typeof getGradeImage;
   deleteGradeImage: typeof deleteGradeImage;
@@ -978,6 +982,21 @@ export function createMemoryStore(): StorePort {
     readStoredScanImage,
     getScanImage,
     deleteScanImage,
+    discardScanImage(scanId: string, storageRef: string) {
+      const record = store.scanImages.get(scanId);
+      if (!record || record.storageRef !== storageRef) return false;
+      return store.scanImages.delete(scanId);
+    },
+    sweepOrphanScanImages() {
+      let removed = 0;
+      for (const scanId of [...store.scanImages.keys()]) {
+        if (!store.scans.has(scanId)) {
+          store.scanImages.delete(scanId);
+          removed += 1;
+        }
+      }
+      return removed;
+    },
     saveGradeImage,
     getGradeImage,
     deleteGradeImage,
@@ -1056,6 +1075,7 @@ function createMemoryAccountStore(
   const emailCodes = new Map<string, { codeHash: string; expiresAt: string; attempts: number }>();
   const sendsByAddressDay = new Map<string, number>();
   const byEmail = new Map<string, string>();
+  const deletionAudit: DeletionAuditEntry[] = [];
   const live = (s: StoredSession, now: string) => s.expiresAt > now;
   return {
     createAccount({ email, passwordHash, at }) {
@@ -1103,7 +1123,7 @@ function createMemoryAccountStore(
     takeEmailSendForAddress(email, day, cap) {
       const yesterday = new Date(Date.parse(`${day}T00:00:00Z`) - 86_400_000).toISOString().slice(0, 10);
       for (const key of [...sendsByAddressDay.keys()]) if (key.split("\0")[1]! < yesterday) sendsByAddressDay.delete(key);
-      const key = `${normalizeEmail(email)}\0${day}`;
+      const key = `${emailSendKey(email)}\0${day}`;
       const count = sendsByAddressDay.get(key) ?? 0;
       if (count >= cap) return false;
       sendsByAddressDay.set(key, count + 1);
@@ -1126,6 +1146,12 @@ function createMemoryAccountStore(
       const account = accounts.get(userId);
       if (account && !account.emailVerifiedAt) accounts.set(userId, { ...account, emailVerifiedAt: now });
       return "verified";
+    },
+    recordDeletionAudit(entry) {
+      deletionAudit.push({ ...entry });
+    },
+    listDeletionAudit() {
+      return deletionAudit.map((entry) => ({ ...entry }));
     },
     listAccountUserIds() {
       return [...accounts.values()].map((account) => account.userId);

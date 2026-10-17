@@ -45,12 +45,28 @@ export interface PurchaseLedger {
   listUserIds(): string[];
   /**
    * Account deletion: the rows stay (so past North Star weeks don't shift) under a random
-   * anonymous ID with the snapshot removed. Returns rows anonymized.
+   * anonymous ID with the snapshot removed. Backend review L2 (P4): event, purchase and inventory
+   * IDs are replaced with fresh random ones too, so no row points at anything the user had
+   * (crm_purchases / crm_inventory_items / logs). What's left per deleted account: kind and
+   * timestamps under one random bucket ID (per-account so North Star's weekly purchaser counts
+   * stay the same). Returns rows anonymized.
    */
   anonymizeUser(userId: string): number;
 }
 
 export const ANONYMIZED_USER_PREFIX = "deleted_";
+
+/** Same old ID → same new random ID within one deletion, so voided/edited events still group. */
+function anonymousRekeyer() {
+  const purchases = new Map<string, string>();
+  const items = new Map<string, string>();
+  const pick = (map: Map<string, string>, id: string) => {
+    let next = map.get(id);
+    if (!next) map.set(id, (next = randomUUID()));
+    return next;
+  };
+  return { purchase: (id: string) => pick(purchases, id), item: (id: string) => pick(items, id) };
+}
 
 function stableJson(value: unknown): string {
   return JSON.stringify(value ?? null);
@@ -104,11 +120,15 @@ export function createMemoryPurchaseLedger(): PurchaseLedger {
     listUserIds: () => [...new Set(rows.map((r) => r.userId))],
     anonymizeUser(userId) {
       const anon = `${ANONYMIZED_USER_PREFIX}${randomUUID()}`;
+      const rekey = anonymousRekeyer();
       let count = 0;
       for (const row of rows) {
         if (row.userId !== userId) continue;
         row.userId = anon;
         row.snapshot = null;
+        row.eventId = randomUUID();
+        row.purchaseId = rekey.purchase(row.purchaseId);
+        row.inventoryItemId = rekey.item(row.inventoryItemId);
         count += 1;
       }
       return count;
@@ -152,11 +172,23 @@ export function createSqlitePurchaseLedger(db: BetterSQLite3Database<typeof sche
     activePurchaseTimes: (userId) =>
       activeTimes(db.select().from(purchaseEvents).where(eq(purchaseEvents.userId, userId)).orderBy(asc(purchaseEvents.seq)).all()),
     listUserIds: () => db.selectDistinct({ userId: purchaseEvents.userId }).from(purchaseEvents).all().map((r) => r.userId),
-    anonymizeUser: (userId) =>
-      db
-        .update(purchaseEvents)
-        .set({ userId: `${ANONYMIZED_USER_PREFIX}${randomUUID()}`, snapshot: null })
-        .where(eq(purchaseEvents.userId, userId))
-        .run().changes,
+    anonymizeUser: (userId) => {
+      const anon = `${ANONYMIZED_USER_PREFIX}${randomUUID()}`;
+      const rekey = anonymousRekeyer();
+      const mine = db.select().from(purchaseEvents).where(eq(purchaseEvents.userId, userId)).all();
+      for (const row of mine) {
+        db.update(purchaseEvents)
+          .set({
+            userId: anon,
+            snapshot: null,
+            eventId: randomUUID(),
+            purchaseId: rekey.purchase(row.purchaseId),
+            inventoryItemId: rekey.item(row.inventoryItemId),
+          })
+          .where(eq(purchaseEvents.seq, row.seq))
+          .run();
+      }
+      return mine.length;
+    },
   };
 }

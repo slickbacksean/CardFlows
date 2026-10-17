@@ -50,6 +50,13 @@ export interface PokecollectorAccounts {
     mapping: PokecollectorUserMapping,
     input: PokecollectorCollectionWrite,
   ): Promise<PokecollectorCollectionCopy | null>;
+  /**
+   * Policy Reviewer (P4): account deletion. Drops everything CardFlow holds for this link outside
+   * the database (the cached PokéCollector access token). PokéCollector has no revoke/unlink API
+   * that CardFlow integrates, so nothing is called on PokéCollector, and the PokéCollector account
+   * and its cards stay there. The per-user password is derived from the pepper and never stored.
+   */
+  forgetUser(mapping: PokecollectorUserMapping): Promise<void>;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -161,6 +168,7 @@ export function createOffPokecollectorAccounts(): PokecollectorAccounts {
     async addWatchlist() {
       return null;
     },
+    async forgetUser() {},
   };
 }
 
@@ -225,6 +233,10 @@ export function createMockPokecollectorAccounts(): MockPokecollectorAccounts {
     },
     async addWatchlist(mapping, input) {
       return pushCopy(wishlists, mapping, input);
+    },
+    async forgetUser(mapping) {
+      // The PokéCollector-side cards stay (they belong to PokéCollector); only CardFlow's link goes.
+      users.delete(mapping.userId);
     },
     seedCollection(pokecollectorUserId, items) {
       collections.set(pokecollectorUserId, [...items]);
@@ -391,6 +403,9 @@ export function createPokecollectorAccounts(
       } catch {
         return null;
       }
+    },
+    async forgetUser(mapping) {
+      tokenByUsername.delete(mapping.pokecollectorUsername);
     },
   };
 }

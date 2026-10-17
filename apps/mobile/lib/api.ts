@@ -272,8 +272,11 @@ async function request<T>(
       throw unverified;
     }
     const error = new Error(cardFlowHttpErrorMessage(response.status, data.error));
-    const extra = error as Error & { status?: number; quota?: GradeQuotaSnapshot };
+    const extra = error as Error & { status?: number; code?: string; quota?: GradeQuotaSnapshot };
     extra.status = response.status;
+    // The server's machine-readable code (e.g. password_incorrect), never shown as text.
+    const code = (data as { code?: unknown }).code;
+    if (typeof code === "string") extra.code = code;
     const quota = (data as { quota?: GradeQuotaSnapshot }).quota;
     if (quota) extra.quota = quota;
     // D14: premium-only feature.
@@ -943,8 +946,9 @@ export function getIdentity() {
 }
 
 /** P4: Settings > Delete account. Deletes every row, photo and session for this user. */
-export function deleteAccount() {
-  return callApi(apiContract.deleteAccountPhotos);
+/** P4: accounts with a password must send it (Backend review M4); guests and testers send none. */
+export function deleteAccount(password?: string) {
+  return callApi(apiContract.deleteAccountPhotos, { body: password ? { password } : {} });
 }
 
 type SignupListener = (reason: SignupReason) => void;

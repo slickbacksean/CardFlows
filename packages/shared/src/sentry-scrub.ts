@@ -7,7 +7,9 @@ const IMAGE_DATA_URL = /data:image\/[a-zA-Z0-9.+-]+;base64,/i;
 const DROP_KEY_PATTERN =
   /^(email|emails|photo|photos|image|images|jpeg|jpg|png|webp|heic|base64|crop|cropbytes|frontbytes|backbytes|identitycropjpeg|still|screenshot|screenshots|file|files|attachment|attachments|authorization|cookie|cookies|set-cookie|token|password|ip_address)$/i;
 
-const DROP_HEADER_PATTERN = /^(authorization|cookie|set-cookie|x-api-key)$/i;
+const DROP_HEADER_PATTERN = /^(authorization|cookie|set-cookie|x-api-key|x-cardflow-app-key)$/i;
+/** Dev Ops review: any key ending in token/secret/password/apiKey (camelCase or snake_case). */
+export const SECRET_KEY_SUFFIX = /(token|secret|password|api_?key)$/i;
 
 export const REDACTED_EMAIL = "[redacted-email]";
 export const REDACTED_IMAGE = "[image-data-redacted]";
@@ -29,7 +31,12 @@ const SECRET_PARAM_PATTERN = /([?&](?:token|access_token|refresh_token|code|pass
 /** Local photo files (camera stills, crops, the scan queue). The path can name the card or user. */
 const LOCAL_IMAGE_URI = /\b(?:file|content|ph|assets-library):\/\/\S+?\.(?:jpe?g|png|heic|heif|webp)\b/gi;
 
+/** Dev Ops review: JWT-like and long base64 blobs inside a longer string (not only whole values). */
+const JWT_LIKE = /\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}/g;
+const EMBEDDED_BASE64 = /(?:data:[a-z]+\/[a-z0-9.+-]+;base64,)?[A-Za-z0-9+/_-]{80,}={0,2}/gi;
+
 export const REDACTED_TOKEN = "[redacted-token]";
+export const REDACTED_BLOB = "[redacted-blob]";
 export const REDACTED_PHOTO_URI = "[photo-uri-redacted]";
 
 function scrubString(value: string): string {
@@ -38,11 +45,13 @@ function scrubString(value: string): string {
     .replace(EMAIL_PATTERN, REDACTED_EMAIL)
     .replace(BEARER_PATTERN, `Bearer ${REDACTED_TOKEN}`)
     .replace(SECRET_PARAM_PATTERN, `$1${REDACTED_TOKEN}`)
-    .replace(LOCAL_IMAGE_URI, REDACTED_PHOTO_URI);
+    .replace(LOCAL_IMAGE_URI, REDACTED_PHOTO_URI)
+    .replace(JWT_LIKE, REDACTED_TOKEN)
+    .replace(EMBEDDED_BASE64, REDACTED_BLOB);
 }
 
 function dropKey(key: string): boolean {
-  return DROP_KEY_PATTERN.test(key);
+  return DROP_KEY_PATTERN.test(key) || SECRET_KEY_SUFFIX.test(key);
 }
 
 function scrubUnknown(value: unknown, key?: string): unknown {
@@ -66,7 +75,7 @@ function scrubRequest(request: Record<string, unknown>): Record<string, unknown>
   const headers = isRecord(request.headers) ? { ...request.headers } : undefined;
   if (headers) {
     for (const name of Object.keys(headers)) {
-      if (DROP_HEADER_PATTERN.test(name)) headers[name] = REDACTED_VALUE;
+      if (DROP_HEADER_PATTERN.test(name) || SECRET_KEY_SUFFIX.test(name.replace(/-/g, "_"))) headers[name] = REDACTED_VALUE;
       else if (typeof headers[name] === "string") headers[name] = scrubString(headers[name]);
     }
   }

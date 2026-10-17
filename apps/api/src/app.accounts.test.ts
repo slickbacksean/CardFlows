@@ -106,7 +106,7 @@ describe("open sign-up", () => {
     expect(before.scan_confirm_events).toBe(1);
     expect(before.user_price_snapshots).toBe(1);
     expect(before.user_card_sales).toBe(1);
-    const deleted = await call(app, "/v1/account/delete", { method: "POST", token });
+    const deleted = await call(app, "/v1/account/delete", { body: { password: PW }, token });
     expect(deleted.status).toBe(200);
     const after = store.accounts.countUserRows(userId);
     expect(Object.entries(after).filter(([, n]) => n > 0)).toEqual([]);

@@ -54,6 +54,7 @@ describe("MVP CRM schema", () => {
     sqlite.close();
 
     expect(tables.map((row) => row.name)).toEqual([
+      "account_deletion_audit",
       "age_confirmations",
       "card_external_ids",
       "cardflow_cards",

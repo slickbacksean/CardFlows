@@ -148,6 +148,13 @@
       "when": 1791350400000,
       "tag": "0020_age_attested_at",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "6",
+      "when": 1791436800000,
+      "tag": "0021_account_deletion_audit",
+      "breakpoints": true
     }
   ]
 }

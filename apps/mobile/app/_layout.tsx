@@ -1,6 +1,6 @@
 import { QueryClientProvider } from "@tanstack/react-query";
 import { type ErrorBoundaryProps, Link, Stack, router } from "expo-router";
-import { EMAIL_VERIFICATION_COPY, GUEST_RETENTION_NOTE, GUEST_SCAN_WALL_NOTE, GUEST_SIGNUP_COPY, signupMessage } from "@cardflow/shared";
+import { EMAIL_VERIFICATION_COPY, GUEST_RETENTION_NOTE, GUEST_SCAN_WALL_NOTE, GUEST_SIGNUP_COPY, RELEASE_API_URL_ERROR_COPY, releaseApiUrlProblem, signupMessage } from "@cardflow/shared";
 import { onEmailUnverified, onSignupRequired } from "@/lib/api";
 import { StatusBar } from "expo-status-bar";
 import { useEffect, useState } from "react";
@@ -12,10 +12,11 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { PrimaryButton } from "@/components/ui/primary-button";
 import { ensureIdentitySession } from "@/lib/identity";
 import { cardFlowQueryClient } from "@/lib/query-client";
-import { captureMobileException, initMobileSentry } from "@/lib/sentry";
+import { captureMobileException, initMobileSentry, loadCrashReportsPreference } from "@/lib/sentry";
 import { colors, space } from "@/lib/theme";
 
-initMobileSentry();
+// Policy Reviewer (P4): Settings > Send crash reports (on by default) gates Sentry.
+void loadCrashReportsPreference().then(() => initMobileSentry());
 
 export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
   captureMobileException(error);
@@ -34,7 +35,30 @@ export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
   );
 }
 
+/**
+ * Dev Ops review (P4, blocking): a release build (!__DEV__) without a usable EXPO_PUBLIC_API_URL
+ * shows this screen instead of the app, and never falls back to 127.0.0.1 / 10.0.2.2.
+ * app.config.ts already refuses to build preview/production without one; this is the backstop.
+ */
+const RELEASE_API_URL_PROBLEM = releaseApiUrlProblem({ configured: process.env.EXPO_PUBLIC_API_URL, isDev: __DEV__ });
+
+function ReleaseConfigErrorScreen() {
+  return (
+    <SafeAreaView style={styles.safe}>
+      <View accessibilityRole="alert" style={styles.stack}>
+        <Text style={styles.title}>{RELEASE_API_URL_ERROR_COPY.title}</Text>
+        <Text style={styles.body}>{RELEASE_API_URL_ERROR_COPY.body}</Text>
+      </View>
+    </SafeAreaView>
+  );
+}
+
 export default function RootLayout() {
+  if (RELEASE_API_URL_PROBLEM) return <ReleaseConfigErrorScreen />;
+  return <AppRoot />;
+}
+
+function AppRoot() {
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
@@ -112,6 +136,7 @@ export default function RootLayout() {
         <Stack.Screen name="watch" options={{ headerShown: false }} />
         <Stack.Screen name="verify-email" options={{ headerShown: false }} />
         <Stack.Screen name="delete-account" options={{ headerShown: false }} />
+        <Stack.Screen name="crash-reports" options={{ headerShown: false }} />
         <Stack.Screen name="card-recognition" options={{ headerShown: false }} />
       </Stack>
       <StatusBar style="light" />
