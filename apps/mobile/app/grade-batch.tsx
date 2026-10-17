@@ -81,7 +81,7 @@ export default function GradeBatchScreen() {
       }
       await runBatchQueue(
         queue.map((item) => item.inventoryItemId),
-        (id) => requestGradeEstimate(id),
+        (id) => requestGradeEstimate(id, undefined, { batch: true }),
         setResults,
         () => cancelRef.current,
       );

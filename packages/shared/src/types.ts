@@ -41,8 +41,10 @@ export interface RecognitionCandidate {
 }
 
 export interface RecognitionDetection {
-  confidence: RecognitionConfidence;
-  matchLevel: string;
+  /** Null when the provider did not say (backend review L4: never assume "Low"). */
+  confidence: RecognitionConfidence | null;
+  /** Null when the provider did not say (never assume "exact"). */
+  matchLevel: string | null;
   vendorCardId: string | null;
   name: string | null;
   setName: string | null;

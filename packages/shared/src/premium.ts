@@ -25,6 +25,11 @@ export const SIGNUP_ALLOWANCE_NOTE =
   "Free accounts get 5 pre-grade estimates a month, resetting on your monthly reset date, and see their 10 most recent estimates per card. Older estimates stay saved, not deleted.";
 
 export const PREMIUM_REQUIRED_CODE = "premium_required";
+/**
+ * Mobile Tech Lead review: the batch screen marks each estimate request with this header;
+ * the API answers 403 premium_required to free accounts. Each estimate still uses quota.
+ */
+export const BATCH_GRADE_HEADER = "x-cardflow-batch";
 export const PREMIUM_FEATURES = ["batch_grading", "grade_history"] as const;
 export type PremiumFeature = (typeof PREMIUM_FEATURES)[number];
 

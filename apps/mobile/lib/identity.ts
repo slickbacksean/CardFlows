@@ -1,5 +1,5 @@
 import { isGuestUserId, type InvitedIdentity } from "@cardflow/shared";
-import { createGuestSession, createSession, getIdentity, listInventory } from "./api";
+import { createAccount, createGuestSession, createSession, getIdentity, listInventory, signInWithPassword } from "./api";
 import { stopLiveVideoIdentify } from "./live-identify";
 import { clearLivestreamOverlay } from "./livestream";
 import {
@@ -48,6 +48,17 @@ function requestStatus(error: unknown): number | undefined {
   if (!error || typeof error !== "object" || !("status" in error)) return undefined;
   const status = (error as { status?: unknown }).status;
   return typeof status === "number" ? status : undefined;
+}
+
+/** Open sign-up / sign-in. The guest bearer rides along so the API moves the guest's scans. */
+export async function signUpWithEmail(email: string, password: string, mode: "sign_up" | "sign_in"): Promise<IdentitySession> {
+  const result = mode === "sign_up" ? await createAccount(email, password) : await signInWithPassword(email, password);
+  await persistSessionToken(result.token);
+  setSessionToken(result.token);
+  const session = toSession(result);
+  rememberIdentity(session.identity);
+  restorePromise = Promise.resolve(session);
+  return session;
 }
 
 export async function redeemInviteCode(inviteCode: string): Promise<IdentitySession> {

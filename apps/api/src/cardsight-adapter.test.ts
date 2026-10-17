@@ -87,3 +87,44 @@ describe("P1-05 CardSight adapter (recorded responses)", () => {
     expect(resolveRecognitionSelection({ CARD_FLOW_CARDSIGHT_ADAPTER: "on", CARDSIGHT_API_KEY: "k" }).kind).not.toBe("cardsight");
   });
 });
+
+describe("CardSight adapter backend review", () => {
+  const run = (body: string) =>
+    createCardSightRecognitionProvider({
+      apiKey: "k",
+      fetch: (async () => new Response(body, { status: 200, headers: { "content-type": "application/json" } })) as never,
+      sleep: noSleep,
+    }).identifyCard(req);
+
+  it("success:false, a broken body, or non-array detections is an error", async () => {
+    for (const body of ['{"success":false,"error":{"message":"bad"}}', "not json", "[]", "null", '{"detections":{}}']) {
+      const result = await run(body);
+      expect(result.ok, body).toBe(false);
+      expect(result.error?.code).toBe("PROVIDER_UNAVAILABLE");
+    }
+  });
+
+  it("falls back when CardSight answers success:false", async () => {
+    const primary = createCardSightRecognitionProvider({ apiKey: "k", fetch: (async () => json(200, { success: false })) as never });
+    const onFallback = vi.fn();
+    await createRecognitionWithFallback(primary, createMockCardRecognitionProvider(), onFallback).identifyCard(req);
+    expect(onFallback).toHaveBeenCalledWith("PROVIDER_UNAVAILABLE");
+  });
+
+  it("a missing matchLevel is null, not 'exact'", async () => {
+    const result = await run(JSON.stringify({ detections: [{ confidence: "high", card: { name: "Pikachu" } }] }));
+    expect(result.ok).toBe(true);
+    expect(result.detections[0]!.matchLevel).toBeNull();
+  });
+});
+
+describe("CardSight confidence (backend review L4)", () => {
+  it("a missing or unknown confidence is null, not Low", async () => {
+    const provider = createCardSightRecognitionProvider({
+      apiKey: "k",
+      fetch: (async () => json(200, { detections: [{ card: { name: "A" } }, { confidence: "weird", card: { name: "B" } }, { confidence: "low", card: { name: "C" } }] })) as never,
+    });
+    const result = await provider.identifyCard(req);
+    expect(result.detections.map((d) => d.confidence)).toEqual([null, null, "Low"]);
+  });
+});

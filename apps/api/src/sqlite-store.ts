@@ -39,6 +39,8 @@ import {
 } from "@cardflow/shared";
 import { catalogDisplayFromCard } from "./listing";
 import { createSqliteSalesStore } from "./sales-store";
+import { createSqlitePurchaseLedger } from "./purchase-ledger";
+import { createSqliteIdempotencyStore } from "./idempotency-store";
 import { createSqliteGradeHistoryStore } from "./grade-history-store";
 import { applyMvpMigrations, isMemorySqlitePath } from "./db/migrate";
 import {
@@ -49,6 +51,7 @@ import {
   stripImageMetadata,
   type GradeImageBytes,
 } from "./grade-image";
+import { createSqliteAccountStore } from "./account-store";
 import { isGradePhotoExpired, type PhotoPurgeResult } from "./photo-retention";
 import {
   isFirstPartyScanImageRef,
@@ -253,6 +256,7 @@ function catalogImageFromRow(card: {
 
 export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStorePort {
   const { sqlite, db } = applyMvpMigrations(options.sqlitePath);
+  const purchaseLedger = createSqlitePurchaseLedger(db);
   const memoryImages = new Map<string, ScanImageBytes>();
   const memoryGradeImages = new Map<string, GradeImageBytes>();
   const sqliteDir = isMemorySqlitePath(options.sqlitePath)
@@ -285,18 +289,19 @@ export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStor
     return { token, identity, session };
   }
 
-  function getSessionByToken(token: string): SessionRecord | undefined {
+  function getSessionByToken(token: string, now: Date = new Date()): SessionRecord | undefined {
     const row = db
       .select()
       .from(crmSessions)
       .where(eq(crmSessions.tokenHash, hashSessionToken(token)))
       .get();
-    if (!row || isSessionExpired(row.expiresAt)) return undefined;
+    if (!row || isSessionExpired(row.expiresAt, now)) return undefined;
     return {
       sessionId: row.sessionId,
       userId: row.userId,
       createdAt: row.createdAt,
       expiresAt: row.expiresAt,
+      isGuest: row.isGuest === true,
     };
   }
 
@@ -586,6 +591,7 @@ export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStor
       inventoryItemId: inventoryItemIdForScan(row.scanId),
       imageStorageRef: row.imageStorageRef,
       imageMimeType: normalizeScanImageMime(row.imageMimeType),
+      idempotencyBodyHash: row.idempotencyBodyHash ?? null,
       recognition: envelope.recognition,
       mapping,
     };
@@ -600,6 +606,7 @@ export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStor
       imageStorageRef: scan.imageStorageRef,
       imageSource: "user_capture",
       imageMimeType: scan.imageMimeType,
+      idempotencyBodyHash: scan.idempotencyBodyHash ?? null,
       recognitionJson: serializeRecognition(scan),
       mappingJson: JSON.stringify(scan.mapping),
       mappingStatus: scan.mapping.status,
@@ -883,6 +890,38 @@ export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStor
     return { deleted };
   }
 
+  /**
+   * Data Engineer review: account deletion removes rows first, then files. This collects the
+   * user's photo locations while the rows still exist; the returned function unlinks them.
+   */
+  function prepareUserPhotoDeletion(userId: string): () => PhotoPurgeResult {
+    const scanIds = listScans(userId).map((scan) => scan.scanId);
+    const storageRefs = listScans(userId).flatMap((scan) => (scan.imageStorageRef ? [scan.imageStorageRef] : []));
+    const gradeCandidates = listInventory(userId).flatMap((item) =>
+      GRADE_SIDES.flatMap((side) => gradeImageStorageCandidates(item.inventoryItemId, side)),
+    );
+    return () => {
+      let deleted = 0;
+      for (const id of scanIds) if (memoryImages.delete(id)) deleted += 1;
+      for (const ref of storageRefs) {
+        const filePath = sqliteDir ? path.join(sqliteDir, ref) : null;
+        if (filePath && existsSync(filePath)) {
+          unlinkSync(filePath);
+          deleted += 1;
+        }
+      }
+      for (const candidate of gradeCandidates) {
+        if (memoryGradeImages.delete(candidate)) deleted += 1;
+        const filePath = sqliteDir ? path.join(sqliteDir, candidate) : null;
+        if (filePath && existsSync(filePath)) {
+          unlinkSync(filePath);
+          deleted += 1;
+        }
+      }
+      return { deleted };
+    };
+  }
+
   function purgeExpiredGradePhotos(now: Date = new Date()): PhotoPurgeResult {
     const rows = db.select().from(gradePhotoObjects).all();
     let deleted = 0;
@@ -1111,6 +1150,13 @@ export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStor
 
   function persistPurchase(item: InventoryItemRecord): void {
     if (!item.purchase) return;
+    purchaseLedger.record(item.userId, {
+      purchaseId: item.purchase.purchaseId,
+      inventoryItemId: item.inventoryItemId,
+      purchasedAt: item.purchase.purchasedAt,
+      snapshot: item.purchase,
+      at: new Date().toISOString(),
+    });
     const cost = item.purchase.costBasis;
     const referenceCents = optionalDollarsToCents(
       item.referencePriceAmount ?? item.purchase.maxBuy.referencePriceAmount,
@@ -1239,6 +1285,9 @@ export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStor
     const item = loadInventoryItem(userId, inventoryItemId);
     if (!item) return false;
     sqlite.transaction(() => {
+      // Data Engineer review: void the purchase in the ledger; the crm_purchases row must go
+      // with the inventory item (foreign key).
+      purchaseLedger.voidForItem(userId, inventoryItemId, new Date().toISOString());
       db.delete(crmPurchases).where(eq(crmPurchases.inventoryItemId, inventoryItemId)).run();
       db.delete(crmListingDrafts).where(eq(crmListingDrafts.inventoryItemId, inventoryItemId)).run();
       db.delete(crmGradingSubmitted)
@@ -1949,7 +1998,10 @@ export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStor
       sqlite.close();
     },
     sales: createSqliteSalesStore(db),
+    purchaseLedger,
+    idempotency: createSqliteIdempotencyStore(db),
     gradeHistory: createSqliteGradeHistoryStore(db),
+    accounts: createSqliteAccountStore(sqlite, db),
     createSession,
     getSessionByToken,
     getPokecollectorUserMapping,
@@ -1971,6 +2023,7 @@ export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStor
     getGradeImage,
     deleteGradeImage,
     deleteUserPhotos,
+    prepareUserPhotoDeletion,
     deleteUserScans,
     listScanUserIds,
     purgeExpiredGradePhotos,

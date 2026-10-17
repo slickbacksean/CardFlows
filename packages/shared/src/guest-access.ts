@@ -12,7 +12,7 @@ export type SignupReason = "scan_limit" | "save";
 
 export const GUEST_SIGNUP_COPY = {
   title: "Sign up to keep going",
-  scanLimit: `You've used your ${GUEST_FREE_SCANS} free scans. Sign up to keep scanning.`,
+  scanLimit: "You've used your 3 free scans. Sign up free to keep scanning. Pre-grade estimates are counted separately.",
   save: "Sign up to save cards, track purchases and build listings.",
   action: "Sign up",
   dismiss: "Not now",
@@ -44,3 +44,14 @@ export function guestRouteAllowed(method: string, path: string): boolean {
 export function signupMessage(reason: SignupReason): string {
   return reason === "scan_limit" ? GUEST_SIGNUP_COPY.scanLimit : GUEST_SIGNUP_COPY.save;
 }
+
+/** Backend review: guest sessions last 24 hours and live in the session table. */
+export const GUEST_SESSION_TTL_MS = 24 * 60 * 60 * 1000;
+export const GUEST_MINT_WINDOW_MS = 60 * 60 * 1000;
+
+/** Shown before the first guest scan and on the save prompt (Policy). */
+export const GUEST_RETENTION_NOTE =
+  "Guest scans and photos are deleted within 24 hours after your guest session ends, unless you sign up. Signing up keeps them.";
+
+/** The guest wall counts scans; pre-grade estimates are a separate monthly allowance. */
+export const GUEST_SCAN_WALL_NOTE = "Guests get 3 free card scans. Pre-grade estimates have their own monthly allowance once you sign up.";

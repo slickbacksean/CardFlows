@@ -6,6 +6,8 @@ export type AppEnv = {
     userId: string;
     identity: InvitedIdentity;
     requestId: string;
+    /** Set only for in-process grade-job requests (see `internalJobRequests` in app.ts). */
+    internalOwner?: { userId: string; identity: unknown };
   };
 };
 

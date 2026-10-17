@@ -205,7 +205,7 @@ describe("Account switching", () => {
     const api = readApiSource();
     const collection = readRepoFile("apps/mobile/app/(tabs)/collection.tsx");
 
-    expect(settings).toContain("This tester");
+    expect(settings).toContain(">Account<");
     expect(settings).toContain("switch-tester");
     expect(settings).not.toContain("invitedUsers.map");
     expect(identity).toContain("createSession(inviteCode)");
@@ -340,7 +340,8 @@ describe("No sign-up wall", () => {
     expect(existsSync(path.join(repoRoot, "apps/mobile/app/login.tsx"))).toBe(false);
     expect(existsSync(path.join(repoRoot, "apps/mobile/app/signup.tsx"))).toBe(false);
     expect(existsSync(path.join(repoRoot, "apps/mobile/app/sign-in.tsx"))).toBe(false);
-    expect(existsSync(path.join(repoRoot, "apps/mobile/app/sign-up.tsx"))).toBe(false);
+    // Open sign-up (Sean): the screen exists but is only opened from the guest prompt / Settings, never on launch.
+    expect(rootLayout).not.toMatch(/Redirect[^\n]*sign-up/);
     expect(existsSync(path.join(repoRoot, "apps/mobile/app/auth.tsx"))).toBe(false);
 
     expect(forbiddenSignUpWall(rootLayout)).toBeNull();
@@ -368,7 +369,7 @@ describe("No sign-up wall", () => {
       false,
     );
     expect(rootLayout).not.toContain("InviteGate");
-    expect(settings).toContain("This tester");
+    expect(settings).toContain(">Account<");
     expect(settings).toContain("switch-tester");
     expect(settings).not.toMatch(/Sign in with Apple|Sign in with Google/i);
 
@@ -427,7 +428,7 @@ describe("Mobile session restore", () => {
     expect(forbiddenSignUpWall(rootLayout)).toBeNull();
 
     expect(settings).toContain("settingsKickerForIdentity(session.identity)");
-    expect(settings).toContain("This tester");
+    expect(settings).toContain(">Account<");
     expect(switchTester).toContain("shouldConfirmAccountSwitch");
     expect(settings).not.toMatch(/ImagePicker|launchImageLibrary|avatar photo/i);
 
@@ -459,7 +460,7 @@ describe("Session loop check", () => {
     expect(switchTester).toContain("shouldConfirmAccountSwitch");
     expect(switchTester).toContain("Alert.alert");
     expect(switchTester).toContain("switchActiveIdentity");
-    expect(settings).toContain("This tester");
+    expect(settings).toContain(">Account<");
     expect(identity).toContain("persistSessionToken(result.token)");
     expect(identity).not.toContain("inviteCodeForUserId");
     expect(identity).not.toContain("patchIdentity");

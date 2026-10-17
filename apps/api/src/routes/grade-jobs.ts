@@ -5,13 +5,22 @@
  * 503 becomes "waiting" with the server's Retry-After, then retries (max 5).
  */
 import { randomBytes } from "node:crypto";
+import type { MiddlewareHandler } from "hono";
 import { GRADE_ESTIMATE_UNAVAILABLE_COPY, type GradeJobView } from "@cardflow/shared";
 import type { CardFlowApp } from "../app-env";
 import { REQUEST_ID_HEADER } from "../request-id";
 
 export interface GradeJobRouteDeps {
   enabled: boolean;
-  dispatch: (request: Request) => Promise<Response>;
+  /**
+   * Runs the grade-estimate request in-process as `owner`. Backend review: the user's auth
+   * headers are not copied onto the internal request; the app marks the Request object itself.
+   */
+  dispatch: (request: Request, owner: JobOwner) => Promise<Response>;
+  /** Same body limit as grade-estimate (backend review). */
+  bodyLimit?: MiddlewareHandler;
+  /** Cap on stored jobs including finished ones; the oldest finished go first. */
+  maxStoredJobs?: number;
   ttlMs?: number;
   maxWaits?: number;
   /** Max unfinished jobs across all users / per user. Over the cap → 503 + Retry-After. */
@@ -22,12 +31,18 @@ export interface GradeJobRouteDeps {
   sleep?: (ms: number) => Promise<void>;
 }
 
+export interface JobOwner {
+  userId: string;
+  identity: unknown;
+}
+
 interface JobRecord extends GradeJobView {
   userId: string;
   createdAt: number;
 }
 
-const FORWARD_HEADERS = ["authorization", "content-type", "x-cardflow-app-key", "cookie"];
+/** Only the body type is forwarded. Auth travels in-process via `owner`, never as headers. */
+const FORWARD_HEADERS = ["content-type"];
 
 export function registerGradeJobRoutes(app: CardFlowApp, deps: GradeJobRouteDeps): void {
   const jobs = new Map<string, JobRecord>();
@@ -36,8 +51,11 @@ export function registerGradeJobRoutes(app: CardFlowApp, deps: GradeJobRouteDeps
   const maxActive = deps.maxActiveJobs ?? 200;
   const maxPerUser = deps.maxActiveJobsPerUser ?? 5;
   const sweepMs = deps.sweepMs ?? 5 * 60_000;
+  const maxStored = deps.maxStoredJobs ?? 1000;
   const sleep = deps.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
   const off = { ok: false, error: "Grade jobs are off" } as const;
+
+  const isActive = (job: JobRecord) => job.status !== "done" && job.status !== "failed";
 
   const view = (job: JobRecord): GradeJobView => ({
     jobId: job.jobId,
@@ -51,15 +69,31 @@ export function registerGradeJobRoutes(app: CardFlowApp, deps: GradeJobRouteDeps
   function prune() {
     const cutoff = Date.now() - ttlMs;
     for (const [id, job] of jobs) if (job.createdAt < cutoff) jobs.delete(id);
+    // Total cap including finished jobs: Map order is insertion order, so oldest finished go first.
+    if (jobs.size >= maxStored) {
+      for (const [id, job] of jobs) {
+        if (jobs.size < maxStored) break;
+        if (!isActive(job)) jobs.delete(id);
+      }
+    }
   }
 
-  async function run(job: JobRecord, url: string, headers: Headers, body: ArrayBuffer | null) {
+  async function run(job: JobRecord, owner: JobOwner, url: string, headers: Headers, held: { body: ArrayBuffer | null }) {
+    try {
+      await runLoop(job, owner, url, headers, held);
+    } finally {
+      // Backend review: drop the photo bytes as soon as the job finishes.
+      held.body = null;
+    }
+  }
+
+  async function runLoop(job: JobRecord, owner: JobOwner, url: string, headers: Headers, held: { body: ArrayBuffer | null }) {
     for (let waits = 0; ; waits += 1) {
       job.status = "running";
       job.retryAfterSeconds = null;
       let res: Response;
       try {
-        res = await deps.dispatch(new Request(url, { method: "POST", headers, body }));
+        res = await deps.dispatch(new Request(url, { method: "POST", headers, body: held.body }), owner);
       } catch {
         job.status = "failed";
         job.error = GRADE_ESTIMATE_UNAVAILABLE_COPY;
@@ -93,14 +127,14 @@ export function registerGradeJobRoutes(app: CardFlowApp, deps: GradeJobRouteDeps
     (sweep as { unref?: () => void }).unref?.();
   }
 
-  const isActive = (job: JobRecord) => job.status !== "done" && job.status !== "failed";
+  const passThrough: MiddlewareHandler = async (_c, next) => next();
+  const gate: MiddlewareHandler = async (c, next) => (deps.enabled ? next() : c.json(off, 404));
 
-  app.post("/v1/inventory/:inventoryItemId/grade-jobs", async (c) => {
-    if (!deps.enabled) return c.json(off, 404);
+  app.post("/v1/inventory/:inventoryItemId/grade-jobs", gate, deps.bodyLimit ?? passThrough, async (c) => {
     prune();
     const userId = c.get("userId");
     const active = [...jobs.values()].filter(isActive);
-    if (active.length >= maxActive || active.filter((j) => j.userId === userId).length >= maxPerUser) {
+    if (jobs.size >= maxStored || active.length >= maxActive || active.filter((j) => j.userId === userId).length >= maxPerUser) {
       c.header("Retry-After", "10");
       return c.json({ ok: false, error: "The pre-grade queue is full. Try again soon." }, 503);
     }
@@ -126,7 +160,8 @@ export function registerGradeJobRoutes(app: CardFlowApp, deps: GradeJobRouteDeps
     const body = await c.req.arrayBuffer().catch(() => null);
     const url = new URL(c.req.url);
     url.pathname = `/v1/inventory/${encodeURIComponent(c.req.param("inventoryItemId"))}/grade-estimate`;
-    void run(job, url.toString(), headers, body && body.byteLength > 0 ? body : null);
+    const owner: JobOwner = { userId, identity: c.get("identity") };
+    void run(job, owner, url.toString(), headers, { body: body && body.byteLength > 0 ? body : null });
     return c.json({ ok: true, job: view(job) }, 202);
   });
 
