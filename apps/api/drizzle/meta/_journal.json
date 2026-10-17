@@ -120,6 +120,13 @@
       "when": 1791004800000,
       "tag": "0016_quota_anchor_credits_period",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "6",
+      "when": 1791091200000,
+      "tag": "0017_email_verification",
+      "breakpoints": true
     }
   ]
 }

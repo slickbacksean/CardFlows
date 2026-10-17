@@ -35,9 +35,11 @@ export default function SignUpScreen() {
     setSaving(true);
     setError(null);
     try {
-      await signUpWithEmail(email.trim(), password, mode);
+      const session = await signUpWithEmail(email.trim(), password, mode);
       void flushScanQueue();
-      router.back();
+      // Sean: new accounts confirm their email (6-digit code) before pre-grade estimates.
+      if (session.emailVerified === false) router.replace("/verify-email");
+      else router.back();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : ACCOUNT_AUTH_COPY.signInFailed);
     } finally {

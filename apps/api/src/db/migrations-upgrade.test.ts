@@ -32,15 +32,16 @@ function foldersUpTo(lastTag: string): string {
   return dir;
 }
 
-describe("migrations 0000–0016", () => {
-  it("journal is ordered: idx 0..16 in order, `when` strictly increasing, files exist", () => {
+describe("migrations 0000–0017", () => {
+  it("journal is ordered: idx 0..17 in order, `when` strictly increasing, files exist", () => {
     const j = journal();
-    expect(j.entries.map((e) => e.idx)).toEqual(Array.from({ length: 17 }, (_, i) => i));
+    expect(j.entries.map((e) => e.idx)).toEqual(Array.from({ length: 18 }, (_, i) => i));
     for (let i = 1; i < j.entries.length; i += 1) expect(j.entries[i]!.when).toBeGreaterThan(j.entries[i - 1]!.when);
     expect(j.entries.slice(14).map((e) => e.tag)).toEqual([
       "0014_accounts_guest_sessions",
       "0015_purchase_events_idempotency",
       "0016_quota_anchor_credits_period",
+      "0017_email_verification",
     ]);
     for (const e of j.entries) expect(readFileSync(path.join(mvpMigrationsFolder(), `${e.tag}.sql`), "utf8").length).toBeGreaterThan(0);
   });
@@ -48,7 +49,7 @@ describe("migrations 0000–0016", () => {
   it("applies all of them to a fresh database", () => {
     const { sqlite } = applyMvpMigrations(path.join(tmp(), "fresh.sqlite"));
     const applied = sqlite.prepare("SELECT COUNT(*) AS n FROM __drizzle_migrations").get() as { n: number };
-    expect(applied.n).toBe(17);
+    expect(applied.n).toBe(18);
     sqlite.close();
   });
 
@@ -91,7 +92,7 @@ describe("migrations 0000–0016", () => {
     expect(usage("alex", alexPeriod.key)).toBe(3);
     expect(sqlite.prepare("SELECT anchor_at FROM grade_accounts WHERE user_id = 'jordan'").get()).toEqual({ anchor_at: jordanAnchor });
     expect(usage("jordan", quotaPeriodFor(jordanAnchor, new Date()).key)).toBe(2);
-    expect((sqlite.prepare("SELECT COUNT(*) AS n FROM __drizzle_migrations").get() as { n: number }).n).toBe(17);
+    expect((sqlite.prepare("SELECT COUNT(*) AS n FROM __drizzle_migrations").get() as { n: number }).n).toBe(18);
     sqlite.close();
   });
 
@@ -137,4 +138,22 @@ describe("migrations 0000–0016", () => {
     expect(backfillQuotaAnchors(sqlite, now)).toBe(0);
     sqlite.close();
   });
+
+  it("0017 (M3): only accounts created before open sign-up deployed (03:01 UTC Oct 17) count as verified", () => {
+    const file = path.join(tmp(), "pre-0017.sqlite");
+    const old = new Database(file);
+    old.pragma("foreign_keys = OFF");
+    migrate(drizzle(old), { migrationsFolder: foldersUpTo("0016_quota_anchor_credits_period") });
+    const add = old.prepare("INSERT INTO user_accounts (user_id, email, password_hash, created_at) VALUES (?, ?, 'h', ?)");
+    add.run("acct_old", "old@x.test", "2026-10-17T03:00:59.000Z");
+    add.run("acct_after", "after@x.test", "2026-10-17T03:01:00.000Z");
+    old.close();
+    const { sqlite } = applyMvpMigrations(file);
+    const verifiedAt = (id: string) => (sqlite.prepare("SELECT email_verified_at AS v FROM user_accounts WHERE user_id = ?").get(id) as { v: string | null }).v;
+    expect(verifiedAt("acct_old")).toBe("2026-10-17T03:00:59.000Z");
+    expect(verifiedAt("acct_after")).toBeNull();
+    expect(sqlite.prepare("SELECT verification_sends AS n FROM user_accounts WHERE user_id = 'acct_old'").get()).toEqual({ n: 0 });
+    sqlite.close();
+  });
+
 });

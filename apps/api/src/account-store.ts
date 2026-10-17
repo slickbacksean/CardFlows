@@ -5,7 +5,7 @@
 import type Database from "better-sqlite3";
 import { and, eq, isNull, lte } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
-import { crmSessions, passwordResetTokens, schema, userAccounts } from "./db/schema";
+import { crmSessions, emailVerificationCodes, passwordResetTokens, schema, userAccounts } from "./db/schema";
 import { hashSessionToken, mintSessionToken } from "./session";
 
 export interface AccountRecord {
@@ -13,7 +13,15 @@ export interface AccountRecord {
   email: string;
   passwordHash: string;
   createdAt: string;
+  /** Null until the email is verified (only sign-ups from before #86 deployed are backfilled). */
+  emailVerifiedAt?: string | null;
+  verificationSends?: number;
 }
+
+/** Wrong guesses allowed per code before it stops working (a new code must be requested). */
+export const EMAIL_CODE_MAX_ATTEMPTS = 5;
+
+export type EmailCodeResult = "verified" | "invalid";
 
 export interface MintedSession {
   token: string;
@@ -31,6 +39,18 @@ export interface AccountStore {
   /** Single use: marks the token used and returns its user, or null if unknown, used or expired. */
   consumePasswordReset(tokenHash: string, now: string): string | null;
   setPasswordHash(userId: string, passwordHash: string): void;
+  /** True only for an account row with a verified email (invite testers are checked by ID in the API). */
+  isEmailVerified(userId: string): boolean;
+  /** Backend review M1: counts one verification send; false once `cap` sends were used. */
+  takeVerificationSend(userId: string, cap: number): boolean;
+  /** Backend review M1: counts one email to this address today (UTC); false at `cap`. Prunes old days. */
+  takeEmailSendForAddress(email: string, day: string, cap: number): boolean;
+  /** Accounts still unverified that were created before `cutoff` (purged after 7 days). */
+  listUnverifiedAccountsBefore(cutoff: string): string[];
+  /** Stores the hash of a new code; replaces any earlier code (only the newest works). */
+  createEmailVerification(input: { userId: string; codeHash: string; expiresAt: string; at: string }): void;
+  /** Single use: a match before expiry (and within EMAIL_CODE_MAX_ATTEMPTS) verifies the account. */
+  confirmEmailVerification(userId: string, codeHash: string, now: string): EmailCodeResult;
   /** Every signed-up account's user ID (North Star counts them with invited testers). */
   listAccountUserIds(): string[];
   /** Session row for any user (account, guest). Guests get `isGuest`. */
@@ -64,7 +84,7 @@ function userIdTables(sqlite: Database.Database): string[] {
 }
 
 /** Guest data that is never moved to the new account (deleted instead). */
-const NOT_MOVED = ["crm_sessions", "user_accounts", "password_reset_tokens"];
+const NOT_MOVED = ["crm_sessions", "user_accounts", "password_reset_tokens", "email_verification_codes"];
 
 /** Children before parents so foreign keys (purchases → inventory, confirmations → scans) hold. */
 const DELETE_FIRST = [
@@ -134,6 +154,54 @@ export function createSqliteAccountStore(
     setPasswordHash(userId, passwordHash) {
       db.update(userAccounts).set({ passwordHash }).where(eq(userAccounts.userId, userId)).run();
     },
+    isEmailVerified(userId) {
+      const row = db.select({ at: userAccounts.emailVerifiedAt }).from(userAccounts).where(eq(userAccounts.userId, userId)).get();
+      return Boolean(row?.at);
+    },
+    takeVerificationSend(userId, cap) {
+      return (
+        sqlite
+          .prepare("UPDATE user_accounts SET verification_sends = verification_sends + 1 WHERE user_id = ? AND verification_sends < ?")
+          .run(userId, cap).changes === 1
+      );
+    },
+    takeEmailSendForAddress(email, day, cap) {
+      return sqlite.transaction(() => {
+        const address = normalizeEmail(email);
+        sqlite.prepare("DELETE FROM email_send_counts WHERE day < date(?, '-1 day')").run(day);
+        sqlite.prepare("INSERT OR IGNORE INTO email_send_counts (email, day, count) VALUES (?, ?, 0)").run(address, day);
+        return (
+          sqlite.prepare("UPDATE email_send_counts SET count = count + 1 WHERE email = ? AND day = ? AND count < ?").run(address, day, cap)
+            .changes === 1
+        );
+      })();
+    },
+    listUnverifiedAccountsBefore(cutoff) {
+      return (
+        sqlite.prepare("SELECT user_id FROM user_accounts WHERE email_verified_at IS NULL AND created_at < ?").all(cutoff) as Array<{
+          user_id: string;
+        }>
+      ).map((row) => row.user_id);
+    },
+    createEmailVerification({ userId, codeHash, expiresAt, at }) {
+      db.insert(emailVerificationCodes)
+        .values({ userId, codeHash, createdAt: at, expiresAt, attempts: 0 })
+        .onConflictDoUpdate({ target: emailVerificationCodes.userId, set: { codeHash, createdAt: at, expiresAt, attempts: 0 } })
+        .run();
+    },
+    confirmEmailVerification(userId, codeHash, now) {
+      return sqlite.transaction((): EmailCodeResult => {
+        const row = db.select().from(emailVerificationCodes).where(eq(emailVerificationCodes.userId, userId)).get();
+        if (!row || row.expiresAt <= now || row.attempts >= EMAIL_CODE_MAX_ATTEMPTS) return "invalid";
+        if (row.codeHash !== codeHash) {
+          db.update(emailVerificationCodes).set({ attempts: row.attempts + 1 }).where(eq(emailVerificationCodes.userId, userId)).run();
+          return "invalid";
+        }
+        db.delete(emailVerificationCodes).where(eq(emailVerificationCodes.userId, userId)).run();
+        db.update(userAccounts).set({ emailVerifiedAt: now }).where(and(eq(userAccounts.userId, userId), isNull(userAccounts.emailVerifiedAt))).run();
+        return "verified";
+      })();
+    },
     listAccountUserIds() {
       return db.select({ userId: userAccounts.userId }).from(userAccounts).all().map((row) => row.userId);
     },
@@ -183,6 +251,7 @@ export function createSqliteAccountStore(
         }
         sqlite.prepare("DELETE FROM crm_sessions WHERE user_id = ?").run(fromUserId);
         sqlite.prepare("DELETE FROM password_reset_tokens WHERE user_id = ?").run(fromUserId);
+        sqlite.prepare("DELETE FROM email_verification_codes WHERE user_id = ?").run(fromUserId);
         return { scans: moved.crm_scans ?? 0, confirmEvents: moved.scan_confirm_events ?? 0 };
       })();
     },

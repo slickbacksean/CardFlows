@@ -223,9 +223,33 @@ export const userAccounts = sqliteTable(
     email: text("email").notNull(),
     passwordHash: text("password_hash").notNull(),
     createdAt: text("created_at").notNull(),
+    /** Null until the 6-digit code is confirmed. Accounts from before 0017 are backfilled. */
+    emailVerifiedAt: text("email_verified_at"),
+    /** Backend review M1: verification codes ever sent (lifetime cap). */
+    verificationSends: integer("verification_sends").notNull().default(0),
   },
   (table) => [unique("user_accounts_email").on(table.email)],
 );
+
+/** Backend review M1: emails per address per UTC day (pruned after a day). */
+export const emailSendCounts = sqliteTable(
+  "email_send_counts",
+  {
+    email: text("email").notNull(),
+    day: text("day").notNull(),
+    count: integer("count").notNull().default(0),
+  },
+  (table) => [primaryKey({ columns: [table.email, table.day] })],
+);
+
+/** Email verification: one live 6-digit code per user (SHA-256 only), 15 min, 5 tries. */
+export const emailVerificationCodes = sqliteTable("email_verification_codes", {
+  userId: text("user_id").primaryKey(),
+  codeHash: text("code_hash").notNull(),
+  createdAt: text("created_at").notNull(),
+  expiresAt: text("expires_at").notNull(),
+  attempts: integer("attempts").notNull().default(0),
+});
 
 /** Forgot password: single-use, 1 h tokens. Only the SHA-256 of the token is stored. */
 export const passwordResetTokens = sqliteTable(
@@ -493,6 +517,8 @@ export const schema = {
   cardflowCards,
   userAccounts,
   passwordResetTokens,
+  emailVerificationCodes,
+  emailSendCounts,
   cardExternalIds,
   crmScans,
   crmConfirmations,

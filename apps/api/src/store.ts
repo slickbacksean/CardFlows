@@ -4,7 +4,7 @@ import { createMemorySalesStore, type SalesStore } from "./sales-store";
 import { createMemoryPurchaseLedger, type PurchaseLedger } from "./purchase-ledger";
 import { createMemoryIdempotencyStore, type IdempotencyStore } from "./idempotency-store";
 import { createMemoryGradeHistoryStore, type GradeHistoryStore } from "./grade-history-store";
-import { normalizeEmail, type AccountRecord, type AccountStore } from "./account-store";
+import { EMAIL_CODE_MAX_ATTEMPTS, normalizeEmail, type AccountRecord, type AccountStore } from "./account-store";
 import {
   catalogFingerprint,
   cachedCatalogCardMatches,
@@ -1046,13 +1046,22 @@ function createMemoryAccountStore(
 ): AccountStore {
   const accounts = new Map<string, AccountRecord>();
   const resets = new Map<string, { userId: string; expiresAt: string; usedAt: string | null }>();
+  const emailCodes = new Map<string, { codeHash: string; expiresAt: string; attempts: number }>();
+  const sendsByAddressDay = new Map<string, number>();
   const byEmail = new Map<string, string>();
   const live = (s: StoredSession, now: string) => s.expiresAt > now;
   return {
     createAccount({ email, passwordHash, at }) {
       const normalized = normalizeEmail(email);
       if (byEmail.has(normalized)) return null;
-      const record = { userId: `acct_${crypto.randomUUID()}`, email: normalized, passwordHash, createdAt: at };
+      const record: AccountRecord = {
+        userId: `acct_${crypto.randomUUID()}`,
+        email: normalized,
+        passwordHash,
+        createdAt: at,
+        emailVerifiedAt: null,
+        verificationSends: 0,
+      };
       accounts.set(record.userId, record);
       byEmail.set(normalized, record.userId);
       return { ...record };
@@ -1074,6 +1083,42 @@ function createMemoryAccountStore(
     setPasswordHash(userId, passwordHash) {
       const account = accounts.get(userId);
       if (account) accounts.set(userId, { ...account, passwordHash });
+    },
+    isEmailVerified(userId) {
+      return Boolean(accounts.get(userId)?.emailVerifiedAt);
+    },
+    takeVerificationSend(userId, cap) {
+      const account = accounts.get(userId);
+      if (!account || (account.verificationSends ?? 0) >= cap) return false;
+      accounts.set(userId, { ...account, verificationSends: (account.verificationSends ?? 0) + 1 });
+      return true;
+    },
+    takeEmailSendForAddress(email, day, cap) {
+      const yesterday = new Date(Date.parse(`${day}T00:00:00Z`) - 86_400_000).toISOString().slice(0, 10);
+      for (const key of [...sendsByAddressDay.keys()]) if (key.split("\0")[1]! < yesterday) sendsByAddressDay.delete(key);
+      const key = `${normalizeEmail(email)}\0${day}`;
+      const count = sendsByAddressDay.get(key) ?? 0;
+      if (count >= cap) return false;
+      sendsByAddressDay.set(key, count + 1);
+      return true;
+    },
+    listUnverifiedAccountsBefore(cutoff) {
+      return [...accounts.values()].filter((a) => !a.emailVerifiedAt && a.createdAt < cutoff).map((a) => a.userId);
+    },
+    createEmailVerification({ userId, codeHash, expiresAt }) {
+      emailCodes.set(userId, { codeHash, expiresAt, attempts: 0 });
+    },
+    confirmEmailVerification(userId, codeHash, now) {
+      const row = emailCodes.get(userId);
+      if (!row || row.expiresAt <= now || row.attempts >= EMAIL_CODE_MAX_ATTEMPTS) return "invalid";
+      if (row.codeHash !== codeHash) {
+        row.attempts += 1;
+        return "invalid";
+      }
+      emailCodes.delete(userId);
+      const account = accounts.get(userId);
+      if (account && !account.emailVerifiedAt) accounts.set(userId, { ...account, emailVerifiedAt: now });
+      return "verified";
     },
     listAccountUserIds() {
       return [...accounts.values()].map((account) => account.userId);
@@ -1139,6 +1184,7 @@ function createMemoryAccountStore(
       for (const key of [...extra.gradeUsage.keys()]) if (key.startsWith(`${userId}\0`)) extra.gradeUsage.delete(key);
       counts.crm_sessions = this.deleteSessionsForUser(userId);
       for (const [hash, reset] of resets) if (reset.userId === userId) resets.delete(hash);
+      emailCodes.delete(userId);
       if (accounts.has(userId)) {
         byEmail.delete(accounts.get(userId)!.email);
         accounts.delete(userId);
