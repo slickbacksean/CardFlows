@@ -49,6 +49,7 @@ import {
   stripImageMetadata,
   type GradeImageBytes,
 } from "./grade-image";
+import { createSqliteAccountStore } from "./account-store";
 import { isGradePhotoExpired, type PhotoPurgeResult } from "./photo-retention";
 import {
   isFirstPartyScanImageRef,
@@ -285,18 +286,19 @@ export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStor
     return { token, identity, session };
   }
 
-  function getSessionByToken(token: string): SessionRecord | undefined {
+  function getSessionByToken(token: string, now: Date = new Date()): SessionRecord | undefined {
     const row = db
       .select()
       .from(crmSessions)
       .where(eq(crmSessions.tokenHash, hashSessionToken(token)))
       .get();
-    if (!row || isSessionExpired(row.expiresAt)) return undefined;
+    if (!row || isSessionExpired(row.expiresAt, now)) return undefined;
     return {
       sessionId: row.sessionId,
       userId: row.userId,
       createdAt: row.createdAt,
       expiresAt: row.expiresAt,
+      isGuest: row.isGuest === true,
     };
   }
 
@@ -1919,6 +1921,7 @@ export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStor
     },
     sales: createSqliteSalesStore(db),
     gradeHistory: createSqliteGradeHistoryStore(db),
+    accounts: createSqliteAccountStore(sqlite, db),
     createSession,
     getSessionByToken,
     getPokecollectorUserMapping,

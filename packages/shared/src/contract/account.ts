@@ -14,7 +14,24 @@ const SessionResponse = z.looseObject({
 
 const money = z.union([z.string(), z.number()]).nullable().optional();
 
+const PasswordBody = z.object({ email: z.string(), password: z.string() });
+
 export const accountRoutes = {
+  /** Open sign-up. A guest bearer moves the guest's scans to the new account. */
+  createAccount: defineRoute({
+    method: "POST",
+    path: "/v1/accounts",
+    bodyKind: "json",
+    body: PasswordBody,
+    response: SessionResponse,
+  }),
+  signInWithPassword: defineRoute({
+    method: "POST",
+    path: "/v1/sessions/password",
+    bodyKind: "json",
+    body: PasswordBody,
+    response: SessionResponse,
+  }),
   /** D9: guest session (3 free scans). 404 when guest mode is off. */
   createGuestSession: defineRoute({
     method: "POST",

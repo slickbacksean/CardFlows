@@ -2,6 +2,7 @@ import type { ConfirmEvent } from "@cardflow/shared";
 import type { UserPriceSnapshot } from "@cardflow/shared";
 import { createMemorySalesStore, type SalesStore } from "./sales-store";
 import { createMemoryGradeHistoryStore, type GradeHistoryStore } from "./grade-history-store";
+import { normalizeEmail, type AccountRecord, type AccountStore } from "./account-store";
 import {
   catalogFingerprint,
   cachedCatalogCardMatches,
@@ -159,6 +160,7 @@ export interface PortfolioValueSnapshot {
 
 interface StoredSession extends SessionRecord {
   tokenHash: string;
+  isGuest?: boolean;
 }
 
 interface Store {
@@ -227,15 +229,16 @@ export function createSession(userId: string): CreatedSession {
   };
 }
 
-export function getSessionByToken(token: string): SessionRecord | undefined {
+export function getSessionByToken(token: string, now: Date = new Date()): SessionRecord | undefined {
   const hashed = hashSessionToken(token);
   const session = store.sessions.get(hashed);
-  if (!session || isSessionExpired(session.expiresAt)) return undefined;
+  if (!session || isSessionExpired(session.expiresAt, now)) return undefined;
   return {
     sessionId: session.sessionId,
     userId: session.userId,
     createdAt: session.createdAt,
     expiresAt: session.expiresAt,
+    isGuest: session.isGuest === true,
   };
 }
 
@@ -703,6 +706,8 @@ export function moveGradingSubmittedToReturned(copy: GradingReturnedCopy): void 
 
 /** Route-facing CRM port. CRM reads/writes take request-scoped userId. */
 export interface StorePort {
+  /** Open sign-up accounts, guest sessions, whole-user move/delete. */
+  accounts: AccountStore;
   /** P2-03 sale records. */
   sales: SalesStore;
   /** P2-07 pre-grade estimate history. */
@@ -894,7 +899,8 @@ export function createMemoryStore(): StorePort {
     return true;
   }
 
-  return {
+  const port: StorePort = {
+    accounts: undefined as unknown as AccountStore,
     sales: createMemorySalesStore(),
     gradeHistory: createMemoryGradeHistoryStore(),
     createSession,
@@ -962,6 +968,104 @@ export function createMemoryStore(): StorePort {
       let n = 0;
       for (let i = userPrices.length - 1; i >= 0; i -= 1) if (userPrices[i]!.userId === userId) { userPrices.splice(i, 1); n += 1; }
       return n;
+    },
+  };
+  port.accounts = createMemoryAccountStore(port, { gradeAccounts, gradeUsage });
+  return port;
+}
+
+/** Memory twin of the SQLite account store (tests and `CARD_FLOW_STORE=memory`). */
+function createMemoryAccountStore(
+  port: StorePort,
+  extra: { gradeAccounts: Map<string, GradeAccountRecord>; gradeUsage: Map<string, number> },
+): AccountStore {
+  const accounts = new Map<string, AccountRecord>();
+  const byEmail = new Map<string, string>();
+  const live = (s: StoredSession, now: string) => s.expiresAt > now;
+  return {
+    createAccount({ email, passwordHash, at }) {
+      const normalized = normalizeEmail(email);
+      if (byEmail.has(normalized)) return null;
+      const record = { userId: `acct_${crypto.randomUUID()}`, email: normalized, passwordHash, createdAt: at };
+      accounts.set(record.userId, record);
+      byEmail.set(normalized, record.userId);
+      return { ...record };
+    },
+    findByEmail(email) {
+      const id = byEmail.get(normalizeEmail(email));
+      return id ? { ...accounts.get(id)! } : null;
+    },
+    getAccount(userId) {
+      const row = accounts.get(userId);
+      return row ? { ...row } : null;
+    },
+    mintSession(userId, { guest, expiresAt, at }) {
+      const token = mintSessionToken();
+      const tokenHash = hashSessionToken(token);
+      store.sessions.set(tokenHash, { sessionId: crypto.randomUUID(), tokenHash, userId, createdAt: at, expiresAt, isGuest: guest });
+      return { token, userId, expiresAt };
+    },
+    purgeExpiredGuestSessions(now) {
+      const expired = new Set<string>();
+      for (const [hash, s] of store.sessions) {
+        if (s.isGuest && !live(s, now)) {
+          store.sessions.delete(hash);
+          expired.add(s.userId);
+        }
+      }
+      return [...expired];
+    },
+    hasLiveSession(userId, now) {
+      return [...store.sessions.values()].some((s) => s.userId === userId && live(s, now));
+    },
+    deleteSessionsForUser(userId) {
+      let n = 0;
+      for (const [hash, s] of store.sessions) if (s.userId === userId) { store.sessions.delete(hash); n += 1; }
+      return n;
+    },
+    moveGuestData(fromUserId, toUserId) {
+      let scans = 0;
+      for (const [id, scan] of store.scans) {
+        if (scan.userId === fromUserId) { store.scans.set(id, { ...scan, userId: toUserId }); scans += 1; }
+      }
+      for (const [id, c] of store.confirmations) {
+        if ((c as { userId?: string }).userId === fromUserId) store.confirmations.set(id, { ...c, userId: toUserId } as ConfirmationRecord);
+      }
+      this.deleteSessionsForUser(fromUserId);
+      return { scans, confirmEvents: 0 };
+    },
+    deleteAllUserRows(userId) {
+      const counts: Record<string, number> = {};
+      port.deleteUserPhotos(userId);
+      counts.crm_scans = port.deleteUserScans(userId);
+      counts.scan_confirm_events = port.deleteUserConfirmEvents(userId);
+      counts.user_price_snapshots = port.deleteUserPriceSnapshots(userId);
+      counts.user_card_sales = port.sales.deleteUser(userId);
+      counts.grade_estimate_history = port.gradeHistory.deleteUser(userId);
+      for (const item of port.listInventory(userId)) port.deleteInventoryItem(userId, item.inventoryItemId);
+      store.inventory = store.inventory.filter((item) => item.userId !== userId);
+      for (const [id, c] of store.confirmations) if ((c as { userId?: string }).userId === userId) store.confirmations.delete(id);
+      store.pokecollectorUsers.delete(userId);
+      store.gradingSubmitted = store.gradingSubmitted.filter((row) => row.userId !== userId);
+      store.gradingReturned = store.gradingReturned.filter((row) => row.userId !== userId);
+      store.portfolioSnapshots.delete(userId);
+      extra.gradeAccounts.delete(userId);
+      for (const key of [...extra.gradeUsage.keys()]) if (key.startsWith(`${userId}\0`)) extra.gradeUsage.delete(key);
+      counts.crm_sessions = this.deleteSessionsForUser(userId);
+      if (accounts.has(userId)) {
+        byEmail.delete(accounts.get(userId)!.email);
+        accounts.delete(userId);
+        counts.user_accounts = 1;
+      }
+      return counts;
+    },
+    countUserRows(userId) {
+      return {
+        crm_scans: port.listScans(userId).length,
+        crm_inventory_items: port.listInventory(userId).length,
+        crm_sessions: [...store.sessions.values()].filter((s) => s.userId === userId).length,
+        user_accounts: accounts.has(userId) ? 1 : 0,
+      };
     },
   };
 }

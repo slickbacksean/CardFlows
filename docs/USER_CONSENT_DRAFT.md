@@ -142,7 +142,9 @@ If you turn on usage analytics, CardFlow sends counts and timings to **PostHog I
 
 ## 6a. Guest scans (D9)
 
-**Privacy policy draft:** You can try CardFlow as a guest with 3 free scans before signing up. Guest scans and their photos are stored only so the scan works, and we delete them within 24 hours after the guest session ends (when you sign up, when the guest session expires, or if our servers restart). Guest data is not moved to the account you create.
+**Privacy policy draft:** You can try CardFlow as a guest with 3 free card scans before signing up. This counts scans only; pre-grade estimates are a separate monthly allowance for signed-in accounts. Guest scans and their photos are stored only so the scan works. A guest session lasts 24 hours. **If you sign up (or sign in) from a guest session, your guest scans and photos move to your account.** If you never sign up, we delete all of your guest data within 24 hours after the guest session ends.
+
+**Accounts (open sign-up):** to create an account we collect your email address and a password. We store only a salted, one-way hash of the password (scrypt), never the password itself. Your email is used to sign you in. Deleting your account (Settings) removes your email, password hash, sessions and every record keyed to your account, in one step.
 
 ---
 

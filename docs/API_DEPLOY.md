@@ -30,3 +30,10 @@ Checked against `apps/api` (the hosting plan was written for the old `packages/a
 | Temp files | Grader output goes to a per-request temp dir that is deleted in `finally`. Debug PNGs only with `CARDFLOW_GRADE_DEBUG_IMAGES=1`. |
 
 Still open (Sean): hosting provider, hosted DB, photo retention, and the right `MAX_CONCURRENT_GRADES` for the chosen instance size.
+
+## Production must set `CARD_FLOW_TRUST_PROXY_HOPS`
+Behind a load balancer or reverse proxy, set `CARD_FLOW_TRUST_PROXY_HOPS` to the number of proxies that append to `X-Forwarded-For` (usually `1`). With the default `0`, every request appears to come from the proxy's IP. Per-IP limits (guest mints, sign-up, sign-in, grading) then become one shared bucket. Setting it too high lets clients spoof their IP. Tests cover the default: a spoofed `X-Forwarded-For` does not reset the guest mint limit.
+
+## Open sign-up env
+- `CARD_FLOW_GUEST_SCANS=true` turns on guest sessions (3 scans, 24-hour sessions in `crm_sessions`).
+- `CARD_FLOW_INVITE_ALEX` / `CARD_FLOW_INVITE_JORDAN` are tester invite codes. **There are no defaults;** unset means invite sign-in is off for that tester.

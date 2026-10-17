@@ -313,3 +313,7 @@ Same research pass as `RISK_REGISTER.md`. Key privacy-related fetches: CardSight
 See `docs/STORE_PRIVACY_LABELS.md` for the App Store / Play answers and the perf-telemetry note.
 
 **Perf timings (`/v1/telemetry/perf`):** optional and opt-in. They're sent only when the analytics switch is on (the same switch as PostHog, off by default), and pending timings are dropped when it's turned off. They go to CardFlow's own API, not PostHog, and are kept as in-memory aggregates only. Store declaration if declared: Diagnostics > Performance Data, not linked, not tracking.
+
+**Accounts:** `user_accounts` (email, scrypt password hash, created_at). Sessions in `crm_sessions` (guest sessions flagged `is_guest`, 24-hour expiry). Account deletion removes every `user_id` row in one transaction. Guest data moves to the account on sign-up; guests who never sign up are purged within 24 h after their session ends.
+
+**Device model:** sent with perf timings (opt-in analytics only) and not stored server-side.

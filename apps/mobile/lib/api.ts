@@ -941,6 +941,14 @@ function notifySignupRequired(reason: SignupReason) {
   signupListener?.(reason);
 }
 
+export function createAccount(email: string, password: string) {
+  return callApi(apiContract.createAccount, { body: { email, password } });
+}
+
+export function signInWithPassword(email: string, password: string) {
+  return callApi(apiContract.signInWithPassword, { body: { email, password } });
+}
+
 export function createGuestSession() {
   return callApi(apiContract.createGuestSession, {});
 }
