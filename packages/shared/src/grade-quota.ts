@@ -1,9 +1,12 @@
 /**
  * Monthly pre-grade estimate quotas per account (P0-11 / D9).
- * Free: 5 per calendar month. Premium: 30. Extra credits sit on the account
- * and are spent after the monthly allowance. Copy never says "AI" and never
+ * Free: 5 per month. Premium: 30. The month runs from the user's own reset date (billing date,
+ * or account creation date for free users), not the calendar month. Extra credits are spent
+ * after the allowance and expire at the next reset: nothing rolls over. Copy never says "AI" and never
  * names a grading company.
  */
+import { resetDateLabel } from "./quota-period";
+
 export const GRADE_PLAN_FREE = "free" as const;
 export const GRADE_PLAN_PREMIUM = "premium" as const;
 
@@ -20,7 +23,7 @@ export const GRADE_QUOTA_COPY = {
   remainingOne: "1 pre-grade estimate left this month",
   outOfGrades: "You're out of pre-grade estimates this month.",
   outOfGradesHint:
-    "Your limit resets at the start of next month. Extra estimates can be added with credits.",
+    "Your allowance resets on your monthly reset date. Unused estimates and credits don't roll over.",
   creditsOne: "1 extra credit available",
   iapUnavailable: "Purchases aren't available yet.",
   getExtra: "Get extra estimates",
@@ -43,11 +46,15 @@ export function remainingGradesCaption(input: {
   remainingMonthly: number;
   extraCredits: number;
   remainingGrades: number;
+  /** When present, the caption ends with the user's own reset date ("Resets Nov 15"). */
+  resetsAt?: string;
 }): string {
-  if (input.remainingGrades <= 0) return GRADE_QUOTA_COPY.outOfGrades;
+  const reset = input.resetsAt ? resetDateLabel(input.resetsAt) : "";
+  const withReset = (text: string) => (reset ? `${text.replace(/\.$/, "")}. ${reset}.` : text);
+  if (input.remainingGrades <= 0) return withReset(GRADE_QUOTA_COPY.outOfGrades);
   const monthly = remainingMonthlyLabel(input.remainingMonthly);
-  if (input.extraCredits > 0) return `${monthly}. ${extraCreditsLabel(input.extraCredits)}.`;
-  return monthly;
+  if (input.extraCredits > 0) return withReset(`${monthly}. ${extraCreditsLabel(input.extraCredits)}.`);
+  return withReset(monthly);
 }
 
 export function isGradePlan(value: string): value is GradePlan {
@@ -89,6 +96,8 @@ export function gradeQuotaSnapshot(input: {
   extraCredits: number;
   iapEnabled: boolean;
   now: Date;
+  /** The user's own allowance period (see quota-period.ts). Calendar month when omitted. */
+  period?: { key: string; resetsAt: string };
 }): GradeQuotaSnapshot {
   const used = Math.max(0, Math.floor(input.usedThisMonth));
   const extraCredits = Math.max(0, Math.floor(input.extraCredits));
@@ -96,13 +105,13 @@ export function gradeQuotaSnapshot(input: {
   const remainingMonthly = Math.max(0, monthlyLimit - used);
   return {
     plan: input.plan,
-    month: calendarMonthKey(input.now),
+    month: input.period?.key ?? calendarMonthKey(input.now),
     monthlyLimit,
     usedThisMonth: used,
     remainingMonthly,
     extraCredits,
     remainingGrades: remainingMonthly + extraCredits,
-    resetsAt: nextMonthResetAt(input.now).toISOString(),
+    resetsAt: input.period?.resetsAt ?? nextMonthResetAt(input.now).toISOString(),
     iapEnabled: input.iapEnabled,
   };
 }

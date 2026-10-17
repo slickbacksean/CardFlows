@@ -11,10 +11,12 @@ export const GradeHistoryEntrySchema = z.looseObject({
 const HistoryResponse = z.looseObject({
   ok: z.literal(true),
   history: z.array(GradeHistoryEntrySchema),
+  /** Free accounts: older estimates kept on the server but not shown until upgrade. */
+  lockedCount: z.number().optional(),
 });
 
 export const gradeHistoryRoutes = {
-  /** D14: premium-only gate the batch screen calls before running. 403 premium_required for free. */
+  /** D14: premium check only (it runs nothing). 403 premium_required for free accounts. */
   startGradeBatch: defineRoute({
     method: "POST",
     path: "/v1/grading/batch",

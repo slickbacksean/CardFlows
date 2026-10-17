@@ -24,3 +24,6 @@ Every Monday, the TPM copies last week's row onto the CardFlow MVP board next to
 ## Notes
 - Today the account list is the invited beta testers. When guest sessions (D9) ship, guests are excluded until they sign up; their scans move to the new account and count from then on.
 - Computed on request from the store; cheap at beta scale. Add a weekly snapshot table before ~10k users.
+
+## Companion: scans per weekly active reseller
+`GET /ops/north-star` also returns `scans` and `scansPerActiveReseller` for each week, with `companionMetric: "Scans per weekly active reseller"`. It uses the same week and the same active-reseller definition. Read the two together: scans/WAR is effort and purchases/WAR is outcome. A rising scans/WAR with flat purchases/WAR points to friction between identify and buy.

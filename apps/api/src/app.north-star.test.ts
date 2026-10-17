@@ -40,6 +40,8 @@ describe("D10 GET /ops/north-star", () => {
       await app.request("/ops/north-star?weeks=2", { headers: { authorization: "Bearer t" } })
     ).json()) as { metric: string; weeks: Array<{ purchased: number; activeResellers: number; perActiveReseller: number | null }> };
     expect(body.metric).toBe("Cards marked Purchased per weekly active reseller");
+    expect((body as unknown as { companionMetric: string }).companionMetric).toBe("Scans per weekly active reseller");
+    expect(body.weeks[1]).toHaveProperty("scansPerActiveReseller");
     expect(body.weeks).toHaveLength(2);
     expect(body.weeks[1]).toMatchObject({ purchased: 2, activeResellers: 1, perActiveReseller: 2 });
     expect(JSON.stringify(body)).not.toMatch(/userId|@cardflow\.beta/);

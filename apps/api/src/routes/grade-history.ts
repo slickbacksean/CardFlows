@@ -1,7 +1,9 @@
 /** P2-07 pre-grade estimate history. Contract: `gradeHistoryRoutes`. Per-user; copy must be the caller's. */
 import {
   appendGradeHistory,
+  GRADE_HISTORY_FREE_VISIBLE,
   GRADE_HISTORY_MAX,
+  GRADE_HISTORY_PREMIUM_MAX,
   PREMIUM_REQUIRED_CODE,
   premiumFeatureLine,
   type GradeHistoryEntry,
@@ -27,8 +29,17 @@ const toEntry = (row: GradeHistoryRecord): GradeHistoryEntry => ({
   confidence: row.confidence,
 });
 
-export function gradeHistoryView(store: GradeHistoryStore, userId: string, id: string): GradeHistoryEntry[] {
-  return store.list(userId, id).map(toEntry).slice(-GRADE_HISTORY_MAX);
+/** Newest-last list. Free accounts see the latest 10; the rest are counted as locked, never deleted. */
+export function gradeHistoryView(
+  store: GradeHistoryStore,
+  userId: string,
+  id: string,
+  premium = true,
+): { history: GradeHistoryEntry[]; lockedCount: number } {
+  const all = store.list(userId, id).map(toEntry);
+  const visible = premium ? GRADE_HISTORY_PREMIUM_MAX : GRADE_HISTORY_FREE_VISIBLE;
+  const history = all.slice(-visible);
+  return { history, lockedCount: premium ? 0 : all.length - history.length };
 }
 
 /** Record one estimate if it is a real 1–10 number and not an identical repeat within a minute. */
@@ -54,6 +65,7 @@ export function recordGradeEstimate(
 }
 
 export function registerGradeHistoryRoutes(app: CardFlowApp, deps: GradeHistoryRouteDeps): void {
+  /** Premium check only: tells the batch screen whether to run. Single estimates still spend quota. */
   app.post("/v1/grading/batch", (c) => {
     if (!deps.isPremium(c.get("userId"))) return c.json(premiumRequiredBody("batch_grading"), 403);
     return c.json({ ok: true as const, plan: "premium" as const });
@@ -65,9 +77,8 @@ export function registerGradeHistoryRoutes(app: CardFlowApp, deps: GradeHistoryR
     if (!deps.ownsInventoryItem(userId, id)) {
       return c.json({ ok: false, error: "Inventory item not found" }, 404);
     }
-    // D14: free users' history keeps saving but stays hidden until they upgrade.
-    if (!deps.isPremium(userId)) return c.json(premiumRequiredBody("grade_history"), 403);
-    return c.json({ ok: true, history: gradeHistoryView(deps.gradeHistory, userId, id) });
+    // Sean: free users see their 10 most recent; older ones stay saved and locked until upgrade.
+    return c.json({ ok: true, ...gradeHistoryView(deps.gradeHistory, userId, id, deps.isPremium(userId)) });
   });
 
   app.post("/v1/inventory/:inventoryItemId/grade-history", async (c) => {
@@ -76,6 +87,8 @@ export function registerGradeHistoryRoutes(app: CardFlowApp, deps: GradeHistoryR
     if (!deps.ownsInventoryItem(userId, id)) {
       return c.json({ ok: false, error: "Inventory item not found" }, 404);
     }
+    // Backend review: importing old on-phone history is a premium action.
+    if (!deps.isPremium(userId)) return c.json(premiumRequiredBody("grade_history"), 403);
     const body = await c.req.json<{ entries?: unknown }>().catch(() => ({}) as { entries?: unknown });
     const entries = Array.isArray(body.entries) ? body.entries.slice(0, GRADE_HISTORY_MAX * 2) : [];
     const existing = new Set(deps.gradeHistory.list(userId, id).map((row) => `${row.recordedAt}|${row.overall}`));
@@ -95,7 +108,6 @@ export function registerGradeHistoryRoutes(app: CardFlowApp, deps: GradeHistoryR
       });
       imported += 1;
     }
-    const history = deps.isPremium(userId) ? gradeHistoryView(deps.gradeHistory, userId, id) : [];
-    return c.json({ ok: true, imported, history });
+    return c.json({ ok: true, imported, history: gradeHistoryView(deps.gradeHistory, userId, id).history });
   });
 }

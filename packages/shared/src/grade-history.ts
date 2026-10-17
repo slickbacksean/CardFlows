@@ -3,6 +3,16 @@
 export const GRADE_HISTORY_TITLE = "Pre-grade estimate history";
 export const GRADE_HISTORY_NOTE = "Estimate only. Not an official grade.";
 export const GRADE_HISTORY_MAX = 8;
+/** Sean: free users see their 10 most recent estimates per card; older ones stay saved, locked. */
+export const GRADE_HISTORY_FREE_VISIBLE = 10;
+/** Premium sees the whole saved history (bounded for the response size). */
+export const GRADE_HISTORY_PREMIUM_MAX = 100;
+
+export function gradeHistoryLockedLine(lockedCount: number): string | null {
+  const n = Math.max(0, Math.floor(lockedCount));
+  if (n === 0) return null;
+  return `${n} older ${n === 1 ? "estimate" : "estimates"} saved, not deleted. Upgrade to see them.`;
+}
 
 export interface GradeHistoryEntry {
   at: string;

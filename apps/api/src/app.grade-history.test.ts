@@ -88,7 +88,8 @@ describe("P2-07 grade estimate history", () => {
     expect(again.imported).toBe(0);
     for (let i = 0; i < 10; i += 1) recordGradeEstimate(store.gradeHistory, u, item.inventoryItemId, { overall: 5 + i / 10, confidence: null }, new Date(Date.UTC(2026, 9, 2 + i)).toISOString());
     const listed = (await (await app.request(`/v1/inventory/${item.inventoryItemId}/grade-history`)).json()) as { history: Array<{ overall: number }> };
-    expect(listed.history).toHaveLength(8);
+    // Premium sees everything saved: 1 recorded + 1 imported + 10 more.
+    expect(listed.history).toHaveLength(12);
     expect(listed.history.at(-1)?.overall).toBe(5.9);
   });
 
@@ -107,21 +108,27 @@ describe("P2-07 grade estimate history", () => {
     expect(store.gradeHistory.list(other, theirs.inventoryItemId)).toHaveLength(1);
   });
 
-  it("D14: free users' history keeps saving but the list is premium-only", async () => {
+  it("free users see their 10 most recent estimates; older ones stay saved and locked", async () => {
     const store = open();
     const free = createApp(store, { premiumUserIds: [] });
     const item = await purchasedItem(store, DEFAULT_INVITED_USER_ID);
-    expect(recordGradeEstimate(store.gradeHistory, DEFAULT_INVITED_USER_ID, item.inventoryItemId, { overall: 7, confidence: null }, "2026-10-01T00:00:00Z")).toBe(true);
-    const locked = await free.request(`/v1/inventory/${item.inventoryItemId}/grade-history`);
-    expect(locked.status).toBe(403);
-    expect(await locked.json()).toMatchObject({ code: "premium_required", feature: "grade_history" });
-    const imported = (await (await free.request(`/v1/inventory/${item.inventoryItemId}/grade-history`, post({ entries: [{ at: "2026-09-01T00:00:00Z", overall: 6 }] }))).json()) as { imported: number; history: unknown[] };
-    expect(imported).toMatchObject({ imported: 1, history: [] });
-    expect(store.gradeHistory.list(DEFAULT_INVITED_USER_ID, item.inventoryItemId)).toHaveLength(2);
-    // Upgrading reveals everything saved while free.
+    for (let i = 0; i < 13; i += 1) {
+      recordGradeEstimate(store.gradeHistory, DEFAULT_INVITED_USER_ID, item.inventoryItemId, { overall: 5 + i / 10, confidence: null }, new Date(Date.UTC(2026, 9, 1 + i)).toISOString());
+    }
+    const listed = (await (await free.request(`/v1/inventory/${item.inventoryItemId}/grade-history`)).json()) as { history: Array<{ overall: number }>; lockedCount: number };
+    expect(listed.history).toHaveLength(10);
+    expect(listed.history.at(-1)?.overall).toBe(6.2);
+    expect(listed.lockedCount).toBe(3);
+    expect(store.gradeHistory.list(DEFAULT_INVITED_USER_ID, item.inventoryItemId)).toHaveLength(13);
+    // Importing old on-phone history is premium-only.
+    const imported = await free.request(`/v1/inventory/${item.inventoryItemId}/grade-history`, post({ entries: [{ at: "2026-09-01T00:00:00Z", overall: 6 }] }));
+    expect(imported.status).toBe(403);
+    expect(await imported.json()).toMatchObject({ code: "premium_required", feature: "grade_history" });
+    // Upgrading shows all 13.
     const premium = createApp(store, { premiumUserIds: [DEFAULT_INVITED_USER_ID] });
-    const listed = (await (await premium.request(`/v1/inventory/${item.inventoryItemId}/grade-history`)).json()) as { history: unknown[] };
-    expect(listed.history).toHaveLength(2);
+    const all = (await (await premium.request(`/v1/inventory/${item.inventoryItemId}/grade-history`)).json()) as { history: unknown[]; lockedCount: number };
+    expect(all).toMatchObject({ lockedCount: 0 });
+    expect(all.history).toHaveLength(13);
   });
 
   it("D14: batch grading is premium-only", async () => {

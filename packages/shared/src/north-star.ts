@@ -4,6 +4,8 @@
  * (non-guest) account with at least one scan or Purchased card that week.
  */
 export const NORTH_STAR_NAME = "Cards marked Purchased per weekly active reseller";
+/** Sean: shown next to the North Star. */
+export const SCANS_PER_WAR_NAME = "Scans per weekly active reseller";
 
 export interface NorthStarUserActivity {
   userId: string;
@@ -19,6 +21,9 @@ export interface NorthStarWeek {
   activeResellers: number;
   /** purchased / activeResellers, 2 dp; null when nobody was active. */
   perActiveReseller: number | null;
+  scans: number;
+  /** scans / activeResellers, 2 dp; null when nobody was active. */
+  scansPerActiveReseller: number | null;
 }
 
 export function isoWeekStart(at: Date): Date {
@@ -38,6 +43,7 @@ export function northStarWeekly(users: NorthStarUserActivity[], options: { weeks
   });
   const index = new Map(starts.map((s, i) => [s, i]));
   const purchased = new Array<number>(weeks).fill(0);
+  const scans = new Array<number>(weeks).fill(0);
   const active = starts.map(() => new Set<string>());
   const bucket = (iso: string) => {
     const t = new Date(iso);
@@ -47,7 +53,9 @@ export function northStarWeekly(users: NorthStarUserActivity[], options: { weeks
   for (const user of users) {
     for (const at of user.scans) {
       const i = bucket(at);
-      if (i !== undefined) active[i]!.add(user.userId);
+      if (i === undefined) continue;
+      scans[i]! += 1;
+      active[i]!.add(user.userId);
     }
     for (const at of user.purchases) {
       const i = bucket(at);
@@ -63,6 +71,8 @@ export function northStarWeekly(users: NorthStarUserActivity[], options: { weeks
       purchased: purchased[i]!,
       activeResellers: n,
       perActiveReseller: n === 0 ? null : Math.round((purchased[i]! / n) * 100) / 100,
+      scans: scans[i]!,
+      scansPerActiveReseller: n === 0 ? null : Math.round((scans[i]! / n) * 100) / 100,
     };
   });
 }
