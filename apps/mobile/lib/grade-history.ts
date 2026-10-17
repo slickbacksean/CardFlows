@@ -46,8 +46,9 @@ export async function clearLegacyGradeHistory(userId: string, inventoryItemIds: 
   if (Platform.OS === "web") {
     for (const key of [...webMemory.keys()]) if (key.startsWith(legacyGradeHistoryKey(userId, ""))) webMemory.delete(key);
   }
-  forgetDeviceItemIds(userId);
+  // Backend final review R5: keep the index entry when any delete failed, so a later wipe retries.
   if (failures > 0) throw new Error(`${failures} grade history entries could not be deleted`);
+  forgetDeviceItemIds(userId);
 }
 
 async function readLegacy(key: string): Promise<string | null> {

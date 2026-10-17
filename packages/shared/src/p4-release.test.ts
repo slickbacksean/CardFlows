@@ -475,14 +475,27 @@ describe("P4: account deletion end to end", () => {
     // The old document-directory file is moved once.
     expect(index).toContain("legacy.delete()");
     expect(index).toContain('if (owner === userId) owner = "";');
+    expect(index).toContain("export function stopRecordingDeviceItemIds");
     const history = read("apps/mobile/lib/grade-history.ts");
     const loop = history.slice(history.indexOf("export async function clearLegacyGradeHistory"), history.indexOf("async function readLegacy"));
     expect(loop.indexOf("try {")).toBeLessThan(loop.indexOf("SecureStore.deleteItemAsync(key)"));
     expect(loop).toContain("failures += 1");
     const lib = read("apps/mobile/lib/account-deletion.ts");
     const wipe = lib.indexOf("await runLocalAccountWipe(");
-    expect(lib.indexOf("forgetDeviceItemIds(userId)")).toBeLessThan(wipe);
+    expect(lib.indexOf("stopRecordingDeviceItemIds(userId)")).toBeLessThan(wipe);
     expect(lib.lastIndexOf("forgetDeviceItemIds(userId)")).toBeGreaterThan(wipe);
+  });
+
+  it("Backend final review R5: the index entry stays when any grade-history delete failed", () => {
+    const history = read("apps/mobile/lib/grade-history.ts");
+    const fn = history.slice(history.indexOf("export async function clearLegacyGradeHistory"), history.indexOf("async function readLegacy"));
+    // The throw on failure comes before the forget, so a failed key keeps its ID for a retry.
+    expect(fn.indexOf("if (failures > 0) throw")).toBeGreaterThan(-1);
+    expect(fn.indexOf("if (failures > 0) throw")).toBeLessThan(fn.indexOf("forgetDeviceItemIds(userId)"));
+    const lib = read("apps/mobile/lib/account-deletion.ts");
+    const after = lib.slice(lib.indexOf("await runLocalAccountWipe("));
+    expect(after).toContain('if (!failed.includes("grade_history"))');
+    expect(after.indexOf('if (!failed.includes("grade_history"))')).toBeLessThan(after.indexOf("forgetDeviceItemIds(userId)"));
   });
 
   it("H2: the anonymous-totals line is accurate (weekly totals table, ledger rows hard-deleted)", () => {

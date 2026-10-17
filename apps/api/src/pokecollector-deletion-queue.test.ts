@@ -1,8 +1,10 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { createApp } from "./app";
 import { createMockPokecollectorAccounts, type PokecollectorRemoteDeletion } from "./pokecollector-accounts";
+import { OpsMetrics } from "./ops-metrics";
 import {
   POKECOLLECTOR_DELETION_BACKOFF_MS,
+  POKECOLLECTOR_DELETION_MAX_ATTEMPTS,
   nextPokecollectorDeletionAttempt,
   type PokecollectorDeletionQueue,
 } from "./pokecollector-deletion-queue";
@@ -58,7 +60,10 @@ function world(options: { store?: StorePort; deleteResults?: PokecollectorRemote
     return realDelete(target, opts);
   };
   let queue!: PokecollectorDeletionQueue;
+  const metrics = new OpsMetrics();
   const app = createApp(store, {
+    opsToken: "ops-token",
+    opsMetrics: metrics,
     devAutoSession: false,
     guestMode: true,
     orphanSweepIntervalMs: 0,
@@ -73,6 +78,7 @@ function world(options: { store?: StorePort; deleteResults?: PokecollectorRemote
     store,
     accounts,
     calls,
+    metrics,
     queue: () => queue,
     advance: (ms: number) => (clock = new Date(clock.getTime() + ms)),
     hold: () => {
@@ -202,6 +208,56 @@ describe("PokéCollector deletion queue (Backend re-review H1/M1)", () => {
     expect(res.status).toBe(200);
     await w.queue().run();
     expect(w.store.accounts.listPokecollectorDeletions()[0]).toEqual(expect.objectContaining({ attempts: 1, lastResult: "failed" }));
+  });
+});
+
+describe("PokéCollector deletion limits (Backend final review R3)", () => {
+  it(`gives up after ${POKECOLLECTOR_DELETION_MAX_ATTEMPTS} attempts: marked failed, alerted, counted in /ops`, async () => {
+    const w = world({ deleteResults: Array.from({ length: 40 }, () => "failed" as const) });
+    const { token } = await linkedAccount(w.app, "gives-up@example.com");
+    await call(w.app, "/v1/account/delete", { method: "POST", token, body: { password: PW } });
+    const warn = console.warn;
+    const logged: string[] = [];
+    console.warn = (...args: unknown[]) => void logged.push(args.join(" "));
+    try {
+      for (let i = 0; i < POKECOLLECTOR_DELETION_MAX_ATTEMPTS + 5; i += 1) {
+        await w.queue().run();
+        w.advance(25 * 3_600_000);
+      }
+    } finally {
+      console.warn = warn;
+    }
+    expect(w.calls).toHaveLength(POKECOLLECTOR_DELETION_MAX_ATTEMPTS);
+    const row = w.store.accounts.listPokecollectorDeletions()[0]!;
+    expect(row).toEqual(expect.objectContaining({ mode: "failed", attempts: POKECOLLECTOR_DELETION_MAX_ATTEMPTS, lastResult: "failed" }));
+    expect(logged.filter((line) => line.includes("[pokecollector-deletion] gave up"))).toHaveLength(1);
+    expect(logged.join(" ")).not.toContain("gives-up@example.com");
+    const snapshot = w.metrics.snapshot();
+    expect(snapshot.pokecollectorDeletionsFailed).toBe(1);
+    expect(snapshot.alerts.map((a) => a.kind)).toContain("pokecollector_deletion_failed");
+    const ops = await w.app.request("/ops/pokecollector-deletions", { headers: { authorization: "Bearer ops-token" } });
+    expect(ops.status).toBe(200);
+    const counts = (await ops.json()) as Record<string, unknown>;
+    expect(counts).toEqual(expect.objectContaining({ ok: true, pending: 0, held: 0, failed: 1, stuck: 0, maxAttempts: POKECOLLECTOR_DELETION_MAX_ATTEMPTS }));
+    expect(JSON.stringify(counts)).not.toContain("remoteUserId");
+  });
+
+  it("/ops/pokecollector-deletions counts stuck rows (pending over 3 days) and needs the ops token", async () => {
+    const w = world();
+    w.store.accounts.enqueuePokecollectorDeletion({ remoteUserId: "501", mode: "delete", at: "2026-10-13T00:00:00.000Z" });
+    w.store.accounts.enqueuePokecollectorDeletion({ remoteUserId: "502", mode: "delete", at: "2026-10-17T17:00:00.000Z" });
+    w.store.accounts.enqueuePokecollectorDeletion({ remoteUserId: "503", mode: "hold", at: "2026-10-01T00:00:00.000Z" });
+    expect((await w.app.request("/ops/pokecollector-deletions")).status).toBe(401);
+    const res = await w.app.request("/ops/pokecollector-deletions", { headers: { authorization: "Bearer ops-token" } });
+    expect(await res.json()).toEqual({
+      ok: true,
+      pending: 2,
+      held: 1,
+      failed: 0,
+      stuck: 1,
+      oldestPendingAt: "2026-10-13T00:00:00.000Z",
+      maxAttempts: POKECOLLECTOR_DELETION_MAX_ATTEMPTS,
+    });
   });
 });
 

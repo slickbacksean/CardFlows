@@ -167,7 +167,7 @@ import {
   type PokecollectorAccounts,
   type PokecollectorCollectionCopy,
 } from "./pokecollector-accounts";
-import { createPokecollectorDeletionQueue, type PokecollectorDeletionQueue } from "./pokecollector-deletion-queue";
+import { createPokecollectorDeletionQueue, pokecollectorDeletionCounts, type PokecollectorDeletionQueue } from "./pokecollector-deletion-queue";
 import type { PokecollectorPacer } from "./pokecollector-pacer";
 import { SCAN_IMAGE_MAX_BYTES, type ScanImageMimeType } from "./scan-image";
 import {
@@ -2034,6 +2034,20 @@ export function createApp(
     linksTo: (remoteUserId) => store.countPokecollectorLinks(remoteUserId),
     now,
     pacer: options.pokecollectorPacer,
+    // Backend final review R3: gave up after the max attempts. Logged (PokéCollector's numeric ID
+    // only, never a CardFlow user ID or email) and alerted.
+    onGaveUp: ({ remoteUserId, attempts, lastResult }) => {
+      console.warn(`[pokecollector-deletion] gave up on remote user ${remoteUserId} after ${attempts} attempts (${lastResult})`);
+      metrics.recordPokecollectorDeletionFailed();
+    },
+  });
+  // R3: counts of failed and stuck deletions, same token rule as /ops/metrics. No IDs.
+  app.get("/ops/pokecollector-deletions", (c) => {
+    const expected = opsToken?.trim();
+    const given = c.req.header("authorization")?.replace(/^Bearer\s+/i, "").trim();
+    if (!expected) return c.json({ ok: false, error: "Not found" }, 404);
+    if (!given || !timingSafeEqualString(given, expected)) return c.json({ ok: false, error: "Unauthorized" }, 401);
+    return c.json({ ok: true, ...pokecollectorDeletionCounts(store.accounts.listPokecollectorDeletions(), now()) });
   });
   options.onPokecollectorDeletionQueue?.(pokecollectorDeletions);
   if (options.pokecollectorDeletionIntervalMs !== 0) {
