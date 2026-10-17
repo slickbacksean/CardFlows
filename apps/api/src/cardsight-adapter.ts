@@ -61,11 +61,13 @@ export function isRetryableStatus(status: number | null): boolean {
   return status === null || status === 408 || status >= 500;
 }
 
-function confidence(value: unknown): RecognitionConfidence {
-  const text = String(value ?? "").toLowerCase();
+/** Backend review L4: a missing or unknown confidence is null, not "Low". */
+function confidence(value: unknown): RecognitionConfidence | null {
+  const text = typeof value === "string" ? value.trim().toLowerCase() : "";
   if (text === "high") return "High";
   if (text === "medium") return "Medium";
-  return "Low";
+  if (text === "low") return "Low";
+  return null;
 }
 
 function str(value: unknown): string | null {

@@ -70,6 +70,7 @@ describe("MVP CRM schema", () => {
       "grade_estimate_history",
       "grade_photo_objects",
       "grade_quota_usage",
+      "idempotency_keys",
       "portfolio_value_snapshots",
       "purchase_events",
       "scan_confirm_events",

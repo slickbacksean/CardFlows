@@ -40,6 +40,7 @@ import {
 import { catalogDisplayFromCard } from "./listing";
 import { createSqliteSalesStore } from "./sales-store";
 import { createSqlitePurchaseLedger } from "./purchase-ledger";
+import { createSqliteIdempotencyStore } from "./idempotency-store";
 import { createSqliteGradeHistoryStore } from "./grade-history-store";
 import { applyMvpMigrations, isMemorySqlitePath } from "./db/migrate";
 import {
@@ -588,6 +589,7 @@ export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStor
       inventoryItemId: inventoryItemIdForScan(row.scanId),
       imageStorageRef: row.imageStorageRef,
       imageMimeType: normalizeScanImageMime(row.imageMimeType),
+      idempotencyBodyHash: row.idempotencyBodyHash ?? null,
       recognition: envelope.recognition,
       mapping,
     };
@@ -602,6 +604,7 @@ export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStor
       imageStorageRef: scan.imageStorageRef,
       imageSource: "user_capture",
       imageMimeType: scan.imageMimeType,
+      idempotencyBodyHash: scan.idempotencyBodyHash ?? null,
       recognitionJson: serializeRecognition(scan),
       mappingJson: JSON.stringify(scan.mapping),
       mappingStatus: scan.mapping.status,
@@ -1117,6 +1120,7 @@ export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStor
       purchaseId: item.purchase.purchaseId,
       inventoryItemId: item.inventoryItemId,
       purchasedAt: item.purchase.purchasedAt,
+      snapshot: item.purchase,
       at: new Date().toISOString(),
     });
     const cost = item.purchase.costBasis;
@@ -1930,6 +1934,7 @@ export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStor
     },
     sales: createSqliteSalesStore(db),
     purchaseLedger,
+    idempotency: createSqliteIdempotencyStore(db),
     gradeHistory: createSqliteGradeHistoryStore(db),
     createSession,
     getSessionByToken,

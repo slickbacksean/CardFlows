@@ -117,3 +117,14 @@ describe("CardSight adapter backend review", () => {
     expect(result.detections[0]!.matchLevel).toBeNull();
   });
 });
+
+describe("CardSight confidence (backend review L4)", () => {
+  it("a missing or unknown confidence is null, not Low", async () => {
+    const provider = createCardSightRecognitionProvider({
+      apiKey: "k",
+      fetch: (async () => json(200, { detections: [{ card: { name: "A" } }, { confidence: "weird", card: { name: "B" } }, { confidence: "low", card: { name: "C" } }] })) as never,
+    });
+    const result = await provider.identifyCard(req);
+    expect(result.detections.map((d) => d.confidence)).toEqual([null, null, "Low"]);
+  });
+});

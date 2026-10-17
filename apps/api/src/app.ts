@@ -836,7 +836,9 @@ export function createApp(
     if (!given || !timingSafeEqualString(given, expected)) {
       return c.json({ ok: false, error: "Unauthorized" }, 401);
     }
-    const users = store.listInvitedUsers().map((user) => ({
+    // Ledger user IDs include anonymized deleted accounts, so past weeks don't shift.
+    const userIds = [...new Set([...store.listInvitedUsers().map((user) => user.userId), ...store.purchaseLedger.listUserIds()])];
+    const users = userIds.map((userId) => ({ userId })).map((user) => ({
       userId: user.userId,
       scans: listScans(user.userId).map((scan) => scan.capturedAt),
       // Data Engineer review: from the purchase ledger, excluding voided (undone) purchases.
@@ -1510,7 +1512,10 @@ export function createApp(
     const staged = gradeUploads.releaseUser(userId);
     const salesDeleted = store.sales.deleteUser(userId);
     const gradeHistoryDeleted = store.gradeHistory.deleteUser(userId);
-    store.purchaseLedger.deleteUser(userId);
+    // Data Engineer review: anonymize (not delete) the purchase ledger so past North Star weeks
+    // keep their counts; snapshots (prices) are removed.
+    store.purchaseLedger.anonymizeUser(userId);
+    store.idempotency.deleteUser(userId);
     return c.json({
       ok: true,
       photosDeleted: photos.deleted + staged,
@@ -1633,6 +1638,15 @@ export function createApp(
       // The first attempt failed: run this one normally (no key reserved).
       return next();
     }
+    // M3: after a restart the in-memory registry is empty; the persisted answer still replays.
+    const persisted = store.idempotency.get(userId, key);
+    if (persisted && now().getTime() - Date.parse(persisted.createdAt) < IDEMPOTENCY_TTL_MS) {
+      claim.finish(persisted.bodyHash, { status: persisted.status, body: persisted.response });
+      if (persisted.bodyHash !== bodyHash) {
+        return c.json({ ok: false, error: "That Idempotency-Key was already used with a different request." }, 422);
+      }
+      return c.body(persisted.response, persisted.status as 200, { "content-type": "application/json" });
+    }
     claim.setHash(bodyHash);
     try {
       await next();
@@ -1642,7 +1656,10 @@ export function createApp(
     }
     const res = c.res;
     if (res.status >= 200 && res.status < 300) {
-      claim.finish(bodyHash, { status: res.status, body: await res.clone().text() });
+      const responseBody = await res.clone().text();
+      store.idempotency.prune(new Date(now().getTime() - IDEMPOTENCY_TTL_MS).toISOString());
+      store.idempotency.save(userId, key, { bodyHash, status: res.status, response: responseBody, createdAt: now().toISOString() });
+      claim.finish(bodyHash, { status: res.status, body: responseBody });
     } else {
       claim.finish(bodyHash, undefined);
     }
@@ -1707,7 +1724,12 @@ export function createApp(
         }
       }
       if (freshPersisted && claim?.kind === "new") {
-        // After a restart the registry is empty; the deterministic scan ID still finds the first scan.
+        // After a restart the registry is empty; the deterministic scan ID still finds the first
+        // scan, and its stored body hash (M2) still catches a different body.
+        if (freshPersisted.idempotencyBodyHash && freshPersisted.idempotencyBodyHash !== bodyHash) {
+          claim.finish(freshPersisted.idempotencyBodyHash, freshPersisted.scanId);
+          return c.json({ ok: false, error: "That Idempotency-Key was already used with a different request." }, 422);
+        }
         claim.finish(bodyHash, freshPersisted.scanId);
         return c.json({ ok: true, scan: freshPersisted, variantSuggestions: variantSuggestionsFor(freshPersisted.mapping) }, 201);
       }
@@ -1794,6 +1816,7 @@ export function createApp(
         inventoryItemId: null,
         imageStorageRef,
         imageMimeType,
+        idempotencyBodyHash: scanIdempotencyKey ? bodyHash : null,
         recognition,
         mapping,
       });

@@ -101,10 +101,10 @@
       "breakpoints": true
     },
     {
-      "idx": 16,
+      "idx": 15,
       "version": "6",
-      "when": 1791004800000,
-      "tag": "0016_purchase_events",
+      "when": 1790918400000,
+      "tag": "0015_purchase_events_idempotency",
       "breakpoints": true
     }
   ]

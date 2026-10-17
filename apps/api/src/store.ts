@@ -2,6 +2,7 @@ import type { ConfirmEvent } from "@cardflow/shared";
 import type { UserPriceSnapshot } from "@cardflow/shared";
 import { createMemorySalesStore, type SalesStore } from "./sales-store";
 import { createMemoryPurchaseLedger, type PurchaseLedger } from "./purchase-ledger";
+import { createMemoryIdempotencyStore, type IdempotencyStore } from "./idempotency-store";
 import { createMemoryGradeHistoryStore, type GradeHistoryStore } from "./grade-history-store";
 import {
   catalogFingerprint,
@@ -78,6 +79,8 @@ export interface ScanRecord {
   inventoryItemId: string | null;
   imageStorageRef: string | null;
   imageMimeType: ScanImageMimeType | null;
+  /** Backend review M2: body hash of the Idempotency-Key request that made this scan. */
+  idempotencyBodyHash?: string | null;
   recognition: CardFlowNormalizedRecognitionResult;
   mapping: CatalogMappingResult;
 }
@@ -708,6 +711,8 @@ export interface StorePort {
   sales: SalesStore;
   /** Data Engineer review: purchases are voided, never forgotten (North Star excludes voided). */
   purchaseLedger: PurchaseLedger;
+  /** Backend review M3: persisted queued-write idempotency (24 h). */
+  idempotency: IdempotencyStore;
   /** P2-07 pre-grade estimate history. */
   gradeHistory: GradeHistoryStore;
   createSession: typeof createSession;
@@ -904,6 +909,7 @@ export function createMemoryStore(): StorePort {
         purchaseId: item.purchase.purchaseId,
         inventoryItemId: item.inventoryItemId,
         purchasedAt: item.purchase.purchasedAt,
+        snapshot: item.purchase,
         at: new Date().toISOString(),
       });
     }
@@ -912,6 +918,7 @@ export function createMemoryStore(): StorePort {
   return {
     sales: createMemorySalesStore(),
     purchaseLedger,
+    idempotency: createMemoryIdempotencyStore(),
     gradeHistory: createMemoryGradeHistoryStore(),
     createSession,
     getSessionByToken,
