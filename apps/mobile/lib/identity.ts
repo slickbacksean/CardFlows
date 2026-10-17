@@ -13,6 +13,8 @@ import {
 interface IdentitySession {
   identity: InvitedIdentity | null;
   invitedUsers: InvitedIdentity[];
+  /** Open sign-up accounts: false until the emailed code is confirmed. */
+  emailVerified?: boolean;
 }
 
 let cachedUserId: string | null = null;
@@ -55,7 +57,7 @@ export async function signUpWithEmail(email: string, password: string, mode: "si
   const result = mode === "sign_up" ? await createAccount(email, password) : await signInWithPassword(email, password);
   await persistSessionToken(result.token);
   setSessionToken(result.token);
-  const session = toSession(result);
+  const session = { ...toSession(result), emailVerified: result.emailVerified };
   rememberIdentity(session.identity);
   restorePromise = Promise.resolve(session);
   return session;

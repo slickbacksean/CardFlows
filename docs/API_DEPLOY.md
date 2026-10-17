@@ -33,7 +33,19 @@ Still open (Sean): hosting provider, hosted DB, photo retention, and the right `
 
 ## Forgot password needs an email sender
 
-`POST /v1/password-resets` always answers 202 with the same message, so nobody can tell whether an email has an account. Reset codes are single use, expire after 1 hour, and only their SHA-256 is stored. A successful reset signs out every session. Delivery checks `CARD_FLOW_EMAIL_SENDER`: when it is unset, the code is logged in development only, and in production nothing is logged or sent. Wiring a provider is the remaining step (a TODO in `app.ts`).
+`POST /v1/password-resets` always answers 202 with the same message, so nobody can tell whether an email has an account. Reset codes are single use, expire after 1 hour, and only their SHA-256 is stored. A successful reset signs out every session. Codes go through the email sender (below).
+
+### Email verification and the email sender
+
+New sign-ups get a 6-digit code by email. It works once, expires in 15 minutes and allows 5 tries. Only its SHA-256 is stored. Until it's confirmed, the pre-grade estimate routes (`POST /v1/grade/detect`, `/v1/grade/pregrade`, `/v1/grading/batch`, `/v1/inventory/:id/grade-jobs`) answer `403 { error: "email_unverified" }`. `POST /v1/email-verifications` sends a new code (one a minute, five an hour), and `POST /v1/email-verifications/confirm { code }` verifies. Invite-code testers and accounts created before migration 0017 count as verified.
+
+| Variable | Meaning |
+|---|---|
+| `CARD_FLOW_EMAIL_SENDER` | `resend`, or unset. When unset, codes are logged in development only and nothing is sent in production (the API warns at startup). |
+| `RESEND_API_KEY` | Required with `resend`. |
+| `CARD_FLOW_EMAIL_FROM` | Required with `resend`: a verified sender, e.g. `CardFlow <no-reply@yourdomain.com>`. |
+
+In production, the API refuses to start if `CARD_FLOW_EMAIL_SENDER` is set but incomplete or unknown.
 
 ## Production must set `CARD_FLOW_TRUST_PROXY_HOPS`
 

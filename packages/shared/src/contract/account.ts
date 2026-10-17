@@ -10,6 +10,8 @@ const SessionResponse = z.looseObject({
   token: z.string(),
   identity: InvitedIdentitySchema,
   invitedUsers: z.array(InvitedIdentitySchema),
+  /** Open sign-up accounts: false until the emailed code is confirmed. */
+  emailVerified: z.boolean().optional(),
 });
 
 const money = z.union([z.string(), z.number()]).nullable().optional();
@@ -48,6 +50,21 @@ export const accountRoutes = {
     body: z.object({ token: z.string(), password: z.string() }),
     response: z.looseObject({ ok: z.literal(true) }),
   }),
+  /** Sends a new 6-digit code to the signed-in account's email (rate-limited; replaces older codes). */
+  requestEmailVerification: defineRoute({
+    method: "POST",
+    path: "/v1/email-verifications",
+    bodyKind: "none",
+    response: z.looseObject({ ok: z.literal(true), emailVerified: z.boolean() }),
+  }),
+  /** Single use, 15 min, 5 tries per code. */
+  confirmEmailVerification: defineRoute({
+    method: "POST",
+    path: "/v1/email-verifications/confirm",
+    bodyKind: "json",
+    body: z.object({ code: z.string() }),
+    response: z.looseObject({ ok: z.literal(true), emailVerified: z.literal(true) }),
+  }),
   /** D9: guest session (3 free scans). 404 when guest mode is off. */
   createGuestSession: defineRoute({
     method: "POST",
@@ -77,6 +94,7 @@ export const accountRoutes = {
       ok: z.literal(true),
       identity: InvitedIdentitySchema.nullable(),
       invitedUsers: z.array(InvitedIdentitySchema),
+      emailVerified: z.boolean().optional(),
     }),
   }),
   switchIdentity: defineRoute({

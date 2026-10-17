@@ -1,7 +1,8 @@
-import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
+import { createHash, randomBytes, randomInt, timingSafeEqual } from "node:crypto";
+import { emailSenderFromEnv, type EmailSender } from "./email-sender";
 import { normalizeEmail } from "./account-store";
 import { routePath } from "hono/route";
-import { quotaAnchor, quotaPeriodFor, ACCOUNT_AUTH_COPY, PASSWORD_RESET_TTL_MS, GUEST_MINT_WINDOW_MS, GUEST_SESSION_TTL_MS, isValidEmail, passwordProblem, GUEST_FREE_SCANS, GUEST_USER_PREFIX, SIGNUP_REQUIRED_CODE, guestIdentity, guestRouteAllowed, isGuestUserId, isHot, parsePerfBatch, signupMessage, type SignupReason } from "@cardflow/shared";
+import { EMAIL_CODE_LENGTH, EMAIL_RESEND_COOLDOWN_MS, EMAIL_UNVERIFIED_CODE, EMAIL_VERIFICATION_COPY, EMAIL_VERIFICATION_TTL_MS, isEmailCode, passwordResetEmailText, verificationEmailText, quotaAnchor, quotaPeriodFor, ACCOUNT_AUTH_COPY, PASSWORD_RESET_TTL_MS, GUEST_MINT_WINDOW_MS, GUEST_SESSION_TTL_MS, isValidEmail, passwordProblem, GUEST_FREE_SCANS, GUEST_USER_PREFIX, SIGNUP_REQUIRED_CODE, guestIdentity, guestRouteAllowed, isGuestUserId, isHot, parsePerfBatch, signupMessage, type SignupReason } from "@cardflow/shared";
 import { NORTH_STAR_NAME, SCANS_PER_WAR_NAME, northStarWeekly } from "@cardflow/shared";
 import { opsMetrics, type OpsMetrics } from "./ops-metrics";
 import { parseUserPriceAmount } from "@cardflow/shared";
@@ -230,6 +231,16 @@ async function boundedProbe(
   }
 }
 
+/** Pre-grade estimate routes that need a verified email (POST only). */
+export function requiresVerifiedEmail(pathName: string): boolean {
+  return (
+    pathName === "/v1/grade/detect" ||
+    pathName === "/v1/grade/pregrade" ||
+    pathName === "/v1/grading/batch" ||
+    /^\/v1\/inventory\/[^/]+\/grade-jobs$/.test(pathName)
+  );
+}
+
 function isPublicV1Path(method: string, pathName: string): boolean {
   return (
     method === "POST" &&
@@ -325,8 +336,10 @@ export interface CreateAppOptions {
   onGuestCleanup?: (run: () => { guestsPurged: number; scansDeleted: number }) => void;
   /** Open sign-up limits (per IP / per email). */
   authLimits?: { signupPerIp?: number; signInPerIp?: number; perEmail?: number; invitePerIp?: number };
-  /** Forgot password delivery (tests). Default: CARD_FLOW_EMAIL_SENDER check, dev-only log. */
+  /** Forgot password delivery override (tests). Default: the email sender. */
   deliverPasswordReset?: (email: string, token: string) => void;
+  /** Verification and reset emails. Default from CARD_FLOW_EMAIL_SENDER (dev logger when unset). */
+  emailSender?: EmailSender;
   /** D9: guest sessions minted per client IP per hour (default 10). */
   guestMintsPerHour?: number;
   /** Catalog provider. Tests default to mock; local/staging may inject live TCGdex or PokéCollector. */
@@ -1081,6 +1094,15 @@ export function createApp(
     return c.json({ ok: false, error: "Unauthorized" }, 401);
   });
 
+  // Sean: email verification before pre-grade estimates. Signed-up accounts must confirm the
+  // emailed code first; invite testers (no account row) and pre-0017 accounts count as verified.
+  // Internal grade-job calls were checked when the job was created.
+  app.use("/v1/*", async (c, next) => {
+    if (c.req.method !== "POST" || !requiresVerifiedEmail(c.req.path) || c.get("internalOwner")) return next();
+    if (store.accounts.isEmailVerified(c.get("userId"))) return next();
+    return c.json({ ok: false, error: EMAIL_UNVERIFIED_CODE, message: EMAIL_VERIFICATION_COPY.required }, 403);
+  });
+
   app.get("/health", async (c) => {
     const catalogStatus = catalogHealth(catalog.name);
     const recognitionStatus = recognitionHealth(recognitionProvider.name);
@@ -1653,9 +1675,16 @@ export function createApp(
       }
       account = existing;
     }
+    if (created) sendVerificationCode(created);
     const moved = adoptGuestData(c.req.header("authorization"), account.userId);
     const session = accountSession(account);
-    return c.json({ ok: true as const, ...session, invitedUsers: [session.identity], movedScans: moved?.scans ?? 0 });
+    return c.json({
+      ok: true as const,
+      ...session,
+      invitedUsers: [session.identity],
+      movedScans: moved?.scans ?? 0,
+      emailVerified: store.accounts.isEmailVerified(account.userId),
+    });
   });
 
   app.post("/v1/sessions/password", async (c) => {
@@ -1676,25 +1705,83 @@ export function createApp(
     }
     const moved = adoptGuestData(c.req.header("authorization"), existing.userId);
     const session = accountSession(existing);
-    return c.json({ ok: true as const, ...session, invitedUsers: [session.identity], movedScans: moved?.scans ?? 0 });
+    return c.json({
+      ok: true as const,
+      ...session,
+      invitedUsers: [session.identity],
+      movedScans: moved?.scans ?? 0,
+      emailVerified: store.accounts.isEmailVerified(existing.userId),
+    });
   });
 
   /**
-   * Forgot password. Delivery waits for an email sender (CARD_FLOW_EMAIL_SENDER). Until one is
-   * wired, the token is logged in development only (never in production). The answer is the same
-   * whether or not the email has an account (no enumeration).
+   * Verification and reset codes go through one provider-agnostic sender (Resend when
+   * CARD_FLOW_EMAIL_SENDER=resend; otherwise the code is logged outside production only).
+   * Sending never blocks or changes the HTTP answer, so timing can't reveal which emails exist.
    */
+  const emailSender = options.emailSender ?? emailSenderFromEnv();
   const deliverResetToken = options.deliverPasswordReset ?? ((email: string, token: string) => {
-    const sender = process.env.CARD_FLOW_EMAIL_SENDER?.trim();
-    if (sender) {
-      // TODO(email sender): send `token` to `email` via the configured provider.
-      console.warn(`[password-reset] CARD_FLOW_EMAIL_SENDER=${sender} is set but no sender is wired yet; nothing sent.`);
-      return;
-    }
-    if (process.env.NODE_ENV !== "production") {
-      console.info(`[password-reset] dev only, no email sender: reset code for ${email}: ${token}`);
-    }
+    void emailSender.send({
+      kind: "password-reset",
+      to: email,
+      subject: EMAIL_VERIFICATION_COPY.resetSubject,
+      text: passwordResetEmailText(token),
+      code: token,
+    });
   });
+  const emailCodeHash = (userId: string, code: string) => hashSessionToken(`${userId}:${code.trim()}`);
+  /** A new 6-digit code (replaces any earlier one), emailed to the account. */
+  const sendVerificationCode = (account: { userId: string; email: string }) => {
+    const code = String(randomInt(0, 10 ** EMAIL_CODE_LENGTH)).padStart(EMAIL_CODE_LENGTH, "0");
+    const at = now();
+    store.accounts.createEmailVerification({
+      userId: account.userId,
+      codeHash: emailCodeHash(account.userId, code),
+      at: at.toISOString(),
+      expiresAt: new Date(at.getTime() + EMAIL_VERIFICATION_TTL_MS).toISOString(),
+    });
+    void emailSender.send({
+      kind: "verify-email",
+      to: account.email,
+      subject: EMAIL_VERIFICATION_COPY.emailSubject,
+      text: verificationEmailText(code),
+      code,
+    });
+  };
+
+  app.post("/v1/email-verifications", (c) => {
+    const userId = c.get("userId");
+    const account = store.accounts.getAccount(userId);
+    if (!account || store.accounts.isEmailVerified(userId)) return c.json({ ok: true as const, emailVerified: true });
+    // One code per minute (the resend button) and at most 5 an hour per account.
+    if (isLimited(`verify-send-min:${userId}`, 1, EMAIL_RESEND_COOLDOWN_MS)) {
+      return c.json({ ok: false, error: EMAIL_VERIFICATION_COPY.tooSoon }, 429);
+    }
+    if (overLimit(`verify-send-hour:${userId}`, 5, 60 * 60 * 1000)) return tooMany(c);
+    overLimit(`verify-send-min:${userId}`, 1, EMAIL_RESEND_COOLDOWN_MS);
+    sendVerificationCode(account);
+    return c.json(
+      { ok: true as const, emailVerified: false, message: EMAIL_VERIFICATION_COPY.sent, resendAfterMs: EMAIL_RESEND_COOLDOWN_MS },
+      202,
+    );
+  });
+
+  app.post("/v1/email-verifications/confirm", async (c) => {
+    const userId = c.get("userId");
+    if (!store.accounts.getAccount(userId) || store.accounts.isEmailVerified(userId)) {
+      return c.json({ ok: true as const, emailVerified: true as const });
+    }
+    // Per-code tries are capped in the store (5); this caps guessing across new codes too.
+    if (overLimit(`verify-confirm:${userId}`, 20, 60 * 60 * 1000)) return tooMany(c);
+    const body = await c.req.json<{ code?: unknown }>().catch(() => ({}) as Record<string, unknown>);
+    const code = typeof body.code === "string" ? body.code.trim() : "";
+    const result = isEmailCode(code)
+      ? store.accounts.confirmEmailVerification(userId, emailCodeHash(userId, code), now().toISOString())
+      : "invalid";
+    if (result !== "verified") return c.json({ ok: false, error: EMAIL_VERIFICATION_COPY.invalid }, 400);
+    return c.json({ ok: true as const, emailVerified: true as const, message: EMAIL_VERIFICATION_COPY.verified });
+  });
+
   app.post("/v1/password-resets", async (c) => {
     const ip = clientIp(c, trustProxyHops, socketAddress) ?? "unknown";
     if (overLimit(`reset-ip:${ip}`, authLimits.signInPerIp, 15 * 60 * 1000)) return tooMany(c);
@@ -1761,6 +1848,7 @@ export function createApp(
       ok: true,
       identity: c.get("identity"),
       invitedUsers: [c.get("identity")],
+      emailVerified: store.accounts.isEmailVerified(c.get("userId")),
     });
   });
 

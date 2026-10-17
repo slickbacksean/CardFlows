@@ -1,7 +1,7 @@
 import { QueryClientProvider } from "@tanstack/react-query";
 import { type ErrorBoundaryProps, Link, Stack, router } from "expo-router";
-import { GUEST_RETENTION_NOTE, GUEST_SCAN_WALL_NOTE, GUEST_SIGNUP_COPY, signupMessage } from "@cardflow/shared";
-import { onSignupRequired } from "@/lib/api";
+import { EMAIL_VERIFICATION_COPY, GUEST_RETENTION_NOTE, GUEST_SCAN_WALL_NOTE, GUEST_SIGNUP_COPY, signupMessage } from "@cardflow/shared";
+import { onEmailUnverified, onSignupRequired } from "@/lib/api";
 import { StatusBar } from "expo-status-bar";
 import { useEffect, useState } from "react";
 import { startWriteQueue } from "@/lib/write-queue";
@@ -65,6 +65,18 @@ export default function RootLayout() {
       ], { cancelable: true, onDismiss: () => { showing = false; } });
     });
   }, []);
+  // Sean: pre-grade estimates need a verified email. One prompt, then the code screen.
+  useEffect(() => {
+    let showing = false;
+    return onEmailUnverified(() => {
+      if (showing) return;
+      showing = true;
+      Alert.alert("Verify your email", EMAIL_VERIFICATION_COPY.required, [
+        { text: "Not now", style: "cancel", onPress: () => { showing = false; } },
+        { text: "Enter code", onPress: () => { showing = false; router.push("/verify-email"); } },
+      ], { cancelable: true, onDismiss: () => { showing = false; } });
+    });
+  }, []);
   useEffect(() => (ready ? startWriteQueue() : undefined), [ready]);
   useEffect(() => (ready ? startScanQueue() : undefined), [ready]);
 
@@ -98,6 +110,7 @@ export default function RootLayout() {
         <Stack.Screen name="practice" options={{ headerShown: false }} />
         <Stack.Screen name="max-buy-rules" options={{ headerShown: false }} />
         <Stack.Screen name="watch" options={{ headerShown: false }} />
+        <Stack.Screen name="verify-email" options={{ headerShown: false }} />
       </Stack>
       <StatusBar style="light" />
     </QueryClientProvider>

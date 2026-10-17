@@ -1,4 +1,4 @@
-import { BATCH_GRADE_HEADER, PREMIUM_REQUIRED_CODE, SIGNUP_REQUIRED_CODE, isPremiumFeature, type PremiumFeature, type SignupReason } from "@cardflow/shared";
+import { BATCH_GRADE_HEADER, EMAIL_UNVERIFIED_CODE, EMAIL_VERIFICATION_COPY, PREMIUM_REQUIRED_CODE, SIGNUP_REQUIRED_CODE, isPremiumFeature, type PremiumFeature, type SignupReason } from "@cardflow/shared";
 import {
   CARD_FLOW_REQUEST_TIMEOUT_MS,
   cardFlowHttpErrorMessage,
@@ -263,6 +263,14 @@ async function request<T>(
     }
   }
   if (!response.ok) {
+    // Sean: pre-grade estimates need a verified email; the app opens the code screen.
+    if (response.status === 403 && data.error === EMAIL_UNVERIFIED_CODE) {
+      const unverified = new Error(EMAIL_VERIFICATION_COPY.required) as Error & { status?: number; emailUnverified?: boolean };
+      unverified.status = 403;
+      unverified.emailUnverified = true;
+      emailUnverifiedListener?.();
+      throw unverified;
+    }
     const error = new Error(cardFlowHttpErrorMessage(response.status, data.error));
     const extra = error as Error & { status?: number; quota?: GradeQuotaSnapshot };
     extra.status = response.status;
@@ -947,6 +955,29 @@ export function onSignupRequired(listener: SignupListener): () => void {
 
 function notifySignupRequired(reason: SignupReason) {
   signupListener?.(reason);
+}
+
+let emailUnverifiedListener: (() => void) | null = null;
+
+/** The root layout opens the verify-email screen when a pre-grade estimate is refused. */
+export function onEmailUnverified(listener: () => void): () => void {
+  emailUnverifiedListener = listener;
+  return () => {
+    if (emailUnverifiedListener === listener) emailUnverifiedListener = null;
+  };
+}
+
+export function isEmailUnverifiedError(error: unknown): boolean {
+  return Boolean(error && typeof error === "object" && (error as { emailUnverified?: unknown }).emailUnverified === true);
+}
+
+/** Sends a new 6-digit code (one a minute). */
+export function requestEmailVerification() {
+  return callApi(apiContract.requestEmailVerification);
+}
+
+export function confirmEmailVerification(code: string) {
+  return callApi(apiContract.confirmEmailVerification, { body: { code } });
 }
 
 export function createAccount(email: string, password: string) {

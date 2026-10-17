@@ -65,6 +65,7 @@ describe("MVP CRM schema", () => {
       "crm_purchases",
       "crm_scans",
       "crm_sessions",
+      "email_verification_codes",
       "grade_accounts",
       "grade_estimate_cache",
       "grade_estimate_history",

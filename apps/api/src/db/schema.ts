@@ -223,9 +223,20 @@ export const userAccounts = sqliteTable(
     email: text("email").notNull(),
     passwordHash: text("password_hash").notNull(),
     createdAt: text("created_at").notNull(),
+    /** Null until the 6-digit code is confirmed. Accounts from before 0017 are backfilled. */
+    emailVerifiedAt: text("email_verified_at"),
   },
   (table) => [unique("user_accounts_email").on(table.email)],
 );
+
+/** Email verification: one live 6-digit code per user (SHA-256 only), 15 min, 5 tries. */
+export const emailVerificationCodes = sqliteTable("email_verification_codes", {
+  userId: text("user_id").primaryKey(),
+  codeHash: text("code_hash").notNull(),
+  createdAt: text("created_at").notNull(),
+  expiresAt: text("expires_at").notNull(),
+  attempts: integer("attempts").notNull().default(0),
+});
 
 /** Forgot password: single-use, 1 h tokens. Only the SHA-256 of the token is stored. */
 export const passwordResetTokens = sqliteTable(
@@ -493,6 +504,7 @@ export const schema = {
   cardflowCards,
   userAccounts,
   passwordResetTokens,
+  emailVerificationCodes,
   cardExternalIds,
   crmScans,
   crmConfirmations,
