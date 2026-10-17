@@ -112,7 +112,7 @@ jobs:
 
       - name: Smoke test /health
         run: |
-          docker run -d --name cardflow-api -p 8080:8080 --memory=2g --cpus=1 cardflow-api:ci
+          docker run -d --name cardflow-api -p 8080:8080 --memory=2g --cpus=1 -e CARD_FLOW_TRUST_PROXY_HOPS=0 cardflow-api:ci
           ready=0
           for i in $(seq 1 30); do
             if curl -fsS http://127.0.0.1:8080/health -o health.json \
