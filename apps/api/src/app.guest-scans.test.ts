@@ -74,45 +74,81 @@ describe("D9 guest scans", () => {
     expect((await call(open(), "/v1/inventory", { token: "nope" })).status).toBe(401);
   });
 
-  it("deletes an ended guest's scans and photos (expired, signed up, or lost on restart)", async () => {
+  it("keeps guests across a restart, moves a signed-up guest's scans, purges the rest after expiry", async () => {
     const store = createSqliteStore({ sqlitePath: ":memory:" });
     stores.push(store);
     let clock = new Date("2026-10-15T00:00:00Z");
     let cleanup!: () => { guestsPurged: number; scansDeleted: number };
-    const app = createApp(store, {
-      devAutoSession: false,
-      guestMode: true,
-      now: () => clock,
-      onGuestCleanup: (run) => (cleanup = run),
-    });
+    const opts = { devAutoSession: false, guestMode: true, now: () => clock, onGuestCleanup: (run: typeof cleanup) => (cleanup = run) };
+    const app = createApp(store, opts);
     const tokenA = (await call(app, "/v1/sessions/guest", { method: "POST" })).body.token as string;
     const tokenB = (await call(app, "/v1/sessions/guest", { method: "POST" })).body.token as string;
-    const scanA = await call(app, "/v1/scans", { method: "POST", body: scanBody, token: tokenA });
+    await call(app, "/v1/scans", { method: "POST", body: scanBody, token: tokenA });
+    const [guestA] = store.listScanUserIds("guest_") as [string];
     await call(app, "/v1/scans", { method: "POST", body: scanBody, token: tokenB });
-    const guestA = (scanA.body.scan as { userId?: string }).userId ?? null;
-    expect(store.listScanUserIds("guest_")).toHaveLength(2);
-
-    // Live guests are kept.
     expect(cleanup()).toEqual({ guestsPurged: 0, scansDeleted: 0 });
 
-    // Signing up ends the guest session and deletes its scans right away.
-    const invite = await call(app, "/v1/sessions", { method: "POST", body: JSON.stringify({ inviteCode: JORDAN_INVITE_CODE }), token: tokenB });
-    expect(invite.status).toBe(200);
-    expect(store.listScanUserIds("guest_")).toHaveLength(1);
+    // B signs up: their scan moves to the new account instead of being deleted.
+    const signup = await call(app, "/v1/accounts", { method: "POST", body: JSON.stringify({ email: "b@example.com", password: "correct horse battery" }), token: tokenB });
+    expect(signup.status).toBe(200);
+    expect(signup.body.movedScans).toBe(1);
+    const accountId = (signup.body.identity as { userId: string }).userId;
+    expect(store.listScans(accountId)).toHaveLength(1);
+    expect(store.listScanUserIds("guest_")).toEqual([guestA]);
 
-    // After the 30-day TTL, guest A's session has ended and the next run purges it.
-    clock = new Date("2026-11-20T00:00:00Z");
-    const result = cleanup();
-    expect(result).toEqual({ guestsPurged: 1, scansDeleted: 1 });
-    expect(store.listScanUserIds("guest_")).toHaveLength(0);
-    if (guestA) expect(store.listScans(guestA)).toHaveLength(0);
+    // Restart: guest sessions live in the DB, so A keeps scanning.
+    const restarted = createApp(store, opts);
+    expect((await call(restarted, "/v1/scans", { method: "POST", body: scanBody, token: tokenA })).status).toBe(201);
 
-    // Restart: a new app has no live guests, so leftover guest scans go on the first run.
-    const app2Token = (await call(app, "/v1/sessions/guest", { method: "POST" })).body.token as string;
-    await call(app, "/v1/scans", { method: "POST", body: scanBody, token: app2Token });
-    let cleanup2!: () => { guestsPurged: number; scansDeleted: number };
-    createApp(store, { devAutoSession: false, guestMode: true, onGuestCleanup: (run) => (cleanup2 = run) });
-    expect(cleanup2().scansDeleted).toBe(1);
-    expect(store.listScanUserIds("guest_")).toHaveLength(0);
+    // 25 hours later A's 24-hour session has expired and A never signed up: every row goes.
+    clock = new Date("2026-10-16T01:00:00Z");
+    expect(cleanup()).toEqual({ guestsPurged: 1, scansDeleted: 2 });
+    expect(Object.values(store.accounts.countUserRows(guestA)).every((n) => n === 0)).toBe(true);
+    expect((await call(restarted, "/v1/inventory", { token: tokenA })).status).toBe(401);
+    expect(store.listScans(accountId)).toHaveLength(1);
+  });
+
+  it("sign-up moves every guest row (schema discovery): zero guest rows remain", async () => {
+    const store = createSqliteStore({ sqlitePath: ":memory:" });
+    stores.push(store);
+    const app = createApp(store, { devAutoSession: false, guestMode: true });
+    const guest = await call(app, "/v1/sessions/guest", { method: "POST" });
+    const token = guest.body.token as string;
+    const guestId = (guest.body.identity as { userId: string } | undefined)?.userId
+      ?? store.listScanUserIds("guest").at(0);
+    for (let i = 0; i < 2; i += 1) await call(app, "/v1/scans", { method: "POST", body: scanBody, token });
+    const id = guestId ?? store.listScanUserIds("guest")[0]!;
+    // A row in a table moveGuestData never named explicitly, to prove discovery covers it.
+    store.setPreferences(id, store.getPreferences(id));
+    const signup = await call(app, "/v1/accounts", {
+      method: "POST",
+      body: JSON.stringify({ email: "moved@example.com", password: "correct horse battery" }),
+      token,
+    });
+    expect(signup.status).toBe(200);
+    expect(signup.body.movedScans).toBe(2);
+    const left = store.accounts.countUserRows(id);
+    expect(Object.entries(left).filter(([, n]) => n > 0)).toEqual([]);
+    const newId = (signup.body.identity as { userId: string }).userId;
+    expect(store.accounts.countUserRows(newId).crm_scans).toBe(2);
+  });
+
+  it("parallel guest scans can't pass the 3-scan limit", async () => {
+    const app = open();
+    const token = (await call(app, "/v1/sessions/guest", { method: "POST" })).body.token as string;
+    const results = await Promise.all(
+      Array.from({ length: 6 }, () => call(app, "/v1/scans", { method: "POST", body: scanBody, token })),
+    );
+    expect(results.filter((r) => r.status === 201)).toHaveLength(GUEST_FREE_SCANS);
+    expect(results.filter((r) => r.status === 403)).toHaveLength(6 - GUEST_FREE_SCANS);
+  });
+
+  it("a spoofed X-Forwarded-For doesn't reset the guest mint limit when no proxy is trusted", async () => {
+    const app = open({ guestMintsPerHour: 2 });
+    const mint = (ip: string) =>
+      app.request("/v1/sessions/guest", { method: "POST", headers: { "content-type": "application/json", "x-forwarded-for": ip } });
+    expect((await mint("1.1.1.1")).status).toBe(200);
+    expect((await mint("2.2.2.2")).status).toBe(200);
+    expect((await mint("3.3.3.3")).status).toBe(429);
   });
 });

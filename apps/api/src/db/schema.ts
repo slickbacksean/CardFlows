@@ -205,8 +205,37 @@ export const crmSessions = sqliteTable(
     userId: text("user_id").notNull(),
     createdAt: text("created_at").notNull(),
     expiresAt: text("expires_at").notNull(),
+    isGuest: integer("is_guest", { mode: "boolean" }).notNull().default(false),
   },
-  (table) => [unique("crm_sessions_token_hash").on(table.tokenHash)],
+  (table) => [
+    unique("crm_sessions_token_hash").on(table.tokenHash),
+    index("crm_sessions_guest_expiry_idx").on(table.isGuest, table.expiresAt),
+  ],
+);
+
+/** Open sign-up: email + scrypt password hash. `user_id` is `acct_<uuid>`. */
+export const userAccounts = sqliteTable(
+  "user_accounts",
+  {
+    userId: text("user_id").primaryKey(),
+    email: text("email").notNull(),
+    passwordHash: text("password_hash").notNull(),
+    createdAt: text("created_at").notNull(),
+  },
+  (table) => [unique("user_accounts_email").on(table.email)],
+);
+
+/** Forgot password: single-use, 1 h tokens. Only the SHA-256 of the token is stored. */
+export const passwordResetTokens = sqliteTable(
+  "password_reset_tokens",
+  {
+    tokenHash: text("token_hash").primaryKey(),
+    userId: text("user_id").notNull(),
+    createdAt: text("created_at").notNull(),
+    expiresAt: text("expires_at").notNull(),
+    usedAt: text("used_at"),
+  },
+  (table) => [index("password_reset_tokens_user_idx").on(table.userId)],
 );
 
 /** Server-side CardFlow invited user → PokéCollector user. Never a client JWT. */
@@ -364,6 +393,8 @@ export const scanConfirmEvents = sqliteTable(
     index("scan_confirm_events_chosen_idx").on(table.chosenTcgdexId),
     index("scan_confirm_events_created_idx").on(table.createdAt),
     index("scan_confirm_events_user_idx").on(table.userId),
+    index("scan_confirm_events_user_created_idx").on(table.userId, table.createdAt),
+    index("scan_confirm_events_scan_idx").on(table.scanId),
   ],
 );
 
@@ -393,7 +424,10 @@ export const userCardSales = sqliteTable(
     saleAt: text("sale_at").notNull(),
     updatedAt: text("updated_at").notNull(),
   },
-  (table) => [primaryKey({ columns: [table.userId, table.inventoryItemId] })],
+  (table) => [
+    primaryKey({ columns: [table.userId, table.inventoryItemId] }),
+    index("user_card_sales_sale_at_idx").on(table.saleAt),
+  ],
 );
 
 /** P2-07: per-user pre-grade estimate history (estimates only, not official grades). */
@@ -412,6 +446,8 @@ export const gradeEstimateHistory = sqliteTable(
 
 export const schema = {
   cardflowCards,
+  userAccounts,
+  passwordResetTokens,
   cardExternalIds,
   crmScans,
   crmConfirmations,

@@ -49,6 +49,7 @@ import {
   stripImageMetadata,
   type GradeImageBytes,
 } from "./grade-image";
+import { createSqliteAccountStore } from "./account-store";
 import { isGradePhotoExpired, type PhotoPurgeResult } from "./photo-retention";
 import {
   isFirstPartyScanImageRef,
@@ -285,18 +286,19 @@ export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStor
     return { token, identity, session };
   }
 
-  function getSessionByToken(token: string): SessionRecord | undefined {
+  function getSessionByToken(token: string, now: Date = new Date()): SessionRecord | undefined {
     const row = db
       .select()
       .from(crmSessions)
       .where(eq(crmSessions.tokenHash, hashSessionToken(token)))
       .get();
-    if (!row || isSessionExpired(row.expiresAt)) return undefined;
+    if (!row || isSessionExpired(row.expiresAt, now)) return undefined;
     return {
       sessionId: row.sessionId,
       userId: row.userId,
       createdAt: row.createdAt,
       expiresAt: row.expiresAt,
+      isGuest: row.isGuest === true,
     };
   }
 
@@ -881,6 +883,38 @@ export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStor
       if (deleteScanImage(userId, scan.scanId)) deleted += 1;
     }
     return { deleted };
+  }
+
+  /**
+   * Data Engineer review: account deletion removes rows first, then files. This collects the
+   * user's photo locations while the rows still exist; the returned function unlinks them.
+   */
+  function prepareUserPhotoDeletion(userId: string): () => PhotoPurgeResult {
+    const scanIds = listScans(userId).map((scan) => scan.scanId);
+    const storageRefs = listScans(userId).flatMap((scan) => (scan.imageStorageRef ? [scan.imageStorageRef] : []));
+    const gradeCandidates = listInventory(userId).flatMap((item) =>
+      GRADE_SIDES.flatMap((side) => gradeImageStorageCandidates(item.inventoryItemId, side)),
+    );
+    return () => {
+      let deleted = 0;
+      for (const id of scanIds) if (memoryImages.delete(id)) deleted += 1;
+      for (const ref of storageRefs) {
+        const filePath = sqliteDir ? path.join(sqliteDir, ref) : null;
+        if (filePath && existsSync(filePath)) {
+          unlinkSync(filePath);
+          deleted += 1;
+        }
+      }
+      for (const candidate of gradeCandidates) {
+        if (memoryGradeImages.delete(candidate)) deleted += 1;
+        const filePath = sqliteDir ? path.join(sqliteDir, candidate) : null;
+        if (filePath && existsSync(filePath)) {
+          unlinkSync(filePath);
+          deleted += 1;
+        }
+      }
+      return { deleted };
+    };
   }
 
   function purgeExpiredGradePhotos(now: Date = new Date()): PhotoPurgeResult {
@@ -1919,6 +1953,7 @@ export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStor
     },
     sales: createSqliteSalesStore(db),
     gradeHistory: createSqliteGradeHistoryStore(db),
+    accounts: createSqliteAccountStore(sqlite, db),
     createSession,
     getSessionByToken,
     getPokecollectorUserMapping,
@@ -1940,6 +1975,7 @@ export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStor
     getGradeImage,
     deleteGradeImage,
     deleteUserPhotos,
+    prepareUserPhotoDeletion,
     deleteUserScans,
     listScanUserIds,
     purgeExpiredGradePhotos,

@@ -1,6 +1,7 @@
-import { createHash, timingSafeEqual } from "node:crypto";
+import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
+import { normalizeEmail } from "./account-store";
 import { routePath } from "hono/route";
-import { GUEST_FREE_SCANS, GUEST_USER_PREFIX, SIGNUP_REQUIRED_CODE, guestIdentity, guestRouteAllowed, isGuestUserId, isHot, parsePerfBatch, signupMessage, type SignupReason } from "@cardflow/shared";
+import { ACCOUNT_AUTH_COPY, PASSWORD_RESET_TTL_MS, GUEST_MINT_WINDOW_MS, GUEST_SESSION_TTL_MS, isValidEmail, passwordProblem, GUEST_FREE_SCANS, GUEST_USER_PREFIX, SIGNUP_REQUIRED_CODE, guestIdentity, guestRouteAllowed, isGuestUserId, isHot, parsePerfBatch, signupMessage, type SignupReason } from "@cardflow/shared";
 import { NORTH_STAR_NAME, northStarWeekly } from "@cardflow/shared";
 import { opsMetrics, type OpsMetrics } from "./ops-metrics";
 import { parseUserPriceAmount } from "@cardflow/shared";
@@ -76,7 +77,7 @@ import {
   isGradeImageMime,
   mockCardGradingProvider,
   NOT_SUBMITTED_CANNOT_RETURN_MESSAGE,
-  requireInvitedIdentity,
+  invitedIdentityByUserId,
   searchCatalog,
   slabPricingHealth,
   updateReturnedCopy,
@@ -177,6 +178,7 @@ import {
   draftView,
 } from "./listing";
 import { identityForInviteCode } from "./invited-testers";
+import { hashPassword, verifyAgainstDummy, verifyPassword } from "./password";
 import {
   hashSessionToken,
   isSessionExpired,
@@ -227,7 +229,17 @@ async function boundedProbe(
 }
 
 function isPublicV1Path(method: string, pathName: string): boolean {
-  return method === "POST" && (pathName === "/v1/sessions" || pathName === "/v1/sessions/guest");
+  return (
+    method === "POST" &&
+    [
+      "/v1/sessions",
+      "/v1/sessions/guest",
+      "/v1/sessions/password",
+      "/v1/accounts",
+      "/v1/password-resets",
+      "/v1/password-resets/confirm",
+    ].includes(pathName)
+  );
 }
 
 /** Live catalog GET refreshes cache. Outage/flag-off falls back to last mapping snapshot. */
@@ -309,6 +321,10 @@ export interface CreateAppOptions {
   guestCleanupIntervalMs?: number;
   /** D9 tests: receives the cleanup function so a test can run it on demand. */
   onGuestCleanup?: (run: () => { guestsPurged: number; scansDeleted: number }) => void;
+  /** Open sign-up limits (per IP / per email). */
+  authLimits?: { signupPerIp?: number; signInPerIp?: number; perEmail?: number; invitePerIp?: number };
+  /** Forgot password delivery (tests). Default: CARD_FLOW_EMAIL_SENDER check, dev-only log. */
+  deliverPasswordReset?: (email: string, token: string) => void;
   /** D9: guest sessions minted per client IP per hour (default 10). */
   guestMintsPerHour?: number;
   /** Catalog provider. Tests default to mock; local/staging may inject live TCGdex or PokéCollector. */
@@ -478,33 +494,40 @@ export function createApp(
     !devAutoSession &&
     (options.guestMode ?? process.env.CARD_FLOW_GUEST_SCANS?.trim().toLowerCase() === "true");
   const guestMintsPerHour = options.guestMintsPerHour ?? 10;
-  /** tokenHash -> guest session. In memory: a restart just means a fresh guest. */
-  const guestSessions = new Map<string, { userId: string; expiresAt: string }>();
+  /** Guest mints per client IP in the last hour. Pruned on every mint. */
   const guestMints = new Map<string, { windowStart: number; count: number }>();
+  /** In-flight guest scans, reserved synchronously so parallel requests can't pass the 3-scan limit. */
+  const guestScanInflight = new Map<string, number>();
   /**
-   * D9 retention: a guest's scans and photos are deleted within 24 h after the guest session
-   * ends (expired, signed up, or lost on an API restart). Runs hourly.
+   * D9 retention: guest sessions live in crm_sessions (is_guest, 24-hour expiry), so a restart
+   * keeps valid guests. A guest who signs up has their scans moved to the new account. A guest
+   * who never signs up has every row deleted within 24 h after the session expires (hourly job).
    */
   const runGuestCleanup = () => {
-    const live = new Set<string>();
-    for (const [hash, guest] of guestSessions) {
-      if (isSessionExpired(guest.expiresAt, now())) guestSessions.delete(hash);
-      else live.add(guest.userId);
-    }
+    const at = now().toISOString();
     let guestsPurged = 0;
     let scansDeleted = 0;
-    for (const userId of store.listScanUserIds(GUEST_USER_PREFIX)) {
-      if (live.has(userId)) continue;
-      scansDeleted += store.deleteUserScans(userId);
-      guestsPurged += 1;
+    const ended = new Set(store.accounts.purgeExpiredGuestSessions(at));
+    for (const userId of store.listScanUserIds(GUEST_USER_PREFIX)) ended.add(userId);
+    for (const userId of ended) {
+      if (store.accounts.hasLiveSession(userId, at)) continue;
+      const scans = store.listScans(userId).length;
+      store.deleteUserPhotos(userId);
+      store.accounts.deleteAllUserRows(userId);
+      if (scans > 0) {
+        guestsPurged += 1;
+        scansDeleted += scans;
+      }
     }
     return { guestsPurged, scansDeleted };
   };
-  const endGuestSession = (tokenHash: string) => {
-    const guest = guestSessions.get(tokenHash);
-    if (!guest) return;
-    guestSessions.delete(tokenHash);
-    store.deleteUserScans(guest.userId);
+  /** Sign-up/sign-in from a guest bearer: move the guest's scans to the account (one transaction). */
+  const adoptGuestData = (authorization: string | undefined, toUserId: string) => {
+    const token = parseBearerToken(authorization);
+    if (!token) return null;
+    const session = getSessionByToken(token, now());
+    if (!session?.isGuest || session.userId === toUserId) return null;
+    return store.accounts.moveGuestData(session.userId, toUserId);
   };
   if (guestMode) {
     options.onGuestCleanup?.(runGuestCleanup);
@@ -606,7 +629,8 @@ export function createApp(
   }
 
   async function mappedPokecollectorUser(userId: string) {
-    const identity = requireInvitedIdentity(userId);
+    const identity = resolveIdentity(userId);
+    if (!identity) return undefined;
     return getPokecollectorUserMapping(userId) ?? (await bindPokecollectorUser(identity));
   }
 
@@ -821,10 +845,12 @@ export function createApp(
     if (!given || !timingSafeEqualString(given, expected)) {
       return c.json({ ok: false, error: "Unauthorized" }, 401);
     }
-    const users = store.listInvitedUsers().map((user) => ({
-      userId: user.userId,
-      scans: listScans(user.userId).map((scan) => scan.capturedAt),
-      purchases: listInventory(user.userId)
+    // Open sign-up: signed-up accounts count alongside invited testers (guests do not).
+    const userIds = [...new Set([...store.listInvitedUsers().map((user) => user.userId), ...store.accounts.listAccountUserIds()])];
+    const users = userIds.map((userId) => ({
+      userId,
+      scans: listScans(userId).map((scan) => scan.capturedAt),
+      purchases: listInventory(userId)
         .filter((item) => item.intent === "purchased" && item.purchase)
         .map((item) => item.purchase!.purchasedAt),
     }));
@@ -857,28 +883,49 @@ export function createApp(
     if (!guestMode) return c.json({ ok: false, error: "Not found" }, 404);
     const ip = clientIp(c, trustProxyHops, socketAddress) ?? "unknown";
     const nowMs = now().getTime();
+    for (const [key, entry] of guestMints) if (nowMs - entry.windowStart >= GUEST_MINT_WINDOW_MS) guestMints.delete(key);
     const bucket = guestMints.get(ip);
-    if (bucket && nowMs - bucket.windowStart < 60 * 60 * 1000) {
+    if (bucket) {
       if (bucket.count >= guestMintsPerHour) {
-        c.header("Retry-After", String(Math.ceil((bucket.windowStart + 3_600_000 - nowMs) / 1000)));
+        c.header("Retry-After", String(Math.ceil((bucket.windowStart + GUEST_MINT_WINDOW_MS - nowMs) / 1000)));
         return c.json({ ok: false, error: "Too many requests" }, 429);
       }
       bucket.count += 1;
     } else {
       guestMints.set(ip, { windowStart: nowMs, count: 1 });
     }
-    const token = mintSessionToken();
     const userId = `${GUEST_USER_PREFIX}${crypto.randomUUID()}`;
-    guestSessions.set(hashSessionToken(token), { userId, expiresAt: sessionExpiryIso(now()) });
+    const minted = store.accounts.mintSession(userId, {
+      guest: true,
+      at: now().toISOString(),
+      expiresAt: new Date(nowMs + GUEST_SESSION_TTL_MS).toISOString(),
+    });
     return c.json({
       ok: true as const,
-      token,
+      token: minted.token,
       identity: guestIdentity(userId),
       guest: true as const,
       freeScans: GUEST_FREE_SCANS,
       scansRemaining: GUEST_FREE_SCANS,
+      expiresAt: minted.expiresAt,
     });
   });
+
+  /** D9: reserve a guest scan slot before any await; released when the request ends. */
+  const guestScanGate = async (c: Context, next: () => Promise<void>) => {
+    const userId = c.get("userId");
+    if (!isGuestUserId(userId)) return next();
+    const inflight = guestScanInflight.get(userId) ?? 0;
+    if (listScans(userId).length + inflight >= GUEST_FREE_SCANS) return signupRequired(c, "scan_limit");
+    guestScanInflight.set(userId, inflight + 1);
+    try {
+      await next();
+    } finally {
+      const left = (guestScanInflight.get(userId) ?? 1) - 1;
+      if (left <= 0) guestScanInflight.delete(userId);
+      else guestScanInflight.set(userId, left);
+    }
+  };
 
   app.use("/v1/*", async (c, next) => {
     if (c.req.method === "GET" || c.req.method === "HEAD") return next();
@@ -896,6 +943,14 @@ export function createApp(
     }
     return next();
   });
+
+  /** Invited tester, open sign-up account, or null. */
+  function resolveIdentity(userId: string): InvitedIdentity | null {
+    const invited = invitedIdentityByUserId(userId);
+    if (invited) return invited;
+    const account = store.accounts.getAccount(userId);
+    return account ? { userId: account.userId, label: account.email } : null;
+  }
 
   function resolveAccountPlan(userId: string, stored: GradePlan): GradePlan {
     return premiumUserIds.has(userId) ? "premium" : stored;
@@ -955,16 +1010,17 @@ export function createApp(
     if (isPublicV1Path(c.req.method, c.req.path)) return next();
     const token = parseBearerToken(c.req.header("authorization"));
     if (token) {
-      const guest = guestMode ? guestSessions.get(hashSessionToken(token)) : undefined;
-      if (guest && !isSessionExpired(guest.expiresAt)) {
-        c.set("userId", guest.userId);
-        c.set("identity", guestIdentity(guest.userId));
+      const session = getSessionByToken(token, now());
+      if (!session) return c.json({ ok: false, error: "Unauthorized" }, 401);
+      if (session.isGuest) {
+        if (!guestMode) return c.json({ ok: false, error: "Unauthorized" }, 401);
+        c.set("userId", session.userId);
+        c.set("identity", guestIdentity(session.userId));
         if (!guestRouteAllowed(c.req.method, c.req.path)) return signupRequired(c, "save");
         return next();
       }
-      const session = getSessionByToken(token);
-      if (!session) return c.json({ ok: false, error: "Unauthorized" }, 401);
-      const identity = requireInvitedIdentity(session.userId);
+      const identity = resolveIdentity(session.userId);
+      if (!identity) return c.json({ ok: false, error: "Unauthorized" }, 401);
       c.set("userId", identity.userId);
       c.set("identity", identity);
       return next();
@@ -1460,8 +1516,42 @@ export function createApp(
     return c.json({ ok: true, returned: listGradingReturned(userId) });
   });
 
+  /** Fixed-window limiter for auth routes. Keys are pruned as they expire. */
+  const authHits = new Map<string, { windowStart: number; count: number }>();
+  const overLimit = (key: string, limit: number, windowMs: number): boolean => {
+    const nowMs = now().getTime();
+    if (authHits.size > 10_000) {
+      for (const [k, v] of authHits) if (nowMs - v.windowStart >= 60 * 60 * 1000) authHits.delete(k);
+    }
+    const hit = authHits.get(key);
+    if (!hit || nowMs - hit.windowStart >= windowMs) {
+      authHits.set(key, { windowStart: nowMs, count: 1 });
+      return false;
+    }
+    hit.count += 1;
+    return hit.count > limit;
+  };
+  /** Peek without counting (H1: only failed sign-ins count). */
+  const isLimited = (key: string, limit: number, windowMs: number): boolean => {
+    const hit = authHits.get(key);
+    return Boolean(hit && now().getTime() - hit.windowStart < windowMs && hit.count >= limit);
+  };
+  const authLimits = {
+    signupPerIp: options.authLimits?.signupPerIp ?? 10,
+    signInPerIp: options.authLimits?.signInPerIp ?? 30,
+    perEmail: options.authLimits?.perEmail ?? 10,
+    invitePerIp: options.authLimits?.invitePerIp ?? 20,
+  };
+  const tooMany = (c: Context) => {
+    c.header("Retry-After", "900");
+    return c.json({ ok: false, error: ACCOUNT_AUTH_COPY.tooMany }, 429);
+  };
+
+  // Backend review M4: invite-code sign-in is rate-limited per IP (codes are guessable otherwise).
   app.post("/v1/sessions", async (c) => {
-    const body = await c.req.json<{ inviteCode?: unknown }>();
+    const inviteIp = clientIp(c, trustProxyHops, socketAddress) ?? "unknown";
+    if (overLimit(`invite-ip:${inviteIp}`, authLimits.invitePerIp, 15 * 60 * 1000)) return tooMany(c);
+    const body = await c.req.json<{ inviteCode?: unknown }>().catch(() => ({}) as { inviteCode?: unknown });
     if (typeof body.inviteCode !== "string" || body.inviteCode.trim() === "") {
       return c.json({ ok: false, error: "Unknown invite code" }, 400);
     }
@@ -1471,9 +1561,8 @@ export function createApp(
     }
     const created = createSession(identity.userId);
     await bindPokecollectorUser(created.identity);
-    // D9: signing up ends the guest session; its scans and photos are deleted now.
-    const guestToken = parseBearerToken(c.req.header("authorization"));
-    if (guestToken) endGuestSession(hashSessionToken(guestToken));
+    // Signing in from a guest session keeps the guest's scans (moved in one transaction).
+    adoptGuestData(c.req.header("authorization"), identity.userId);
     return c.json({
       ok: true,
       token: created.token,
@@ -1482,19 +1571,136 @@ export function createApp(
     });
   });
 
+  const readCredentials = async (c: Context) => {
+    const body = await c.req.json<{ email?: unknown; password?: unknown }>().catch(() => ({}) as Record<string, unknown>);
+    const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
+    const password = typeof body.password === "string" ? body.password : "";
+    return { email, password };
+  };
+  const accountSession = (account: { userId: string; email: string }) => {
+    const minted = store.accounts.mintSession(account.userId, {
+      guest: false,
+      at: now().toISOString(),
+      expiresAt: sessionExpiryIso(now()),
+    });
+    const identity = { userId: account.userId, label: account.email };
+    return { token: minted.token, identity };
+  };
+
+  app.post("/v1/accounts", async (c) => {
+    const ip = clientIp(c, trustProxyHops, socketAddress) ?? "unknown";
+    if (overLimit(`signup-ip:${ip}`, authLimits.signupPerIp, 60 * 60 * 1000)) return tooMany(c);
+    const { email, password } = await readCredentials(c);
+    if (!isValidEmail(email)) return c.json({ ok: false, error: ACCOUNT_AUTH_COPY.badEmail }, 400);
+    if (overLimit(`email:${email}`, authLimits.perEmail, 15 * 60 * 1000)) return tooMany(c);
+    const problem = passwordProblem(password);
+    if (problem) return c.json({ ok: false, error: problem }, 400);
+    const passwordHash = await hashPassword(password);
+    const created = store.accounts.createAccount({ email, passwordHash, at: now().toISOString() });
+    let account = created;
+    if (!account) {
+      // Email already registered: the right password signs in; anything else gets one generic answer.
+      const existing = store.accounts.findByEmail(email);
+      if (!existing || !(await verifyPassword(password, existing.passwordHash))) {
+        return c.json({ ok: false, error: ACCOUNT_AUTH_COPY.signUpFailed }, 400);
+      }
+      account = existing;
+    }
+    const moved = adoptGuestData(c.req.header("authorization"), account.userId);
+    const session = accountSession(account);
+    return c.json({ ok: true as const, ...session, invitedUsers: [session.identity], movedScans: moved?.scans ?? 0 });
+  });
+
+  app.post("/v1/sessions/password", async (c) => {
+    const ip = clientIp(c, trustProxyHops, socketAddress) ?? "unknown";
+    const { email, password } = await readCredentials(c);
+    // Backend review H1: only failed sign-ins count, keyed by email + IP (and per IP overall),
+    // so a stranger can't lock someone out of their account from another network.
+    const failKey = `signin-fail:${email}:${ip}`;
+    const ipFailKey = `signin-fail-ip:${ip}`;
+    const window = 15 * 60 * 1000;
+    if (isLimited(failKey, authLimits.perEmail, window) || isLimited(ipFailKey, authLimits.signInPerIp, window)) return tooMany(c);
+    const existing = email ? store.accounts.findByEmail(email) : null;
+    const ok = existing ? await verifyPassword(password, existing.passwordHash) : await verifyAgainstDummy(password);
+    if (!existing || !ok) {
+      overLimit(failKey, authLimits.perEmail, window);
+      overLimit(ipFailKey, authLimits.signInPerIp, window);
+      return c.json({ ok: false, error: ACCOUNT_AUTH_COPY.signInFailed }, 401);
+    }
+    const moved = adoptGuestData(c.req.header("authorization"), existing.userId);
+    const session = accountSession(existing);
+    return c.json({ ok: true as const, ...session, invitedUsers: [session.identity], movedScans: moved?.scans ?? 0 });
+  });
+
+  /**
+   * Forgot password. Delivery waits for an email sender (CARD_FLOW_EMAIL_SENDER). Until one is
+   * wired, the token is logged in development only (never in production). The answer is the same
+   * whether or not the email has an account (no enumeration).
+   */
+  const deliverResetToken = options.deliverPasswordReset ?? ((email: string, token: string) => {
+    const sender = process.env.CARD_FLOW_EMAIL_SENDER?.trim();
+    if (sender) {
+      // TODO(email sender): send `token` to `email` via the configured provider.
+      console.warn(`[password-reset] CARD_FLOW_EMAIL_SENDER=${sender} is set but no sender is wired yet; nothing sent.`);
+      return;
+    }
+    if (process.env.NODE_ENV !== "production") {
+      console.info(`[password-reset] dev only, no email sender: reset code for ${email}: ${token}`);
+    }
+  });
+  app.post("/v1/password-resets", async (c) => {
+    const ip = clientIp(c, trustProxyHops, socketAddress) ?? "unknown";
+    if (overLimit(`reset-ip:${ip}`, authLimits.signInPerIp, 15 * 60 * 1000)) return tooMany(c);
+    const body = await c.req.json<{ email?: unknown }>().catch(() => ({}) as Record<string, unknown>);
+    const email = typeof body.email === "string" ? normalizeEmail(body.email) : "";
+    const generic = { ok: true as const, message: ACCOUNT_AUTH_COPY.resetRequested };
+    if (!isValidEmail(email)) return c.json(generic, 202);
+    if (overLimit(`reset-email:${email}`, authLimits.perEmail, 60 * 60 * 1000)) return c.json(generic, 202);
+    const account = store.accounts.findByEmail(email);
+    if (account) {
+      const token = randomBytes(32).toString("base64url");
+      const at = now();
+      store.accounts.createPasswordReset({
+        userId: account.userId,
+        tokenHash: hashSessionToken(token),
+        at: at.toISOString(),
+        expiresAt: new Date(at.getTime() + PASSWORD_RESET_TTL_MS).toISOString(),
+      });
+      deliverResetToken(account.email, token);
+    }
+    return c.json(generic, 202);
+  });
+  app.post("/v1/password-resets/confirm", async (c) => {
+    const ip = clientIp(c, trustProxyHops, socketAddress) ?? "unknown";
+    if (overLimit(`reset-confirm-ip:${ip}`, authLimits.signInPerIp, 15 * 60 * 1000)) return tooMany(c);
+    const body = await c.req.json<{ token?: unknown; password?: unknown }>().catch(() => ({}) as Record<string, unknown>);
+    const token = typeof body.token === "string" ? body.token.trim() : "";
+    const password = typeof body.password === "string" ? body.password : "";
+    const problem = passwordProblem(password);
+    if (problem) return c.json({ ok: false, error: problem }, 400);
+    const userId = token ? store.accounts.consumePasswordReset(hashSessionToken(token), now().toISOString()) : null;
+    if (!userId) return c.json({ ok: false, error: ACCOUNT_AUTH_COPY.resetInvalid }, 400);
+    store.accounts.setPasswordHash(userId, await hashPassword(password));
+    // Every existing session (possibly an attacker's) is signed out.
+    store.accounts.deleteSessionsForUser(userId);
+    return c.json({ ok: true as const });
+  });
+
   app.post("/v1/account/delete", (c) => {
     const userId = c.get("userId");
-    const photos = deleteUserPhotos(userId);
-    deleteUserConfirmEvents(userId);
-    deleteUserPriceSnapshots(userId);
+    // Data Engineer review: every user_id row in one transaction first, then the files (whose
+    // locations were collected before the rows went). A crash in between leaves orphan files
+    // with no personal rows, which the photo retention sweep removes, never rows without files.
+    const removePhotos = store.prepareUserPhotoDeletion(userId);
+    const rows = store.accounts.deleteAllUserRows(userId);
+    const photos = removePhotos();
     const staged = gradeUploads.releaseUser(userId);
-    const salesDeleted = store.sales.deleteUser(userId);
-    const gradeHistoryDeleted = store.gradeHistory.deleteUser(userId);
     return c.json({
       ok: true,
       photosDeleted: photos.deleted + staged,
-      salesDeleted,
-      gradeHistoryDeleted,
+      salesDeleted: rows.user_card_sales ?? 0,
+      gradeHistoryDeleted: rows.grade_estimate_history ?? 0,
+      rowsDeleted: Object.values(rows).reduce((sum, n) => sum + n, 0),
     });
   });
 
@@ -1603,14 +1809,10 @@ export function createApp(
     isPremium: (userId) => resolveAccountPlan(userId, getGradeAccount(userId).plan) === "premium",
   });
 
-  app.post("/v1/scans", bodyLimit({
+  app.post("/v1/scans", guestScanGate, bodyLimit({
       maxSize: SCAN_IMAGE_MAX_BYTES,
       onError: (c) => c.json({ ok: false, error: "Image must be 20 MB or smaller" }, 413),
     }), async (c) => {
-      // D9: server-enforced guest limit. The 4th scan needs sign-up.
-      if (isGuestUserId(c.get("userId")) && listScans(c.get("userId")).length >= GUEST_FREE_SCANS) {
-        return signupRequired(c, "scan_limit");
-      }
       const parsed = await parseScanCreateRequest(c);
       if ("error" in parsed) {
         return c.json({ ok: false, error: parsed.error }, parsed.status);

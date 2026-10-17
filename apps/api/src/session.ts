@@ -12,6 +12,8 @@ export interface SessionRecord {
   userId: string;
   createdAt: string;
   expiresAt: string;
+  /** D9: a guest session (3 free scans, 24-hour expiry). */
+  isGuest?: boolean;
 }
 
 export interface CreatedSession {

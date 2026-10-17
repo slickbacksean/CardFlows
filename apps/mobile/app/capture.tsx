@@ -6,7 +6,7 @@ import {
   CAMERA_PREPROMPT_TITLE,
   PHOTO_PICKER_UNAVAILABLE_COPY,
 } from "@cardflow/shared";
-import { isOfflineScanError, queueOfflineScan } from "@/lib/scan-queue";
+import { isOfflineScanError, isSignupRequiredError, queueOfflineScan } from "@/lib/scan-queue";
 import { trackScanStarted } from "@/lib/product-events";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { CameraView, useCameraPermissions } from "expo-camera";
@@ -26,6 +26,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { DevScenarioPanel } from "@/components/ui/dev-scenario-panel";
 import { PermissionGate } from "@/components/ui/permission-gate";
 import { createScan } from "@/lib/api";
+import { confirmGuestNoticeOnce } from "@/lib/guest-notice";
 import { getMockScenario } from "@/lib/mock-scenario";
 import { prepareScanStill, rememberScanCapture } from "@/lib/scan-capture";
 import { launchSystemImagePicker } from "@/lib/system-photo-picker";
@@ -78,6 +79,8 @@ export default function CaptureScreen() {
     imageMimeType?: string | null,
     size?: { width?: number; height?: number },
   ) {
+    // Guests see the 24-hour deletion note and the scan-count note before their first scan.
+    if (!(await confirmGuestNoticeOnce())) return;
     const startedAt = Date.now();
     let uploadUri = imageUri;
     let uploadMime = imageMimeType ?? null;
@@ -103,6 +106,11 @@ export default function CaptureScreen() {
         queueOfflineScan({ imageUri: uploadUri, mimeType: uploadMime ?? "image/jpeg", captureMethod })
       ) {
         router.replace("/(tabs)/collection");
+        return;
+      }
+      // Guest over the scan limit: keep the still queued; it sends after sign-up (prompt shows).
+      if (uploadUri && isSignupRequiredError(caught)) {
+        queueOfflineScan({ imageUri: uploadUri, mimeType: uploadMime ?? "image/jpeg", captureMethod });
         return;
       }
       throw caught;
