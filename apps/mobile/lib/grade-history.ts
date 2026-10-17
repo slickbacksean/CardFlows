@@ -49,36 +49,51 @@ export async function migrateLocalGradeHistory(inventoryItemId: string): Promise
       inventoryItemId,
       entries: legacy.map((entry) => ({ at: entry.at, overall: entry.overall, confidence: entry.confidence })),
     });
-  } catch {
-    // Permanent refusal (e.g. card deleted): nothing to keep.
+  } catch (error) {
+    // Free accounts can't import (premium); keep the on-phone copy so nothing is lost.
+    if (isPremiumRequired(error, "grade_history")) return legacy;
+    // Other permanent refusal (e.g. card deleted): nothing to keep.
   }
   await clearLegacy(key);
   return legacy;
 }
 
-/** D14: last answer was premium_required (history saved but hidden until upgrade). */
-let historyLocked = false;
-export function isGradeHistoryLocked(): boolean {
-  return historyLocked;
+/** Free accounts: how many older estimates the server kept but didn't send (last load). */
+let lockedCount = 0;
+/** Premium: cursor for the next older page (null when everything is shown). */
+let nextCursor: string | null = null;
+export function gradeHistoryHasOlder(): boolean {
+  return nextCursor !== null;
+}
+
+/** Premium: fetch the next older page and return the full list (older first). */
+export async function loadOlderGradeHistory(inventoryItemId: string, current: GradeHistoryEntry[]): Promise<GradeHistoryEntry[]> {
+  if (!nextCursor) return current;
+  const result = await getGradeHistory(inventoryItemId, nextCursor);
+  nextCursor = result.nextCursor ?? null;
+  const older = result.history.map((entry) => ({ at: entry.at, overall: entry.overall, confidence: entry.confidence }));
+  const merged = [...older, ...current];
+  lastSeen.set(`${peekActiveUserId()}|${inventoryItemId}`, merged);
+  return merged;
+}
+export function gradeHistoryLockedCount(): number {
+  return lockedCount;
 }
 
 export async function loadGradeHistory(inventoryItemId: string): Promise<GradeHistoryEntry[]> {
   const legacy = await migrateLocalGradeHistory(inventoryItemId);
   const cacheKey = `${peekActiveUserId()}|${inventoryItemId}`;
   try {
-    const { history } = await getGradeHistory(inventoryItemId);
-    historyLocked = false;
+    const result = await getGradeHistory(inventoryItemId);
+    const history = result.history;
+    lockedCount = result.lockedCount ?? 0;
+    nextCursor = result.nextCursor ?? null;
     const entries = history.map((entry) => ({ at: entry.at, overall: entry.overall, confidence: entry.confidence }));
     // If the import is still queued, show the legacy entries until it lands.
     const shown = entries.length === 0 && legacy.length > 0 ? legacy : entries;
     lastSeen.set(cacheKey, shown);
     return shown;
   } catch (error) {
-    if (isPremiumRequired(error, "grade_history")) {
-      historyLocked = true;
-      lastSeen.delete(cacheKey);
-      return [];
-    }
     return lastSeen.get(cacheKey) ?? legacy;
   }
 }

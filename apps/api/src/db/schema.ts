@@ -349,6 +349,12 @@ export const gradeAccounts = sqliteTable(
     plan: text("plan").notNull().default("free"),
     extraCredits: integer("extra_credits").notNull().default(0),
     updatedAt: text("updated_at").notNull(),
+    /** Allowance anchor: when the account was first seen (free users reset on this day). */
+    anchorAt: text("anchor_at"),
+    /** Billing date once premium billing exists; wins over anchor_at. */
+    billingAnchorAt: text("billing_anchor_at"),
+    /** Period key the extra credits belong to; credits from an older period are void (no rollover). */
+    creditsPeriod: text("credits_period"),
   },
   (table) => [check("grade_accounts_plan_chk", sql`${table.plan} in ('free', 'premium')`)],
 );

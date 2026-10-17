@@ -1002,8 +1002,8 @@ export function startGradeBatch() {
   return callApi(apiContract.startGradeBatch, {});
 }
 
-export function getGradeHistory(inventoryItemId: string) {
-  return callApi(apiContract.getGradeHistory, { params: { inventoryItemId } });
+export function getGradeHistory(inventoryItemId: string, before?: string) {
+  return callApi(apiContract.getGradeHistory, { params: { inventoryItemId }, ...(before ? { query: { before } } : {}) });
 }
 
 export function importGradeHistory(

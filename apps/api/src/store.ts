@@ -133,10 +133,15 @@ export interface InventoryItemRecord {
 
 export interface GradeAccountRecord {
   plan: GradePlan;
+  /** Raw stored credits; only usable while `creditsPeriod` is the current period. */
   extraCredits: number;
+  anchorAt?: string | null;
+  billingAnchorAt?: string | null;
+  creditsPeriod?: string | null;
 }
 
 export interface GradeQuotaConsumeInput {
+  /** The allowance period key (period start date). */
   monthKey: string;
   monthlyLimit: number;
   at: string;
@@ -770,7 +775,11 @@ export interface StorePort {
   listPortfolioSnapshots: typeof listPortfolioSnapshots;
   getGradeAccount: (userId: string) => GradeAccountRecord;
   setGradePlan: (userId: string, plan: GradePlan, at: string) => GradeAccountRecord;
-  addGradeCredits: (userId: string, credits: number, at: string) => GradeAccountRecord;
+  /** Purchased credits belong to `periodKey`; credits from an older period are replaced (no rollover). */
+  addGradeCredits: (userId: string, credits: number, at: string, periodKey?: string) => GradeAccountRecord;
+  /** Creates the grade account if needed and sets `anchorAt` once. */
+  ensureGradeAnchor: (userId: string, at: string) => GradeAccountRecord;
+  setBillingAnchor: (userId: string, billingAnchorAt: string | null, at: string) => GradeAccountRecord;
   getGradeQuotaUsage: (userId: string, monthKey: string) => number;
   consumeGradeQuota: (userId: string, input: GradeQuotaConsumeInput) => GradeQuotaConsumeResult;
   getVendorQuotaUsage: (provider: string, monthKey: string) => number;
@@ -864,13 +873,30 @@ export function createMemoryStore(): StorePort {
     return { ...next };
   }
 
-  function addGradeCredits(userId: string, credits: number, _at: string): GradeAccountRecord {
+  function addGradeCredits(userId: string, credits: number, _at: string, periodKey?: string): GradeAccountRecord {
     const add = Math.floor(credits);
     if (!Number.isFinite(add) || add <= 0) return getGradeAccount(userId);
     const current = getGradeAccount(userId);
-    const next = { ...current, extraCredits: current.extraCredits + add };
+    const stale = periodKey !== undefined && current.creditsPeriod !== periodKey;
+    const next = {
+      ...current,
+      extraCredits: (stale ? 0 : current.extraCredits) + add,
+      creditsPeriod: periodKey ?? current.creditsPeriod ?? null,
+    };
     gradeAccounts.set(userId, next);
     return { ...next };
+  }
+
+  function ensureGradeAnchor(userId: string, at: string): GradeAccountRecord {
+    const current = getGradeAccount(userId);
+    if (!current.anchorAt) gradeAccounts.set(userId, { ...current, anchorAt: at });
+    return getGradeAccount(userId);
+  }
+
+  function setBillingAnchor(userId: string, billingAnchorAt: string | null, at: string): GradeAccountRecord {
+    const current = ensureGradeAnchor(userId, at);
+    gradeAccounts.set(userId, { ...current, billingAnchorAt });
+    return getGradeAccount(userId);
   }
 
   function getGradeQuotaUsage(userId: string, monthKey: string): number {
@@ -879,7 +905,9 @@ export function createMemoryStore(): StorePort {
 
   function consumeGradeQuota(userId: string, input: GradeQuotaConsumeInput): GradeQuotaConsumeResult {
     const usedThisMonth = getGradeQuotaUsage(userId, input.monthKey);
-    const account = getGradeAccount(userId);
+    const stored = getGradeAccount(userId);
+    // No rollover: credits from an older period are void.
+    const account = stored.creditsPeriod === input.monthKey ? stored : { ...stored, extraCredits: 0 };
     const decision = decideGradeConsume({
       usedThisMonth,
       monthlyLimit: input.monthlyLimit,
@@ -987,6 +1015,8 @@ export function createMemoryStore(): StorePort {
     getGradeAccount,
     setGradePlan,
     addGradeCredits,
+    ensureGradeAnchor,
+    setBillingAnchor,
     getGradeQuotaUsage,
     consumeGradeQuota,
     getVendorQuotaUsage,

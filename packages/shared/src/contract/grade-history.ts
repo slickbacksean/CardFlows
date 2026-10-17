@@ -11,10 +11,14 @@ export const GradeHistoryEntrySchema = z.looseObject({
 const HistoryResponse = z.looseObject({
   ok: z.literal(true),
   history: z.array(GradeHistoryEntrySchema),
+  /** Free accounts: older estimates kept on the server but not shown until upgrade. */
+  lockedCount: z.number().optional(),
+  /** Premium: pass as `before` to get the next older page; null when there is none. */
+  nextCursor: z.string().nullable().optional(),
 });
 
 export const gradeHistoryRoutes = {
-  /** D14: premium-only gate the batch screen calls before running. 403 premium_required for free. */
+  /** D14: premium check only (it runs nothing). 403 premium_required for free accounts. */
   startGradeBatch: defineRoute({
     method: "POST",
     path: "/v1/grading/batch",
@@ -25,6 +29,7 @@ export const gradeHistoryRoutes = {
     method: "GET",
     path: "/v1/inventory/:inventoryItemId/grade-history",
     bodyKind: "none",
+    query: z.looseObject({ before: z.string().optional(), limit: z.string().optional() }),
     response: HistoryResponse,
   }),
   /** One-time upload of entries kept on the phone before server history. */

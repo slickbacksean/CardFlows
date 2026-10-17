@@ -1702,20 +1702,39 @@ export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStor
     return snapshot;
   }
 
+  function liveCredits(account: GradeAccountRecord, periodKey: string): number {
+    return account.creditsPeriod === periodKey ? account.extraCredits : 0;
+  }
+
   function getGradeAccount(userId: string): GradeAccountRecord {
     const row = db.select().from(gradeAccounts).where(eq(gradeAccounts.userId, userId)).get();
-    if (!row) return { plan: "free", extraCredits: 0 };
+    if (!row) return { plan: "free", extraCredits: 0, anchorAt: null, billingAnchorAt: null, creditsPeriod: null };
     return {
       plan: isGradePlan(row.plan) ? row.plan : "free",
       extraCredits: Math.max(0, row.extraCredits),
+      anchorAt: row.anchorAt ?? null,
+      billingAnchorAt: row.billingAnchorAt ?? null,
+      creditsPeriod: row.creditsPeriod ?? null,
     };
   }
 
   function ensureGradeAccount(userId: string, at: string): void {
     db.insert(gradeAccounts)
-      .values({ userId, plan: "free", extraCredits: 0, updatedAt: at })
+      .values({ userId, plan: "free", extraCredits: 0, updatedAt: at, anchorAt: at })
       .onConflictDoNothing()
       .run();
+  }
+
+  function ensureGradeAnchor(userId: string, at: string): GradeAccountRecord {
+    ensureGradeAccount(userId, at);
+    sqlite.prepare("UPDATE grade_accounts SET anchor_at = ? WHERE user_id = ? AND anchor_at IS NULL").run(at, userId);
+    return getGradeAccount(userId);
+  }
+
+  function setBillingAnchor(userId: string, billingAnchorAt: string | null, at: string): GradeAccountRecord {
+    ensureGradeAnchor(userId, at);
+    sqlite.prepare("UPDATE grade_accounts SET billing_anchor_at = ?, updated_at = ? WHERE user_id = ?").run(billingAnchorAt, at, userId);
+    return getGradeAccount(userId);
   }
 
   function setGradePlan(userId: string, plan: GradePlan, at: string): GradeAccountRecord {
@@ -1728,11 +1747,21 @@ export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStor
     return getGradeAccount(userId);
   }
 
-  function addGradeCredits(userId: string, credits: number, at: string): GradeAccountRecord {
+  function addGradeCredits(userId: string, credits: number, at: string, periodKey?: string): GradeAccountRecord {
     const add = Math.floor(credits);
     if (!Number.isFinite(add) || add <= 0) return getGradeAccount(userId);
     return sqlite.transaction(() => {
       ensureGradeAccount(userId, at);
+      if (periodKey !== undefined) {
+        // No rollover: credits from an older period are replaced, not added to.
+        sqlite
+          .prepare(
+            `UPDATE grade_accounts SET extra_credits = CASE WHEN credits_period IS ? THEN extra_credits + ? ELSE ? END,
+             credits_period = ?, updated_at = ? WHERE user_id = ?`,
+          )
+          .run(periodKey, add, add, periodKey, at, userId);
+        return getGradeAccount(userId);
+      }
       sqlite
         .prepare(
           `UPDATE grade_accounts SET extra_credits = extra_credits + ?, updated_at = ? WHERE user_id = ?`,
@@ -1769,16 +1798,18 @@ export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStor
           ok: true as const,
           source: "monthly" as const,
           usedThisMonth: getGradeQuotaUsage(userId, input.monthKey),
-          extraCredits: getGradeAccount(userId).extraCredits,
+          extraCredits: liveCredits(getGradeAccount(userId), input.monthKey),
         };
       }
+      // No rollover: only credits bought in this period can be spent.
       const credit = sqlite
         .prepare(
           `UPDATE grade_accounts SET extra_credits = extra_credits - 1, updated_at = ?
-           WHERE user_id = ? AND extra_credits > 0`,
+           WHERE user_id = ? AND extra_credits > 0 AND credits_period IS ?`,
         )
-        .run(input.at, userId);
-      const account = getGradeAccount(userId);
+        .run(input.at, userId, input.monthKey);
+      const stored = getGradeAccount(userId);
+      const account = { ...stored, extraCredits: liveCredits(stored, input.monthKey) };
       const usedThisMonth = getGradeQuotaUsage(userId, input.monthKey);
       if (credit.changes === 1) {
         return {
@@ -2023,6 +2054,8 @@ export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStor
     getGradeAccount,
     setGradePlan,
     addGradeCredits,
+    ensureGradeAnchor,
+    setBillingAnchor,
     getGradeQuotaUsage,
     consumeGradeQuota,
     getVendorQuotaUsage,

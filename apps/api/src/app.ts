@@ -1,8 +1,8 @@
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { normalizeEmail } from "./account-store";
 import { routePath } from "hono/route";
-import { ACCOUNT_AUTH_COPY, PASSWORD_RESET_TTL_MS, GUEST_MINT_WINDOW_MS, GUEST_SESSION_TTL_MS, isValidEmail, passwordProblem, GUEST_FREE_SCANS, GUEST_USER_PREFIX, SIGNUP_REQUIRED_CODE, guestIdentity, guestRouteAllowed, isGuestUserId, isHot, parsePerfBatch, signupMessage, type SignupReason } from "@cardflow/shared";
-import { NORTH_STAR_NAME, northStarWeekly } from "@cardflow/shared";
+import { quotaAnchor, quotaPeriodFor, ACCOUNT_AUTH_COPY, PASSWORD_RESET_TTL_MS, GUEST_MINT_WINDOW_MS, GUEST_SESSION_TTL_MS, isValidEmail, passwordProblem, GUEST_FREE_SCANS, GUEST_USER_PREFIX, SIGNUP_REQUIRED_CODE, guestIdentity, guestRouteAllowed, isGuestUserId, isHot, parsePerfBatch, signupMessage, type SignupReason } from "@cardflow/shared";
+import { NORTH_STAR_NAME, SCANS_PER_WAR_NAME, northStarWeekly } from "@cardflow/shared";
 import { opsMetrics, type OpsMetrics } from "./ops-metrics";
 import { parseUserPriceAmount } from "@cardflow/shared";
 import {
@@ -876,7 +876,7 @@ export function createApp(
       purchases: store.purchaseLedger.activePurchaseTimes(userId),
     }));
     const weeks = northStarWeekly(users, { weeks: Number(c.req.query("weeks") ?? "8") || 8 });
-    return c.json({ ok: true, metric: NORTH_STAR_NAME, weeks });
+    return c.json({ ok: true, metric: NORTH_STAR_NAME, companionMetric: SCANS_PER_WAR_NAME, weeks });
   });
   const allowedOrigins = new Set(options.corsOrigins ?? corsOriginsFromEnv());
   app.use(
@@ -990,17 +990,24 @@ export function createApp(
     return premiumUserIds.has(userId) ? "premium" : stored;
   }
 
+  /** Sean: the allowance resets on the billing date, else the account creation date. No rollover. */
+  function quotaPeriodForUser(userId: string, at: Date) {
+    const account = store.ensureGradeAnchor(userId, at.toISOString());
+    const anchor = quotaAnchor({ billingAnchorAt: account.billingAnchorAt, createdAt: account.anchorAt ?? at.toISOString() });
+    return { account, period: quotaPeriodFor(anchor, at) };
+  }
+
   function quotaSnapshotFor(userId: string): GradeQuotaSnapshot {
     const at = now();
-    const monthKey = calendarMonthKey(at);
-    const account = getGradeAccount(userId);
+    const { account, period } = quotaPeriodForUser(userId, at);
     const plan = resolveAccountPlan(userId, account.plan);
     return gradeQuotaSnapshot({
       plan,
-      usedThisMonth: getGradeQuotaUsage(userId, monthKey),
-      extraCredits: account.extraCredits,
+      usedThisMonth: getGradeQuotaUsage(userId, period.key),
+      extraCredits: account.creditsPeriod === period.key ? account.extraCredits : 0,
       iapEnabled: gradeIap.enabled,
       now: at,
+      period,
     });
   }
 
@@ -1009,11 +1016,10 @@ export function createApp(
       return { ok: true as const, quota: quotaSnapshotFor(userId) };
     }
     const at = now();
-    const monthKey = calendarMonthKey(at);
-    const account = getGradeAccount(userId);
+    const { account, period } = quotaPeriodForUser(userId, at);
     const plan = resolveAccountPlan(userId, account.plan);
     const consumed = consumeGradeQuota(userId, {
-      monthKey,
+      monthKey: period.key,
       monthlyLimit: monthlyLimitForPlan(plan),
       at: at.toISOString(),
     });
@@ -1023,6 +1029,7 @@ export function createApp(
       extraCredits: consumed.extraCredits,
       iapEnabled: gradeIap.enabled,
       now: at,
+      period,
     });
     if (!consumed.ok) return { ok: false as const, quota };
     return { ok: true as const, quota };
@@ -2269,7 +2276,9 @@ export function createApp(
     outOfGradesResponse,
     gradeIap,
     setGradePlan,
-    addGradeCredits,
+    // Purchased credits belong to the current period and don't roll over.
+    addGradeCredits: (userId, credits, at) =>
+      addGradeCredits(userId, credits, at, quotaPeriodForUser(userId, new Date(at)).period.key),
     now,
   });
 

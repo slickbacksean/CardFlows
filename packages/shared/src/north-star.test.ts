@@ -17,8 +17,8 @@ describe("D10 North Star", () => {
       { weeks: 2, now: new Date("2026-10-15T20:00:00Z") },
     );
     expect(weeks).toEqual([
-      { weekStart: "2026-10-05", purchased: 1, activeResellers: 1, perActiveReseller: 1 },
-      { weekStart: "2026-10-12", purchased: 3, activeResellers: 3, perActiveReseller: 1 },
+      { weekStart: "2026-10-05", purchased: 1, activeResellers: 1, perActiveReseller: 1, scans: 0, scansPerActiveReseller: 0 },
+      { weekStart: "2026-10-12", purchased: 3, activeResellers: 3, perActiveReseller: 1, scans: 2, scansPerActiveReseller: 0.67 },
     ]);
     expect(northStarWeekly([], { weeks: 1, now: new Date("2026-10-15T00:00:00Z") })[0]?.perActiveReseller).toBeNull();
   });

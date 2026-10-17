@@ -2,7 +2,7 @@ import {
   ACCOUNT_AUTH_COPY,
   GUEST_RETENTION_NOTE,
   PASSWORD_MIN_LENGTH,
-  SIGNUP_FREE_PLAN_NOTE,
+  SIGNUP_ALLOWANCE_NOTE,
   isValidEmail,
   passwordProblem,
 } from "@cardflow/shared";
@@ -51,7 +51,7 @@ export default function SignUpScreen() {
       <PreferencesScreenHeader dismiss="back" title={title} />
       <ScrollView contentContainerStyle={authStyles.content} keyboardShouldPersistTaps="handled">
         {guest ? <Text style={authStyles.body}>Your guest scans move to your account. {GUEST_RETENTION_NOTE}</Text> : null}
-        {mode === "sign_up" ? <Text style={authStyles.body}>{SIGNUP_FREE_PLAN_NOTE}</Text> : null}
+        {mode === "sign_up" ? <Text style={authStyles.body}>{SIGNUP_ALLOWANCE_NOTE}</Text> : null}
         <TextInput
           accessibilityLabel="Email"
           autoCapitalize="none"

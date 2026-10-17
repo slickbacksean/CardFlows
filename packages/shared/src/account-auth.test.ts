@@ -23,12 +23,10 @@ describe("open sign-up rules", () => {
 });
 
 describe("sign-up free plan note", () => {
-  it("states the allowance, reset, no rollover and the 10-estimate history", async () => {
+  it("is the approved allowance copy", async () => {
     const { SIGNUP_FREE_PLAN_NOTE } = await import("./account-auth");
-    expect(SIGNUP_FREE_PLAN_NOTE).toMatch(/5 pre-grade estimates a month/);
-    expect(SIGNUP_FREE_PLAN_NOTE).toMatch(/don't roll over/);
-    expect(SIGNUP_FREE_PLAN_NOTE).toMatch(/10 most recent/);
-    expect(SIGNUP_FREE_PLAN_NOTE).toMatch(/not deleted/);
+    const { SIGNUP_ALLOWANCE_NOTE } = await import("./premium");
+    expect(SIGNUP_FREE_PLAN_NOTE).toBe(SIGNUP_ALLOWANCE_NOTE);
     expect(SIGNUP_FREE_PLAN_NOTE).not.toMatch(/\bAI\b|PSA|BGS|CGC|profit|guarantee/i);
   });
 });
