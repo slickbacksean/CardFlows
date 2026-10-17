@@ -9,7 +9,9 @@ import {
   GRADE_LEVEL_NEAR_DEG,
   GRADE_LEVEL_OK_DEG,
   gradeCaptureReadiness,
-  GRADE_AUTO_CAPTURE_COPY,
+  GRADE_AUTO_COPY,
+  gradeFrameFillInPhoto,
+  type GradeAutoPhase,
   type GradeCaptureReadiness,
 } from "@cardflow/shared";
 import Ionicons from "@expo/vector-icons/Ionicons";
@@ -89,37 +91,54 @@ export function GradeCardFinder({
   const banner = error ?? notice ?? null;
   // Tilt guide: feature-detected DeviceMotion; falls back to the static frame.
   const level = useDeviceLevel(showLivePreview && !freezeUri);
+  const screen = useWindowDimensions();
+  const frame = finderFrameSize(screen.width, screen.height);
+  const [stage, setStage] = useState<{ width: number; height: number } | null>(null);
+  // Auto-capture (Sean, Oct 17): 4 corners in the green frame + level + steady for ~0.7 s.
+  // The manual shutter always works; without the sensor or the corner check it's manual only.
+  const auto = useGradeAutoCapture({
+    cameraRef,
+    active: showLivePreview && !freezeUri && !detecting && cameraReady && pictureSizeResolved,
+    level,
+    busy: shutterDisabled,
+    frameFill: (photoWidth, photoHeight) =>
+      stage
+        ? gradeFrameFillInPhoto({
+            stageWidth: stage.width,
+            stageHeight: stage.height,
+            frameHeight: frame.height,
+            photoWidth,
+            photoHeight,
+          })
+        : null,
+    onFire: () => void onShutter("auto"),
+  });
   const readiness = gradeCaptureReadiness({
     sensorAvailable: level.available,
     level: level.level,
     steady: level.steady,
-    cardInFrame: null,
+    cardInFrame: auto.enabled ? auto.cardInFrame : null,
   });
-  const guideColor = GUIDE_COLORS[readiness.tone];
-  // P1-15: auto-capture once level (≤ 2°) and still for 0.5 s. The shutter always works too.
-  const autoEnabled = showLivePreview && !freezeUri && !detecting && level.available;
-  const { holdProgress } = useGradeAutoCapture({
-    tick: level,
-    autoCaptureReady: readiness.autoCaptureReady,
-    enabled: autoEnabled,
-    busy: shutterDisabled,
-    onFire: () => void onShutter("auto"),
-  });
-  const holding = holdProgress > 0 && readiness.autoCaptureReady;
+  const holding = auto.phase === "holding" && auto.progress > 0;
+  const guideColor = GUIDE_COLORS[holding ? "good" : readiness.tone];
   const statusPhrase = capturing
-    ? GRADE_AUTO_CAPTURE_COPY.capturing
+    ? GRADE_AUTO_COPY.capturing
     : holding
-      ? GRADE_AUTO_CAPTURE_COPY.holding
+      ? GRADE_AUTO_COPY.holding
       : statusLine(readiness);
   const tiltNote = capturing || holding ? null : tiltDetail(readiness, level);
+  const autoLine = autoHelperLine(auto.phase, auto.hint, level.available, statusPhrase);
 
 
   async function onShutter(via: "auto" | "manual" = "manual") {
     if (busyRef.current || shutterDisabled || !showLivePreview) return;
     busyRef.current = true;
+    // Never overlap the small corner-probe still; then start the auto cooldown.
+    await auto.waitForProbe();
+    auto.noteCapture();
     setCapturing(true);
     // Announce once per capture (iOS); Android reads the chip's live region.
-    if (Platform.OS === "ios") AccessibilityInfo.announceForAccessibility(GRADE_AUTO_CAPTURE_COPY.capturing);
+    if (Platform.OS === "ios") AccessibilityInfo.announceForAccessibility(GRADE_AUTO_COPY.capturing);
     setError(null);
     try {
       // Light haptic on capture (expo-haptics works in Expo Go).
@@ -249,9 +268,7 @@ export function GradeCardFinder({
             </Text>
           ) : null}
         </View>
-        {level.available && statusPhrase === statusLine(readiness) && !holding ? (
-          <Text style={styles.helperMain}>{GRADE_AUTO_CAPTURE_COPY.manualHint}</Text>
-        ) : null}
+        {autoLine ? <Text style={styles.helperMain}>{autoLine}</Text> : null}
       </View>
       <CardFinderStage
         cameraRef={cameraRef}
@@ -259,8 +276,11 @@ export function GradeCardFinder({
         freezeUri={freezeUri}
         detecting={detecting}
         guideColor={guideColor}
+        frameWidth={frame.width}
+        frameHeight={frame.height}
         level={level}
         pictureSize={pictureSize}
+        onStageLayout={setStage}
         onCameraReady={() => void onCameraReady()}
         onMountError={() => setCameraMountFailed(true)}
       />
@@ -275,20 +295,35 @@ export function GradeCardFinder({
         >
           <Ionicons color={colors.text} name="images-outline" size={28} />
         </Pressable>
+        <View style={styles.shutterWrap}>
+          {holding ? <ProgressRing color={GUIDE_COLORS.good} progress={auto.progress} /> : null}
+          <Pressable
+            accessibilityLabel="Take photo"
+            accessibilityRole="button"
+            accessibilityState={{ busy: shutterDisabled }}
+            onPress={() => void onShutter("manual")}
+            style={[styles.shutterOuter, { borderColor: guideColor }]}
+          >
+            {detecting || waitingForCamera ? (
+              <ActivityIndicator color={colors.ctaText} />
+            ) : (
+              <View style={styles.shutterInner} />
+            )}
+          </Pressable>
+        </View>
         <Pressable
-          accessibilityLabel="Take photo"
-          accessibilityRole="button"
-          accessibilityState={{ busy: shutterDisabled }}
-          onPress={() => void onShutter("manual")}
-          style={[styles.shutterOuter, { borderColor: guideColor }]}
+          accessibilityLabel={GRADE_AUTO_COPY.toggleLabel}
+          accessibilityRole="switch"
+          accessibilityState={{ checked: auto.enabled }}
+          hitSlop={8}
+          onPress={() => auto.setEnabled(!auto.enabled)}
+          style={styles.toolbarSide}
         >
-          {detecting || waitingForCamera ? (
-            <ActivityIndicator color={colors.ctaText} />
-          ) : (
-            <View style={styles.shutterInner} />
-          )}
+          <Ionicons color={auto.enabled ? GUIDE_COLORS.good : colors.muted} name={auto.enabled ? "flash" : "flash-off"} size={24} />
+          <Text style={[styles.autoToggleText, !auto.enabled && styles.autoToggleOff]}>
+            {auto.enabled ? GRADE_AUTO_COPY.on : GRADE_AUTO_COPY.off}
+          </Text>
         </Pressable>
-        <View style={styles.toolbarSide} />
       </View>
     </View>
   );
@@ -296,6 +331,48 @@ export function GradeCardFinder({
 
 function statusLine(readiness: GradeCaptureReadiness): string {
   return readiness.status;
+}
+
+/** Same frame size the overlay draws; the corner probe looks in the same place. */
+function finderFrameSize(width: number, height: number): { width: number; height: number } {
+  const maxFrameHeight = Math.max(180, height * 0.46);
+  const frameWidth = Math.min(width * 0.72, 280, maxFrameHeight * CARD_ASPECT_RATIO);
+  return { width: frameWidth, height: frameWidth / CARD_ASPECT_RATIO };
+}
+
+/** Line under the chip: why auto is off/unavailable, the corner hint, or the manual reminder. */
+function autoHelperLine(phase: GradeAutoPhase, hint: string, sensor: boolean, statusPhrase: string): string | null {
+  if (phase === "off" || phase === "unavailable") return hint;
+  if (phase === "holding" || phase === "capturing") return null;
+  if (hint === GRADE_AUTO_COPY.fitCorners && statusPhrase !== hint) return hint;
+  return sensor ? GRADE_AUTO_COPY.manualHint : null;
+}
+
+const RING_SEGMENTS = 12;
+const RING_RADIUS = 46;
+
+/** Hold progress around the shutter: segments light up over the ~0.7 s hold (no animation library). */
+function ProgressRing({ progress, color }: { progress: number; color: string }) {
+  const lit = Math.round(progress * RING_SEGMENTS);
+  return (
+    <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" pointerEvents="none" style={styles.ring}>
+      {Array.from({ length: RING_SEGMENTS }, (_, i) => {
+        const angle = (i / RING_SEGMENTS) * 2 * Math.PI - Math.PI / 2;
+        return (
+          <View
+            key={i}
+            style={[
+              styles.ringDot,
+              {
+                backgroundColor: i < lit ? color : "rgba(255,255,255,0.25)",
+                transform: [{ translateX: Math.cos(angle) * RING_RADIUS }, { translateY: Math.sin(angle) * RING_RADIUS }],
+              },
+            ]}
+          />
+        );
+      })}
+    </View>
+  );
 }
 
 /** Visible-only tilt detail; never in the live region. */
@@ -341,8 +418,11 @@ interface CardFinderStageProps {
   freezeUri: string | null;
   detecting: boolean;
   guideColor: string;
+  frameWidth: number;
+  frameHeight: number;
   level: DeviceLevel;
   pictureSize?: string;
+  onStageLayout: (size: { width: number; height: number }) => void;
   onCameraReady: () => void;
   onMountError: () => void;
 }
@@ -353,25 +433,28 @@ function CardFinderStage({
   freezeUri,
   detecting,
   guideColor,
+  frameWidth,
+  frameHeight,
   level,
   pictureSize,
+  onStageLayout,
   onCameraReady,
   onMountError,
 }: CardFinderStageProps) {
-  const { width, height } = useWindowDimensions();
-  const maxFrameHeight = Math.max(180, height * 0.46);
-  const frameWidth = Math.min(width * 0.72, 280, maxFrameHeight * CARD_ASPECT_RATIO);
-  const frameHeight = frameWidth / CARD_ASPECT_RATIO;
-
   return (
     <View style={styles.viewfinder}>
-      <View style={styles.viewfinderStage}>
+      <View
+        onLayout={(e) => onStageLayout({ width: e.nativeEvent.layout.width, height: e.nativeEvent.layout.height })}
+        style={styles.viewfinderStage}
+      >
         {enableLivePreview ? (
           <CameraView
             ref={cameraRef}
             facing="back"
             mode="picture"
             mute
+            // No flash on the silent corner-probe stills; the haptic marks the real capture.
+            animateShutter={false}
             pictureSize={pictureSize}
             onCameraReady={onCameraReady}
             onMountError={onMountError}
@@ -577,6 +660,11 @@ const styles = StyleSheet.create({
     paddingBottom: space.md + TAB_CURVE_RADIUS,
   },
   toolbarSide: { width: 56, height: 56, alignItems: "center", justifyContent: "center" },
+  autoToggleText: { color: colors.text, fontSize: 12, fontWeight: "700" },
+  autoToggleOff: { color: colors.muted },
+  shutterWrap: { width: 104, height: 104, alignItems: "center", justifyContent: "center" },
+  ring: { ...StyleSheet.absoluteFill, alignItems: "center", justifyContent: "center" },
+  ringDot: { position: "absolute", width: 8, height: 8, borderRadius: 4 },
   disabled: { opacity: 0.5 },
   shutterOuter: {
     width: 72,

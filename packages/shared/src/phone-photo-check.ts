@@ -114,3 +114,13 @@ export function phonePhotoCheck(img: GrayImage, frameFill: number = GRADE_FRAME_
   }
   return { ok: reasons.length === 0, reasons, sharpness: Math.round(sharpness * 10) / 10, cornersWithEdges };
 }
+
+/**
+ * Auto-capture corner probe: how many of the 4 frame corners show a card
+ * edge in a small preview still (same check as above). An empty or clearly
+ * soft still counts as 0, so a blurry preview never starts a hold.
+ */
+export function gradeProbeCorners(img: GrayImage, frameFill: number = GRADE_FRAME_FILL.zoomed): number {
+  const result = phonePhotoCheck(img, frameFill);
+  return result.ok || result.reasons[0] === PREGRADE_COPY.shapeOff ? result.cornersWithEdges : 0;
+}
