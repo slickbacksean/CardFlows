@@ -18,6 +18,7 @@ const CardSightConsentSchema = z.looseObject({
   granted: z.boolean(),
   version: z.string().nullable(),
   grantedAt: z.string().nullable(),
+  declinedAt: z.string().nullable(),
   withdrawnAt: z.string().nullable(),
   currentVersion: z.string(),
   needsPrompt: z.boolean(),

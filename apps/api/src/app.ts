@@ -1,10 +1,11 @@
 import { createHash, randomBytes, randomInt, timingSafeEqual } from "node:crypto";
 import { emailSenderFromEnv, type EmailSender } from "./email-sender";
-import { consentState, hasActiveConsent } from "./consent-store";
+import { cardSightMonthKey, consentState, hasActiveConsent } from "./consent-store";
+import { CARDSIGHT_GUEST_MONTHLY_CAP_DEFAULT, CARDSIGHT_USER_MONTHLY_CAP_DEFAULT } from "./grade-quota-env";
 import { createRecognitionWithFallback } from "./cardsight-adapter";
 import { normalizeEmail } from "./account-store";
 import { routePath } from "hono/route";
-import { CARDSIGHT_CONSENT_VERSION, EMAIL_CODE_LENGTH, EMAIL_RESEND_COOLDOWN_MS, EMAIL_UNVERIFIED_CODE, EMAIL_VERIFICATION_COPY, EMAIL_VERIFICATION_TTL_MS, isEmailCode, passwordResetEmailText, verificationEmailText, quotaAnchor, quotaPeriodFor, ACCOUNT_AUTH_COPY, PASSWORD_RESET_TTL_MS, GUEST_MINT_WINDOW_MS, GUEST_SESSION_TTL_MS, isValidEmail, passwordProblem, GUEST_FREE_SCANS, GUEST_USER_PREFIX, SIGNUP_REQUIRED_CODE, guestIdentity, guestRouteAllowed, isGuestUserId, isHot, parsePerfBatch, signupMessage, type SignupReason } from "@cardflow/shared";
+import { CARDSIGHT_CONSENT_VERSION, INVITED_USERS, EMAIL_CODE_LIFETIME_SENDS, EMAIL_SENDS_PER_ADDRESS_PER_DAY, UNVERIFIED_ACCOUNT_TTL_DAYS, EMAIL_CODE_LENGTH, EMAIL_RESEND_COOLDOWN_MS, EMAIL_UNVERIFIED_CODE, EMAIL_VERIFICATION_COPY, EMAIL_VERIFICATION_TTL_MS, isEmailCode, passwordResetEmailText, verificationEmailText, quotaAnchor, quotaPeriodFor, ACCOUNT_AUTH_COPY, PASSWORD_RESET_TTL_MS, GUEST_MINT_WINDOW_MS, GUEST_SESSION_TTL_MS, isValidEmail, passwordProblem, GUEST_FREE_SCANS, GUEST_USER_PREFIX, SIGNUP_REQUIRED_CODE, guestIdentity, guestRouteAllowed, isGuestUserId, isHot, parsePerfBatch, signupMessage, type SignupReason } from "@cardflow/shared";
 import { NORTH_STAR_NAME, SCANS_PER_WAR_NAME, northStarWeekly } from "@cardflow/shared";
 import { opsMetrics, type OpsMetrics } from "./ops-metrics";
 import { parseUserPriceAmount } from "@cardflow/shared";
@@ -239,7 +240,7 @@ export function requiresVerifiedEmail(pathName: string): boolean {
     pathName === "/v1/grade/detect" ||
     pathName === "/v1/grade/pregrade" ||
     pathName === "/v1/grading/batch" ||
-    /^\/v1\/inventory\/[^/]+\/grade-jobs$/.test(pathName)
+    /^\/v1\/inventory\/[^/]+\/(grade-jobs|grade-estimate)$/.test(pathName)
   );
 }
 
@@ -342,6 +343,10 @@ export interface CreateAppOptions {
   deliverPasswordReset?: (email: string, token: string) => void;
   /** Verification and reset emails. Default from CARD_FLOW_EMAIL_SENDER (dev logger when unset). */
   emailSender?: EmailSender;
+  /** Hourly purge of accounts unverified after 7 days. 0 turns the timer off (tests). */
+  unverifiedPurgeIntervalMs?: number;
+  /** Tests: receives the purge so it can run on demand. */
+  onUnverifiedPurge?: (run: () => { accountsPurged: number }) => void;
   /** D9: guest sessions minted per client IP per hour (default 10). */
   guestMintsPerHour?: number;
   /** Catalog provider. Tests default to mock; local/staging may inject live TCGdex or PokéCollector. */
@@ -355,6 +360,11 @@ export interface CreateAppOptions {
    * current-version consent is on; everyone else gets the local matcher.
    */
   cardSight?: CardRecognitionProvider | null;
+  /**
+   * Backend review M5: CardSight calls per user per calendar month (defaults 50 signed-in,
+   * 3 guests; see cardSightUserCapsFromEnv). Past the cap, scans use the local matcher.
+   */
+  cardSightUserCaps?: { signedIn: number; guest: number };
   /** P1-07: async grade jobs. Defaults to CARD_FLOW_GRADE_JOBS=on (off). */
   gradeJobs?: boolean;
   gradeJobLimits?: { ttlMs?: number; maxActiveJobs?: number; maxActiveJobsPerUser?: number; sweepMs?: number; maxStoredJobs?: number };
@@ -583,6 +593,10 @@ export function createApp(
   const basePricing = options.pricing ?? offPricingProvider;
   const pricing = serverCache ? cachedPricingProvider(basePricing) : basePricing;
   const recognitionCache = serverCache ? createRecognitionCache() : null;
+  const cardSightUserCaps = options.cardSightUserCaps ?? {
+    signedIn: CARDSIGHT_USER_MONTHLY_CAP_DEFAULT,
+    guest: CARDSIGHT_GUEST_MONTHLY_CAP_DEFAULT,
+  };
   const pokecollectorAccounts = options.pokecollectorAccounts ?? offPokecollectorAccounts;
   const recognitionProvider = options.recognition ?? mockCardRecognitionProvider;
   const gradingProvider = options.grading ?? mockCardGradingProvider;
@@ -1101,12 +1115,19 @@ export function createApp(
     return c.json({ ok: false, error: "Unauthorized" }, 401);
   });
 
+  /**
+   * Backend review M3: verified means an account row with a confirmed email, or an invite tester
+   * (fixed roster IDs). No account row (guests, unknown IDs) is not verified.
+   */
+  const isUserEmailVerified = (userId: string) =>
+    INVITED_USERS.some((u) => u.userId === userId) || store.accounts.isEmailVerified(userId);
+
   // Sean: email verification before pre-grade estimates. Signed-up accounts must confirm the
   // emailed code first; invite testers (no account row) and pre-0017 accounts count as verified.
   // Internal grade-job calls were checked when the job was created.
   app.use("/v1/*", async (c, next) => {
     if (c.req.method !== "POST" || !requiresVerifiedEmail(c.req.path) || c.get("internalOwner")) return next();
-    if (store.accounts.isEmailVerified(c.get("userId"))) return next();
+    if (isUserEmailVerified(c.get("userId"))) return next();
     return c.json({ ok: false, error: EMAIL_UNVERIFIED_CODE, message: EMAIL_VERIFICATION_COPY.required }, 403);
   });
 
@@ -1690,7 +1711,7 @@ export function createApp(
       ...session,
       invitedUsers: [session.identity],
       movedScans: moved?.scans ?? 0,
-      emailVerified: store.accounts.isEmailVerified(account.userId),
+      emailVerified: isUserEmailVerified(account.userId),
     });
   });
 
@@ -1717,7 +1738,7 @@ export function createApp(
       ...session,
       invitedUsers: [session.identity],
       movedScans: moved?.scans ?? 0,
-      emailVerified: store.accounts.isEmailVerified(existing.userId),
+      emailVerified: isUserEmailVerified(existing.userId),
     });
   });
 
@@ -1727,7 +1748,7 @@ export function createApp(
    * Sending never blocks or changes the HTTP answer, so timing can't reveal which emails exist.
    */
   const emailSender = options.emailSender ?? emailSenderFromEnv();
-  const deliverResetToken = options.deliverPasswordReset ?? ((email: string, token: string) => {
+  const sendReset = options.deliverPasswordReset ?? ((email: string, token: string) => {
     void emailSender.send({
       kind: "password-reset",
       to: email,
@@ -1736,9 +1757,21 @@ export function createApp(
       code: token,
     });
   });
+  // Backend review M1: reset emails count toward the address's daily cap too (still a silent 202).
+  const deliverResetToken = (email: string, token: string) => {
+    if (store.accounts.takeEmailSendForAddress(email, now().toISOString().slice(0, 10), EMAIL_SENDS_PER_ADDRESS_PER_DAY)) {
+      sendReset(email, token);
+    }
+  };
   const emailCodeHash = (userId: string, code: string) => hashSessionToken(`${userId}:${code.trim()}`);
-  /** A new 6-digit code (replaces any earlier one), emailed to the account. */
-  const sendVerificationCode = (account: { userId: string; email: string }) => {
+  const sendDay = () => now().toISOString().slice(0, 10);
+  /**
+   * A new 6-digit code (replaces any earlier one), emailed to the account. Backend review M1:
+   * at most EMAIL_CODE_LIFETIME_SENDS per account and EMAIL_SENDS_PER_ADDRESS_PER_DAY per address.
+   */
+  const sendVerificationCode = (account: { userId: string; email: string }): "sent" | "lifetime" | "daily" => {
+    if (!store.accounts.takeVerificationSend(account.userId, EMAIL_CODE_LIFETIME_SENDS)) return "lifetime";
+    if (!store.accounts.takeEmailSendForAddress(account.email, sendDay(), EMAIL_SENDS_PER_ADDRESS_PER_DAY)) return "daily";
     const code = String(randomInt(0, 10 ** EMAIL_CODE_LENGTH)).padStart(EMAIL_CODE_LENGTH, "0");
     const at = now();
     store.accounts.createEmailVerification({
@@ -1754,6 +1787,7 @@ export function createApp(
       text: verificationEmailText(code),
       code,
     });
+    return "sent";
   };
 
   // Sean: CardSight disclosure + consent, stored with its version and timestamps.
@@ -1771,12 +1805,11 @@ export function createApp(
         return c.json({ ok: false, error: "Consent version is out of date. Reload and try again.", currentVersion: CARDSIGHT_CONSENT_VERSION }, 409);
       }
       store.consents.grant(userId, "cardsight", CARDSIGHT_CONSENT_VERSION, at);
-    } else if (store.consents.get(userId, "cardsight")?.version === CARDSIGHT_CONSENT_VERSION) {
+    } else if (hasActiveConsent(store.consents, userId)) {
       store.consents.withdraw(userId, "cardsight", at);
-    } else {
-      // Declined the prompt: remember the answer (withdrawn at once) so the app doesn't ask again.
-      store.consents.grant(userId, "cardsight", CARDSIGHT_CONSENT_VERSION, at);
-      store.consents.withdraw(userId, "cardsight", at);
+    } else if (consentState(store.consents.get(userId, "cardsight")).needsPrompt) {
+      // Backend review M4: a "No" to the prompt is a decline, never a grant that was withdrawn.
+      store.consents.decline(userId, "cardsight", CARDSIGHT_CONSENT_VERSION, at);
     }
     return c.json({ ok: true as const, consent: consentState(store.consents.get(userId, "cardsight")) });
   });
@@ -1784,14 +1817,16 @@ export function createApp(
   app.post("/v1/email-verifications", (c) => {
     const userId = c.get("userId");
     const account = store.accounts.getAccount(userId);
-    if (!account || store.accounts.isEmailVerified(userId)) return c.json({ ok: true as const, emailVerified: true });
+    if (!account || isUserEmailVerified(userId)) return c.json({ ok: true as const, emailVerified: true });
     // One code per minute (the resend button) and at most 5 an hour per account.
     if (isLimited(`verify-send-min:${userId}`, 1, EMAIL_RESEND_COOLDOWN_MS)) {
       return c.json({ ok: false, error: EMAIL_VERIFICATION_COPY.tooSoon }, 429);
     }
     if (overLimit(`verify-send-hour:${userId}`, 5, 60 * 60 * 1000)) return tooMany(c);
     overLimit(`verify-send-min:${userId}`, 1, EMAIL_RESEND_COOLDOWN_MS);
-    sendVerificationCode(account);
+    const sent = sendVerificationCode(account);
+    if (sent === "lifetime") return c.json({ ok: false, error: EMAIL_VERIFICATION_COPY.sendLimit }, 429);
+    if (sent === "daily") return c.json({ ok: false, error: EMAIL_VERIFICATION_COPY.dailyLimit }, 429);
     return c.json(
       { ok: true as const, emailVerified: false, message: EMAIL_VERIFICATION_COPY.sent, resendAfterMs: EMAIL_RESEND_COOLDOWN_MS },
       202,
@@ -1800,7 +1835,7 @@ export function createApp(
 
   app.post("/v1/email-verifications/confirm", async (c) => {
     const userId = c.get("userId");
-    if (!store.accounts.getAccount(userId) || store.accounts.isEmailVerified(userId)) {
+    if (!store.accounts.getAccount(userId) || isUserEmailVerified(userId)) {
       return c.json({ ok: true as const, emailVerified: true as const });
     }
     // Per-code tries are capped in the store (5); this caps guessing across new codes too.
@@ -1852,8 +1887,8 @@ export function createApp(
     return c.json({ ok: true as const });
   });
 
-  app.post("/v1/account/delete", (c) => {
-    const userId = c.get("userId");
+  /** Everything for one user: rows (one transaction), then files, then staged uploads. */
+  const deleteUserEverything = (userId: string) => {
     // Data Engineer review: every user_id row in one transaction first, then the files (whose
     // locations were collected before the rows went). A crash in between leaves orphan files
     // with no personal rows, which the photo retention sweep removes, never rows without files.
@@ -1865,6 +1900,33 @@ export function createApp(
     const rows = store.accounts.deleteAllUserRows(userId);
     const photos = removePhotos();
     const staged = gradeUploads.releaseUser(userId);
+    return { rows, photos, staged };
+  };
+
+  /**
+   * Backend review M1: accounts still unverified UNVERIFIED_ACCOUNT_TTL_DAYS after sign-up are
+   * deleted (every row and photo, like an account delete). Runs hourly; tests get a handle.
+   */
+  const purgeUnverifiedAccounts = () => {
+    const cutoff = new Date(now().getTime() - UNVERIFIED_ACCOUNT_TTL_DAYS * 86_400_000).toISOString();
+    const ids = store.accounts.listUnverifiedAccountsBefore(cutoff);
+    for (const userId of ids) deleteUserEverything(userId);
+    return { accountsPurged: ids.length };
+  };
+  options.onUnverifiedPurge?.(purgeUnverifiedAccounts);
+  if (options.unverifiedPurgeIntervalMs !== 0) {
+    const purgeTimer = setInterval(() => {
+      try {
+        purgeUnverifiedAccounts();
+      } catch {
+        // retried next tick
+      }
+    }, options.unverifiedPurgeIntervalMs ?? 60 * 60 * 1000);
+    purgeTimer.unref?.();
+  }
+
+  app.post("/v1/account/delete", (c) => {
+    const { rows, photos, staged } = deleteUserEverything(c.get("userId"));
     return c.json({
       ok: true,
       photosDeleted: photos.deleted + staged,
@@ -1880,12 +1942,15 @@ export function createApp(
       ok: true,
       identity: c.get("identity"),
       invitedUsers: [c.get("identity")],
-      emailVerified: store.accounts.isEmailVerified(c.get("userId")),
+      emailVerified: isUserEmailVerified(c.get("userId")),
     });
   });
 
   app.patch("/v1/identity", async (c) => {
-    const body = await c.req.json<{ inviteCode?: unknown }>();
+    // Backend review: invite checks share POST /v1/sessions' per-IP limiter (codes are guessable).
+    const inviteIp = clientIp(c, trustProxyHops, socketAddress) ?? "unknown";
+    if (overLimit(`invite-ip:${inviteIp}`, authLimits.invitePerIp, 15 * 60 * 1000)) return tooMany(c);
+    const body = await c.req.json<{ inviteCode?: unknown }>().catch(() => ({}) as { inviteCode?: unknown });
     if (typeof body.inviteCode !== "string" || body.inviteCode.trim() === "") {
       return c.json({ ok: false, error: "Invite code is required" }, 400);
     }
@@ -2121,12 +2186,21 @@ export function createApp(
           });
         // Sean: the photo goes to CardSight only with this user's current consent, checked here,
         // right before the adapter. Without it (or if CardSight misses) the local matcher runs.
-        const cardSight = options.cardSight && hasActiveConsent(store.consents, userId) ? options.cardSight : null;
+        // Backend review M5: also only while this user's monthly CardSight cap has room. A use is
+        // taken only when the adapter is actually called (not for cache hits).
+        const monthKey = cardSightMonthKey(now());
+        const userCap = isGuestUserId(userId) ? cardSightUserCaps.guest : cardSightUserCaps.signedIn;
+        const cardSight =
+          options.cardSight && hasActiveConsent(store.consents, userId) && store.consents.monthlyUse(userId, monthKey) < userCap
+            ? options.cardSight
+            : null;
         const runLive = cardSight
           ? () =>
-              createRecognitionWithFallback(cardSight, { name: recognitionProvider.name, identifyCard: () => runLocal() }).identifyCard(
-                identifyRequest,
-              )
+              store.consents.takeMonthlyUse(userId, monthKey, userCap)
+                ? createRecognitionWithFallback(cardSight, { name: recognitionProvider.name, identifyCard: () => runLocal() }).identifyCard(
+                    identifyRequest,
+                  )
+                : runLocal()
           : runLocal;
         recognition = recognitionCache
           ? await recognitionCache.getOrIdentify(

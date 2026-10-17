@@ -12,6 +12,8 @@ import {
 } from "@cardflow/shared";
 import { identifyCardMock } from "@cardflow/shared/mock";
 import { createApp } from "./app";
+import { createCardSightRecognitionProvider } from "./cardsight-adapter";
+import { createRecognitionCache } from "./server-cache";
 import { createSqliteStore } from "./sqlite-store";
 import { createMemoryStore, type StorePort } from "./store";
 
@@ -36,7 +38,15 @@ function spy(name: string, ok = true): { calls: IdentifyCardRequest[]; provider:
   };
 }
 
-function setup(opts: { cardSightOk?: boolean } = {}) {
+function setup(
+  opts: {
+    cardSightOk?: boolean;
+    serverCache?: boolean;
+    cardSightUserCaps?: { signedIn: number; guest: number };
+    cardSight?: CardRecognitionProvider;
+    now?: () => Date;
+  } = {},
+) {
   const inner = createMemoryStore();
   const store: StorePort = {
     ...inner,
@@ -44,7 +54,14 @@ function setup(opts: { cardSightOk?: boolean } = {}) {
   };
   const local = spy("mock");
   const cardSight = spy("cardsight", opts.cardSightOk ?? true);
-  const app = createApp(store, { recognition: local.provider, cardSight: cardSight.provider, liveIdentifyEnabled: true });
+  const app = createApp(store, {
+    recognition: local.provider,
+    cardSight: opts.cardSight ?? cardSight.provider,
+    liveIdentifyEnabled: true,
+    serverCache: opts.serverCache ?? false,
+    ...(opts.cardSightUserCaps ? { cardSightUserCaps: opts.cardSightUserCaps } : {}),
+    ...(opts.now ? { now: opts.now } : {}),
+  });
   return { app, store, local, cardSight };
 }
 
@@ -118,8 +135,9 @@ describe.each(["sqlite", "memory"] as const)("guest consent moves to the account
     });
     return { status: res.status, body: (await res.json()) as Record<string, unknown> };
   }
+  let store: StorePort;
   function open() {
-    const store = kind === "sqlite" ? createSqliteStore({ sqlitePath: ":memory:" }) : createMemoryStore();
+    store = kind === "sqlite" ? createSqliteStore({ sqlitePath: ":memory:" }) : createMemoryStore();
     return createApp(store, { devAutoSession: false, guestMode: true });
   }
 
@@ -136,6 +154,9 @@ describe.each(["sqlite", "memory"] as const)("guest consent moves to the account
     expect(up.status).toBe(200);
     const account = await req(app, "/v1/consents/cardsight", { token: up.body.token as string });
     expect(account.body.consent).toMatchObject({ granted: true, version: CARDSIGHT_CONSENT_VERSION, grantedAt, needsPrompt: false });
+    // The guest's consent history moves with it.
+    const accountId = ((await req(app, "/v1/identity", { token: up.body.token as string })).body.identity as { userId: string }).userId;
+    expect(store.consents.events(accountId).map((e) => [e.kind, e.at])).toEqual([["grant", grantedAt]]);
   });
 
   it("a guest's Don't allow moves too, and an account's own earlier answer wins on sign-in", async () => {
@@ -162,6 +183,7 @@ describe("CardSight consent API", () => {
       granted: false,
       version: null,
       grantedAt: null,
+      declinedAt: null,
       withdrawnAt: null,
       currentVersion: CARDSIGHT_CONSENT_VERSION,
       needsPrompt: true,
@@ -208,4 +230,194 @@ describe("CardSight consent API", () => {
     expect([...Object.values(rest), CAMERA_USAGE_DESCRIPTION].join(" ")).not.toMatch(/\bAI\b|artificial intelligence|PSA|BGS|CGC/);
   });
 
+});
+
+describe("Backend review M4: consent history is append-only and a decline is never a grant", () => {
+  it.each(["memory", "sqlite"] as const)("%s: decline, grant, withdraw each append one event", async (kind) => {
+    const inner = kind === "sqlite" ? createSqliteStore({ sqlitePath: ":memory:" }) : createMemoryStore();
+    const app = createApp(inner, { liveIdentifyEnabled: true });
+    const userId = await currentUserId(app);
+
+    const declined = await consent(app, { granted: false });
+    expect(declined.body.consent).toMatchObject({ granted: false, grantedAt: null, withdrawnAt: null, needsPrompt: false });
+    expect(declined.body.consent!.declinedAt).toEqual(expect.any(String));
+    expect(inner.consents.get(userId, "cardsight")).toMatchObject({ grantedAt: null, declinedAt: expect.any(String) });
+    expect(inner.consents.events(userId).map((e) => e.kind)).toEqual(["decline"]);
+
+    // Saying no again changes nothing and adds nothing.
+    await consent(app, { granted: false });
+    expect(inner.consents.events(userId)).toHaveLength(1);
+
+    await consent(app, { granted: true, version: CARDSIGHT_CONSENT_VERSION });
+    const off = await consent(app, { granted: false });
+    expect(off.body.consent).toMatchObject({ granted: false, declinedAt: null, withdrawnAt: expect.any(String) });
+    const events = inner.consents.events(userId);
+    expect(events.map((e) => e.kind)).toEqual(["decline", "grant", "withdraw"]);
+    expect(events.every((e) => e.version === CARDSIGHT_CONSENT_VERSION && e.provider === "cardsight")).toBe(true);
+    expect(new Set(events.map((e) => e.eventId)).size).toBe(3);
+
+    // Account deletion removes the history with the rest of the user's rows.
+    inner.accounts.deleteAllUserRows(userId);
+    expect(inner.consents.events(userId)).toEqual([]);
+  });
+
+  it("SQLite: history survives a restart, oldest first", () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "cardflow-consent-events-"));
+    dirs.push(dir);
+    const file = path.join(dir, "e.sqlite");
+    const first = createSqliteStore({ sqlitePath: file });
+    first.consents.decline("u1", "cardsight", CARDSIGHT_CONSENT_VERSION, "2026-10-17T03:00:00.000Z");
+    first.consents.grant("u1", "cardsight", CARDSIGHT_CONSENT_VERSION, "2026-10-18T03:00:00.000Z");
+    first.close();
+    const second = createSqliteStore({ sqlitePath: file });
+    expect(second.consents.events("u1").map((e) => [e.kind, e.at])).toEqual([
+      ["decline", "2026-10-17T03:00:00.000Z"],
+      ["grant", "2026-10-18T03:00:00.000Z"],
+    ]);
+    second.close();
+  });
+});
+
+describe("Backend review M5: per-user monthly CardSight cap", () => {
+  it("signed-in users fall back to the local matcher once their cap is used; it resets next month", async () => {
+    let at = new Date("2026-10-20T12:00:00.000Z");
+    const { app, store, local, cardSight } = setup({ cardSightUserCaps: { signedIn: 2, guest: 1 }, now: () => at });
+    await consent(app, { granted: true, version: CARDSIGHT_CONSENT_VERSION });
+    await scan(app);
+    await scan(app);
+    expect(local.calls).toHaveLength(0);
+    await scan(app);
+    expect(cardSight.calls).toHaveLength(2);
+    expect(local.calls.length).toBeGreaterThan(0);
+    expect(store.consents.monthlyUse(await currentUserId(app), "2026-10")).toBe(2);
+
+    at = new Date("2026-11-01T00:00:00.000Z");
+    await scan(app);
+    expect(cardSight.calls).toHaveLength(3);
+  });
+
+  it("cache hits don't use up the cap", async () => {
+    const { app, store, cardSight } = setup({ cardSightUserCaps: { signedIn: 1, guest: 1 }, serverCache: true });
+    await consent(app, { granted: true, version: CARDSIGHT_CONSENT_VERSION });
+    await scan(app);
+    await scan(app);
+    expect(cardSight.calls).toHaveLength(1);
+    const month = new Date().toISOString().slice(0, 7);
+    expect(store.consents.monthlyUse(await currentUserId(app), month)).toBe(1);
+  });
+
+  it.each(["memory", "sqlite"] as const)("%s: guests get the smaller cap (0 = never)", async (kind) => {
+    const inner = kind === "sqlite" ? createSqliteStore({ sqlitePath: ":memory:" }) : createMemoryStore();
+    const store: StorePort = {
+      ...inner,
+      readStoredScanImage: (_scanId, storageRef) => ({ storageRef, mimeType: "image/jpeg", bytes: STORED_JPEG }),
+    };
+    const local = spy("mock");
+    const cardSight = spy("cardsight");
+    const app = createApp(store, {
+      devAutoSession: false,
+      guestMode: true,
+      recognition: local.provider,
+      cardSight: cardSight.provider,
+      liveIdentifyEnabled: true,
+      serverCache: false,
+      cardSightUserCaps: { signedIn: 50, guest: 1 },
+    });
+    const guest = ((await (await app.request("/v1/sessions/guest", { method: "POST" })).json()) as { token: string }).token;
+    const auth = { authorization: `Bearer ${guest}` };
+    await app.request("/v1/consents/cardsight", {
+      method: "POST",
+      headers: { ...auth, "content-type": "application/json" },
+      body: JSON.stringify({ granted: true, version: CARDSIGHT_CONSENT_VERSION }),
+    });
+    for (let i = 0; i < 2; i += 1) {
+      const form = new FormData();
+      form.append("captureMethod", "camera_photo");
+      form.append("image", new File([Uint8Array.from([0xff, 0xd8, 0xff, 0xd9])], "still.jpg", { type: "image/jpeg" }));
+      expect((await app.request("/v1/scans", { method: "POST", body: form, headers: auth })).status).toBe(201);
+    }
+    expect(cardSight.calls).toHaveLength(1);
+    expect(local.calls.length).toBeGreaterThan(0);
+
+    const none = setup({ cardSightUserCaps: { signedIn: 0, guest: 0 } });
+    await consent(none.app, { granted: true, version: CARDSIGHT_CONSENT_VERSION });
+    await scan(none.app);
+    expect(none.cardSight.calls).toHaveLength(0);
+  });
+});
+
+describe("Backend review: recognition cache and fallbacks", () => {
+  it("cache entries are separated by source (CardSight vs local matcher)", async () => {
+    const cache = createRecognitionCache();
+    const image = { bytes: STORED_JPEG, mimeType: "image/jpeg" };
+    let calls = 0;
+    const identify = async () => {
+      calls += 1;
+      return { ...identifyCardMock("high-confidence"), vendorRequestId: `req-${calls}` } as never;
+    };
+    await cache.getOrIdentify(image, "cardsight+mock", identify);
+    await cache.getOrIdentify(image, "mock", identify);
+    expect(calls).toBe(2);
+    await cache.getOrIdentify(image, "cardsight+mock", identify);
+    expect(calls).toBe(2);
+  });
+
+  it("a cache hit never carries the vendor request id", async () => {
+    const cache = createRecognitionCache();
+    const image = { bytes: STORED_JPEG, mimeType: "image/jpeg" };
+    const identify = async () => ({ ...identifyCardMock("high-confidence"), vendorRequestId: "cs-req-1" }) as never;
+    const first = await cache.getOrIdentify(image, "cardsight+mock", identify);
+    expect(first.vendorRequestId).toBe("cs-req-1");
+    const hit = await cache.getOrIdentify(image, "cardsight+mock", identify);
+    expect(hit.vendorRequestId).toBeNull();
+    expect(hit.detections).toEqual(first.detections);
+  });
+
+  it("after withdrawal, a cached CardSight answer for the same photo is not reused", async () => {
+    const { app, local, cardSight } = setup({ serverCache: true });
+    await consent(app, { granted: true, version: CARDSIGHT_CONSENT_VERSION });
+    await scan(app);
+    await scan(app);
+    expect(cardSight.calls).toHaveLength(1);
+    expect(local.calls).toHaveLength(0);
+    await consent(app, { granted: false });
+    await scan(app);
+    expect(cardSight.calls).toHaveLength(1);
+    expect(local.calls.length).toBeGreaterThan(0);
+  });
+
+  it("when the global CardSight budget is used up, nothing is sent and the local matcher answers", async () => {
+    const fetchCalls: unknown[] = [];
+    const adapter = createCardSightRecognitionProvider({
+      apiKey: "test-key",
+      fetch: (async (...args: unknown[]) => {
+        fetchCalls.push(args);
+        return new Response("{}", { status: 200 });
+      }) as typeof fetch,
+      consumeBudget: () => false,
+    });
+    const { app, local } = setup({ cardSight: adapter });
+    await consent(app, { granted: true, version: CARDSIGHT_CONSENT_VERSION });
+    await scan(app);
+    expect(fetchCalls).toHaveLength(0);
+    expect(local.calls.length).toBeGreaterThan(0);
+  });
+
+  it("livestream identify never calls CardSight, even with consent", async () => {
+    const { app, cardSight } = setup();
+    await consent(app, { granted: true, version: CARDSIGHT_CONSENT_VERSION });
+    const res = await app.request("/v1/livestream/identify", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        source: "live_video",
+        platform: "ios",
+        cardDetected: true,
+        classifiedTcgdexId: "base1-58",
+        identityCropJpeg: Buffer.from(STORED_JPEG).toString("base64"),
+      }),
+    });
+    expect(res.status).toBe(200);
+    expect(cardSight.calls).toHaveLength(0);
+  });
 });

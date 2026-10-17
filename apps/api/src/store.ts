@@ -1051,13 +1051,21 @@ function createMemoryAccountStore(
   const accounts = new Map<string, AccountRecord>();
   const resets = new Map<string, { userId: string; expiresAt: string; usedAt: string | null }>();
   const emailCodes = new Map<string, { codeHash: string; expiresAt: string; attempts: number }>();
+  const sendsByAddressDay = new Map<string, number>();
   const byEmail = new Map<string, string>();
   const live = (s: StoredSession, now: string) => s.expiresAt > now;
   return {
     createAccount({ email, passwordHash, at }) {
       const normalized = normalizeEmail(email);
       if (byEmail.has(normalized)) return null;
-      const record: AccountRecord = { userId: `acct_${crypto.randomUUID()}`, email: normalized, passwordHash, createdAt: at, emailVerifiedAt: null };
+      const record: AccountRecord = {
+        userId: `acct_${crypto.randomUUID()}`,
+        email: normalized,
+        passwordHash,
+        createdAt: at,
+        emailVerifiedAt: null,
+        verificationSends: 0,
+      };
       accounts.set(record.userId, record);
       byEmail.set(normalized, record.userId);
       return { ...record };
@@ -1081,8 +1089,25 @@ function createMemoryAccountStore(
       if (account) accounts.set(userId, { ...account, passwordHash });
     },
     isEmailVerified(userId) {
+      return Boolean(accounts.get(userId)?.emailVerifiedAt);
+    },
+    takeVerificationSend(userId, cap) {
       const account = accounts.get(userId);
-      return !account || Boolean(account.emailVerifiedAt);
+      if (!account || (account.verificationSends ?? 0) >= cap) return false;
+      accounts.set(userId, { ...account, verificationSends: (account.verificationSends ?? 0) + 1 });
+      return true;
+    },
+    takeEmailSendForAddress(email, day, cap) {
+      const yesterday = new Date(Date.parse(`${day}T00:00:00Z`) - 86_400_000).toISOString().slice(0, 10);
+      for (const key of [...sendsByAddressDay.keys()]) if (key.split("\0")[1]! < yesterday) sendsByAddressDay.delete(key);
+      const key = `${normalizeEmail(email)}\0${day}`;
+      const count = sendsByAddressDay.get(key) ?? 0;
+      if (count >= cap) return false;
+      sendsByAddressDay.set(key, count + 1);
+      return true;
+    },
+    listUnverifiedAccountsBefore(cutoff) {
+      return [...accounts.values()].filter((a) => !a.emailVerifiedAt && a.createdAt < cutoff).map((a) => a.userId);
     },
     createEmailVerification({ userId, codeHash, expiresAt }) {
       emailCodes.set(userId, { codeHash, expiresAt, attempts: 0 });
@@ -1138,13 +1163,9 @@ function createMemoryAccountStore(
       for (const [id, c] of store.confirmations) {
         if ((c as { userId?: string }).userId === fromUserId) store.confirmations.set(id, { ...c, userId: toUserId } as ConfirmationRecord);
       }
-      // Consent given as a guest carries over unless the account already answered.
-      const guestConsent = port.consents.get(fromUserId, "cardsight");
-      if (guestConsent && !port.consents.get(toUserId, "cardsight")) {
-        port.consents.grant(toUserId, "cardsight", guestConsent.version, guestConsent.grantedAt);
-        if (guestConsent.withdrawnAt) port.consents.withdraw(toUserId, "cardsight", guestConsent.withdrawnAt);
-      }
-      port.consents.deleteUser(fromUserId);
+      // Consent given as a guest carries over unless the account already answered; the guest's
+      // consent history and this month's CardSight use move with it (as SQLite does by user_id).
+      (port.consents as ConsentStore & { moveUser(from: string, to: string): void }).moveUser(fromUserId, toUserId);
       this.deleteSessionsForUser(fromUserId);
       return { scans, confirmEvents: 0 };
     },

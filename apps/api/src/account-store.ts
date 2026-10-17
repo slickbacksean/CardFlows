@@ -13,8 +13,9 @@ export interface AccountRecord {
   email: string;
   passwordHash: string;
   createdAt: string;
-  /** Null until the email is verified (sign-ups from before migration 0017 are verified). */
+  /** Null until the email is verified (only sign-ups from before #86 deployed are backfilled). */
   emailVerifiedAt?: string | null;
+  verificationSends?: number;
 }
 
 /** Wrong guesses allowed per code before it stops working (a new code must be requested). */
@@ -38,8 +39,14 @@ export interface AccountStore {
   /** Single use: marks the token used and returns its user, or null if unknown, used or expired. */
   consumePasswordReset(tokenHash: string, now: string): string | null;
   setPasswordHash(userId: string, passwordHash: string): void;
-  /** True for verified accounts and for users with no account row (invite testers). */
+  /** True only for an account row with a verified email (invite testers are checked by ID in the API). */
   isEmailVerified(userId: string): boolean;
+  /** Backend review M1: counts one verification send; false once `cap` sends were used. */
+  takeVerificationSend(userId: string, cap: number): boolean;
+  /** Backend review M1: counts one email to this address today (UTC); false at `cap`. Prunes old days. */
+  takeEmailSendForAddress(email: string, day: string, cap: number): boolean;
+  /** Accounts still unverified that were created before `cutoff` (purged after 7 days). */
+  listUnverifiedAccountsBefore(cutoff: string): string[];
   /** Stores the hash of a new code; replaces any earlier code (only the newest works). */
   createEmailVerification(input: { userId: string; codeHash: string; expiresAt: string; at: string }): void;
   /** Single use: a match before expiry (and within EMAIL_CODE_MAX_ATTEMPTS) verifies the account. */
@@ -149,7 +156,32 @@ export function createSqliteAccountStore(
     },
     isEmailVerified(userId) {
       const row = db.select({ at: userAccounts.emailVerifiedAt }).from(userAccounts).where(eq(userAccounts.userId, userId)).get();
-      return !row || Boolean(row.at);
+      return Boolean(row?.at);
+    },
+    takeVerificationSend(userId, cap) {
+      return (
+        sqlite
+          .prepare("UPDATE user_accounts SET verification_sends = verification_sends + 1 WHERE user_id = ? AND verification_sends < ?")
+          .run(userId, cap).changes === 1
+      );
+    },
+    takeEmailSendForAddress(email, day, cap) {
+      return sqlite.transaction(() => {
+        const address = normalizeEmail(email);
+        sqlite.prepare("DELETE FROM email_send_counts WHERE day < date(?, '-1 day')").run(day);
+        sqlite.prepare("INSERT OR IGNORE INTO email_send_counts (email, day, count) VALUES (?, ?, 0)").run(address, day);
+        return (
+          sqlite.prepare("UPDATE email_send_counts SET count = count + 1 WHERE email = ? AND day = ? AND count < ?").run(address, day, cap)
+            .changes === 1
+        );
+      })();
+    },
+    listUnverifiedAccountsBefore(cutoff) {
+      return (
+        sqlite.prepare("SELECT user_id FROM user_accounts WHERE email_verified_at IS NULL AND created_at < ?").all(cutoff) as Array<{
+          user_id: string;
+        }>
+      ).map((row) => row.user_id);
     },
     createEmailVerification({ userId, codeHash, expiresAt, at }) {
       db.insert(emailVerificationCodes)

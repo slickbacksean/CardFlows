@@ -7,7 +7,7 @@ import { createPricingFromEnv, createPokecollectorAccountsFromEnv } from "./poke
 import { createRecognitionFromEnv } from "./recognition-env";
 import { cardSightAdapterFromEnv } from "./cardsight-adapter";
 import { consumeCardSightBudget } from "./cardsight-budget";
-import { cardSightMonthlyBudgetFromEnv } from "./grade-quota-env";
+import { cardSightMonthlyBudgetFromEnv, cardSightUserCapsFromEnv } from "./grade-quota-env";
 import { createGradeEstimateFromEnv, gradeEngineProbeFromEnv } from "./grade-estimate-env";
 import { createSlabPricingFromEnv } from "./poketrace-env";
 import { resolveDevAutoSession } from "./session";
@@ -60,6 +60,7 @@ const app = createApp(store, {
   pokecollectorAccounts,
   recognition,
   cardSight,
+  cardSightUserCaps: cardSightUserCapsFromEnv(),
   grading,
   cardgrading,
   gradeEngineProbe,

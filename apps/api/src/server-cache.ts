@@ -103,7 +103,8 @@ export function createRecognitionCache(options: { ttlMs?: number; now?: () => nu
       // whose photos stay on the local matcher, and vice versa.
       const key = `${source}:${imageCacheKey(image.bytes, image.mimeType)}`;
       const hit = cache.get(key);
-      if (hit) return hit.value;
+      // Backend review: a cache hit is not a vendor call, so it never carries the vendor's request id.
+      if (hit) return { ...hit.value, vendorRequestId: null };
       const result = await identify();
       if (isCacheableRecognition(result)) cache.set(key, result, source);
       return result;

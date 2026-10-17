@@ -225,18 +225,24 @@ export const userAccounts = sqliteTable(
     createdAt: text("created_at").notNull(),
     /** Null until the 6-digit code is confirmed. Accounts from before 0017 are backfilled. */
     emailVerifiedAt: text("email_verified_at"),
+    /** Backend review M1: verification codes ever sent (lifetime cap). */
+    verificationSends: integer("verification_sends").notNull().default(0),
   },
   (table) => [unique("user_accounts_email").on(table.email)],
 );
 
-/** Sean: CardSight consent (version + timestamps). Photos go to CardSight only while granted. */
+/**
+ * Sean: CardSight consent, current state per user. Backend review M4: a decline is `declined_at`
+ * (never a fake grant); every change is also appended to `consent_events`.
+ */
 export const providerConsents = sqliteTable(
   "provider_consents",
   {
     userId: text("user_id").notNull(),
     provider: text("provider", { enum: ["cardsight"] }).notNull(),
     version: text("version").notNull(),
-    grantedAt: text("granted_at").notNull(),
+    grantedAt: text("granted_at"),
+    declinedAt: text("declined_at"),
     withdrawnAt: text("withdrawn_at"),
     updatedAt: text("updated_at").notNull(),
   },
@@ -244,6 +250,47 @@ export const providerConsents = sqliteTable(
     primaryKey({ columns: [table.userId, table.provider] }),
     check("provider_consents_provider_chk", sql`${table.provider} in ('cardsight')`),
   ],
+);
+
+/** Backend review M4: append-only consent history (grant, decline, withdraw), never updated. */
+export const consentEvents = sqliteTable(
+  "consent_events",
+  {
+    seq: integer("seq").primaryKey({ autoIncrement: true }),
+    eventId: text("event_id").notNull(),
+    userId: text("user_id").notNull(),
+    provider: text("provider", { enum: ["cardsight"] }).notNull(),
+    kind: text("kind", { enum: ["grant", "decline", "withdraw"] }).notNull(),
+    version: text("version").notNull(),
+    at: text("at").notNull(),
+  },
+  (table) => [
+    unique("consent_events_event_id").on(table.eventId),
+    index("consent_events_user_idx").on(table.userId, table.seq),
+    check("consent_events_kind_chk", sql`${table.kind} in ('grant', 'decline', 'withdraw')`),
+  ],
+);
+
+/** Backend review M5: CardSight calls per user per calendar month (signed-in and guest caps). */
+export const cardsightUserUsage = sqliteTable(
+  "cardsight_user_usage",
+  {
+    userId: text("user_id").notNull(),
+    monthKey: text("month_key").notNull(),
+    used: integer("used").notNull().default(0),
+  },
+  (table) => [primaryKey({ columns: [table.userId, table.monthKey] })],
+);
+
+/** Backend review M1: emails per address per UTC day (pruned after a day). */
+export const emailSendCounts = sqliteTable(
+  "email_send_counts",
+  {
+    email: text("email").notNull(),
+    day: text("day").notNull(),
+    count: integer("count").notNull().default(0),
+  },
+  (table) => [primaryKey({ columns: [table.email, table.day] })],
 );
 
 /** Email verification: one live 6-digit code per user (SHA-256 only), 15 min, 5 tries. */
@@ -523,6 +570,9 @@ export const schema = {
   passwordResetTokens,
   emailVerificationCodes,
   providerConsents,
+  consentEvents,
+  cardsightUserUsage,
+  emailSendCounts,
   cardExternalIds,
   crmScans,
   crmConfirmations,

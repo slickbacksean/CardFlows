@@ -34,6 +34,8 @@ export interface CardSightConsentState {
   /** Version the user last answered (null if never asked). */
   version: string | null;
   grantedAt: string | null;
+  /** Set when the user said no to `version` (never recorded as a grant). */
+  declinedAt: string | null;
   withdrawnAt: string | null;
   currentVersion: string;
   /** True when the app should show the one-time prompt (never answered, or an older version). */
