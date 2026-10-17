@@ -37,7 +37,7 @@ Still open (Sean): hosting provider, hosted DB, photo retention, and the right `
 
 ### Email verification and the email sender
 
-New sign-ups get a 6-digit code by email. It works once, expires in 15 minutes and allows 5 tries. Only its SHA-256 is stored. Until it's confirmed, the pre-grade estimate routes (`POST /v1/grade/detect`, `/v1/grade/pregrade`, `/v1/grading/batch`, `/v1/inventory/:id/grade-jobs`) answer `403 { error: "email_unverified" }`. `POST /v1/email-verifications` sends a new code (one a minute, five an hour), and `POST /v1/email-verifications/confirm { code }` verifies. Invite-code testers and accounts created before migration 0017 count as verified.
+New sign-ups get a 6-digit code by email. It works once, expires in 15 minutes and allows 5 tries. Only its SHA-256 is stored. Until it's confirmed, the pre-grade estimate routes (`POST /v1/grade/detect`, `/v1/grade/pregrade`, `/v1/grading/batch`, `/v1/inventory/:id/grade-jobs`) answer `403 { error: "email_unverified" }`. `POST /v1/email-verifications` sends a new code (one a minute, five an hour), and `POST /v1/email-verifications/confirm { code }` verifies. Invite-code testers count as verified (by their roster ID), and so do accounts created before open sign-up deployed (2026-10-17T03:01Z, backfilled by 0017). An account with no row is never verified. Caps: 10 verification codes per account (lifetime), and 10 emails (verification + reset) per address per UTC day (`email_send_counts`, pruned after a day). Accounts still unverified 7 days after sign-up are deleted by an hourly job, the same way as an account delete.
 
 | Variable | Meaning |
 |---|---|

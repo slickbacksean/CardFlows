@@ -18,13 +18,21 @@ function capture(): EmailSender & { sent: EmailMessage[] } {
   return { name: "test", sent, send: async (m) => (sent.push(m), true) };
 }
 
-function open(kind: "sqlite" | "memory" = "sqlite") {
+function open(kind: "sqlite" | "memory" = "sqlite", extra: Parameters<typeof createApp>[1] = {}) {
   const store = kind === "sqlite" ? createSqliteStore({ sqlitePath: ":memory:" }) : createMemoryStore();
   if (kind === "sqlite") stores.push(store as SqliteStorePort);
   const mail = capture();
-  let clock = new Date("2026-10-17T03:00:00.000Z");
-  const app = createApp(store, { devAutoSession: false, emailSender: mail, now: () => clock });
-  return { app, mail, store, advance: (ms: number) => (clock = new Date(clock.getTime() + ms)) };
+  let clock = new Date("2026-10-17T05:00:00.000Z");
+  let purge: (() => { accountsPurged: number }) | null = null;
+  const app = createApp(store, {
+    devAutoSession: false,
+    emailSender: mail,
+    now: () => clock,
+    unverifiedPurgeIntervalMs: 0,
+    onUnverifiedPurge: (run) => (purge = run),
+    ...extra,
+  });
+  return { app, mail, store, purge: () => purge!(), advance: (ms: number) => (clock = new Date(clock.getTime() + ms)) };
 }
 
 type App = ReturnType<typeof createApp>;
@@ -38,7 +46,13 @@ async function call(app: App, path: string, init: { method?: string; body?: unkn
 }
 
 const PW = "correct horse battery";
-const GRADE_ROUTES = ["/v1/grade/detect", "/v1/grade/pregrade", "/v1/grading/batch", "/v1/inventory/inv-1/grade-jobs"];
+const GRADE_ROUTES = [
+  "/v1/grade/detect",
+  "/v1/grade/pregrade",
+  "/v1/grading/batch",
+  "/v1/inventory/inv-1/grade-jobs",
+  "/v1/inventory/inv-1/grade-estimate",
+];
 
 async function signUp(app: App, email = "sam@example.com") {
   const up = await call(app, "/v1/accounts", { body: { email, password: PW } });
@@ -128,6 +142,63 @@ describe.each(["sqlite", "memory"] as const)("email verification (%s store)", (k
     for (const route of GRADE_ROUTES) expect((await call(app, route, { body: {}, token })).body.error, route).not.toBe(EMAIL_UNVERIFIED_CODE);
     expect((await call(app, "/v1/email-verifications", { method: "POST", token })).body.emailVerified).toBe(true);
     expect(mail.sent).toHaveLength(0);
+  });
+
+  it("M1: an account can be sent at most 10 codes in its lifetime", async () => {
+    const { app, mail, advance } = open(kind);
+    const token = await signUp(app); // 1
+    let accepted = 0;
+    for (let i = 0; i < 12; i += 1) {
+      advance(61 * 60 * 1000); // past the minute and hour limits
+      const res = await call(app, "/v1/email-verifications", { method: "POST", token });
+      if (res.status === 202) accepted += 1;
+      else expect(res.body.error).toBe(EMAIL_VERIFICATION_COPY.sendLimit);
+    }
+    expect(accepted).toBe(9);
+    expect(mail.sent.filter((m) => m.kind === "verify-email")).toHaveLength(10);
+  });
+
+  it("M1: one address gets at most 10 emails a day (reset emails count too); the next day it resets", async () => {
+    const { app, mail, advance } = open(kind);
+    await signUp(app); // verification email #1
+    for (let i = 0; i < 12; i += 1) {
+      expect((await call(app, "/v1/password-resets", { body: { email: "sam@example.com" } })).status).toBe(202);
+      advance(10 * 60 * 1000);
+    }
+    expect(mail.sent).toHaveLength(10);
+    advance(24 * 60 * 60 * 1000);
+    await call(app, "/v1/password-resets", { body: { email: "sam@example.com" } });
+    expect(mail.sent).toHaveLength(11);
+  });
+
+  it("M1: accounts still unverified after 7 days are deleted; verified ones stay", async () => {
+    const { app, mail, purge, advance, store } = open(kind);
+    const unverified = await call(app, "/v1/accounts", { body: { email: "late@example.com", password: PW } });
+    const keep = await call(app, "/v1/accounts", { body: { email: "keep@example.com", password: PW } });
+    const code = mail.sent.find((m) => m.to === "keep@example.com")!.code;
+    await call(app, "/v1/email-verifications/confirm", { body: { code }, token: keep.body.token as string });
+    advance(6 * 86_400_000);
+    expect(purge().accountsPurged).toBe(0);
+    advance(86_400_000 + 1000);
+    expect(purge().accountsPurged).toBe(1);
+    const lateId = (unverified.body.identity as { userId: string }).userId;
+    expect(store.accounts.getAccount(lateId)).toBeNull();
+    expect((await call(app, "/v1/identity", { token: unverified.body.token as string })).status).toBe(401);
+    expect((await call(app, "/v1/identity", { token: keep.body.token as string })).status).toBe(200);
+  });
+
+  it("M3: no account row is not verified (only invite testers are, by ID)", () => {
+    const { store } = open(kind);
+    expect(store.accounts.isEmailVerified("acct_nobody")).toBe(false);
+    expect(store.accounts.isEmailVerified("guest_123")).toBe(false);
+  });
+
+  it("PATCH /v1/identity shares the invite limiter with POST /v1/sessions", async () => {
+    const { app } = open(kind, { authLimits: { invitePerIp: 2 } });
+    const session = await call(app, "/v1/sessions", { body: { inviteCode: JORDAN_INVITE_CODE } });
+    const token = session.body.token as string;
+    expect((await call(app, "/v1/identity", { method: "PATCH", body: { inviteCode: "wrong" }, token })).status).toBe(401);
+    expect((await call(app, "/v1/identity", { method: "PATCH", body: { inviteCode: "wrong" }, token })).status).toBe(429);
   });
 
   it("password reset codes go through the same email sender", async () => {

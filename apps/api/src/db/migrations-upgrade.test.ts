@@ -139,19 +139,21 @@ describe("migrations 0000–0017", () => {
     sqlite.close();
   });
 
-  it("0017: accounts that existed before email verification count as verified; new ones don't", () => {
+  it("0017 (M3): only accounts created before open sign-up deployed (03:01 UTC Oct 17) count as verified", () => {
     const file = path.join(tmp(), "pre-0017.sqlite");
     const old = new Database(file);
     old.pragma("foreign_keys = OFF");
     migrate(drizzle(old), { migrationsFolder: foldersUpTo("0016_quota_anchor_credits_period") });
-    old.prepare("INSERT INTO user_accounts (user_id, email, password_hash, created_at) VALUES ('acct_old', 'old@x.test', 'h', '2026-10-01T00:00:00.000Z')").run();
+    const add = old.prepare("INSERT INTO user_accounts (user_id, email, password_hash, created_at) VALUES (?, ?, 'h', ?)");
+    add.run("acct_old", "old@x.test", "2026-10-17T03:00:59.000Z");
+    add.run("acct_after", "after@x.test", "2026-10-17T03:01:00.000Z");
     old.close();
     const { sqlite } = applyMvpMigrations(file);
-    expect(sqlite.prepare("SELECT email_verified_at FROM user_accounts WHERE user_id = 'acct_old'").get()).toEqual({
-      email_verified_at: "2026-10-01T00:00:00.000Z",
-    });
-    sqlite.prepare("INSERT INTO user_accounts (user_id, email, password_hash, created_at) VALUES ('acct_new', 'new@x.test', 'h', '2026-10-17T00:00:00.000Z')").run();
-    expect(sqlite.prepare("SELECT email_verified_at FROM user_accounts WHERE user_id = 'acct_new'").get()).toEqual({ email_verified_at: null });
+    const verifiedAt = (id: string) => (sqlite.prepare("SELECT email_verified_at AS v FROM user_accounts WHERE user_id = ?").get(id) as { v: string | null }).v;
+    expect(verifiedAt("acct_old")).toBe("2026-10-17T03:00:59.000Z");
+    expect(verifiedAt("acct_after")).toBeNull();
+    expect(sqlite.prepare("SELECT verification_sends AS n FROM user_accounts WHERE user_id = 'acct_old'").get()).toEqual({ n: 0 });
     sqlite.close();
   });
+
 });

@@ -225,8 +225,21 @@ export const userAccounts = sqliteTable(
     createdAt: text("created_at").notNull(),
     /** Null until the 6-digit code is confirmed. Accounts from before 0017 are backfilled. */
     emailVerifiedAt: text("email_verified_at"),
+    /** Backend review M1: verification codes ever sent (lifetime cap). */
+    verificationSends: integer("verification_sends").notNull().default(0),
   },
   (table) => [unique("user_accounts_email").on(table.email)],
+);
+
+/** Backend review M1: emails per address per UTC day (pruned after a day). */
+export const emailSendCounts = sqliteTable(
+  "email_send_counts",
+  {
+    email: text("email").notNull(),
+    day: text("day").notNull(),
+    count: integer("count").notNull().default(0),
+  },
+  (table) => [primaryKey({ columns: [table.email, table.day] })],
 );
 
 /** Email verification: one live 6-digit code per user (SHA-256 only), 15 min, 5 tries. */
@@ -505,6 +518,7 @@ export const schema = {
   userAccounts,
   passwordResetTokens,
   emailVerificationCodes,
+  emailSendCounts,
   cardExternalIds,
   crmScans,
   crmConfirmations,

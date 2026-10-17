@@ -1047,13 +1047,21 @@ function createMemoryAccountStore(
   const accounts = new Map<string, AccountRecord>();
   const resets = new Map<string, { userId: string; expiresAt: string; usedAt: string | null }>();
   const emailCodes = new Map<string, { codeHash: string; expiresAt: string; attempts: number }>();
+  const sendsByAddressDay = new Map<string, number>();
   const byEmail = new Map<string, string>();
   const live = (s: StoredSession, now: string) => s.expiresAt > now;
   return {
     createAccount({ email, passwordHash, at }) {
       const normalized = normalizeEmail(email);
       if (byEmail.has(normalized)) return null;
-      const record: AccountRecord = { userId: `acct_${crypto.randomUUID()}`, email: normalized, passwordHash, createdAt: at, emailVerifiedAt: null };
+      const record: AccountRecord = {
+        userId: `acct_${crypto.randomUUID()}`,
+        email: normalized,
+        passwordHash,
+        createdAt: at,
+        emailVerifiedAt: null,
+        verificationSends: 0,
+      };
       accounts.set(record.userId, record);
       byEmail.set(normalized, record.userId);
       return { ...record };
@@ -1077,8 +1085,25 @@ function createMemoryAccountStore(
       if (account) accounts.set(userId, { ...account, passwordHash });
     },
     isEmailVerified(userId) {
+      return Boolean(accounts.get(userId)?.emailVerifiedAt);
+    },
+    takeVerificationSend(userId, cap) {
       const account = accounts.get(userId);
-      return !account || Boolean(account.emailVerifiedAt);
+      if (!account || (account.verificationSends ?? 0) >= cap) return false;
+      accounts.set(userId, { ...account, verificationSends: (account.verificationSends ?? 0) + 1 });
+      return true;
+    },
+    takeEmailSendForAddress(email, day, cap) {
+      const yesterday = new Date(Date.parse(`${day}T00:00:00Z`) - 86_400_000).toISOString().slice(0, 10);
+      for (const key of [...sendsByAddressDay.keys()]) if (key.split("\0")[1]! < yesterday) sendsByAddressDay.delete(key);
+      const key = `${normalizeEmail(email)}\0${day}`;
+      const count = sendsByAddressDay.get(key) ?? 0;
+      if (count >= cap) return false;
+      sendsByAddressDay.set(key, count + 1);
+      return true;
+    },
+    listUnverifiedAccountsBefore(cutoff) {
+      return [...accounts.values()].filter((a) => !a.emailVerifiedAt && a.createdAt < cutoff).map((a) => a.userId);
     },
     createEmailVerification({ userId, codeHash, expiresAt }) {
       emailCodes.set(userId, { codeHash, expiresAt, attempts: 0 });
