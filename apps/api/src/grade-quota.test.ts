@@ -189,6 +189,51 @@ describe("monthly grade quotas", () => {
     expect(granted.body.quota).toMatchObject({ extraCredits: 3, plan: "premium", monthlyLimit: 30 });
   });
 
+  it("free users can't buy credit packs (Premium-only)", async () => {
+    const stub = createApp(createMemoryStore(), {
+      devAutoSession: true,
+      gradeQuota: true,
+      gradeIap: { enabled: false, stub: true },
+    });
+    const denied = await json<QuotaBody & { code?: string; feature?: string }>(stub, "/v1/grade/credits", {
+      method: "POST",
+      body: JSON.stringify({ credits: 10 }),
+    });
+    expect(denied.status).toBe(403);
+    expect(denied.body).toMatchObject({ code: "premium_required", feature: "credit_packs", error: "Credit packs are for Premium members." });
+    expect((await json<QuotaBody>(stub, "/v1/grade/quota")).body.quota).toMatchObject({ plan: "free", extraCredits: 0 });
+  });
+
+  it("a lapsed Premium user keeps their bought credits and spends them after the free allowance", async () => {
+    const store = createMemoryStore();
+    const app = createApp(store, {
+      devAutoSession: true,
+      gradeQuota: true,
+      gradeIap: { enabled: false, stub: true },
+      now: () => new Date("2026-10-20T00:00:00Z"),
+    });
+    const bought = await json<QuotaBody>(app, "/v1/grade/credits", { method: "POST", body: JSON.stringify({ credits: 10, plan: "premium" }) });
+    expect(bought.body.quota).toMatchObject({ plan: "premium", extraCredits: 10 });
+    // Premium lapses.
+    await json<QuotaBody>(app, "/v1/grade/credits", { method: "POST", body: JSON.stringify({ plan: "free" }) });
+    expect((await json<QuotaBody>(app, "/v1/grade/quota")).body.quota).toMatchObject({
+      plan: "free",
+      monthlyLimit: GRADE_QUOTA_FREE_PER_MONTH,
+      extraCredits: 10,
+      remainingGrades: GRADE_QUOTA_FREE_PER_MONTH + 10,
+    });
+    // The 5 free estimates go first; then the leftover credits, with no Premium needed.
+    for (let i = 0; i < GRADE_QUOTA_FREE_PER_MONTH; i += 1) {
+      await json<QuotaBody>(app, "/v1/grade/credits/consume", { method: "POST", body: "{}" });
+    }
+    expect((await json<QuotaBody>(app, "/v1/grade/quota")).body.quota).toMatchObject({ remainingMonthly: 0, extraCredits: 10 });
+    const spent = await json<QuotaBody>(app, "/v1/grade/credits/consume", { method: "POST", body: "{}" });
+    expect(spent.status).toBe(200);
+    expect(spent.body.quota).toMatchObject({ plan: "free", extraCredits: 9 });
+    // Buying more needs Premium again.
+    expect((await json<QuotaBody>(app, "/v1/grade/credits", { method: "POST", body: JSON.stringify({ credits: 10 }) })).status).toBe(403);
+  });
+
   it("requires the app API key when configured", async () => {
     const app = createApp(createMemoryStore(), {
       devAutoSession: true,

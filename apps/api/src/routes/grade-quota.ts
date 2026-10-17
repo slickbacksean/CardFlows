@@ -7,6 +7,7 @@ import {
 } from "@cardflow/shared";
 import type { Context } from "hono";
 import type { AppEnv, CardFlowApp } from "../app-env";
+import { premiumRequiredBody } from "./grade-history";
 
 export interface GradeQuotaRouteDeps {
   quotaSnapshotFor(userId: string): GradeQuotaSnapshot;
@@ -66,6 +67,11 @@ export function registerGradeQuotaRoutes(app: CardFlowApp, deps: GradeQuotaRoute
       setGradePlan(userId, body.plan, at);
     }
     const credits = Math.floor(Number(body.credits ?? 0));
+    // Sean: buying credit packs is Premium-only. Spending leftover credits is not (Oct 17): a
+    // lapsed user's credits stay usable and are spent after the free allowance.
+    if (Number.isFinite(credits) && credits > 0 && quotaSnapshotFor(userId).plan !== "premium") {
+      return c.json(premiumRequiredBody("credit_packs"), 403);
+    }
     if (Number.isFinite(credits) && credits > 0) {
       addGradeCredits(userId, Math.min(credits, 1_000), at);
     }

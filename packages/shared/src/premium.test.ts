@@ -25,7 +25,9 @@ describe("D14 premium", () => {
       premiumOnly: "Credit packs are for Premium members.",
       packs: ["10 pre-grade estimates for $2.99", "25 pre-grade estimates for $5.99"],
       neverExpire: "Bought credits never expire. They're used only after your monthly pre-grade estimates run out.",
+      afterPremium: "If your Premium ends, credits you already bought still work. They're used after your free monthly estimates.",
     });
+    expect(premiumFeatureLine("credit_packs")).toBe("Credit packs are for Premium members.");
     expect(CREDITS_NEVER_EXPIRE_COPY).toBe(
       "Your monthly allowance resets on your reset date and unused monthly estimates don't roll over. Credits you buy never expire.",
     );

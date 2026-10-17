@@ -19,7 +19,9 @@ export const PREMIUM_PLACEHOLDER_PRICING = {
   /** Sean (Oct 16): bought credit-pack credits never expire (Apple 3.1.1). */
   creditsExpire: false,
   /**
-   * Credit packs (Sean, Oct 16): Premium-only, built after the Apple developer account exists.
+   * Credit packs (Sean, Oct 16): buying is Premium-only, built after the Apple developer account
+   * exists. Sean (Oct 17): spending leftover credits does not need Premium; on Free they're
+   * spent after the 5 free estimates.
    * Not for sale yet. Credits are spent only after the monthly allowance is used up.
    */
   creditPacks: [
@@ -39,11 +41,12 @@ export const PREMIUM_REQUIRED_CODE = "premium_required";
  * the API answers 403 premium_required to free accounts. Each estimate still uses quota.
  */
 export const BATCH_GRADE_HEADER = "x-cardflow-batch";
-export const PREMIUM_FEATURES = ["batch_grading", "grade_history"] as const;
+export const PREMIUM_FEATURES = ["batch_grading", "grade_history", "credit_packs"] as const;
 export type PremiumFeature = (typeof PREMIUM_FEATURES)[number];
 
 const FEATURE_LINE: Record<PremiumFeature, string> = {
   batch_grading: "Batch pre-grade is part of Premium.",
+  credit_packs: "Credit packs are for Premium members.",
   grade_history: `Your full pre-grade estimate history is part of Premium. Free accounts see the ${GRADE_HISTORY_FREE_VISIBLE} most recent; older ones stay saved.`,
 };
 
@@ -62,6 +65,8 @@ export const CREDIT_PACK_COPY = {
   premiumOnly: "Credit packs are for Premium members.",
   packs: PREMIUM_PLACEHOLDER_PRICING.creditPacks.map((p) => `${p.credits} pre-grade estimates for ${p.price}`),
   neverExpire: "Bought credits never expire. They're used only after your monthly pre-grade estimates run out.",
+  /** Sean (Oct 17): leftover credits stay usable if Premium ends; only buying needs Premium. */
+  afterPremium: "If your Premium ends, credits you already bought still work. They're used after your free monthly estimates.",
 } as const;
 
 export function premiumFeatureLine(feature: PremiumFeature): string {
