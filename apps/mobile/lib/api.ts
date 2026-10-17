@@ -41,6 +41,7 @@ import {
   type ScanImageMimeType,
 } from "@cardflow/shared";
 import { Platform } from "react-native";
+import { rememberDeviceItemIds } from "./device-item-index";
 import { createRequestId, rememberRequestId } from "./request-id";
 import { isPhysicalRuntime } from "./runtime-host";
 import { peekSessionToken, waitForSessionRestore } from "./session-token";
@@ -491,8 +492,11 @@ export function identifyLivestreamFrame(input: {
   });
 }
 
-export function listInventory() {
-  return callApi(apiContract.listInventory);
+export async function listInventory() {
+  const result = await callApi(apiContract.listInventory);
+  // Backend re-review M2 (P4): kept on the phone so account deletion can find grade history keys.
+  rememberDeviceItemIds(result.items.map((item) => item.inventoryItemId));
+  return result;
 }
 
 export function getPortfolio() {

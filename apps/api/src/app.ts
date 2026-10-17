@@ -8,7 +8,8 @@ import { createRecognitionWithFallback } from "./cardsight-adapter";
 import { normalizeEmail, type DeletionAuditKind } from "./account-store";
 import { routePath } from "hono/route";
 import { CARDSIGHT_CONSENT_VERSION, INVITED_USERS, EMAIL_CODE_LIFETIME_SENDS, EMAIL_SENDS_PER_ADDRESS_PER_DAY, UNVERIFIED_ACCOUNT_TTL_DAYS, EMAIL_CODE_LENGTH, EMAIL_RESEND_COOLDOWN_MS, EMAIL_UNVERIFIED_CODE, EMAIL_VERIFICATION_COPY, EMAIL_VERIFICATION_TTL_MS, isEmailCode, passwordResetEmailText, verificationEmailText, quotaAnchor, quotaPeriodFor, ACCOUNT_AUTH_COPY, ACCOUNT_DELETION_COPY, PASSWORD_RESET_TTL_MS, GUEST_MINT_WINDOW_MS, GUEST_SESSION_TTL_MS, isValidEmail, passwordProblem, GUEST_FREE_SCANS, GUEST_USER_PREFIX, SIGNUP_REQUIRED_CODE, guestIdentity, guestRouteAllowed, isGuestUserId, isHot, parsePerfBatch, signupMessage, type SignupReason } from "@cardflow/shared";
-import { NORTH_STAR_NAME, SCANS_PER_WAR_NAME, northStarWeekly } from "@cardflow/shared";
+import { NORTH_STAR_NAME, SCANS_PER_WAR_NAME, northStarUserWeekTotals, northStarWeekly, type NorthStarWeekTotal } from "@cardflow/shared";
+import { ANONYMIZED_USER_PREFIX } from "./purchase-ledger";
 import { opsMetrics, type OpsMetrics } from "./ops-metrics";
 import { parseUserPriceAmount } from "@cardflow/shared";
 import {
@@ -162,6 +163,7 @@ import {
   offPokecollectorAccounts,
   type PokecollectorAccounts,
   type PokecollectorCollectionCopy,
+  type PokecollectorRemoteDeletion,
 } from "./pokecollector-accounts";
 import { SCAN_IMAGE_MAX_BYTES, type ScanImageMimeType } from "./scan-image";
 import {
@@ -567,6 +569,26 @@ export function createApp(
    * keeps valid guests. A guest who signs up has their scans moved to the new account. A guest
    * who never signs up has every row deleted within 24 h after the session expires (hourly job).
    */
+  /**
+   * Backend review H2 (P4): the weekly counts this user adds to /ops/north-star (same rule: invited
+   * testers, signed-up accounts, and anyone with purchase ledger rows), taken just before their
+   * rows are deleted and stored as anonymous totals in the same transaction.
+   */
+  const northStarTotalsFor = (userId: string): NorthStarWeekTotal[] => {
+    const purchases = store.purchaseLedger.activePurchaseTimes(userId);
+    const counted =
+      store.listInvitedUsers().some((user) => user.userId === userId) ||
+      Boolean(store.accounts.getAccount(userId)) ||
+      store.purchaseLedger.list(userId).length > 0;
+    if (!counted) return [];
+    return northStarUserWeekTotals({ scans: store.listScans(userId).map((scan) => scan.capturedAt), purchases });
+  };
+  // Before H2, deleted accounts' ledger rows stayed under `deleted_<uuid>`: fold them into the
+  // totals once (they have no scans left) and delete them.
+  for (const legacyId of store.purchaseLedger.listUserIds()) {
+    if (!legacyId.startsWith(ANONYMIZED_USER_PREFIX)) continue;
+    store.accounts.deleteAllUserRows(legacyId, { northStarTotals: northStarTotalsFor(legacyId) });
+  }
   const runGuestCleanup = () => {
     const at = now().toISOString();
     let guestsPurged = 0;
@@ -577,7 +599,7 @@ export function createApp(
       if (store.accounts.hasLiveSession(userId, at)) continue;
       const scans = store.listScans(userId).length;
       store.deleteUserPhotos(userId);
-      store.accounts.deleteAllUserRows(userId);
+      store.accounts.deleteAllUserRows(userId, { northStarTotals: northStarTotalsFor(userId) });
       if (scans > 0) {
         guestsPurged += 1;
         scansDeleted += scans;
@@ -921,8 +943,7 @@ export function createApp(
     if (!given || !timingSafeEqualString(given, expected)) {
       return c.json({ ok: false, error: "Unauthorized" }, 401);
     }
-    // Invited testers + signed-up accounts (#86) + ledger user IDs (#88), which include
-    // anonymized deleted accounts so past weeks don't shift. Guests are not counted.
+    // Invited testers + signed-up accounts (#86) + ledger user IDs (#88). Guests are not counted.
     const userIds = [
       ...new Set([
         ...store.listInvitedUsers().map((user) => user.userId),
@@ -936,7 +957,11 @@ export function createApp(
       // Data Engineer review: from the purchase ledger, excluding voided (undone) purchases.
       purchases: store.purchaseLedger.activePurchaseTimes(userId),
     }));
-    const weeks = northStarWeekly(users, { weeks: Number(c.req.query("weeks") ?? "8") || 8 });
+    // Backend review H2 (P4): deleted accounts are in the anonymous weekly totals instead.
+    const weeks = northStarWeekly(users, {
+      weeks: Number(c.req.query("weeks") ?? "8") || 8,
+      totals: store.accounts.listNorthStarTotals(),
+    });
     return c.json({ ok: true, metric: NORTH_STAR_NAME, companionMetric: SCANS_PER_WAR_NAME, weeks });
   });
   const allowedOrigins = new Set(options.corsOrigins ?? corsOriginsFromEnv());
@@ -1959,31 +1984,42 @@ export function createApp(
     return c.json({ ok: true as const });
   });
 
+  /**
+   * Backend re-review (P4): delete the cards and wishlist CardFlow stored on PokéCollector for this
+   * link (the remote user itself when PokéCollector allows it). Never blocks or fails the account
+   * delete. A remote user other CardFlow users are also linked to (guests' shared legacy user, or
+   * a legacy email-derived name) is never destroyed; the opaque per-user accounts PR fixes that.
+   */
+  const deletePokecollectorRemote = async (
+    userId: string,
+    link: ReturnType<typeof getPokecollectorUserMapping>,
+  ): Promise<PokecollectorRemoteDeletion | "not_linked"> => {
+    if (!link) return "not_linked";
+    if (isGuestUserId(userId) || store.countPokecollectorLinks(link.pokecollectorUserId) > 0) return "skipped";
+    try {
+      return await pokecollectorAccounts.deleteRemoteUser(link);
+    } catch {
+      return "failed";
+    }
+  };
+
   /** Everything for one user: rows (one transaction), then files, then staged uploads. */
   const deleteUserEverything = (userId: string, kind: DeletionAuditKind) => {
     // Data Engineer review: every user_id row in one transaction first, then the files (whose
     // locations were collected before the rows went). A crash in between leaves orphan files
     // with no personal rows, which the photo retention sweep removes, never rows without files.
     const removePhotos = store.prepareUserPhotoDeletion(userId);
-    // Data Engineer review: anonymize (not delete) the purchase ledger first, so past North Star
-    // weeks keep their counts (snapshots with prices are removed). deleteAllUserRows then finds
-    // no purchase_events rows under this user_id.
-    store.purchaseLedger.anonymizeUser(userId);
-    // Policy Reviewer (P4): the PokéCollector link (crm_pokecollector_users: link IDs) goes in the
-    // same transaction as every other user_id row. Read it first so the cached token can be dropped.
+    // Backend review H2 (P4): the user's weekly North Star counts become anonymous totals in the
+    // same transaction that hard-deletes every row, including purchase_events, so past weeks
+    // keep their numbers and nothing per-user is left.
+    const northStarTotals = northStarTotalsFor(userId);
+    // The PokéCollector link (crm_pokecollector_users) is read first: the row goes with every
+    // other user_id row, then what CardFlow stored on PokéCollector is deleted (below).
     const pokecollectorLink = getPokecollectorUserMapping(userId);
-    const rows = store.accounts.deleteAllUserRows(userId);
+    const rows = store.accounts.deleteAllUserRows(userId, { northStarTotals });
     const photos = removePhotos();
     const staged = gradeUploads.releaseUser(userId);
-    if (pokecollectorLink) {
-      // Best effort, never blocks or fails the delete. PokéCollector has no revoke/unlink API that
-      // CardFlow integrates; this only drops CardFlow's cached access token.
-      try {
-        void pokecollectorAccounts.forgetUser(pokecollectorLink).catch(() => undefined);
-      } catch {
-        // ignored
-      }
-    }
+    const pokecollector = deletePokecollectorRemote(userId, pokecollectorLink);
     // Backend review M1/L1: in-flight work is refused from now on, and in-memory state goes.
     pruneDeletionMemory();
     deletedUserIds.set(userId, now().getTime());
@@ -1994,7 +2030,7 @@ export function createApp(
     // Backend review L3: audit row with no PII.
     const rowsDeleted = Object.values(rows).reduce((sum, n) => sum + n, 0);
     store.accounts.recordDeletionAudit({ at: now().toISOString(), kind, rowsDeleted });
-    return { rows, photos, staged, rowsDeleted, pokecollectorUnlinked: Boolean(pokecollectorLink) };
+    return { rows, photos, staged, rowsDeleted, pokecollector };
   };
 
   // Policy Reviewer (Oct 17): act on an under-18 report. Ops token only (404 when unset). Turns
@@ -2041,7 +2077,8 @@ export function createApp(
   const sweepOrphanedUserData = () => {
     const at = now().toISOString();
     let accountsSwept = 0;
-    for (const userId of store.listScanUserIds("")) {
+    // Backend re-review M1: every user_id in any table, not only users with scans.
+    for (const userId of store.accounts.listAllUserIds()) {
       const goneAccount = userId.startsWith("acct_") && !store.accounts.getAccount(userId);
       if (!goneAccount && !wasDeleted(userId)) continue;
       if (store.accounts.hasLiveSession(userId, at)) continue;
@@ -2097,10 +2134,11 @@ export function createApp(
         return c.json({ ok: false, code: "password_incorrect", error: ACCOUNT_DELETION_COPY.passwordIncorrect }, 403);
       }
     }
-    const { rows, photos, staged, rowsDeleted } = deleteUserEverything(userId, "self");
+    const { rows, photos, staged, rowsDeleted, pokecollector } = deleteUserEverything(userId, "self");
     const token = parseBearerToken(c.req.header("authorization"));
     if (token) deletionReceipts.set(deletionReceiptKey(token), now().getTime());
     return c.json({
+      pokecollector: await pokecollector,
       ok: true,
       photosDeleted: photos.deleted + staged,
       salesDeleted: rows.user_card_sales ?? 0,

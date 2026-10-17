@@ -9,6 +9,7 @@ import { createApp } from "./app";
 import { createIdempotencyRegistry } from "./idempotency";
 import { createMockPokecollectorAccounts, type PokecollectorUserMapping } from "./pokecollector-accounts";
 import { createSqliteStore, type SqliteStorePort } from "./sqlite-store";
+import { createMemoryStore } from "./store";
 
 /** P4: account deletion end to end, for every kind of session the app can hold. */
 const stores: SqliteStorePort[] = [];
@@ -126,29 +127,70 @@ describe("P4 account deletion end to end", () => {
     expect((await call(app, "/v1/account/delete", { method: "POST" })).status).toBe(401);
   });
 
-  it("deletes the PokéCollector link in the same delete and drops CardFlow's cached token", async () => {
+  it("deletes the PokéCollector link and the cards and wishlist CardFlow stored there", async () => {
     const accounts = createMockPokecollectorAccounts();
-    const forgotten: PokecollectorUserMapping[] = [];
-    const forgetUser = accounts.forgetUser.bind(accounts);
-    accounts.forgetUser = async (mapping) => {
-      forgotten.push(mapping);
-      await forgetUser(mapping);
+    const deleted: PokecollectorUserMapping[] = [];
+    const deleteRemoteUser = accounts.deleteRemoteUser.bind(accounts);
+    accounts.deleteRemoteUser = async (mapping) => {
+      deleted.push(mapping);
+      return deleteRemoteUser(mapping);
     };
     const { app, store } = open({ pokecollectorAccounts: accounts });
     const { token, userId } = await signUp(app, "linked@example.com");
     expect((await call(app, "/v1/identity", { token })).status).toBe(200);
-    expect(store.getPokecollectorUserMapping(userId)).toBeDefined();
+    const mapping = store.getPokecollectorUserMapping(userId)!;
+    expect(mapping).toBeDefined();
+    await accounts.addPurchased(mapping, { tcgdexId: "sv1-1" });
+    await accounts.addWatchlist(mapping, { tcgdexId: "sv1-2" });
     expect(store.accounts.countUserRows(userId).crm_pokecollector_users).toBe(1);
-    expect((await deleteWith(app, token, PW)).status).toBe(200);
+    const res = await deleteWith(app, token, PW);
+    expect(res.status).toBe(200);
+    expect(res.body.pokecollector).toBe("user_deleted");
     expect(store.getPokecollectorUserMapping(userId)).toBeUndefined();
     expect(remaining(store.accounts.countUserRows(userId))).toEqual([]);
-    expect(forgotten.map((m) => m.userId)).toEqual([userId]);
+    expect(deleted.map((m) => m.userId)).toEqual([userId]);
+    expect(await accounts.listCollection(mapping)).toEqual([]);
+    expect(await accounts.listWishlist(mapping)).toEqual([]);
+  });
+
+  it("a PokéCollector user other CardFlow users are linked to is never destroyed", async () => {
+    const accounts = createMockPokecollectorAccounts();
+    let calls = 0;
+    accounts.deleteRemoteUser = async () => {
+      calls += 1;
+      return "user_deleted";
+    };
+    const fresh = createSqliteStore({ sqlitePath: ":memory:" });
+    stores.push(fresh);
+    // SQLite refuses a second link to one remote ID; the memory twin doesn't, so the guard is
+    // checked there (and on legacy data the opaque-accounts migration script cleans up).
+    const link = { userId: "u1", pokecollectorUserId: "9", pokecollectorUsername: "cardflow-sean", updatedAt: "2026-10-17T00:00:00.000Z" };
+    const sqliteRefused = (() => {
+      try {
+        fresh.savePokecollectorUserMapping(link);
+        fresh.savePokecollectorUserMapping({ ...link, userId: "u2", pokecollectorUsername: "x" });
+        return false;
+      } catch {
+        return true;
+      }
+    })();
+    expect(sqliteRefused).toBe(true);
+    const memory = createMemoryStore();
+    const memApp = createApp(memory, { devAutoSession: false, guestMode: true, orphanSweepIntervalMs: 0, pokecollectorAccounts: accounts });
+    const signed = await signUp(memApp, "shared-mem@example.com");
+    await call(memApp, "/v1/identity", { token: signed.token });
+    const memMapping = memory.getPokecollectorUserMapping(signed.userId)!;
+    memory.savePokecollectorUserMapping({ ...memMapping, userId: "someone-else" });
+    const res = await deleteWith(memApp, signed.token, PW);
+    expect(res.status).toBe(200);
+    expect(res.body.pokecollector).toBe("skipped");
+    expect(calls).toBe(0);
   });
 
   it("a PokéCollector failure never blocks the delete", async () => {
     for (const failure of ["reject", "throw"] as const) {
       const accounts = createMockPokecollectorAccounts();
-      accounts.forgetUser =
+      accounts.deleteRemoteUser =
         failure === "reject"
           ? async () => {
               throw new Error("pokecollector down");
@@ -159,7 +201,9 @@ describe("P4 account deletion end to end", () => {
       const { app, store } = open({ pokecollectorAccounts: accounts });
       const { token, userId } = await signUp(app, `fail-${failure}@example.com`);
       await call(app, "/v1/identity", { token });
-      expect((await deleteWith(app, token, PW)).status, failure).toBe(200);
+      const res = await deleteWith(app, token, PW);
+      expect(res.status, failure).toBe(200);
+      expect(res.body.pokecollector, failure).toBe("failed");
       expect(remaining(store.accounts.countUserRows(userId)), failure).toEqual([]);
     }
   });
@@ -318,6 +362,7 @@ describe("Backend review M5: every user table and file on a real temp-dir store"
         else if (col.name === "purchase_id") values[col.name] = purchaseId;
         else if (col.name === "image_storage_ref") values[col.name] = `scans/${scanId}.jpg`;
         else if (col.name === "image_mime_type") values[col.name] = "image/jpeg";
+        else if (col.name === "purchased_at" || col.name === "captured_at") values[col.name] = "2026-10-14T00:00:00.000Z";
         else if (col.pk && /INT/i.test(col.type)) continue;
         else if (!col.notnull && col.dflt_value === null) continue;
         else if (/INT|REAL/i.test(col.type)) values[col.name] = 1;
@@ -368,14 +413,58 @@ describe("Backend review M5: every user table and file on a real temp-dir store"
         .prepare("SELECT COUNT(*) AS n FROM purchase_events WHERE user_id = ? OR purchase_id = ? OR inventory_item_id = ? OR snapshot IS NOT NULL")
         .get(userId, purchaseId, itemId) as { n: number };
       expect(tied.n).toBe(0);
-      const anon = check.prepare("SELECT user_id FROM purchase_events").all() as Array<{ user_id: string }>;
-      expect(anon.length).toBe(1);
-      expect(anon[0]!.user_id).toMatch(/^deleted_[0-9a-f-]{36}$/);
+      // H2: purchase_events rows are hard-deleted; only anonymous weekly totals remain.
+      expect((check.prepare("SELECT COUNT(*) AS n FROM purchase_events").get() as { n: number }).n).toBe(0);
+      const totals = check.prepare("SELECT * FROM north_star_weekly_totals").all() as Array<Record<string, unknown>>;
+      expect(totals).toEqual([{ week_start: "2026-10-12", purchased: 1, scans: 1, active_resellers: 1 }]);
+      for (const row of totals) expect(Object.keys(row).sort()).toEqual(["active_resellers", "purchased", "scans", "week_start"]);
       expect((check.prepare("SELECT COUNT(*) AS n FROM crm_purchases WHERE purchase_id = ?").get(purchaseId) as { n: number }).n).toBe(0);
       const audit = check.prepare("SELECT * FROM account_deletion_audit").all();
       expect(JSON.stringify(audit)).not.toContain(userId);
     } finally {
       check.close();
     }
+  });
+});
+
+describe("Backend re-review (P4): sweep scope, memory image cutoff, peppered email keys", () => {
+  it("M1: the orphan sweep finds a deleted account's rows in any user_id table, not only scans", async () => {
+    let sweep!: () => { accountsSwept: number; imagesSwept: number };
+    const { store } = open({ onOrphanSweep: (run) => (sweep = run) });
+    // No scan at all: only a preferences row and a consent row for an account that's gone.
+    store.setPreferences("acct_ghost2", { ...store.getPreferences("acct_ghost2") });
+    store.consents.decline("acct_ghost2", "cardsight", "v1", "2026-10-17T00:00:00.000Z");
+    expect(store.listScanUserIds("")).not.toContain("acct_ghost2");
+    expect(store.accounts.listAllUserIds()).toContain("acct_ghost2");
+    expect(sweep().accountsSwept).toBe(1);
+    expect(remaining(store.accounts.countUserRows("acct_ghost2"))).toEqual([]);
+  });
+
+  it("L1: in memory-image mode the sweep also leaves images younger than an hour", async () => {
+    let sweep!: () => { accountsSwept: number; imagesSwept: number };
+    const { store } = open({ onOrphanSweep: (run) => (sweep = run) });
+    const scanId = "88888888-8888-8888-8888-888888888888";
+    store.saveScanImage(scanId, { bytes: Uint8Array.from([0xff, 0xd8, 0xff, 0xd9]), mimeType: "image/jpeg" });
+    expect(sweep().imagesSwept).toBe(0);
+    // An hour later it is an orphan.
+    expect(store.sweepOrphanScanImages(new Date(Date.now() + 60 * 60 * 1000 + 1))).toBe(1);
+  });
+
+  it("L3: email_send_counts keys are HMAC-SHA256 with the server pepper", async () => {
+    const { createHmac } = await import("node:crypto");
+    const { serverPepper } = await import("./server-pepper");
+    const pepper = serverPepper();
+    expect(emailSendKey("a@example.com")).toBe(
+      createHmac("sha256", pepper).update("cardflow-email-send\0a@example.com").digest("hex"),
+    );
+    expect(emailSendKey("a@example.com", "another-pepper-another-pepper-xx")).not.toBe(emailSendKey("a@example.com"));
+    // Without the pepper the plain hash of the address doesn't match.
+    const { createHash } = await import("node:crypto");
+    expect(emailSendKey("a@example.com")).not.toBe(createHash("sha256").update("cardflow-email-send\0a@example.com").digest("hex"));
+    expect(() => serverPepper({ NODE_ENV: "production" })).toThrow(/CARD_FLOW_SERVER_PEPPER/);
+    expect(() => serverPepper({ NODE_ENV: "production", CARD_FLOW_SERVER_PEPPER: "short" })).toThrow();
+    expect(serverPepper({ NODE_ENV: "production", CARD_FLOW_SERVER_PEPPER: "p".repeat(32) })).toBe("p".repeat(32));
+    const { productionConfigProblems } = await import("./production-config");
+    expect(productionConfigProblems({ NODE_ENV: "production", CARD_FLOW_TRUST_PROXY_HOPS: "1" }).join(" ")).toContain("CARD_FLOW_SERVER_PEPPER");
   });
 });

@@ -77,6 +77,7 @@ describe("MVP CRM schema", () => {
       "grade_photo_objects",
       "grade_quota_usage",
       "idempotency_keys",
+      "north_star_weekly_totals",
       "password_reset_tokens",
       "portfolio_value_snapshots",
       "provider_consents",

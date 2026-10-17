@@ -418,7 +418,7 @@ describe("P4: account deletion end to end", () => {
     const lib = read("apps/mobile/lib/account-deletion.ts");
     const serverCall = lib.indexOf("await deleteAccount(password)");
     expect(serverCall).toBeGreaterThan(0);
-    expect(lib.indexOf("await inventoryItemIdsForWipe()")).toBeLessThan(serverCall);
+    expect(lib.indexOf("await inventoryItemIdsForWipe(userId)")).toBeLessThan(serverCall);
     expect(lib.indexOf("gradeFlowPhotoUris(gradeFlowSession.getState())")).toBeLessThan(serverCall);
     expect(lib.indexOf("if (!wipesPhone(outcome))")).toBeGreaterThan(serverCall);
     expect(lib.indexOf("runLocalAccountWipe(")).toBeGreaterThan(lib.indexOf("if (!wipesPhone(outcome))"));
@@ -441,7 +441,7 @@ describe("P4: account deletion end to end", () => {
 
   it("Policy + Backend M3: exact deletion lines", () => {
     expect(POKECOLLECTOR_DELETION_LINE).toBe(
-      "If you linked PokéCollector, CardFlow deletes its connection to your PokéCollector account. Anything stored in your PokéCollector account stays there and is managed by PokéCollector.",
+      "If your account was linked to PokéCollector, CardFlow deletes the cards and wishlist it stored there and removes the link.",
     );
     expect(ACCOUNT_DELETION_COPY.deletes).toContain(POKECOLLECTOR_DELETION_LINE);
     expect(ANONYMOUS_LEDGER_LINE).toBe("CardFlow keeps only anonymous totals that can't identify you. Purchases you made on a marketplace aren't affected.");
@@ -450,6 +450,30 @@ describe("P4: account deletion end to end", () => {
       "Deleting your account doesn't cancel an App Store or Google Play subscription. Cancel it in your store settings.",
     );
     expect(ACCOUNT_DELETION_COPY.credits).toBe("Unused grading credits are lost and can't be refunded or restored.");
+  });
+
+  it("Backend re-review M2: the wipe's item IDs come from the phone's own index, not only the server", () => {
+    const index = read("apps/mobile/lib/device-item-index.ts");
+    expect(index).toContain("export function rememberDeviceItemIds");
+    expect(index).toContain("export function forgetDeviceItemIds");
+    expect(index).not.toContain("expo-secure-store");
+    const lib = read("apps/mobile/lib/account-deletion.ts");
+    expect(lib).toContain("new Set(deviceItemIds(userId))");
+    // listInventory may fail (401 on a retry); the device index is used either way.
+    expect(lib.indexOf("deviceItemIds(userId)")).toBeLessThan(lib.indexOf("await listInventory()"));
+    expect(read("apps/mobile/lib/api.ts")).toContain("rememberDeviceItemIds(result.items.map((item) => item.inventoryItemId))");
+    expect(read("apps/mobile/lib/identity.ts")).toContain("setDeviceItemIndexOwner(cachedUserId)");
+    const history = read("apps/mobile/lib/grade-history.ts");
+    expect(history).toContain("rememberDeviceItemIds([inventoryItemId])");
+    expect(history).toContain("forgetDeviceItemIds(userId)");
+  });
+
+  it("H2: the anonymous-totals line is accurate (weekly totals table, ledger rows hard-deleted)", () => {
+    const app = read("apps/api/src/app.ts");
+    expect(app).toContain("store.accounts.deleteAllUserRows(userId, { northStarTotals })");
+    expect(app).toContain("totals: store.accounts.listNorthStarTotals()");
+    expect(app).not.toContain("anonymizeUser");
+    expect(read("apps/api/drizzle/0022_north_star_weekly_totals.sql")).toContain("CREATE TABLE `north_star_weekly_totals`");
   });
 
   it("deletion copy follows the copy rules", () => {

@@ -2,11 +2,13 @@
  * Open sign-up accounts, DB-backed guest sessions, and whole-user data moves/deletes.
  * Every multi-table change runs in one SQLite transaction.
  */
-import { createHash } from "node:crypto";
+import { createHmac } from "node:crypto";
+import type { NorthStarWeekTotal } from "@cardflow/shared";
 import type Database from "better-sqlite3";
 import { and, eq, isNull, lte } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import { crmSessions, emailVerificationCodes, passwordResetTokens, schema, userAccounts } from "./db/schema";
+import { serverPepper } from "./server-pepper";
 import { hashSessionToken, mintSessionToken } from "./session";
 
 export interface AccountRecord {
@@ -62,8 +64,16 @@ export interface AccountStore {
   deleteSessionsForUser(userId: string): number;
   /** Moves a guest's scans (photos ride on the scan row) and confirm events to `toUserId`. */
   moveGuestData(fromUserId: string, toUserId: string): { scans: number; confirmEvents: number };
-  /** Deletes every row keyed by this user_id, in every table, in one transaction. */
-  deleteAllUserRows(userId: string): Record<string, number>;
+  /**
+   * Deletes every row keyed by this user_id, in every table, in one transaction. Backend review
+   * H2 (P4): `northStarTotals` (the user's weekly counts) are added to north_star_weekly_totals in
+   * that same transaction, so the counts and the rows can't get out of step.
+   */
+  deleteAllUserRows(userId: string, options?: { northStarTotals?: readonly NorthStarWeekTotal[] }): Record<string, number>;
+  /** H2: deleted accounts' weekly totals, oldest week first. */
+  listNorthStarTotals(): NorthStarWeekTotal[];
+  /** Backend review M1 (P4): every distinct user_id in any table (the orphan sweep's input). */
+  listAllUserIds(): string[];
   /** Test/ops helper: rows left for a user_id across every table. */
   countUserRows(userId: string): Record<string, number>;
   /** Backend review L3: one PII-free row per deletion (no user ID, email or token). */
@@ -81,9 +91,11 @@ export interface DeletionAuditEntry {
 /**
  * Backend review L1: email_send_counts keys on a hash of the normalized address, never the
  * address itself, so the per-address email cap survives an account delete without keeping the email.
+ * Backend review L3 (P4): HMAC-SHA256 with the server pepper, so the key can't be matched by
+ * hashing a list of known emails. (Rows keyed the old way only count one day and age out.)
  */
-export function emailSendKey(email: string): string {
-  return createHash("sha256").update(`cardflow-email-send\0${normalizeEmail(email)}`).digest("hex");
+export function emailSendKey(email: string, pepper: string = serverPepper()): string {
+  return createHmac("sha256", pepper).update(`cardflow-email-send\0${normalizeEmail(email)}`).digest("hex");
 }
 
 export function normalizeEmail(email: string): string {
@@ -295,9 +307,15 @@ export function createSqliteAccountStore(
         return { scans: moved.crm_scans ?? 0, confirmEvents: moved.scan_confirm_events ?? 0 };
       })();
     },
-    deleteAllUserRows(userId) {
+    deleteAllUserRows(userId, options = {}) {
       return sqlite.transaction(() => {
         const counts: Record<string, number> = {};
+        const addTotal = sqlite.prepare(
+          "INSERT INTO north_star_weekly_totals (week_start, purchased, scans, active_resellers) VALUES (?, ?, ?, ?) " +
+            "ON CONFLICT(week_start) DO UPDATE SET purchased = purchased + excluded.purchased, scans = scans + excluded.scans, " +
+            "active_resellers = active_resellers + excluded.active_resellers",
+        );
+        for (const t of options.northStarTotals ?? []) addTotal.run(t.weekStart, t.purchased, t.scans, t.activeResellers);
         childDeletes(userId, counts);
         const tables = userIdTables(sqlite);
         const ordered = [...DELETE_FIRST.filter((t) => tables.includes(t)), ...tables.filter((t) => !DELETE_FIRST.includes(t))];
@@ -306,6 +324,22 @@ export function createSqliteAccountStore(
         }
         return counts;
       })();
+    },
+    listNorthStarTotals() {
+      return (
+        sqlite
+          .prepare("SELECT week_start, purchased, scans, active_resellers FROM north_star_weekly_totals ORDER BY week_start")
+          .all() as Array<{ week_start: string; purchased: number; scans: number; active_resellers: number }>
+      ).map((r) => ({ weekStart: r.week_start, purchased: r.purchased, scans: r.scans, activeResellers: r.active_resellers }));
+    },
+    listAllUserIds() {
+      const ids = new Set<string>();
+      for (const table of userIdTables(sqlite)) {
+        for (const row of sqlite.prepare(`SELECT DISTINCT user_id FROM \`${table}\` WHERE user_id IS NOT NULL`).all() as Array<{ user_id: string }>) {
+          ids.add(row.user_id);
+        }
+      }
+      return [...ids];
     },
     countUserRows(userId) {
       const counts: Record<string, number> = {};

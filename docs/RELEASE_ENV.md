@@ -73,16 +73,19 @@ Repeat for `preview`, and for `development` if wanted. `apps/mobile/.env.example
 4. Organization Settings > Legal & Compliance: accept Sentry's **Data Processing Addendum** (DPA), which includes the SCCs, and keep a copy for counsel.
 
 ## Account deletion (checked in P4)
-- **API:** `POST /v1/account/delete` deletes, in one transaction, every `user_id` row, including the PokéCollector link (`crm_pokecollector_users`). It then deletes the user's photos and staged uploads, signs out every session, and drops CardFlow's cached PokéCollector token.
-  - The purchase ledger is anonymized: random bucket ID, no snapshot, and new random event, purchase and item IDs.
+- **API:** `POST /v1/account/delete` deletes, in one transaction, every `user_id` row, including the PokéCollector link (`crm_pokecollector_users`). It then deletes the user's photos and staged uploads, signs out every session, and deletes what CardFlow stored on PokéCollector (below).
+  - North Star (H2): in the same transaction, the user's weekly counts (purchases, scans, active weeks) are added to `north_star_weekly_totals` (week, counts; no IDs), and their `purchase_events` rows are hard-deleted. `/ops/north-star` adds the totals to the live rows, so past weeks don't change. Older `deleted_<uuid>` ledger buckets are folded into the totals when the API starts.
+  - PokéCollector: `DELETE /api/auth/users/{id}` with the admin token first (PokéCollector deletes the user and every row it owns). If that's refused, CardFlow signs in as the user, deletes every collection and wishlist item, then rotates the password to a random one nobody keeps (admin `PUT /api/auth/users/{id}` with `is_active: false`, else `PUT /api/auth/me/password`). Best effort: it never blocks the delete, and a remote user other CardFlow users are linked to (legacy shared names) is never destroyed. If PokéCollector is unreachable at that moment it isn't retried later; keep PokéCollector accounts off until the opaque per-user accounts PR is merged (see that PR).
+  - `email_send_counts` keys are HMAC-SHA256 with `CARD_FLOW_SERVER_PEPPER` (required in production, 32+ random characters; the API refuses to start without it).
   - Accounts with a password must send it; guests and invite testers don't.
   - A retried delete with the same token gets `410`.
-  - In-flight scans and grade jobs are refused afterwards. An orphan sweep (every 6 h) removes rows of deleted accounts and old orphan image files.
+  - In-flight scans and grade jobs are refused afterwards. An orphan sweep (every 6 h) looks at every `user_id` in any table and removes rows of deleted accounts, and orphan image files older than an hour (on disk and in memory-image mode).
   - Each delete writes one audit row `{at, kind, rowsDeleted}` with no PII.
 - **App:** Settings > **Delete account** lists what is deleted (including the PokéCollector line), the subscription and grading-credit notes, and the anonymous-totals line. It asks for the password, or for DELETE typed by guests and testers, then confirms once more.
+  - Grade history keys on the phone are found from an on-device list of item IDs the phone has seen (`cardflow-item-index.json`, IDs only), plus the server's list when it still answers, so a failed list can't leave history behind.
   - It deletes on the server first. Only after that succeeds (or the server answers `410`/`401`) does it wipe the phone: write queue, scan queue and its photos, grade-flow photo files, grade flow state, on-phone grade history, query cache, analytics install ID and session.
   - If a step fails, the screen says so and suggests reinstalling.
-- **Not covered:** photos CardSight already received (if the user allowed CardSight) are governed by CardSight's terms. Cards stored in the user's PokéCollector account stay there; CardFlow integrates no PokéCollector unlink/revoke API.
+- **Not covered:** photos CardSight already received (if the user allowed CardSight) are governed by CardSight's terms. PokéCollector's own pre-upgrade SQL dumps (`/app/backups`, `PRE_UPGRADE_BACKUP_KEEP`) keep deleted cards until they rotate out; set the keep count so that fits the backup window in the privacy policy.
 
 ## App Store Connect (once the Apple account exists)
 - **Age rating:** the **18+** rating is set in App Store Connect (App Information > Age Rating, override to the higher rating after answering the questionnaire truthfully). It isn't a build setting. See APP_REVIEW_NOTES.md.

@@ -110,13 +110,13 @@ Account deletion is not the same as turning the app off or “freezing” the ac
 
 Settings > Delete account deletes your CardFlow account and everything in it right away: your sign-in, email and password, MyDEX, your Watchlist and purchase details, scans and card photos, pre-grade estimate history, sales, listing drafts, Max Buy rules, your CardSight choice and your 18+ confirmation. Guests can delete their guest data the same way.
 
-If you linked PokéCollector, CardFlow deletes its connection to your PokéCollector account. Anything stored in your PokéCollector account stays there and is managed by PokéCollector.
+If your account was linked to PokéCollector, CardFlow deletes the cards and wishlist it stored there and removes the link.
 
 CardFlow keeps only anonymous totals that can't identify you. Purchases you made on a marketplace aren't affected.
 
 Deleted data is removed from backups within [30] days.
 
-> **Open (Sean):** confirm the backup window (the number in brackets) against the real backup retention before this is published.
+> **Open (Sean):** confirm the backup window (the number in brackets) against the real backup retention before this is published. That includes the PokéCollector server CardFlow runs: its automatic pre-upgrade SQL dumps (`/app/backups`, newest `PRE_UPGRADE_BACKUP_KEEP`, default 10) keep deleted users' cards until they rotate out, so they need the same window.
 
 ---
 

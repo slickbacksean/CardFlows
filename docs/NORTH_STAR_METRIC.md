@@ -24,6 +24,7 @@ Every Monday, the TPM copies last week's row onto the CardFlow MVP board next to
 ## Notes
 - Today the account list is the invited beta testers. When guest sessions (D9) ship, guests are excluded until they sign up; their scans move to the new account and count from then on.
 - Computed on request from the store; cheap at beta scale. Add a weekly snapshot table before ~10k users.
+- **Deleted accounts (Backend review H2, P4):** when an account is deleted, its weekly counts (purchased, scans, and 1 active reseller per week it was active) are added to `north_star_weekly_totals` (week and counts only, no IDs) in the same transaction that hard-deletes its rows, including `purchase_events`. Both numbers (purchases/WAR and scans/WAR) are computed from live rows plus these totals, so past weeks don't change after a delete. Each account is one distinct reseller, so adding totals never double-counts.
 
 ## Companion: scans per weekly active reseller
 `GET /ops/north-star` also returns `scans` and `scansPerActiveReseller` for each week, with `companionMetric: "Scans per weekly active reseller"`. It uses the same week and the same active-reseller definition. Read the two together: scans/WAR is effort and purchases/WAR is outcome. A rising scans/WAR with flat purchases/WAR points to friction between identify and buy.

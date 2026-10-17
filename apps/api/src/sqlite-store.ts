@@ -260,6 +260,8 @@ export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStor
   const { sqlite, db } = applyMvpMigrations(options.sqlitePath);
   const purchaseLedger = createSqlitePurchaseLedger(db);
   const memoryImages = new Map<string, ScanImageBytes>();
+  /** Backend review L1 (P4): save time of each in-memory image, for the sweep's age cutoff. */
+  const memoryImageSavedAt = new WeakMap<ScanImageBytes, number>();
   const memoryGradeImages = new Map<string, GradeImageBytes>();
   const sqliteDir = isMemorySqlitePath(options.sqlitePath)
     ? null
@@ -320,6 +322,14 @@ export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStor
       pokecollectorUsername: row.pokecollectorUsername,
       updatedAt: row.updatedAt,
     };
+  }
+
+  function countPokecollectorLinks(pokecollectorUserId: string): number {
+    return db
+      .select({ userId: crmPokecollectorUsers.userId })
+      .from(crmPokecollectorUsers)
+      .where(eq(crmPokecollectorUsers.pokecollectorUserId, pokecollectorUserId))
+      .all().length;
   }
 
   function savePokecollectorUserMapping(
@@ -695,6 +705,7 @@ export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStor
     };
     if (!sqliteDir) {
       memoryImages.set(scanId, record);
+      memoryImageSavedAt.set(record, Date.now());
       return record;
     }
     const filePath = path.join(sqliteDir, record.storageRef);
@@ -884,7 +895,8 @@ export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStor
   /** Backend review M1: files under scans/ with no crm_scans row (older than `olderThan`). */
   function sweepOrphanScanImages(olderThan: Date): number {
     let removed = 0;
-    for (const scanId of [...memoryImages.keys()]) {
+    for (const [scanId, record] of [...memoryImages]) {
+      if ((memoryImageSavedAt.get(record) ?? 0) >= olderThan.getTime()) continue;
       if (!db.select({ id: crmScans.scanId }).from(crmScans).where(eq(crmScans.scanId, scanId)).get()) {
         memoryImages.delete(scanId);
         removed += 1;
@@ -2039,6 +2051,7 @@ export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStor
     getSessionByToken,
     getPokecollectorUserMapping,
     savePokecollectorUserMapping,
+    countPokecollectorLinks,
     listInvitedUsers,
     getPreferences,
     setPreferences,

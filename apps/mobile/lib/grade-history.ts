@@ -7,6 +7,7 @@ import {
 import * as SecureStore from "expo-secure-store";
 import { Platform } from "react-native";
 import { getGradeHistory, isPremiumRequired } from "./api";
+import { forgetDeviceItemIds, rememberDeviceItemIds } from "./device-item-index";
 import { peekActiveUserId } from "./identity";
 import { runQueueableWrite } from "./write-queue";
 
@@ -24,7 +25,8 @@ function legacyKey(inventoryItemId: string): string {
 
 /**
  * Backend review M2 (P4): account deletion removes the on-phone history for every card the
- * account had (SecureStore can't list keys, so the item IDs are collected before the delete).
+ * account had. SecureStore can't list keys, so the item IDs come from the phone's own index
+ * (device-item-index.ts, re-review M2) plus whatever the server listed before the delete.
  */
 export async function clearLegacyGradeHistory(userId: string, inventoryItemIds: readonly string[]): Promise<void> {
   lastSeen.clear();
@@ -38,6 +40,7 @@ export async function clearLegacyGradeHistory(userId: string, inventoryItemIds: 
   if (Platform.OS === "web") {
     for (const key of [...webMemory.keys()]) if (key.startsWith(legacyGradeHistoryKey(userId, ""))) webMemory.delete(key);
   }
+  forgetDeviceItemIds(userId);
 }
 
 async function readLegacy(key: string): Promise<string | null> {
@@ -99,6 +102,7 @@ export function gradeHistoryLockedCount(): number {
 }
 
 export async function loadGradeHistory(inventoryItemId: string): Promise<GradeHistoryEntry[]> {
+  rememberDeviceItemIds([inventoryItemId]);
   const legacy = await migrateLocalGradeHistory(inventoryItemId);
   const cacheKey = `${peekActiveUserId()}|${inventoryItemId}`;
   try {

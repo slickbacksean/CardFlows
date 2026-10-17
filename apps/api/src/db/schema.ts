@@ -565,6 +565,17 @@ export const accountDeletionAudit = sqliteTable(
   (table) => [check("account_deletion_audit_kind_chk", sql`${table.kind} in ('self', 'under18_report', 'unverified_purge', 'orphan_sweep')`)],
 );
 
+/**
+ * Backend review H2 (P4): deleted accounts' weekly North Star counts, as anonymous totals (no
+ * user ID or any other ID). Added to the live rows by /ops/north-star so past weeks don't change.
+ */
+export const northStarWeeklyTotals = sqliteTable("north_star_weekly_totals", {
+  weekStart: text("week_start").primaryKey(),
+  purchased: integer("purchased").notNull().default(0),
+  scans: integer("scans").notNull().default(0),
+  activeResellers: integer("active_resellers").notNull().default(0),
+});
+
 /** Backend review M3: persisted Idempotency-Key results for queued writes (24 h). */
 export const idempotencyKeys = sqliteTable(
   "idempotency_keys",
@@ -605,6 +616,7 @@ export const schema = {
   cardsightUserUsage,
   emailSendCounts,
   accountDeletionAudit,
+  northStarWeeklyTotals,
   cardExternalIds,
   crmScans,
   crmConfirmations,

@@ -9,6 +9,7 @@ import {
 import { Directory, File, Paths } from "expo-file-system";
 import { apiErrorStatus, deleteAccount, listInventory } from "./api";
 import { gradeFlowSession } from "./grade-flow-session";
+import { deviceItemIds } from "./device-item-index";
 import { clearLegacyGradeHistory } from "./grade-history";
 import { peekActiveUserId, signOutLocally } from "./identity";
 import { setAnalyticsEnabled } from "./product-events";
@@ -30,14 +31,20 @@ function deleteGradePhotoFiles(uris: readonly string[]): void {
   }
 }
 
-/** Item IDs for the on-phone grade history keys, collected while the account still exists. */
-async function inventoryItemIdsForWipe(): Promise<string[]> {
+/**
+ * Item IDs for the on-phone grade history keys. Backend re-review M2: the phone's own index
+ * (every item it has listed or opened) is the source, so a failed list (e.g. a 401 on a retried
+ * delete) can't leave history behind; a fresh server list only adds to it.
+ */
+async function inventoryItemIdsForWipe(userId: string): Promise<string[]> {
+  const ids = new Set(deviceItemIds(userId));
   try {
     const result = await listInventory();
-    return result.items.map((item) => item.inventoryItemId);
+    for (const item of result.items) ids.add(item.inventoryItemId);
   } catch {
-    return [];
+    // The device index is enough.
   }
+  return [...ids];
 }
 
 export interface AccountDeletionResult {
@@ -52,7 +59,7 @@ export interface AccountDeletionResult {
  */
 export async function deleteAccountEverywhere(password?: string): Promise<AccountDeletionResult> {
   const userId = peekActiveUserId();
-  const itemIds = await inventoryItemIdsForWipe();
+  const itemIds = await inventoryItemIdsForWipe(userId);
   const photoUris = gradeFlowPhotoUris(gradeFlowSession.getState());
   let outcome: AccountDeletionOutcome;
   try {

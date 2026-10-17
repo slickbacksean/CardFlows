@@ -2,12 +2,13 @@
  * P4 account deletion (Apple 5.1.1(v), Google Play account deletion). The app's Settings >
  * Delete account calls POST /v1/account/delete, which removes every user_id row, the user's
  * photos and staged uploads, and signs out every session, then the app wipes what it kept on
- * the phone. The purchase ledger is anonymized, not deleted (aggregate counts only).
+ * the phone. The purchase ledger rows are deleted after their weekly counts are kept as anonymous
+ * totals (north_star_weekly_totals: week and counts, no IDs).
  */
 /** Policy Reviewer (P4): exact wording, also in the privacy policy draft. */
 export const POKECOLLECTOR_DELETION_LINE =
-  "If you linked PokéCollector, CardFlow deletes its connection to your PokéCollector account. Anything stored in your PokéCollector account stays there and is managed by PokéCollector.";
-/** Policy Reviewer (P4): exact wording for the anonymized purchase ledger. */
+  "If your account was linked to PokéCollector, CardFlow deletes the cards and wishlist it stored there and removes the link.";
+/** Policy Reviewer (P4): exact wording for the anonymous North Star totals (Backend H2). */
 export const ANONYMOUS_LEDGER_LINE =
   "CardFlow keeps only anonymous totals that can't identify you. Purchases you made on a marketplace aren't affected.";
 

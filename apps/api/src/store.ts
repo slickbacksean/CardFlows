@@ -1,5 +1,6 @@
 import type { ConfirmEvent } from "@cardflow/shared";
 import type { UserPriceSnapshot } from "@cardflow/shared";
+import type { NorthStarWeekTotal } from "@cardflow/shared";
 import { createMemorySalesStore, type SalesStore } from "./sales-store";
 import { createMemoryPurchaseLedger, type PurchaseLedger } from "./purchase-ledger";
 import { createMemoryAgeConfirmationStore, type AgeConfirmationStore } from "./age-store";
@@ -257,6 +258,13 @@ export function getPokecollectorUserMapping(userId: string): PokecollectorUserMa
   return store.pokecollectorUsers.get(userId);
 }
 
+/** CardFlow users linked to this PokéCollector user (a remote user must never be shared). */
+export function countPokecollectorLinks(pokecollectorUserId: string): number {
+  let n = 0;
+  for (const mapping of store.pokecollectorUsers.values()) if (mapping.pokecollectorUserId === pokecollectorUserId) n += 1;
+  return n;
+}
+
 export function savePokecollectorUserMapping(
   mapping: PokecollectorUserMapping,
 ): PokecollectorUserMapping {
@@ -307,6 +315,9 @@ export function saveScan(scan: ScanRecord): ScanRecord {
   return scan;
 }
 
+/** Backend review L1 (P4): when each in-memory image was saved (the orphan sweep's age cutoff). */
+const scanImageSavedAt = new WeakMap<ScanImageBytes, number>();
+
 export function saveScanImage(
   scanId: string,
   input: { bytes: Uint8Array; mimeType: ScanImageMimeType },
@@ -317,6 +328,7 @@ export function saveScanImage(
     bytes: stripImageMetadata(input.bytes, input.mimeType),
   };
   store.scanImages.set(scanId, record);
+  scanImageSavedAt.set(record, Date.now());
   return record;
 }
 
@@ -735,6 +747,7 @@ export interface StorePort {
   getSessionByToken: typeof getSessionByToken;
   getPokecollectorUserMapping: typeof getPokecollectorUserMapping;
   savePokecollectorUserMapping: typeof savePokecollectorUserMapping;
+  countPokecollectorLinks: typeof countPokecollectorLinks;
   listInvitedUsers: typeof listInvitedUsers;
   getPreferences: typeof getPreferences;
   setPreferences: typeof setPreferences;
@@ -971,6 +984,7 @@ export function createMemoryStore(): StorePort {
     getSessionByToken,
     getPokecollectorUserMapping,
     savePokecollectorUserMapping,
+    countPokecollectorLinks,
     listInvitedUsers,
     getPreferences,
     setPreferences,
@@ -987,9 +1001,11 @@ export function createMemoryStore(): StorePort {
       if (!record || record.storageRef !== storageRef) return false;
       return store.scanImages.delete(scanId);
     },
-    sweepOrphanScanImages() {
+    sweepOrphanScanImages(olderThan: Date) {
       let removed = 0;
-      for (const scanId of [...store.scanImages.keys()]) {
+      for (const [scanId, record] of [...store.scanImages]) {
+        // Same 1-hour cutoff as the SQLite store: a scan in flight saves its image first.
+        if ((scanImageSavedAt.get(record) ?? 0) >= olderThan.getTime()) continue;
         if (!store.scans.has(scanId)) {
           store.scanImages.delete(scanId);
           removed += 1;
@@ -1076,6 +1092,7 @@ function createMemoryAccountStore(
   const sendsByAddressDay = new Map<string, number>();
   const byEmail = new Map<string, string>();
   const deletionAudit: DeletionAuditEntry[] = [];
+  const northStarTotals = new Map<string, NorthStarWeekTotal>();
   const live = (s: StoredSession, now: string) => s.expiresAt > now;
   return {
     createAccount({ email, passwordHash, at }) {
@@ -1200,16 +1217,25 @@ function createMemoryAccountStore(
       this.deleteSessionsForUser(fromUserId);
       return { scans, confirmEvents: 0 };
     },
-    deleteAllUserRows(userId) {
+    deleteAllUserRows(userId, options = {}) {
       const counts: Record<string, number> = {};
+      for (const t of options.northStarTotals ?? []) {
+        const row = northStarTotals.get(t.weekStart) ?? { weekStart: t.weekStart, purchased: 0, scans: 0, activeResellers: 0 };
+        northStarTotals.set(t.weekStart, {
+          weekStart: t.weekStart,
+          purchased: row.purchased + t.purchased,
+          scans: row.scans + t.scans,
+          activeResellers: row.activeResellers + t.activeResellers,
+        });
+      }
       port.deleteUserPhotos(userId);
       counts.crm_scans = port.deleteUserScans(userId);
       counts.scan_confirm_events = port.deleteUserConfirmEvents(userId);
       counts.user_price_snapshots = port.deleteUserPriceSnapshots(userId);
       counts.user_card_sales = port.sales.deleteUser(userId);
       counts.grade_estimate_history = port.gradeHistory.deleteUser(userId);
-      // Data Engineer review: the purchase ledger is anonymized, not deleted (North Star history).
-      counts.purchase_events_anonymized = port.purchaseLedger.anonymizeUser(userId);
+      // Backend review H2 (P4): hard-deleted; the weekly counts were added to the totals above.
+      counts.purchase_events = port.purchaseLedger.deleteUser(userId);
       counts.idempotency_keys = port.idempotency.deleteUser(userId);
       counts.provider_consents = port.consents.deleteUser(userId);
       counts.age_confirmations = port.ageConfirmations.deleteUser(userId);
@@ -1232,8 +1258,26 @@ function createMemoryAccountStore(
       }
       return counts;
     },
+    listNorthStarTotals() {
+      return [...northStarTotals.values()].sort((a, b) => a.weekStart.localeCompare(b.weekStart)).map((t) => ({ ...t }));
+    },
+    listAllUserIds() {
+      return [
+        ...new Set([
+          ...[...store.scans.values()].map((scan) => scan.userId),
+          ...store.inventory.map((item) => item.userId),
+          ...[...store.sessions.values()].map((s) => s.userId),
+          ...accounts.keys(),
+          ...port.purchaseLedger.listUserIds(),
+          ...store.pokecollectorUsers.keys(),
+          ...store.portfolioSnapshots.keys(),
+          ...extra.gradeAccounts.keys(),
+        ]),
+      ];
+    },
     countUserRows(userId) {
       return {
+        purchase_events: port.purchaseLedger.list(userId).length,
         crm_scans: port.listScans(userId).length,
         crm_inventory_items: port.listInventory(userId).length,
         crm_sessions: [...store.sessions.values()].filter((s) => s.userId === userId).length,

@@ -1,6 +1,7 @@
 import { isGuestUserId, type InvitedIdentity } from "@cardflow/shared";
 import { createAccount, createGuestSession, createSession, getIdentity, listInventory, signInWithPassword } from "./api";
 import { resetAgeConfirmationCache } from "./age-confirmation";
+import { setDeviceItemIndexOwner } from "./device-item-index";
 import { resetCardSightConsentCache } from "./cardsight-consent";
 import { stopLiveVideoIdentify } from "./live-identify";
 import { clearLivestreamOverlay } from "./livestream";
@@ -28,6 +29,7 @@ export function peekActiveUserId(): string {
 
 function rememberIdentity(identity: InvitedIdentity | null) {
   cachedUserId = identity?.userId ?? null;
+  setDeviceItemIndexOwner(cachedUserId);
 }
 
 function toSession(result: {
