@@ -88,7 +88,7 @@ export default function VerifyEmailScreen() {
               onPress={() => void resend()}
             >
               <Text style={[styles.link, waitSeconds > 0 ? { color: colors.muted } : null]}>
-                {waitSeconds > 0 ? `Resend code in ${waitSeconds}s` : "Resend code"}
+                {waitSeconds > 0 ? `Resend code in ${waitSeconds} ${waitSeconds === 1 ? "second" : "seconds"}` : "Resend code"}
               </Text>
             </Pressable>
           </>
