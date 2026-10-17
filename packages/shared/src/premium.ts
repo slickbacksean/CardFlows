@@ -50,7 +50,7 @@ const FEATURE_LINE: Record<PremiumFeature, string> = {
 export const PREMIUM_PROMPT_COPY = {
   title: "Premium is coming",
   plans: `${PREMIUM_PLACEHOLDER_PRICING.monthly} or ${PREMIUM_PLACEHOLDER_PRICING.yearly}`,
-  includes: `${PREMIUM_PLACEHOLDER_PRICING.premiumEstimatesPerMonth} pre-grade estimates a month (free: ${PREMIUM_PLACEHOLDER_PRICING.freeEstimatesPerMonth}), batch pre-grade and full estimate history. The monthly allowance resets on your billing date and doesn't roll over.`,
+  includes: `${PREMIUM_PLACEHOLDER_PRICING.premiumEstimatesPerMonth} pre-grade estimates a month (free: ${PREMIUM_PLACEHOLDER_PRICING.freeEstimatesPerMonth}), batch pre-grade and full estimate history. Your monthly allowance resets on your reset date and unused monthly estimates don't roll over. Credits you buy never expire.`,
   notYet: "Upgrades aren't available yet. Prices may change before launch.",
 } as const;
 
