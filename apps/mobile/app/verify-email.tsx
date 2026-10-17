@@ -1,10 +1,17 @@
-import { EMAIL_CODE_LENGTH, EMAIL_RESEND_COOLDOWN_MS, EMAIL_VERIFICATION_COPY, isEmailCode } from "@cardflow/shared";
+import {
+  actionErrorMessage,
+  EMAIL_CODE_LENGTH,
+  EMAIL_RESEND_COOLDOWN_MS,
+  EMAIL_VERIFICATION_COPY,
+  isEmailCode,
+} from "@cardflow/shared";
 import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { authStyles as styles } from "@/components/ui/auth-styles";
 import { PreferencesScreenHeader } from "@/components/ui/preferences-screen-header";
 import { PrimaryButton } from "@/components/ui/primary-button";
+import { InlineError } from "@/components/ui/screen-state";
 import { confirmEmailVerification, requestEmailVerification } from "@/lib/api";
 import { colors } from "@/lib/theme";
 
@@ -35,7 +42,7 @@ export default function VerifyEmailScreen() {
       setVerified(true);
       setNotice(EMAIL_VERIFICATION_COPY.verified);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : EMAIL_VERIFICATION_COPY.invalid);
+      setError(actionErrorMessage(caught, EMAIL_VERIFICATION_COPY.invalid));
     } finally {
       setSaving(false);
     }
@@ -53,7 +60,7 @@ export default function VerifyEmailScreen() {
         setNotice(EMAIL_VERIFICATION_COPY.sent);
       }
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : EMAIL_VERIFICATION_COPY.tooSoon);
+      setError(actionErrorMessage(caught, EMAIL_VERIFICATION_COPY.tooSoon));
     }
   }
 
@@ -79,8 +86,12 @@ export default function VerifyEmailScreen() {
               textContentType="oneTimeCode"
               value={code}
             />
-            {error ? <Text style={styles.error}>{error}</Text> : null}
-            <PrimaryButton disabled={saving || code.length !== EMAIL_CODE_LENGTH} label="Verify email" onPress={() => void submit()} />
+            <InlineError message={error} />
+            <PrimaryButton
+              disabled={saving || code.length !== EMAIL_CODE_LENGTH}
+              label={saving ? "Verifying…" : "Verify email"}
+              onPress={() => void submit()}
+            />
             <Pressable
               accessibilityRole="button"
               accessibilityState={{ disabled: waitSeconds > 0 }}

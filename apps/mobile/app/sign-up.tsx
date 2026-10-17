@@ -6,6 +6,7 @@ import {
   SIGNUP_ALLOWANCE_NOTE,
   isValidEmail,
   passwordProblem,
+  actionErrorMessage,
 } from "@cardflow/shared";
 import { useRouter } from "expo-router";
 import { useState } from "react";
@@ -13,6 +14,7 @@ import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-
 import { authStyles } from "@/components/ui/auth-styles";
 import { PreferencesScreenHeader } from "@/components/ui/preferences-screen-header";
 import { PrimaryButton } from "@/components/ui/primary-button";
+import { InlineError } from "@/components/ui/screen-state";
 import { isGuestSession, signUpWithEmail } from "@/lib/identity";
 import { flushScanQueue } from "@/lib/scan-queue";
 import { colors } from "@/lib/theme";
@@ -45,7 +47,7 @@ export default function SignUpScreen() {
       if (session.emailVerified === false) router.replace("/verify-email");
       else router.back();
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : ACCOUNT_AUTH_COPY.signInFailed);
+      setError(actionErrorMessage(caught, ACCOUNT_AUTH_COPY.signInFailed));
     } finally {
       setSaving(false);
     }
@@ -96,8 +98,8 @@ export default function SignUpScreen() {
           </Pressable>
         ) : null}
         {mode === "sign_up" ? <Text style={authStyles.body}>{AGE_GATE_COPY.signUpLine}</Text> : null}
-        {error ? <Text style={authStyles.error}>{error}</Text> : null}
-        <PrimaryButton disabled={saving || (mode === "sign_up" && !over18)} label={title} onPress={() => void submit()} />
+        <InlineError message={error} />
+        <PrimaryButton disabled={saving || (mode === "sign_up" && !over18)} label={saving ? (mode === "sign_up" ? "Creating account…" : "Signing in…") : title} onPress={() => void submit()} />
         <Pressable accessibilityRole="button" onPress={() => { setMode(mode === "sign_up" ? "sign_in" : "sign_up"); setError(null); }}>
           <Text style={authStyles.link}>{mode === "sign_up" ? "Already have an account? Sign in" : "New here? Create an account"}</Text>
         </Pressable>

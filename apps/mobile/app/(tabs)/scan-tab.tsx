@@ -5,13 +5,14 @@ import {
   LIVESTREAM_SCANNER_UNAVAILABLE_MESSAGE,
   type LiveOverlayGuess,
   type LiveVideoIdentityResult,
+  SCREEN_ERROR_WHAT,
 } from "@cardflow/shared";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { LivestreamBrowser, type LivestreamBrowserHandle } from "@/components/ui/livestream-browser";
-import { PrimaryButton } from "@/components/ui/primary-button";
+import { ScreenError } from "@/components/ui/screen-state";
 import { ScreenerOverlay } from "@/components/ui/screener-overlay";
 import { undoLivestreamPurchase } from "@/lib/api";
 import { cancelQueuedWrite, isQueuedId, runQueueableWrite } from "@/lib/write-queue";
@@ -126,9 +127,12 @@ export default function ScanTabScreen() {
           <View style={styles.iconButton} />
         </View>
         <View style={styles.errorBody}>
-          <Text style={styles.errorMessage}>Could not load the live page.</Text>
-          <PrimaryButton label="Try again" onPress={retryLivePage} />
-          <PrimaryButton label="Open Collection" onPress={openCollection} tone="muted" />
+          <ScreenError
+            error={null}
+            onRetry={retryLivePage}
+            secondary={{ label: "Open Collection", onPress: openCollection }}
+            what={SCREEN_ERROR_WHAT.livePage}
+          />
         </View>
       </SafeAreaView>
     );

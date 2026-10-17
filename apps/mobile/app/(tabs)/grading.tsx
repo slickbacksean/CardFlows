@@ -11,7 +11,12 @@ import {
   updateSubmittedCopy,
   type GradingReturnedCopy,
   type GradingSubmittedCopy,
+  actionErrorMessage,
+  SCREEN_EMPTY_COPY,
+  SCREEN_ERROR_WHAT,
+  SCREEN_LOADING_LABELS,
 } from "@cardflow/shared";
+import { InlineError, ScreenEmpty, ScreenError, ScreenLoading } from "@/components/ui/screen-state";
 import { StatusBanner } from "@/components/ui/status-banner";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { Image } from "expo-image";
@@ -20,7 +25,6 @@ import { useCallback, useMemo, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { PhotoGradeFlow } from "@/components/ui/photo-grade-flow";
 import { PrepareSheet, type PrepareMovePayload } from "@/components/ui/prepare-sheet";
-import { PrimaryButton } from "@/components/ui/primary-button";
 import { ReturnedSheet, type ReturnedSheetPayload } from "@/components/ui/returned-sheet";
 import { SubmittedSheet, type SubmittedSheetSavePayload } from "@/components/ui/submitted-sheet";
 import {
@@ -40,9 +44,7 @@ function inventoryMaxBuyAmount(item: InventoryItem): string | null {
 }
 
 function saveErrorMessage(caught: unknown): string {
-  return caught instanceof Error && caught.message
-    ? caught.message
-    : "Could not save that change.";
+  return actionErrorMessage(caught, "Couldn't save that change. Try again.");
 }
 
 type LoadState = "loading" | "ready" | "error";
@@ -66,6 +68,7 @@ export default function GradingScreen() {
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [activeUserId, setActiveUserId] = useState(peekActiveUserId);
   const [loadState, setLoadState] = useState<LoadState>("loading");
+  const [loadError, setLoadError] = useState<unknown>(null);
   const [query, setQuery] = useState("");
   const [preparingItem, setPreparingItem] = useState<InventoryItem | null>(null);
   const [submitted, setSubmitted] = useState<GradingSubmittedCopy[]>([]);
@@ -95,7 +98,9 @@ export default function GradingScreen() {
         current && current.copy.userId === userId ? current : null,
       );
       setLoadState("ready");
-    } catch {
+      setLoadError(null);
+    } catch (caught) {
+      setLoadError(caught);
       setLoadState("error");
     }
   }, []);
@@ -315,15 +320,15 @@ export default function GradingScreen() {
         </View>
       </View>
 
-      {segment === "prepare" && loadState === "error" ? (
+      {loadState === "error" ? (
         <View style={styles.bodyPad}>
-          <Text style={styles.emptyTitle}>Could not load inventory.</Text>
-          <PrimaryButton
-            label="Try again"
-            onPress={() => {
+          <ScreenError
+            error={loadError}
+            onRetry={() => {
               setLoadState("loading");
               void refreshInventory();
             }}
+            what={SCREEN_ERROR_WHAT.grade}
           />
         </View>
       ) : (
@@ -332,16 +337,20 @@ export default function GradingScreen() {
           keyboardShouldPersistTaps="handled"
           style={styles.flex}
         >
-          {actionError ? <Text style={styles.error}>{actionError}</Text> : null}
+          <InlineError message={actionError} />
+          {loadState === "loading" && items.length === 0 ? (
+            <ScreenLoading label={SCREEN_LOADING_LABELS.grade} rows={4} />
+          ) : null}
           {segment === "prepare" ? (
             <Pressable accessibilityLabel="Batch pre-grade" accessibilityRole="button" onPress={() => router.push("/grade-batch")}>
               <Text style={styles.batchLink}>Batch pre-grade</Text>
             </Pressable>
           ) : null}
           {segment === "prepare" ? (
-            loadState === "loading" && purchasedItems.length === 0 ? null : visiblePurchased.length ===
+            loadState === "loading" && items.length === 0 ? null : visiblePurchased.length ===
               0 ? (
               <EmptyState
+                onOpenCollection={() => router.push("/(tabs)/collection")}
                 hasQuery={Boolean(normalizedQuery)}
                 hasPurchased={purchasedItems.length > 0}
                 hasPrepareRemaining={prepareItems.length > 0}
@@ -357,7 +366,7 @@ export default function GradingScreen() {
               ))
             )
           ) : segment === "submitted" ? (
-            visibleSubmitted.length === 0 ? (
+            loadState === "loading" && items.length === 0 ? null : visibleSubmitted.length === 0 ? (
               <EmptyState segment="submitted" />
             ) : (
               visibleSubmitted.map((copy) => (
@@ -368,7 +377,7 @@ export default function GradingScreen() {
                 />
               ))
             )
-          ) : visibleReturned.length === 0 ? (
+          ) : loadState === "loading" && items.length === 0 ? null : visibleReturned.length === 0 ? (
             <EmptyState segment="returned" />
           ) : (
             visibleReturned.map((copy) => (
@@ -455,6 +464,7 @@ interface EmptyStateProps {
   hasQuery?: boolean;
   hasPurchased?: boolean;
   hasPrepareRemaining?: boolean;
+  onOpenCollection?: () => void;
 }
 
 function EmptyState({
@@ -462,44 +472,27 @@ function EmptyState({
   hasQuery = false,
   hasPurchased = false,
   hasPrepareRemaining = false,
+  onOpenCollection,
 }: EmptyStateProps) {
+  const c = SCREEN_EMPTY_COPY;
   if (segment === "submitted") {
-    return (
-      <View style={styles.empty}>
-        <Text style={styles.emptyTitle}>Nothing submitted.</Text>
-        <Text style={styles.body}>Prepare a purchased copy first.</Text>
-      </View>
-    );
+    return <ScreenEmpty body={c.gradeSubmitted.body} icon="paper-plane-outline" title={c.gradeSubmitted.title} />;
   }
-
   if (segment === "returned") {
-    return (
-      <View style={styles.empty}>
-        <Text style={styles.emptyTitle}>Nothing returned.</Text>
-      </View>
-    );
+    return <ScreenEmpty body={c.gradeReturned.body} icon="return-down-back-outline" title={c.gradeReturned.title} />;
   }
-
   if (hasQuery && hasPrepareRemaining) {
-    return <Text style={styles.body}>No matching cards.</Text>;
+    return <ScreenEmpty body={c.noMatches.body} icon="search-outline" title={c.noMatches.title} />;
   }
-
   if (hasPurchased && !hasPrepareRemaining) {
-    return (
-      <View style={styles.empty}>
-        <Text style={styles.emptyTitle}>No copies left to prepare.</Text>
-        <Text style={styles.body}>Moved copies are on Submitted or Returned.</Text>
-      </View>
-    );
+    return <ScreenEmpty body={c.gradePrepareDone.body} icon="checkmark-done-outline" title={c.gradePrepareDone.title} />;
   }
-
   return (
-    <View style={styles.empty}>
-      <Text style={styles.emptyTitle}>No purchased copies.</Text>
-      <Text style={styles.body}>
-        Scan does not create inventory. Confirm, then Purchased.
-      </Text>
-    </View>
+    <ScreenEmpty
+      action={onOpenCollection ? { label: c.gradePrepare.action, onPress: onOpenCollection } : undefined}
+      body={c.gradePrepare.body}
+      title={c.gradePrepare.title}
+    />
   );
 }
 

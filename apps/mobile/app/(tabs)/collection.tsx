@@ -13,12 +13,16 @@ import {
   type CardFlowPortfolioSummary,
   type MaxBuyPreferences,
   type TcgdexVariants,
+  actionErrorMessage,
+  SCREEN_EMPTY_COPY,
+  SCREEN_ERROR_WHAT,
+  SCREEN_LOADING_LABELS,
 } from "@cardflow/shared";
+import { InlineError, ScreenEmpty, ScreenError, ScreenLoading } from "@/components/ui/screen-state";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AccessibilityInfo,
-  ActivityIndicator,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -32,7 +36,6 @@ import {
   playPurchasedSuccessHaptic,
   PurchasedUndoToast,
 } from "@/components/ui/hud-bubble";
-import { PrimaryButton } from "@/components/ui/primary-button";
 import { PurchaseSheet, type PurchaseSavePayload } from "@/components/ui/purchase-sheet";
 import { ValueHistoryChart } from "@/components/ui/value-history-chart";
 import {
@@ -97,6 +100,7 @@ export default function CollectionScreen() {
     today: null,
   });
   const [loadState, setLoadState] = useState<LoadState>("loading");
+  const [loadError, setLoadError] = useState<unknown>(null);
   const [segment, setSegment] = useState<Segment>(
     () => parseSegment(params.segment) ?? "purchased",
   );
@@ -121,7 +125,9 @@ export default function CollectionScreen() {
       setItems(result.items);
       setPortfolio(portfolioResult?.portfolio ?? null);
       setLoadState("ready");
-    } catch {
+      setLoadError(null);
+    } catch (caught) {
+      setLoadError(caught);
       setLoadState("error");
     }
     // After /v1/portfolio so today's recorded snapshot is included.
@@ -235,7 +241,7 @@ export default function CollectionScreen() {
       setDetailItem(null);
       await refreshInventory();
     } catch (caught) {
-      setDetailError(caught instanceof Error ? caught.message : "Could not save purchase details");
+      setDetailError(actionErrorMessage(caught, "Could not save purchase details"));
     } finally {
       setIsSavingDetails(false);
     }
@@ -255,7 +261,7 @@ export default function CollectionScreen() {
         openWatchlistDetail(item);
         return;
       }
-      setActionError(caught instanceof Error ? caught.message : "Could not open draft");
+      setActionError(actionErrorMessage(caught, "Could not open draft"));
     }
   }
 
@@ -283,7 +289,7 @@ export default function CollectionScreen() {
       });
       await refreshInventory();
     } catch (caught) {
-      setActionError(caught instanceof Error ? caught.message : "Could not mark Purchased");
+      setActionError(actionErrorMessage(caught, "Could not mark Purchased"));
     } finally {
       savingWatchlistIdRef.current = null;
       setSavingWatchlistId(null);
@@ -301,7 +307,7 @@ export default function CollectionScreen() {
       AccessibilityInfo.announceForAccessibility("Purchased undone");
       await refreshInventory();
     } catch (caught) {
-      setActionError(caught instanceof Error ? caught.message : "Could not undo");
+      setActionError(actionErrorMessage(caught, "Could not undo"));
     } finally {
       setUndoing(false);
     }
@@ -378,13 +384,13 @@ export default function CollectionScreen() {
 
       {loadState === "error" ? (
         <View style={styles.bodyPad}>
-          <Text style={styles.title}>Could not load inventory.</Text>
-          <PrimaryButton
-            label="Try again"
-            onPress={() => {
+          <ScreenError
+            error={loadError}
+            onRetry={() => {
               setLoadState("loading");
               void refreshInventory();
             }}
+            what={SCREEN_ERROR_WHAT.collection}
           />
         </View>
       ) : (
@@ -405,14 +411,12 @@ export default function CollectionScreen() {
           <SyncPending />
           <ScanQueueList />
           <StatusBanner />
-          {actionError ? <Text style={styles.error}>{actionError}</Text> : null}
+          <InlineError message={actionError} />
           {loadState === "loading" && items.length === 0 ? (
-            <ActivityIndicator
-              accessibilityLabel="Loading collection"
-              color={colors.accent}
-            />
+            <ScreenLoading label={SCREEN_LOADING_LABELS.collection} rows={4} variant="grid" />
           ) : visibleItems.length === 0 ? (
             <EmptyState
+              onScan={() => router.push("/capture")}
               hasQuery={Boolean(normalizedQuery) || (segment === "purchased" && detailsNeededOnly)}
               hasSegmentItems={segmentedItems.length > 0}
               segment={segment}
@@ -537,29 +541,28 @@ interface EmptyStateProps {
   segment: Segment;
   hasQuery: boolean;
   hasSegmentItems: boolean;
+  onScan: () => void;
 }
 
-function EmptyState({ segment, hasQuery, hasSegmentItems }: EmptyStateProps) {
+function EmptyState({ segment, hasQuery, hasSegmentItems, onScan }: EmptyStateProps) {
   if (hasQuery && hasSegmentItems) {
-    return <Text style={styles.body}>No matching cards.</Text>;
+    return <ScreenEmpty body={SCREEN_EMPTY_COPY.noMatches.body} icon="search-outline" title={SCREEN_EMPTY_COPY.noMatches.title} />;
   }
-
   if (segment === "watchlist") {
     return (
-      <View style={styles.empty}>
-        <Text style={styles.title}>Nothing watching.</Text>
-        <Text style={styles.body}>Confirm a card, then Watchlist.</Text>
-      </View>
+      <ScreenEmpty
+        body={SCREEN_EMPTY_COPY.collectionWatchlist.body}
+        icon="eye-outline"
+        title={SCREEN_EMPTY_COPY.collectionWatchlist.title}
+      />
     );
   }
-
   return (
-    <View style={styles.empty}>
-      <Text style={styles.title}>No purchased copies.</Text>
-      <Text style={styles.body}>
-        Scan does not create inventory. Confirm, then Purchased.
-      </Text>
-    </View>
+    <ScreenEmpty
+      action={{ label: SCREEN_EMPTY_COPY.collectionPurchased.action, onPress: onScan }}
+      body={SCREEN_EMPTY_COPY.collectionPurchased.body}
+      title={SCREEN_EMPTY_COPY.collectionPurchased.title}
+    />
   );
 }
 

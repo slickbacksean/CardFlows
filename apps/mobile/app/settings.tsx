@@ -14,12 +14,15 @@ import {
   type CardFlowHealth,
   type InvitedIdentity,
   type SettingsStackLoad,
+  actionErrorMessage,
+  SCREEN_STATE_COPY,
 } from "@cardflow/shared";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { PreferencesScreenHeader } from "@/components/ui/preferences-screen-header";
+import { InlineError } from "@/components/ui/screen-state";
 import { getHealth } from "@/lib/api";
 import {
   isGuestSession,
@@ -33,6 +36,24 @@ export default function SettingsScreen() {
   const [identity, setIdentity] = useState<InvitedIdentity | null>(null);
   const [stack, setStack] = useState<CardFlowHealth | null>(null);
   const [stackLoad, setStackLoad] = useState<SettingsStackLoad>("checking");
+  const [stackError, setStackError] = useState<string | null>(null);
+
+  const checkHealth = useCallback((isCancelled: () => boolean = () => false) => {
+    setStackLoad("checking");
+    setStackError(null);
+    void getHealth()
+      .then((health) => {
+        if (isCancelled()) return;
+        setStack(health);
+        setStackLoad("ready");
+      })
+      .catch((caught: unknown) => {
+        if (isCancelled()) return;
+        setStack(null);
+        setStackLoad("unavailable");
+        setStackError(actionErrorMessage(caught, "Couldn't check CardFlow's status."));
+      });
+  }, []);
 
   const applySession = useCallback(
     (session: { identity: InvitedIdentity | null }) => {
@@ -55,21 +76,11 @@ export default function SettingsScreen() {
           applySession({ identity: null });
           setKicker(SETTINGS_KICKER);
         });
-      void getHealth()
-        .then((health) => {
-          if (cancelled) return;
-          setStack(health);
-          setStackLoad("ready");
-        })
-        .catch(() => {
-          if (cancelled) return;
-          setStack(null);
-          setStackLoad("unavailable");
-        });
+      checkHealth(() => cancelled);
       return () => {
         cancelled = true;
       };
-    }, [applySession]),
+    }, [applySession, checkHealth]),
   );
 
   return (
@@ -121,6 +132,15 @@ export default function SettingsScreen() {
             </View>
           );
         })}
+
+        {stackLoad === "unavailable" ? (
+          <>
+            <InlineError message={stackError} />
+            <Pressable accessibilityRole="button" hitSlop={8} onPress={() => checkHealth()}>
+              <Text style={styles.retry}>{SCREEN_STATE_COPY.retry}</Text>
+            </Pressable>
+          </>
+        ) : null}
 
         <Text style={styles.section}>{SETTINGS_RESEARCH_SECTION_LABEL}</Text>
         {SETTINGS_RESEARCH_FLAGS.map((flag) => {
@@ -175,6 +195,7 @@ const styles = StyleSheet.create({
     gap: space.sm,
   },
   kicker: { color: colors.accent, fontWeight: "700", letterSpacing: 0.6 },
+  retry: { color: colors.accent, fontSize: 15, fontWeight: "700", paddingVertical: 6 },
   sectionFirst: {
     color: colors.text,
     fontSize: 16,
