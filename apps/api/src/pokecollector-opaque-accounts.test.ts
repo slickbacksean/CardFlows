@@ -516,15 +516,91 @@ describe("relink script (dry run by default; never run against a real server her
     for (const id of [alexId, jordanId]) expect(frozen).not.toContain(store.getPokecollectorUserMapping(id)!.pokecollectorUserId);
   });
 
-  it("freezes the 'hold' rows account deletion left (PR 96 queue) and clears them", async () => {
+  it("R1: a 'hold' row nobody live links to is admin-DELETEd, not frozen (the delete copy stays true)", async () => {
     const { store } = await legacyWorld();
-    store.accounts.enqueuePokecollectorDeletion({ remoteUserId: "77", mode: "hold", at: "2026-10-17T00:00:00.000Z" });
     const { accounts, frozen } = crashable();
+    // A deleted account's old shared/legacy remote user: no CardFlow account links to it any more.
+    const held = accounts.seedRemoteUser("cardflow-sam");
+    accounts.seedCollection(held, [{ id: "c1", tcgdexId: "base1-58", quantity: 1, selectedVariant: null, condition: null, purchasePrice: null }]);
+    store.accounts.enqueuePokecollectorDeletion({ remoteUserId: held, mode: "hold", at: "2026-10-17T00:00:00.000Z" });
     const plan = planPokecollectorRelink(store);
-    expect(plan.freeze).toContainEqual(expect.objectContaining({ pokecollectorUserId: "77", source: "deletion_hold", pokecollectorUsername: null }));
-    await runPokecollectorRelink({ store, accounts, dryRun: false, state: memoryRelinkState() });
-    expect(frozen).toContain("77");
+    expect(plan.freeze).toContainEqual(
+      expect.objectContaining({ pokecollectorUserId: held, source: "deletion_hold", pokecollectorUsername: null, action: "delete" }),
+    );
+    const state = memoryRelinkState();
+    const result = await runPokecollectorRelink({ store, accounts, dryRun: false, state });
+    expect(result.deleted).toBe(1);
+    expect(frozen).not.toContain(held);
+    expect([...accounts.remoteUsers.values()].map((u) => u.id)).not.toContain(held);
     expect(store.accounts.listPokecollectorDeletions()).toEqual([]);
+    expect(state.current?.deleted).toEqual([held]);
+    expect(summarizeRelink(result)).toMatchObject({ deleted: 1, plan: { delete: 1, freeze: 3 } });
+    // A rerun does nothing more.
+    const again = await runPokecollectorRelink({ store, accounts, dryRun: false, state });
+    expect([again.deleted, again.frozen, again.strayFrozen]).toEqual([0, 0, 0]);
+  });
+
+  it("R1: a 'hold' row still shared with a live account is frozen after that account moves to its own opaque user", async () => {
+    const { store } = await legacyWorld();
+    const { accounts, frozen } = crashable();
+    let deletes = 0;
+    accounts.deleteRemoteUser = async () => {
+      deletes += 1;
+      return "user_deleted";
+    };
+    // A deleted account shared remote user 41 with Alex, who is still live.
+    store.accounts.enqueuePokecollectorDeletion({ remoteUserId: "41", mode: "hold", at: "2026-10-17T00:00:00.000Z" });
+    const plan = planPokecollectorRelink(store);
+    expect(plan.freeze.filter((f) => f.pokecollectorUserId === "41")).toEqual([expect.objectContaining({ action: "freeze" })]);
+    const result = await runPokecollectorRelink({ store, accounts, dryRun: false, state: memoryRelinkState() });
+    expect(deletes).toBe(0);
+    expect(result.deleted).toBe(0);
+    expect(frozen).toContain("41");
+    const alex = store.getPokecollectorUserMapping(alexId)!;
+    expect(isReadyLink(alex) && alex.pokecollectorUserId !== "41").toBe(true);
+    expect(store.accounts.listPokecollectorDeletions()).toEqual([]);
+  });
+
+  it("R1: a failed delete is never turned into a freeze; the hold row stays and a rerun deletes it", async () => {
+    const { store } = await legacyWorld();
+    const { accounts, frozen } = crashable();
+    const held = accounts.seedRemoteUser("cardflow-sam");
+    store.accounts.enqueuePokecollectorDeletion({ remoteUserId: held, mode: "hold", at: "2026-10-17T00:00:00.000Z" });
+    const realDelete = accounts.deleteRemoteUser.bind(accounts);
+    let fail = true;
+    accounts.deleteRemoteUser = async (target) => (fail ? "partial" : realDelete(target));
+    const state = memoryRelinkState();
+    const first = await runPokecollectorRelink({ store, accounts, dryRun: false, state });
+    expect(first.deleteFailed).toEqual([held]);
+    expect(first.deleted).toBe(0);
+    // Not frozen by the delete step or by the stray sweep (it's an unlinked cardflow-* user).
+    expect(frozen).not.toContain(held);
+    expect(store.accounts.listPokecollectorDeletions().map((r) => r.remoteUserId)).toEqual([held]);
+    fail = false;
+    const second = await runPokecollectorRelink({ store, accounts, dryRun: false, state });
+    expect(second.deleted).toBe(1);
+    expect(frozen).not.toContain(held);
+    expect(store.accounts.listPokecollectorDeletions()).toEqual([]);
+  });
+
+  it("R1: an entry from an older state file (no action) is frozen, never deleted", async () => {
+    const { store } = await legacyWorld();
+    const { accounts, frozen } = crashable();
+    const old = accounts.seedRemoteUser("cardflow-old");
+    let deletes = 0;
+    accounts.deleteRemoteUser = async () => {
+      deletes += 1;
+      return "user_deleted";
+    };
+    const state = memoryRelinkState({
+      version: 1,
+      freeze: [{ pokecollectorUserId: old, pokecollectorUsername: "cardflow-old", linkedUsers: 1, source: "link" }],
+      frozen: [],
+      progress: {},
+    });
+    await runPokecollectorRelink({ store, accounts, dryRun: false, state });
+    expect(deletes).toBe(0);
+    expect(frozen).toContain(old);
   });
 
   it("L3: stdout gets counts and hashed IDs only; the full plan goes to a 0600 file", async () => {

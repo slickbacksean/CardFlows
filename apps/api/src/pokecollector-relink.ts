@@ -25,6 +25,15 @@ import type { StorePort } from "./store";
  * the save can leave one duplicate copy). The run ends by freezing every remote `cardflow-*` user
  * that isn't opaque and isn't linked (admin GET /api/auth/users), e.g. one whose link row was lost.
  *
+ * Delete vs freeze (Backend final review R1): a remote user held by an account deletion (PR 96
+ * "hold" row) that no CardFlow account links to any more is admin-DELETEd, so the deletion copy
+ * stays true. Only remote users still shared with a live account are frozen, after every live
+ * account on them has moved to its own opaque user. Strays (no link, owner unknown) are frozen.
+ *
+ * Resume caveat: copy progress is a count into the user's inventory order (rebuildItems). If a
+ * user's inventory changes between a crash and the rerun, the resume can skip or repeat items.
+ * Rerun soon after a crash, and check the user's PokéCollector list if their inventory changed.
+ *
  * Dry run (the default) makes no network call and writes nothing to the database or PokéCollector.
  * DO NOT run with apply against a real PokéCollector server until Sean says so.
  */
@@ -36,10 +45,15 @@ export interface RelinkFreezeEntry {
   linkedUsers: number;
   /** Why it's on the list: an old link, or a "hold" row left by an account deletion (PR 96). */
   source: "link" | "deletion_hold" | "state";
+  /**
+   * Final review R1: "delete" when no live CardFlow account links to it (only deleted accounts
+   * owned it), "freeze" when a live account still shares it. Missing (older state file) = freeze.
+   */
+  action?: "delete" | "freeze";
 }
 
 export interface RelinkPlan {
-  /** Old remote users to freeze (random password, deactivated). No CardFlow user IDs. */
+  /** Old remote users to delete or freeze (see `action`). No CardFlow user IDs. */
   freeze: RelinkFreezeEntry[];
   /** CardFlow users who get a fresh opaque remote user rebuilt from their inventory. */
   relink: Array<{ userId: string; reason: RelinkReason; purchased: number; watchlist: number }>;
@@ -58,6 +72,8 @@ export interface RelinkState {
   version: 1;
   freeze: RelinkFreezeEntry[];
   frozen: string[];
+  /** Final review R1: remote users already deleted (missing in older state files). */
+  deleted?: string[];
   progress: Record<string, RelinkProgress>;
 }
 
@@ -76,6 +92,9 @@ export interface RelinkResult {
   frozen: number;
   freezeFailed: string[];
   skippedFreeze: string[];
+  /** Final review R1: remote users of deleted accounts, admin-DELETEd. */
+  deleted: number;
+  deleteFailed: string[];
   guestLinksDropped: number;
   /** Re-review H2: unlinked, non-opaque `cardflow-*` remote users frozen at the end. */
   strayFrozen: number;
@@ -96,7 +115,8 @@ type RelinkStore = Pick<
   accounts: Pick<StorePort["accounts"], "listAccountUserIds" | "listPokecollectorDeletions" | "removePokecollectorDeletion">;
 };
 
-const emptyState = (): RelinkState => ({ version: 1, freeze: [], frozen: [], progress: {} });
+const emptyState = (): RelinkState => ({ version: 1, freeze: [], frozen: [], deleted: [], progress: {} });
+const actionOf = (entry: RelinkFreezeEntry) => entry.action ?? "freeze";
 
 /** State kept in memory (tests). */
 export function memoryRelinkState(initial: RelinkState | null = null): RelinkStateStore & { current: RelinkState | null; saves: number } {
@@ -146,7 +166,8 @@ export function summarizeRelink(result: RelinkResult) {
     dryRun: result.dryRun,
     plan: {
       relink: result.plan.relink.length,
-      freeze: result.plan.freeze.length,
+      freeze: result.plan.freeze.filter((f) => actionOf(f) === "freeze").length,
+      delete: result.plan.freeze.filter((f) => actionOf(f) === "delete").length,
       dropGuestLinks: result.plan.dropGuestLinks.length,
       copies: result.plan.relink.reduce((n, r) => n + r.purchased + r.watchlist, 0),
     },
@@ -154,12 +175,14 @@ export function summarizeRelink(result: RelinkResult) {
     copiesWritten: result.copiesWritten,
     copiesFailed: result.copiesFailed,
     frozen: result.frozen,
+    deleted: result.deleted,
     strayFrozen: result.strayFrozen,
     strayCheckFailed: result.strayCheckFailed,
     guestLinksDropped: result.guestLinksDropped,
     relinkFailed: result.relinkFailed.map(hashRelinkId),
     freezeFailed: result.freezeFailed.map(hashRelinkId),
     skippedFreeze: result.skippedFreeze.map(hashRelinkId),
+    deleteFailed: result.deleteFailed.map(hashRelinkId),
   };
 }
 
@@ -202,7 +225,7 @@ export function planPokecollectorRelink(store: RelinkStore, state: RelinkState |
   };
 
   // Re-review H2: anything an earlier (crashed) run already listed stays on the list.
-  const frozenBefore = new Set(state?.frozen ?? []);
+  const frozenBefore = new Set([...(state?.frozen ?? []), ...(state?.deleted ?? [])]);
   for (const entry of state?.freeze ?? []) {
     if (!frozenBefore.has(entry.pokecollectorUserId)) freeze.set(entry.pokecollectorUserId, { ...entry, source: "state" });
   }
@@ -216,15 +239,26 @@ export function planPokecollectorRelink(store: RelinkStore, state: RelinkState |
         pokecollectorUsername: m.pokecollectorUsername,
         linkedUsers: byRemote.get(m.pokecollectorUserId)?.length ?? 1,
         source: "link",
+        // A live account is linked to it: freeze (after relinking), never delete.
+        action: "freeze",
       });
     }
     if (isGuestUserId(m.userId)) dropGuestLinks.push(m.userId);
     else addRelink(m.userId, shared ? "shared_remote" : "legacy_link");
   }
-  // PR 96: remote users of deleted accounts that were shared, a guest's, or legacy.
+  // PR 96: remote users of deleted accounts that were shared, a guest's, or legacy. Final review
+  // R1: still linked to a live account -> already listed above as "freeze"; otherwise every owner
+  // was deleted -> "delete".
   for (const row of store.accounts.listPokecollectorDeletions()) {
     if (row.mode !== "hold" || freeze.has(row.remoteUserId) || frozenBefore.has(row.remoteUserId)) continue;
-    freeze.set(row.remoteUserId, { pokecollectorUserId: row.remoteUserId, pokecollectorUsername: null, linkedUsers: 0, source: "deletion_hold" });
+    const live = byRemote.has(row.remoteUserId) || pendingOwn.some((m) => m.pokecollectorUserId === row.remoteUserId);
+    freeze.set(row.remoteUserId, {
+      pokecollectorUserId: row.remoteUserId,
+      pokecollectorUsername: null,
+      linkedUsers: 0,
+      source: "deletion_hold",
+      action: live ? "freeze" : "delete",
+    });
   }
   // A pending row from a crashed run: finished with its own password, never a new one.
   for (const m of pendingOwn) if (!isGuestUserId(m.userId)) addRelink(m.userId, "resume_pending");
@@ -265,6 +299,8 @@ export async function runPokecollectorRelink(input: {
     frozen: 0,
     freezeFailed: [],
     skippedFreeze: [],
+    deleted: 0,
+    deleteFailed: [],
     guestLinksDropped: 0,
     strayFrozen: 0,
     strayCheckFailed: false,
@@ -275,9 +311,15 @@ export async function runPokecollectorRelink(input: {
   if (!input.state) throw new Error("A state file is required to apply (crash-safe resume)");
   const stateStore = input.state;
   const state: RelinkState = loaded ?? emptyState();
+  state.deleted ??= [];
   // Re-review H2: the freeze list is on disk before anything is written.
   const known = new Set(state.freeze.map((f) => f.pokecollectorUserId));
   for (const entry of plan.freeze) if (!known.has(entry.pokecollectorUserId)) state.freeze.push({ ...entry, source: entry.source === "state" ? "link" : entry.source });
+  // A hold that a later account deletion turned into delete-only (its last live link is gone).
+  for (const entry of plan.freeze) {
+    const saved = state.freeze.find((f) => f.pokecollectorUserId === entry.pokecollectorUserId);
+    if (saved && entry.source === "deletion_hold" && entry.action === "delete") saved.action = "delete";
+  }
   stateStore.save(state);
 
   for (const entry of plan.relink) {
@@ -340,10 +382,26 @@ export async function runPokecollectorRelink(input: {
   const stillLinked = () => new Set(store.listPokecollectorUserMappings().map((m) => m.pokecollectorUserId));
   const linkedNow = stillLinked();
   const frozen = new Set(state.frozen);
+  const deleted = new Set(state.deleted);
   for (const old of state.freeze) {
-    if (frozen.has(old.pokecollectorUserId)) continue;
+    if (frozen.has(old.pokecollectorUserId) || deleted.has(old.pokecollectorUserId)) continue;
     if (linkedNow.has(old.pokecollectorUserId)) {
       result.skippedFreeze.push(old.pokecollectorUserId);
+      continue;
+    }
+    // Final review R1: only deleted accounts owned it -> delete it (and everything it holds).
+    if (actionOf(old) === "delete") {
+      const outcome = await accounts.deleteRemoteUser({ pokecollectorUserId: old.pokecollectorUserId });
+      if (outcome === "user_deleted") {
+        result.deleted += 1;
+        deleted.add(old.pokecollectorUserId);
+        state.deleted!.push(old.pokecollectorUserId);
+        stateStore.save(state);
+        store.accounts.removePokecollectorDeletion(old.pokecollectorUserId);
+      } else {
+        // Kept on the list and the hold row stays, so a rerun tries again.
+        result.deleteFailed.push(old.pokecollectorUserId);
+      }
       continue;
     }
     if (await accounts.freezeRemoteUser(old.pokecollectorUserId)) {
@@ -366,7 +424,9 @@ export async function runPokecollectorRelink(input: {
   const linkedAfter = stillLinked();
   for (const user of remoteUsers) {
     if (!user.isActive || user.role === "admin" || !user.username.toLowerCase().startsWith("cardflow-")) continue;
-    if (isOpaquePokecollectorUsername(user.username) || linkedAfter.has(user.id) || frozen.has(user.id)) continue;
+    if (isOpaquePokecollectorUsername(user.username) || linkedAfter.has(user.id) || frozen.has(user.id) || deleted.has(user.id)) continue;
+    // A delete that failed above stays a delete on the next run; don't freeze it here.
+    if (result.deleteFailed.includes(user.id)) continue;
     if (await accounts.freezeRemoteUser(user.id)) {
       result.strayFrozen += 1;
       frozen.add(user.id);

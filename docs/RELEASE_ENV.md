@@ -75,7 +75,7 @@ Repeat for `preview`, and for `development` if wanted. `apps/mobile/.env.example
 ## Account deletion (checked in P4)
 - **API:** `POST /v1/account/delete` deletes, in one transaction, every `user_id` row, including the PokéCollector link (`crm_pokecollector_users`). It then deletes the user's photos and staged uploads, signs out every session, and queues what CardFlow stored on PokéCollector for deletion (below). The response never waits on PokéCollector.
   - North Star (H2): in the same transaction, the user's weekly counts (purchases, scans, active weeks) are added to `north_star_weekly_totals` (week, counts; no IDs), and their `purchase_events` rows are hard-deleted. `/ops/north-star` adds the totals to the live rows, so past weeks don't change. Older `deleted_<uuid>` ledger buckets are folded into the totals when the API starts.
-  - PokéCollector (Backend re-review H1/M1): the remote user ID (only that: no CardFlow ID, email or username) goes into `pokecollector_pending_deletions` in the same transaction as the rows. A background queue (every minute, and after each orphan sweep) runs `DELETE /api/auth/users/{id}` with the admin token, the strongest option: PokéCollector deletes the user and every row it owns. A 404 counts as done only when the body is `{"detail": "User not found"}`. If the admin delete is refused and the process still has the link in memory, CardFlow signs in as the user, deletes every collection and wishlist item, then rotates the password (admin `PUT /api/auth/users/{id}` with `is_active: false`, else `PUT /api/auth/me/password`). After a restart only the admin delete is possible, so **the admin token must stay valid** (PokéCollector JWTs last 7 days). Failures retry with backoff (1 min, 5 min, 30 min, 2 h, 6 h, 12 h, then daily). Calls are paced at 30 requests and 2 logins a minute, under PokéCollector's per-IP 60 and 5. A remote user still linked to another CardFlow user, or a guest's shared user, is queued as `hold` and never deleted; the opaque-accounts relink freezes it. Keep PokéCollector accounts off until the opaque per-user accounts PR is merged (see that PR).
+  - PokéCollector (Backend re-review H1/M1): the remote user ID (only that: no CardFlow ID, email or username) goes into `pokecollector_pending_deletions` in the same transaction as the rows. A background queue (every minute, and after each orphan sweep) runs `DELETE /api/auth/users/{id}` with the admin token, the strongest option: PokéCollector deletes the user and every row it owns. A 404 counts as done only when the body is `{"detail": "User not found"}`. If the admin delete is refused and the process still has the link in memory, CardFlow signs in as the user, deletes every collection and wishlist item, then rotates the password (admin `PUT /api/auth/users/{id}` with `is_active: false`, else `PUT /api/auth/me/password`). After a restart only the admin delete is possible, so **the admin token must stay valid** (PokéCollector JWTs last 7 days). Failures retry with backoff (1 min, 5 min, 30 min, 2 h, 6 h, 12 h, then daily). Calls are paced at 30 requests and 2 logins a minute, under PokéCollector's per-IP 60 and 5. A remote user still linked to another CardFlow user, or a guest's shared user, is queued as `hold` and not deleted by the queue; the opaque-accounts relink then admin-deletes it if no live account links to it any more, or freezes it if one still does (final review R1). Keep PokéCollector accounts off until the opaque per-user accounts PR is merged (see that PR).
   - **Limit and alerts (Backend final review R3):** after 14 failed attempts (about 9 days with the backoff) a row becomes `failed` and the queue stops trying. That logs `[pokecollector-deletion] gave up on remote user <PokéCollector ID> …` (no CardFlow ID or email), counts `pokecollectorDeletionsFailed` in `/ops/metrics`, and sends a `pokecollector_deletion_failed` alert to Sentry or the webhook. `GET /ops/pokecollector-deletions` (ops token) returns counts only: `pending`, `held`, `failed`, `stuck` (pending for over 3 days) and `oldestPendingAt`. To fix a failed row: repair PokéCollector or the admin token, then `UPDATE pokecollector_pending_deletions SET mode = 'delete', attempts = 0, next_attempt_at = '<now>' WHERE mode = 'failed';`, or delete the user in PokéCollector by hand and remove the row.
   - **Pacing is per process:** the 30 requests and 2 logins a minute are counted inside one API process. Two API processes, or the API plus the relink script, share PokéCollector's per-IP limit (60 and 5) without coordinating. Run one API process against PokéCollector and don't run the relink while the deletion queue is busy.
   - Ops check: `SELECT mode, attempts, last_result, next_attempt_at FROM pokecollector_pending_deletions;` (no personal data).
@@ -112,10 +112,17 @@ these are true:
    It gives every CardFlow user with a legacy (email-derived or shared) link, or with CardFlow
    inventory and no link, a fresh opaque PokéCollector user rebuilt from CardFlow's own
    inventory, drops guest links, freezes each old remote user (random password,
-   `is_active: false`) once nothing points at it, freezes the `hold` rows account deletion left in
-   `pokecollector_pending_deletions`, and ends by freezing every remote `cardflow-*` user that
-   isn't opaque and isn't linked (admin `GET /api/auth/users`). Review the dry-run plan with Sean
-   before `--apply`.
+   `is_active: false`) once nothing points at it, and ends by freezing every remote `cardflow-*`
+   user that isn't opaque and isn't linked (admin `GET /api/auth/users`). Review the dry-run plan
+   with Sean before `--apply`.
+   - **Delete vs freeze (Backend final review R1):** a `hold` row in
+     `pokecollector_pending_deletions` whose remote user no live CardFlow account links to (every
+     owner deleted their account) is **admin-DELETEd** (`DELETE /api/auth/users/{id}`), so the
+     account-deletion copy stays true. Only remote users still shared with a live account are
+     frozen, after each live account on them has its own opaque user. A failed delete is never
+     turned into a freeze: the hold row stays and a rerun tries again (`deleteFailed` in the
+     output). Strays (no link, owner unknown) are frozen, not deleted. The plan's `action` field
+     says which; the summary counts `plan.delete` and `plan.freeze`.
    - **Output (re-review L3):** stdout shows counts and hashed IDs only. The full plan goes to
      `--plan-file` (default `./pokecollector-relink-plan.json`, mode 0600).
    - **Crash-safe (re-review H2):** `--state-file` (default `./pokecollector-relink-state.json`,
@@ -123,8 +130,17 @@ these are true:
      stops, run the same command again with the same state file: it reuses pending rows and
      their passwords and resumes copies where they stopped (a crash right after a remote write can
      leave one duplicate card). Delete both files when the relink is done.
+   - **Resume caveat:** copy progress is saved as a count into each user's inventory order, not
+     per item. If a user's CardFlow inventory changes between a crash and the rerun (a purchase,
+     a removal, a closed watchlist item), the resume can skip or repeat items for that user. Rerun
+     soon after a crash, keep the API's PokéCollector accounts off while the relink runs (they are
+     off until step 3 anyway), and spot-check any user whose inventory changed.
    - Paced at 30 requests and 2 logins a minute (PokéCollector allows 60 and 5 per IP), so a big
      relink takes a while: about 1 request per copy plus 1 login and 1 create per user.
+   - **Pacing is per process:** the script, each API process and the API's deletion queue each
+     have their own 30/2 budget and don't coordinate. Together they can pass PokéCollector's
+     per-IP 60 and 5. Run the relink while one API process at most talks to PokéCollector and the
+     deletion queue is idle (`GET /ops/pokecollector-deletions` shows `pending: 0`).
 
 Why: before this PR, PokéCollector usernames came from the email local part, so
 `sean@gmail.com` and `sean@yahoo.com` (or `sean.h@…` and `sean_h@…`) landed on one remote user
@@ -140,7 +156,21 @@ Required to turn accounts on (fail closed, no fallback values):
 | `CARD_FLOW_POKECOLLECTOR_ADMIN_USERNAME` / `CARD_FLOW_POKECOLLECTOR_ADMIN_PASSWORD` | Optional (re-review M2). CardFlow mints its admin token at first use and again on a 401, so the token can't silently expire. Treat as the PokéCollector admin password. |
 | `CARD_FLOW_POKECOLLECTOR_USER_PEPPER` | 32+ random chars. HMAC key for usernames `cardflow-u-<base32(HMAC-SHA256(userId))[:20]>`. Never change it. |
 | `CARD_FLOW_POKECOLLECTOR_LINK_KEY` | 32-byte AES-256-GCM key (base64 or hex). Encrypts each link's random password at rest (`v2:<key id>:…`). Back it up with the database; losing it loses every link. |
-| `CARD_FLOW_POKECOLLECTOR_PREVIOUS_LINK_KEYS` | Optional, comma-separated (re-review L2). To rotate: put the old key here, a new one in `LINK_KEY`, deploy. Old links still decrypt (by key ID); `reencryptLinkPassword` moves a link to the new key. |
+| `CARD_FLOW_POKECOLLECTOR_PREVIOUS_LINK_KEYS` | Optional, comma-separated (re-review L2). To rotate: put the old key here, a new one in `LINK_KEY`, deploy, then run the re-encrypt below. Old links still decrypt (by key ID). **An old key must stay here until the re-encrypt has run** (final review R4): removing it earlier makes every link still under it unreadable. |
+
+### Rotating the link key (final review R4)
+
+1. Put the new key in `CARD_FLOW_POKECOLLECTOR_LINK_KEY` and add the old one to
+   `CARD_FLOW_POKECOLLECTOR_PREVIOUS_LINK_KEYS`. Deploy.
+2. Re-encrypt every link under the new key (local database only, never calls PokéCollector;
+   stdout shows counts and hashed IDs only):
+   ```sh
+   pnpm --filter @cardflow/api pokecollector:reencrypt-links              # dry run (default): counts, no write
+   pnpm --filter @cardflow/api pokecollector:reencrypt-links -- --apply   # calls reencryptLinkPassword for each link
+   ```
+3. Run the dry run again. Only when it shows `needsRotation: 0` and `failed: []` remove the old key
+   from `PREVIOUS_LINK_KEYS` and deploy. A `failed` row is a link no configured key can read; that
+   user has to be relinked.
 
 A user's PokéCollector token that expires (401) is dropped and the user signs in again once
 (re-review M2). User tokens are cached in memory, so a restart costs one login per active user,
@@ -150,18 +180,41 @@ The PokéCollector container must run with `USER_MODE=multi` (set in
 `infra/pokecollector/docker-compose.yml`): in single-user mode PokéCollector treats a request
 with no token as the admin.
 
-### Merge order and the pre-merge migration check
+### Merge order and the pre-merge checklist (Backend final review)
 
-PR 96 merges first (it adds migrations 0021–0023), then this PR (0024). Before each merge, and
-before deploying, check what a staging or production database has already applied:
+Merge procedure (merge commits only, no squash or rebase):
 
-```sql
-SELECT hash, created_at FROM __drizzle_migrations ORDER BY created_at DESC LIMIT 3;
-```
+1. Merge PR 96 into `main` with a merge commit.
+2. Retarget this PR's base to `main` by hand (GitHub may not do it) and confirm it shows
+   **0 commits behind** `main`. If it's behind, merge `main` into this branch and wait for CI.
+3. Merge this PR with a merge commit.
+4. Deploy both together (one deploy). Leave `CARD_FLOW_POKECOLLECTOR_ACCOUNTS` unset.
 
-The newest `created_at` must be older than the next migration's journal `when` (0021
-1791436800000, 0022 1791523200000, 0023 1791566400000, 0024 1791609600000), or the migrator skips
-it. If a database already has a migration this branch renumbered, stop and fix it by hand first.
+Before merging, and again before deploying, on each staging and production database:
+
+- **Migrations:** check what the database has already applied:
+  ```sql
+  SELECT hash, created_at FROM __drizzle_migrations ORDER BY created_at DESC LIMIT 5;
+  ```
+  The newest `created_at` must be **at most `1791350400000`** (0020, the last migration on
+  `main`). The two PRs add 0021 `1791436800000`, 0022 `1791523200000`, 0023 `1791566400000` (PR 96)
+  and 0024 `1791609600000` (this PR); the migrator skips any whose `when` is older than the newest
+  applied one. If a row is newer than `1791350400000`, a renumbered or unmerged migration was
+  applied: stop and fix it by hand first.
+- **Env:** `CARD_FLOW_SERVER_PEPPER` (required in production, 32+ random characters),
+  `CARD_FLOW_OPS_TOKEN` (for `/ops/*`, including `/ops/pokecollector-deletions`), and
+  `CARD_FLOW_POKECOLLECTOR_ACCOUNTS` **unset**. Before accounts go on: `CARD_FLOW_POKECOLLECTOR_URL`,
+  `CARD_FLOW_POKECOLLECTOR_TOKEN` or `CARD_FLOW_POKECOLLECTOR_ADMIN_USERNAME`/`_PASSWORD`,
+  `CARD_FLOW_POKECOLLECTOR_USER_PEPPER`, `CARD_FLOW_POKECOLLECTOR_LINK_KEY` (backed up with the
+  database), optional `CARD_FLOW_POKECOLLECTOR_PREVIOUS_LINK_KEYS`, and PokéCollector's
+  `USER_MODE=multi`.
+- **Relink (after the deploy, with Sean's go-ahead):** set the PokéCollector secrets above but keep
+  `CARD_FLOW_POKECOLLECTOR_ACCOUNTS` unset; run the relink dry run and review the plan file
+  (`plan.delete`, `plan.freeze`, `plan.relink`) with Sean; run `--apply --confirm-url=…` with a
+  state file; rerun with the same state file until `relinkFailed`, `copiesFailed`, `freezeFailed`
+  and `deleteFailed` are empty and `strayCheckFailed` is false; check
+  `GET /ops/pokecollector-deletions` shows `held: 0`; delete the plan and state files; then set
+  `CARD_FLOW_POKECOLLECTOR_ACCOUNTS=true` and deploy.
 
 ### Unknowns to validate on a staging PokéCollector before turning accounts on
 
