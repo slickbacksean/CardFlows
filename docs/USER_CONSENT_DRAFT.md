@@ -144,6 +144,10 @@ Marketplace apps have their own rules. Using overlays, bots, or scrapers can vio
 
 If you allow it, CardFlow uploads your card photos to **CardSight**, our card-recognition provider, to identify the card. CardSight's terms allow it to use these images to improve its service. We send the image and the fields its API requires, not your email or other account details. If you don't allow it, or you turn it off in Settings (Card recognition), new photos are matched only by CardFlow's own servers. Turning it off doesn't recall photos CardSight has already received, and deleting a scan in CardFlow can't delete CardSight's copy. We record when you allowed or withdrew this, and which version of this notice you saw.
 
+**Privacy policy draft: email service provider (Resend)**
+
+We use **Resend** (Resend, Inc.), an email service provider that processes data on our behalf, to send account emails: your sign-up verification code and password reset codes. Resend receives your email address and the message we send, including the code. It does not receive your photos, cards, prices or anything else in your account. We don't use Resend for marketing email.
+
 **Privacy policy draft: analytics service provider**
 
 If you turn on usage analytics, CardFlow sends counts and timings to **PostHog Inc.**, a service provider that processes this data on our behalf and stores it in the **United States**. PostHog briefly receives your device's IP address when events arrive, but we have turned off its location lookup (GeoIP), so no location is derived or stored, and events are not linked to a person profile. We never send photos, card details, prices or anything you type. You can turn analytics off at any time in Settings; events not yet sent are deleted from your phone.
