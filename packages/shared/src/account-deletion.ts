@@ -7,7 +7,7 @@
  */
 /** Policy Reviewer (P4): exact wording, also in the privacy policy draft. */
 export const POKECOLLECTOR_DELETION_LINE =
-  "If your account was linked to PokéCollector, CardFlow removes the link and deletes the cards and wishlist it stored there. This can take up to a few days, and PokéCollector's own backups may keep a copy for a while.";
+  "If your account was linked to PokéCollector, CardFlow removes the link and deletes the cards and wishlist it stored there. This can take up to 2 weeks, and PokéCollector's own backups may keep a copy for a while.";
 /** Policy Reviewer (P4): exact wording for the anonymous North Star totals (Backend H2). */
 export const ANONYMOUS_LEDGER_LINE =
   "CardFlow keeps only anonymous totals that can't identify you. Purchases you made on a marketplace aren't affected.";

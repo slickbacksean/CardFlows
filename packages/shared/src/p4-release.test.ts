@@ -441,7 +441,7 @@ describe("P4: account deletion end to end", () => {
 
   it("Policy + Backend M3: exact deletion lines", () => {
     expect(POKECOLLECTOR_DELETION_LINE).toBe(
-      "If your account was linked to PokéCollector, CardFlow removes the link and deletes the cards and wishlist it stored there. This can take up to a few days, and PokéCollector's own backups may keep a copy for a while.",
+      "If your account was linked to PokéCollector, CardFlow removes the link and deletes the cards and wishlist it stored there. This can take up to 2 weeks, and PokéCollector's own backups may keep a copy for a while.",
     );
     expect(ACCOUNT_DELETION_COPY.deletes).toContain(POKECOLLECTOR_DELETION_LINE);
     expect(ANONYMOUS_LEDGER_LINE).toBe("CardFlow keeps only anonymous totals that can't identify you. Purchases you made on a marketplace aren't affected.");
