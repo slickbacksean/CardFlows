@@ -42,8 +42,17 @@ The shared scrubber (`packages/shared/src/sentry-scrub.ts`) drops:
 - Request bodies, cookies, and `Authorization` headers
 - Keys such as `photo`, `image`, `cropBytes`, `frontBytes`, `identityCropJpeg`, `base64`
 - Data-URL / long base64 payloads (card photos)
+- Local photo paths (`file://`, `content://`, `ph://`, `assets-library://` ending in .jpg/.png/.heic/.webp), added in P4
+- Bearer tokens, and the values of `token`, `access_token`, `refresh_token`, `code`, `password`, `key`, `api_key` and `dsn` query parameters (P4)
+- Keys named like `token`, `password` or `ip_address` (P4)
 
 Also disabled: session replay, screenshots, view hierarchy, failed-request bodies, default PII.
+
+## Consent
+
+Crash reporting is **not** tied to the in-app analytics opt-in. Analytics consent covers PostHog product events only. Crash data is a separate, disclosed category (Crash Data, PRIVACY_DATA_MAP §14) and carries no PII or photos. P4 checked this and kept it. If it should require the opt-in too, gate `initMobileSentry()` on the stored analytics preference.
+
+EAS profiles and the rest of the env layout: [RELEASE_ENV.md](./RELEASE_ENV.md).
 
 ## Expo Go
 

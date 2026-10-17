@@ -111,6 +111,7 @@ export default function RootLayout() {
         <Stack.Screen name="max-buy-rules" options={{ headerShown: false }} />
         <Stack.Screen name="watch" options={{ headerShown: false }} />
         <Stack.Screen name="verify-email" options={{ headerShown: false }} />
+        <Stack.Screen name="delete-account" options={{ headerShown: false }} />
         <Stack.Screen name="card-recognition" options={{ headerShown: false }} />
       </Stack>
       <StatusBar style="light" />

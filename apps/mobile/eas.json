@@ -4,12 +4,46 @@
     "appVersionSource": "local"
   },
   "build": {
+    "base": {
+      "node": "22.22.0",
+      "env": {
+        "EXPO_PUBLIC_POSTHOG_HOST": "https://us.i.posthog.com"
+      }
+    },
     "development": {
+      "extends": "base",
       "developmentClient": true,
       "distribution": "internal",
-      "node": "22.22.0",
+      "environment": "development",
       "ios": {
         "resourceClass": "m-medium"
+      },
+      "env": {
+        "APP_ENV": "development",
+        "EXPO_PUBLIC_APP_ENV": "development"
+      }
+    },
+    "preview": {
+      "extends": "base",
+      "distribution": "internal",
+      "environment": "preview",
+      "ios": {
+        "resourceClass": "m-medium"
+      },
+      "env": {
+        "APP_ENV": "preview",
+        "EXPO_PUBLIC_APP_ENV": "preview"
+      }
+    },
+    "production": {
+      "extends": "base",
+      "environment": "production",
+      "ios": {
+        "resourceClass": "m-medium"
+      },
+      "env": {
+        "APP_ENV": "production",
+        "EXPO_PUBLIC_APP_ENV": "production"
       }
     }
   }

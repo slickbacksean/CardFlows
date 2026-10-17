@@ -47,7 +47,7 @@ export type {
   HealthRecognition,
   HealthSlabPricing,
 } from "./health";
-export { scrubSentryEvent, REDACTED_EMAIL, REDACTED_IMAGE, REDACTED_VALUE } from "./sentry-scrub";
+export { scrubSentryEvent, REDACTED_EMAIL, REDACTED_IMAGE, REDACTED_PHOTO_URI, REDACTED_TOKEN, REDACTED_VALUE } from "./sentry-scrub";
 export { catalogCardFromMapping, confirmIdentity } from "./confirm";
 export {
   CONFIDENCE_SCREEN_LABEL,
@@ -838,3 +838,5 @@ export * from "./account-auth";
 export * from "./email-verification";
 export * from "./cardsight-consent";
 export * from "./age-gate";
+export * from "./account-deletion";
+export * from "./sign-in-with-apple";

@@ -942,6 +942,11 @@ export function getIdentity() {
   return callApi(apiContract.getIdentity);
 }
 
+/** P4: Settings > Delete account. Deletes every row, photo and session for this user. */
+export function deleteAccount() {
+  return callApi(apiContract.deleteAccountPhotos);
+}
+
 type SignupListener = (reason: SignupReason) => void;
 let signupListener: SignupListener | null = null;
 

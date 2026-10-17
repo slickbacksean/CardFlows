@@ -116,6 +116,21 @@ async function restoreIdentitySession(): Promise<IdentitySession> {
   }
 }
 
+/**
+ * P4 account deletion: forget the session on this phone. The next screen that needs a
+ * session starts fresh (a new guest session when guest mode is on).
+ */
+export async function signOutLocally(): Promise<void> {
+  setSessionToken(null);
+  await persistSessionToken(null);
+  rememberIdentity(null);
+  restorePromise = null;
+  resetCardSightConsentCache();
+  resetAgeConfirmationCache();
+  stopLiveVideoIdentify();
+  clearLivestreamOverlay();
+}
+
 /** D9: true while the app runs on a guest session. */
 export function isGuestSession(): boolean {
   return isGuestUserId(cachedUserId);

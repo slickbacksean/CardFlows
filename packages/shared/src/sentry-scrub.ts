@@ -5,7 +5,7 @@ const BASE64_LIKE = /^[A-Za-z0-9+/=\s]{200,}$/;
 const IMAGE_DATA_URL = /data:image\/[a-zA-Z0-9.+-]+;base64,/i;
 
 const DROP_KEY_PATTERN =
-  /^(email|emails|photo|photos|image|images|jpeg|jpg|png|webp|heic|base64|crop|cropbytes|frontbytes|backbytes|identitycropjpeg|still|screenshot|screenshots|file|files|attachment|attachments|authorization|cookie|cookies|set-cookie)$/i;
+  /^(email|emails|photo|photos|image|images|jpeg|jpg|png|webp|heic|base64|crop|cropbytes|frontbytes|backbytes|identitycropjpeg|still|screenshot|screenshots|file|files|attachment|attachments|authorization|cookie|cookies|set-cookie|token|password|ip_address)$/i;
 
 const DROP_HEADER_PATTERN = /^(authorization|cookie|set-cookie|x-api-key)$/i;
 
@@ -23,9 +23,22 @@ function looksLikeImageData(value: string): boolean {
   return false;
 }
 
+/** P4: bearer tokens and session/reset/verification secrets in URLs or messages. */
+const BEARER_PATTERN = /\bBearer\s+[A-Za-z0-9._~+/=-]+/gi;
+const SECRET_PARAM_PATTERN = /([?&](?:token|access_token|refresh_token|code|password|key|api_key|dsn)=)[^&#\s]*/gi;
+/** Local photo files (camera stills, crops, the scan queue). The path can name the card or user. */
+const LOCAL_IMAGE_URI = /\b(?:file|content|ph|assets-library):\/\/\S+?\.(?:jpe?g|png|heic|heif|webp)\b/gi;
+
+export const REDACTED_TOKEN = "[redacted-token]";
+export const REDACTED_PHOTO_URI = "[photo-uri-redacted]";
+
 function scrubString(value: string): string {
   if (looksLikeImageData(value)) return REDACTED_IMAGE;
-  return value.replace(EMAIL_PATTERN, REDACTED_EMAIL);
+  return value
+    .replace(EMAIL_PATTERN, REDACTED_EMAIL)
+    .replace(BEARER_PATTERN, `Bearer ${REDACTED_TOKEN}`)
+    .replace(SECRET_PARAM_PATTERN, `$1${REDACTED_TOKEN}`)
+    .replace(LOCAL_IMAGE_URI, REDACTED_PHOTO_URI);
 }
 
 function dropKey(key: string): boolean {
