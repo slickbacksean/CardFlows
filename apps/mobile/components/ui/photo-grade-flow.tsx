@@ -10,6 +10,7 @@ import {
   retakeSideCopy,
   type GradeQuotaSnapshot,
   type PhotoPregradeSubgrade,
+  GRADE_AUTO_COPY,
 } from "@cardflow/shared";
 import { Image } from "expo-image";
 import { useFocusEffect } from "expo-router";
@@ -47,6 +48,7 @@ const GUIDELINES = [
   "Use even light. No sleeve, glare, or fingers on the card.",
   "Take the front, then the back. Catalog art is not a grade photo.",
   "Hold the phone flat over the card. A tilted angle means a retake.",
+  GRADE_AUTO_COPY.guideline,
   `The result is a ${PREGRADE_LABEL.toLowerCase()}. ${PREGRADE_DISCLAIMER}`,
 ];
 
