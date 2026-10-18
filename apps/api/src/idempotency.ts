@@ -75,6 +75,17 @@ export function createIdempotencyRegistry<T>(now: () => number = Date.now, max =
       return Boolean(existing && now() - existing.at < IDEMPOTENCY_TTL_MS);
     },
     prune,
+    /** Backend review L1: account deletion drops every key that starts with `${userId}\0`. */
+    purgePrefix(prefix: string): number {
+      let n = 0;
+      for (const key of [...entries.keys()]) {
+        if (key.startsWith(prefix)) {
+          entries.delete(key);
+          n += 1;
+        }
+      }
+      return n;
+    },
     size: () => entries.size,
   };
 }

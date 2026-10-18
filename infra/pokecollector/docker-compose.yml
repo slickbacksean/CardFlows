@@ -40,6 +40,9 @@ services:
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       OPENAI_SCANNER_ENABLED: "false"
       PUBLIC_MODE: "false"
+      # Opaque per-user accounts: pin multi-user mode. In single-user mode PokéCollector treats a
+      # request with no token as the admin (api/auth.py get_current_user, v1.51).
+      USER_MODE: multi
       CORS_ORIGINS: ${CORS_ORIGINS:-}
       POKEDEX_IMAGE_CACHE_DIR: /app/data/pokedex-images
       SCAN_UPLOAD_DIR: /app/data/scan-uploads

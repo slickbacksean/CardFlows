@@ -32,14 +32,11 @@ export function applyMvpMigrations(
     const db = drizzle(sqlite, { schema });
     // FK must be OFF for table-rebuild migrations. The pragma is a no-op inside a
     // transaction, so it is set outside, and always switched back on.
-    sqlite.pragma("foreign_keys = OFF");
-    try {
+    withForeignKeysOff(sqlite, () => {
       migrate(db, { migrationsFolder: opts.migrationsFolder ?? mvpMigrationsFolder() });
       // 0016 adds `anchor_at`; existing accounts get their creation/activity date (see the module).
       backfillQuotaAnchors(sqlite);
-    } finally {
-      sqlite.pragma("foreign_keys = ON");
-    }
+    });
     if (Number(sqlite.pragma("foreign_keys", { simple: true })) !== 1) throw new Error("foreign_keys did not re-enable");
     const violations = sqlite.prepare("PRAGMA foreign_key_check").all();
     // Warn, don't block boot (legacy rows); the restore drill checks this too.
@@ -48,5 +45,15 @@ export function applyMvpMigrations(
   } catch (err) {
     sqlite.close();
     throw err;
+  }
+}
+
+/** Runs `fn` with foreign keys off (table rebuilds), and always turns them back on, even if it throws. */
+export function withForeignKeysOff<T>(sqlite: InstanceType<typeof Database>, fn: () => T): T {
+  sqlite.pragma("foreign_keys = OFF");
+  try {
+    return fn();
+  } finally {
+    sqlite.pragma("foreign_keys = ON");
   }
 }

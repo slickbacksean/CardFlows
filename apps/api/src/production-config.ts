@@ -1,5 +1,6 @@
 import path from "node:path";
 import { emailSenderProblems } from "./email-sender";
+import { serverPepperProblem } from "./server-pepper";
 
 type Env = NodeJS.Dict<string | undefined>;
 
@@ -47,6 +48,9 @@ export function productionConfigProblems(env: NodeJS.Dict<string | undefined>): 
   if (volume) problems.push(volume);
   const backups = backupEnvProblem(env);
   if (backups) problems.push(backups);
+  // Backend review L3 (P4): email_send_counts keys are HMACs with this pepper.
+  const pepper = serverPepperProblem(env);
+  if (pepper) problems.push(pepper);
   return problems;
 }
 

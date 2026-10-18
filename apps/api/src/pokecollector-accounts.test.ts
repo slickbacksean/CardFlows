@@ -2,11 +2,8 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
-import {
-  INVITED_USERS,
-  createMockPricingProvider,
-  pokecollectorUsernameForIdentity,
-} from "@cardflow/shared";
+import { INVITED_USERS, createMockPricingProvider } from "@cardflow/shared";
+import { isOpaquePokecollectorUsername, opaquePokecollectorUsername, type PokecollectorLinkSecrets } from "./pokecollector-link-secrets";
 import { createApp } from "./app";
 import { ALEX_INVITE_CODE, JORDAN_INVITE_CODE } from "./invited-testers";
 import {
@@ -19,6 +16,12 @@ import {
 import { createSqliteStore, type SqliteStorePort } from "./sqlite-store";
 
 type App = ReturnType<typeof createApp>;
+
+const TEST_SECRETS: PokecollectorLinkSecrets = {
+  userPepper: "test-pokecollector-user-pepper-0123456789",
+  linkKey: Buffer.alloc(32, 3),
+};
+const opaqueName = (userId: string) => opaquePokecollectorUsername(userId, TEST_SECRETS.userPepper);
 
 const srcDir = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.join(srcDir, "../../..");
@@ -140,12 +143,15 @@ describe("invite session maps to a PokéCollector user", () => {
     expectNoVendorSessionLeak(session.body);
 
     const mapping = store.getPokecollectorUserMapping(alex.userId);
-    expect(mapping).toMatchObject({
-      userId: alex.userId,
-      pokecollectorUsername: pokecollectorUsernameForIdentity(alex),
-    });
+    expect(mapping?.userId).toBe(alex.userId);
+    // Opaque per-user name, never derived from the label or email.
+    expect(isOpaquePokecollectorUsername(mapping!.pokecollectorUsername)).toBe(true);
+    expect(mapping!.pokecollectorUsername).not.toContain("alex");
     expect(mapping?.pokecollectorUserId).toBeTruthy();
-    expect(JSON.stringify(mapping)).not.toMatch(/access_token|password|jwt/i);
+    // Only the encrypted per-link password is stored.
+    expect(mapping?.passwordCiphertext).toMatch(/^v2:[A-Za-z0-9_-]{8}:/);
+    const { passwordCiphertext: _ciphertext, ...rest } = mapping!;
+    expect(JSON.stringify(rest)).not.toMatch(/access_token|password|jwt/i);
   });
 
   it("keeps Alex and Jordan PokéCollector collections isolated", async () => {
@@ -195,14 +201,15 @@ describe("invite session maps to a PokéCollector user", () => {
   it("HTTP upsert uses admin users API and collection reads only the mapped user", async () => {
     const users: Array<{ id: number; username: string }> = [];
     const collections: Record<string, Array<{ card_id: string }>> = {
-      "cardflow-alex": [{ card_id: "base1-58_en" }],
-      "cardflow-jordan": [{ card_id: "swsh3-136_en" }],
+      [opaqueName(INVITED_USERS[0].userId)]: [{ card_id: "base1-58_en" }],
+      [opaqueName(INVITED_USERS[1].userId)]: [{ card_id: "swsh3-136_en" }],
     };
     const urls: string[] = [];
     const collectionAuths: string[] = [];
     const accounts = createPokecollectorAccounts({
       baseUrl: "http://127.0.0.1:8000",
       token: "pokecollector-secret",
+      secrets: TEST_SECRETS,
       sleep: async () => undefined,
       fetchImpl: async (input, init) => {
         const url = requestUrl(input);
@@ -287,9 +294,11 @@ describe("invite session maps to a PokéCollector user", () => {
     expectNoVendorSessionLeak(alexCollection.body);
     expectNoVendorSessionLeak(jordanCollection.body);
     expect(collectionAuths).toEqual([
-      "Bearer pc-jwt-cardflow-alex",
-      "Bearer pc-jwt-cardflow-jordan",
+      `Bearer pc-jwt-${opaqueName(INVITED_USERS[0].userId)}`,
+      `Bearer pc-jwt-${opaqueName(INVITED_USERS[1].userId)}`,
     ]);
+    // Never listed users to find one by name.
+    expect(urls.some((url) => url.endsWith("/api/auth/users"))).toBe(false);
     expect(urls.some((url) => url.endsWith("/api/auth/login"))).toBe(true);
     expect(urls.some((url) => url.includes("/api/collection"))).toBe(true);
     expect(urls.some((url) => url.includes("/api/collection/user/"))).toBe(false);
@@ -767,6 +776,7 @@ describe("collection and portfolio read PokéCollector", () => {
     const accounts = createPokecollectorAccounts({
       baseUrl: "http://127.0.0.1:8000",
       token: "pokecollector-secret",
+      secrets: TEST_SECRETS,
       sleep: async () => undefined,
       fetchImpl: async (input, init) => {
         const url = requestUrl(input);
@@ -907,7 +917,7 @@ describe("collection and portfolio read PokéCollector", () => {
       body: JSON.stringify({ inviteCode: ALEX_INVITE_CODE }),
     });
     const headers = bearer(session.body.token);
-    const mapping = await accounts.upsertInvitedUser(INVITED_USERS[0]!);
+    const mapping = store.getPokecollectorUserMapping(INVITED_USERS[0]!.userId);
     accounts.seedCollection(mapping!.pokecollectorUserId, [seededCopy("base1-58")]);
     accounts.seedWishlist(mapping!.pokecollectorUserId, [seededCopy("base1-4")]);
 

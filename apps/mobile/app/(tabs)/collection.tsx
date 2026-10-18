@@ -3,6 +3,7 @@ import { StatusBanner } from "@/components/ui/status-banner";
 import { SyncPending } from "@/components/ui/sync-pending";
 import { ScanQueueList } from "@/components/ui/scan-queue-list";
 import { cancelQueuedWrite, isQueuedId, runQueueableWrite } from "@/lib/write-queue";
+import { requireAccount } from "@/lib/signup-prompt";
 import {
   collectionTileValue,
   DETAILS_NEEDED_LABEL,
@@ -85,6 +86,10 @@ function matchesSearch(item: InventoryItem, query: string): boolean {
 
 export default function CollectionScreen() {
   const router = useRouter();
+  // Browse-only guests (Sean, Oct 17): Scan opens the sign-up prompt instead of the camera.
+  const openScan = () => {
+    if (requireAccount()) router.push("/capture");
+  };
   const { width } = useWindowDimensions();
   const columns = collectionColumnCount(width);
   const gridGap = space.sm;
@@ -396,7 +401,7 @@ export default function CollectionScreen() {
         <Pressable
           accessibilityLabel="Scan a card"
           accessibilityRole="button"
-          onPress={() => router.push("/capture")}
+          onPress={openScan}
           style={styles.scanner}
         >
           <Ionicons color={colors.accentText} name="camera" size={16} />
@@ -444,7 +449,7 @@ export default function CollectionScreen() {
             />
           ) : visibleItems.length === 0 ? (
             <EmptyState
-              onScan={() => router.push("/capture")}
+              onScan={openScan}
               hasQuery={Boolean(normalizedQuery) || (segment === "purchased" && detailsNeededOnly)}
               hasSegmentItems={segmentedItems.length > 0}
               segment={segment}
