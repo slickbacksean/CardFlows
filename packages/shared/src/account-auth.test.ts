@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ACCOUNT_AUTH_COPY, isValidEmail, passwordProblem } from "./account-auth";
-import { GUEST_RETENTION_NOTE, GUEST_SCAN_WALL_NOTE, GUEST_SESSION_TTL_MS, GUEST_SIGNUP_COPY } from "./guest-access";
+import { GUEST_SESSION_TTL_MS, GUEST_SIGNUP_COPY } from "./guest-access";
 
 describe("open sign-up rules", () => {
   it("validates email and password", () => {
@@ -13,12 +13,9 @@ describe("open sign-up rules", () => {
   it("sign-in failure copy doesn't say which part was wrong", () => {
     expect(ACCOUNT_AUTH_COPY.signInFailed).toBe("Email or password is incorrect.");
   });
-  it("guest copy separates scans from estimates and states the 24-hour deletion", () => {
+  it("browse-only guests (Sean, Oct 17): 24-hour sessions and one sign-up message", () => {
     expect(GUEST_SESSION_TTL_MS).toBe(24 * 60 * 60 * 1000);
-    // Policy Reviewer: exact copy.
-    expect(GUEST_SCAN_WALL_NOTE).toBe("Guests get 3 free card scans. Pre-grade estimates have their own monthly allowance once you sign up.");
-    expect(GUEST_SIGNUP_COPY.scanLimit).toBe("You've used your 3 free scans. Sign up free to keep scanning. Pre-grade estimates are counted separately.");
-    expect(GUEST_RETENTION_NOTE).toMatch(/within 24 hours/);
+    expect(GUEST_SIGNUP_COPY.body).toBe("Sign up to scan, grade and save cards. It's free.");
   });
 });
 

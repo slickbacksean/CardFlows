@@ -22,7 +22,7 @@ Only counts are returned, never user IDs or card data.
 Every Monday, the TPM copies last week's row onto the CardFlow MVP board next to `docs/MVP_SUCCESS_METRICS.md`. Once PostHog is live (D7), the same number can be cross-checked against `purchased` events from opted-in users. The server number is the source of truth, because events are opt-in.
 
 ## Notes
-- Today the account list is the invited beta testers. When guest sessions (D9) ship, guests are excluded until they sign up; their scans move to the new account and count from then on.
+- Today the account list is the invited beta testers. Guests are excluded: they're browse-only (Sean, Oct 17) and can't scan or mark Purchased until they sign up.
 - Computed on request from the store; cheap at beta scale. Add a weekly snapshot table before ~10k users.
 - **Deleted accounts (Backend review H2, P4):** when an account is deleted, its weekly counts (purchased, scans, and 1 active reseller per week it was active) are added to `north_star_weekly_totals` (week and counts only, no IDs) in the same transaction that hard-deletes its rows, including `purchase_events`. Both numbers (purchases/WAR and scans/WAR) are computed from live rows plus these totals, so past weeks don't change after a delete. Each account is one distinct reseller, so adding totals never double-counts.
 

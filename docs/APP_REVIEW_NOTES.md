@@ -1,13 +1,13 @@
 # App Review notes (draft)
 
-- Guests get 3 scans before signing up. The guest limit counts scans only; pre-grade estimates are a separate monthly allowance for accounts.
-- Anyone can create an account with an email and password (Settings or the sign-up prompt after the 3rd scan). No invite code is needed.
+- Guests can browse the app (FullDEX catalog, prices, and empty MyDEX, Grading and Export screens) but can't scan, grade or save anything. Any of those opens the sign-up prompt: "Sign up to scan, grade and save cards. It's free." The free account is the entry tier (Sean, Oct 17).
+- Anyone can create an account with an email and password (Settings or the sign-up prompt). No invite code is needed.
 - Reviewer account: Sean to create one and enter the email and password in App Store Connect > App Review Information.
 - Account deletion: Settings > Delete account removes the account and all its data. Accounts with a password confirm with it; guests and invite testers type DELETE (P4).
 - **TODO (before the Play submission):** Google Play also needs a **web** account deletion-request page (a public URL, entered in Play Console > Data safety > Data deletion) that works without the app installed. Not built yet. It should say what is deleted (same list as the app) and how to request it (for example, a form or a support email that runs the same server delete after the owner is verified).
 - Tester invite codes still work (server env only) but aren't needed for review.
 - **Age (18+ accounts):**
-  - Guests can try 3 scans with CardFlow's own matcher, with no age question.
+  - Guests only browse, so they're never asked their age and never upload photos.
   - Creating an account requires confirming 18+ (a required checkbox, unchecked by default).
   - CardSight is used only for 18+ account holders who consent. Guests never get CardSight or its prompt.
   - The reviewer demo account is created through sign-up, so it has already confirmed 18+.

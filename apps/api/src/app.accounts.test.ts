@@ -91,10 +91,12 @@ describe("open sign-up", () => {
   it("account deletion leaves zero rows in every user_id table", async () => {
     const { app, store } = open();
     const guest = (await call(app, "/v1/sessions/guest", { method: "POST" })).body.token as string;
-    await call(app, "/v1/scans", { body: { captureMethod: "camera_photo", scenario: "high-confidence" }, token: guest });
+    // Browse-only guests (Sean, Oct 17): the scan happens after sign-up.
+    expect((await call(app, "/v1/scans", { body: { captureMethod: "camera_photo", scenario: "high-confidence" }, token: guest })).status).toBe(403);
     const up = await call(app, "/v1/accounts", { body: { email: "del@example.com", password: PW }, token: guest });
     const userId = (up.body.identity as { userId: string }).userId;
     const token = up.body.token as string;
+    await call(app, "/v1/scans", { body: { captureMethod: "camera_photo", scenario: "high-confidence" }, token });
     const at = "2026-10-15T00:00:00.000Z";
     store.saveConfirmEvent({ scanId: "s1", userId, via: "candidate", shownTcgdexIds: ["base1-58"], chosenTcgdexId: "base1-58", chosenRank: 1, selectedVariant: null, confidence: null, recognitionProvider: null, at } as never);
     store.saveUserPriceSnapshot(userId, { snapshotId: "p1", tcgdexId: "base1-58", variant: null, amount: "1.00", currency: "USD", source: USER_PRICE_SOURCE, enteredAt: at });

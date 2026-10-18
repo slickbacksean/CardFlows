@@ -47,7 +47,10 @@ describe("Policy Reviewer: guests never get CardSight", () => {
   it("guests can't call the consent or age routes", () => {
     expect(guestRouteAllowed("POST", "/v1/consents/cardsight")).toBe(false);
     expect(guestRouteAllowed("POST", "/v1/age-confirmation")).toBe(false);
-    expect(guestRouteAllowed("POST", "/v1/scans")).toBe(true);
+    expect(guestRouteAllowed("GET", "/v1/consents/cardsight")).toBe(false);
+    expect(guestRouteAllowed("GET", "/v1/age-confirmation")).toBe(false);
+    // Sean (Oct 17, 8:36 PM PT): guests are browse-only, so no scans either.
+    expect(guestRouteAllowed("POST", "/v1/scans")).toBe(false);
   });
 
   it("capture: no CardSight prompt for guests; accounts confirm 18+ before the prompt, all before upload", () => {
