@@ -42,6 +42,7 @@ import {
   type ScanImageMimeType,
 } from "@cardflow/shared";
 import { Platform } from "react-native";
+import { rememberDeviceItemIds } from "./device-item-index";
 import { createRequestId, rememberRequestId } from "./request-id";
 import { isPhysicalRuntime } from "./runtime-host";
 import { peekSessionToken, waitForSessionRestore } from "./session-token";
@@ -301,10 +302,11 @@ async function request<T>(
     if (response.status === 403 && premium.code === PREMIUM_REQUIRED_CODE && isPremiumFeature(premium.feature)) {
       (extra as Error & { premiumRequired?: PremiumFeature }).premiumRequired = premium.feature;
     }
-    // D9: the API says a guest must sign up (4th scan or a save step).
+    // Browse-only guests (Sean, Oct 17): any scan, grade or save needs sign-up.
     const signup = data as { code?: unknown; reason?: unknown };
     if (response.status === 403 && signup.code === SIGNUP_REQUIRED_CODE) {
-      const reason: SignupReason = signup.reason === "scan_limit" ? "scan_limit" : "save";
+      const reason: SignupReason =
+        signup.reason === "scan" || signup.reason === "grade" || signup.reason === "cardsight" ? signup.reason : "save";
       (extra as Error & { signupRequired?: SignupReason }).signupRequired = reason;
       notifySignupRequired(reason);
     }
@@ -508,8 +510,11 @@ export function identifyLivestreamFrame(input: {
   });
 }
 
-export function listInventory() {
-  return callApi(apiContract.listInventory);
+export async function listInventory() {
+  const result = await callApi(apiContract.listInventory);
+  // Backend re-review M2 (P4): kept on the phone so account deletion can find grade history keys.
+  rememberDeviceItemIds(result.items.map((item) => item.inventoryItemId));
+  return result;
 }
 
 export function getPortfolio() {
@@ -987,6 +992,12 @@ export function getHealth() {
 
 export function getIdentity() {
   return callApi(apiContract.getIdentity);
+}
+
+/** P4: Settings > Delete account. Deletes every row, photo and session for this user. */
+/** P4: accounts with a password must send it (Backend review M4); guests and testers send none. */
+export function deleteAccount(password?: string) {
+  return callApi(apiContract.deleteAccountPhotos, { body: password ? { password } : {} });
 }
 
 type SignupListener = (reason: SignupReason) => void;

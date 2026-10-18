@@ -32,10 +32,10 @@ function foldersUpTo(lastTag: string): string {
   return dir;
 }
 
-describe("migrations 0000–0020", () => {
-  it("journal is ordered: idx 0..20 in order, `when` strictly increasing, files exist", () => {
+describe("migrations 0000–0024", () => {
+  it("journal is ordered: idx 0..24 in order, `when` strictly increasing, files exist", () => {
     const j = journal();
-    expect(j.entries.map((e) => e.idx)).toEqual(Array.from({ length: 21 }, (_, i) => i));
+    expect(j.entries.map((e) => e.idx)).toEqual(Array.from({ length: 25 }, (_, i) => i));
     for (let i = 1; i < j.entries.length; i += 1) expect(j.entries[i]!.when).toBeGreaterThan(j.entries[i - 1]!.when);
     expect(j.entries.slice(14).map((e) => e.tag)).toEqual([
       "0014_accounts_guest_sessions",
@@ -45,6 +45,10 @@ describe("migrations 0000–0020", () => {
       "0018_provider_consents",
       "0019_age_confirmations",
       "0020_age_attested_at",
+      "0021_account_deletion_audit",
+      "0022_north_star_weekly_totals",
+      "0023_pokecollector_pending_deletions",
+      "0024_pokecollector_opaque_links",
     ]);
     for (const e of j.entries) expect(readFileSync(path.join(mvpMigrationsFolder(), `${e.tag}.sql`), "utf8").length).toBeGreaterThan(0);
   });
@@ -52,7 +56,7 @@ describe("migrations 0000–0020", () => {
   it("applies all of them to a fresh database", () => {
     const { sqlite } = applyMvpMigrations(path.join(tmp(), "fresh.sqlite"));
     const applied = sqlite.prepare("SELECT COUNT(*) AS n FROM __drizzle_migrations").get() as { n: number };
-    expect(applied.n).toBe(21);
+    expect(applied.n).toBe(25);
     sqlite.close();
   });
 
@@ -95,7 +99,7 @@ describe("migrations 0000–0020", () => {
     expect(usage("alex", alexPeriod.key)).toBe(3);
     expect(sqlite.prepare("SELECT anchor_at FROM grade_accounts WHERE user_id = 'jordan'").get()).toEqual({ anchor_at: jordanAnchor });
     expect(usage("jordan", quotaPeriodFor(jordanAnchor, new Date()).key)).toBe(2);
-    expect((sqlite.prepare("SELECT COUNT(*) AS n FROM __drizzle_migrations").get() as { n: number }).n).toBe(21);
+    expect((sqlite.prepare("SELECT COUNT(*) AS n FROM __drizzle_migrations").get() as { n: number }).n).toBe(25);
     sqlite.close();
   });
 

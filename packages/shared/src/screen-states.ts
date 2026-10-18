@@ -256,8 +256,7 @@ const KNOWN_USER_MESSAGES: ReadonlySet<string> = new Set<string>([
   EMAIL_VERIFICATION_COPY.tooSoon,
   EMAIL_VERIFICATION_COPY.sendLimit,
   EMAIL_VERIFICATION_COPY.dailyLimit,
-  GUEST_SIGNUP_COPY.scanLimit,
-  GUEST_SIGNUP_COPY.save,
+  GUEST_SIGNUP_COPY.body,
   AGE_GATE_COPY.required,
   PHOTO_PICKER_UNAVAILABLE_COPY,
   GRADE_QUOTA_COPY.iapUnavailable,
@@ -364,7 +363,7 @@ export const SCREEN_EMPTY_COPY = {
   noMatches: { title: "No matching cards", body: "Try a different name or number." },
   collectionPurchased: {
     title: "No cards yet",
-    body: "Scan and confirm a card, then mark it Purchased.",
+    body: `Scan a card, confirm it, then mark it Purchased to start tracking its value in ${COLLECTION_DESTINATION_NAME}.`,
     action: "Scan a card",
   },
   collectionWatchlist: {

@@ -80,7 +80,27 @@ function schedule() {
   timer = setTimeout(() => void flushScanQueue(), wait);
 }
 
-/** A guest hit the scan limit (403 signup_required). Not a real refusal of this scan. */
+/** P4 account deletion: drop queued scans and their photos from the phone. */
+export function clearScanQueue(): void {
+  if (timer) clearTimeout(timer);
+  timer = null;
+  state = emptyScanQueue();
+  try {
+    const dir = new Directory(Paths.document, "scan-queue");
+    if (dir.exists) dir.delete();
+  } catch {
+    // Already gone.
+  }
+  try {
+    const file = new File(Paths.document, FILE_NAME);
+    if (file.exists) file.delete();
+  } catch {
+    // Already gone.
+  }
+  for (const listener of listeners) listener();
+}
+
+/** 403 signup_required (a guest; Sean, Oct 17: guests can't scan). Not a real refusal of this scan. */
 export function isSignupRequiredError(error: unknown): boolean {
   return (error as { signupRequired?: unknown } | null)?.signupRequired != null;
 }
@@ -131,7 +151,7 @@ export async function flushScanQueue(): Promise<void> {
         save(markScanReady(load(), item.id, result.scan.scanId));
       } catch (error) {
         if (isSignupRequiredError(error)) {
-          // Guest 4th scan: keep it queued; the sign-up prompt is already showing (api.ts).
+          // A guest (e.g. signed out with a queued still): keep it queued for after sign-up; the prompt is showing (api.ts).
           // It sends once the user signs up.
           save(markScanFailed(load(), item.id));
           break;
