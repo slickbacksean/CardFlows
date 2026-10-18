@@ -22,11 +22,12 @@ export const PREGRADE_COPY = {
   surfaceIncludedNote: "Surface checked from your extra light photos.",
   sizeNotCheckedNote: "Card size isn't checked from photos.",
   // Retake reasons (no number is shown with these).
-  blurry: "Photo is blurry",
+  blurry: "Too blurry, move back a little",
   tooFar: "Card is too small in the photo. Move a little closer",
   tilted: "Hold the phone flat over the card",
   shapeOff: "Couldn't see the whole card",
   notFound: "Card not found",
+  darkerBackground: "Try a darker background",
   unreadable: "Couldn't read the photo",
   nothingMeasured: "Nothing could be measured in these photos",
   unusable: "Couldn't use this photo",

@@ -66,6 +66,8 @@ describe("largestPictureSize", () => {
   });
   it("falls back to the iOS Photo preset", () => {
     expect(largestPictureSize(["High", "Medium", "Photo"])).toBe("Photo");
+    // iOS: the 4K video preset must not beat the full-resolution photo preset.
+    expect(largestPictureSize(["3840x2160", "1920x1080", "640x480", "Photo", "High"])).toBe("Photo");
   });
   it("returns undefined when nothing usable is listed", () => {
     expect(largestPictureSize([])).toBeUndefined();

@@ -159,6 +159,8 @@ export interface GradeQuotaConsumeInput {
   monthKey: string;
   monthlyLimit: number;
   at: string;
+  /** Full 14-photo grades: monthly allowance only, bought credits are not spent. */
+  noCredits?: boolean;
 }
 
 export type GradeQuotaConsumeResult =
@@ -962,7 +964,7 @@ export function createMemoryStore(): StorePort {
     const decision = decideGradeConsume({
       usedThisMonth,
       monthlyLimit: input.monthlyLimit,
-      extraCredits: account.extraCredits,
+      extraCredits: input.noCredits ? 0 : account.extraCredits,
     });
     if (!decision.ok) {
       return { ok: false, usedThisMonth, extraCredits: account.extraCredits };

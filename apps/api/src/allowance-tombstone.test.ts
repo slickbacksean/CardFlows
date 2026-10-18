@@ -2,7 +2,7 @@ import { createHash, createHmac } from "node:crypto";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { AGE_GATE_VERSION, quotaPeriodFor } from "@cardflow/shared";
+import { AGE_GATE_VERSION, quotaAnchor, quotaPeriodFor } from "@cardflow/shared";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   ALLOWANCE_TOMBSTONE_TTL_MS,
@@ -56,7 +56,12 @@ describe("allowance tombstone", () => {
     const token = up.body.token as string;
     const userId = (up.body.identity as { userId: string }).userId;
     store.ensureGradeAnchor(userId, new Date().toISOString());
-    const period = quotaPeriodFor(store.getGradeAccount(userId).anchorAt ?? new Date().toISOString(), new Date());
+    // Match app.ts quotaPeriodForUser: calendar month unless a billing date is set.
+    const account = store.getGradeAccount(userId);
+    const period = quotaPeriodFor(
+      quotaAnchor({ billingAnchorAt: account.billingAnchorAt, createdAt: account.anchorAt ?? new Date().toISOString() }),
+      new Date(),
+    );
     store.setGradeQuotaUsage(userId, period.key, 2);
     expect(store.getGradeQuotaUsage(userId, period.key)).toBe(2);
 
@@ -87,13 +92,13 @@ describe("allowance tombstone", () => {
     });
     store.accounts.upsertAllowanceTombstone({
       emailHmac: allowanceTombstoneKey("old@example.com"),
-      periodKey: "2026-07-18",
+      periodKey: "2026-07-01",
       used: 3,
       deletedAt: new Date(now.getTime() - ALLOWANCE_TOMBSTONE_TTL_MS - 1000).toISOString(),
     });
     store.accounts.upsertAllowanceTombstone({
       emailHmac: allowanceTombstoneKey("fresh@example.com"),
-      periodKey: "2026-10-18",
+      periodKey: "2026-10-01",
       used: 1,
       deletedAt: now.toISOString(),
     });
@@ -113,7 +118,11 @@ describe("allowance tombstone", () => {
     const token = up.body.token as string;
     const userId = (up.body.identity as { userId: string }).userId;
     store.ensureGradeAnchor(userId, new Date().toISOString());
-    const period = quotaPeriodFor(store.getGradeAccount(userId).anchorAt ?? new Date().toISOString(), new Date());
+    const account = store.getGradeAccount(userId);
+    const period = quotaPeriodFor(
+      quotaAnchor({ billingAnchorAt: account.billingAnchorAt, createdAt: account.anchorAt ?? new Date().toISOString() }),
+      new Date(),
+    );
     store.setGradeQuotaUsage(userId, period.key, 4);
     expect((await call(app, "/v1/account/delete", { method: "POST", token, body: { password: PW } })).status).toBe(200);
     expect(store.accounts.findAllowanceTombstone(allowanceTombstoneKey("sql@example.com"))?.used).toBe(4);

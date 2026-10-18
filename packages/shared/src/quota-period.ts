@@ -1,6 +1,8 @@
 /**
- * Sean: the monthly pre-grade estimate allowance resets on each user's billing date. Free users
- * (no billing date) reset on their account creation date. Unused estimates don't roll over.
+ * Sean (Oct 18): every monthly allowance (quick estimates and full grades) resets on the 1st of
+ * each calendar month, 00:00 UTC (the server has no user time zone), for everyone. Exception: an
+ * account with a billing date (Apple subscription, not wired yet) keeps resetting on that date so
+ * the Premium allowance lines up with what Apple bills. Unused estimates don't roll over.
  * Bought credits never expire (Sean, Oct 16).
  */
 function daysInMonth(year: number, month: number): number {
@@ -42,9 +44,12 @@ export function quotaPeriodFor(anchorIso: string, now: Date): QuotaPeriod {
   return { key: start.toISOString().slice(0, 10), startsAt: start.toISOString(), resetsAt: next.toISOString() };
 }
 
-/** Billing date wins; otherwise the account creation date. */
-export function quotaAnchor(input: { billingAnchorAt?: string | null; createdAt: string }): string {
-  return input.billingAnchorAt || input.createdAt;
+/** Any 1st-of-month 00:00 UTC: anchoring here makes quotaPeriodFor return calendar months. */
+export const CALENDAR_MONTH_ANCHOR = "2000-01-01T00:00:00.000Z";
+
+/** Billing date wins (Apple); otherwise the calendar month. `createdAt` no longer moves the reset. */
+export function quotaAnchor(input: { billingAnchorAt?: string | null; createdAt?: string }): string {
+  return input.billingAnchorAt || CALENDAR_MONTH_ANCHOR;
 }
 
 /**
@@ -57,5 +62,7 @@ export function resetDateLabel(resetsAt: string, options: { timeZone?: string } 
   if (!Number.isFinite(d.getTime())) return "";
   const format: Intl.DateTimeFormatOptions = { month: "short", day: "numeric" };
   if (options.timeZone) format.timeZone = options.timeZone;
+  // A calendar-month reset (1st, 00:00 UTC) reads "Resets Nov 1" everywhere, not "Oct 31" in LA.
+  else if (d.getUTCDate() === 1 && d.getUTCHours() === 0 && d.getUTCMinutes() === 0) format.timeZone = "UTC";
   return `Resets ${d.toLocaleDateString("en-US", format)}`;
 }

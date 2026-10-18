@@ -66,6 +66,8 @@ export const GradeQuotaSnapshotSchema = typed<GradeQuotaSnapshot>(
     remainingGrades: num,
     resetsAt: str,
     iapEnabled: z.boolean(),
+    unlimited: z.boolean().optional(),
+    fullGrade: z.looseObject({ monthlyLimit: num, usedThisMonth: num, remaining: num }).optional(),
   }),
 );
 
@@ -128,6 +130,15 @@ export const GradeEstimateSchema = typed<CardFlowGradeEstimate>(
 );
 
 const side = z.enum(["front", "back"]);
+
+/** POST /v1/grade/extra (full 14-photo grade). `used` is false: the grader has no input for it yet. */
+export const GradeExtraShotResultSchema = z.looseObject({
+  ok: z.literal(true),
+  side: z.enum(["front", "back"]),
+  shot: z.enum(["tilt_a", "tilt_b", "corner_tl", "corner_tr", "corner_br", "corner_bl"]),
+  used: z.boolean(),
+  stored: z.boolean(),
+});
 
 export const DetectCropResultSchema = typed<DetectCropResult>(
   z.discriminatedUnion("status", [

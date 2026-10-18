@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { GRADE_FRAME_FILL, gradeGuideFrame } from "./grade-capture-guide";
 import { PREGRADE_COPY } from "./pregrade-copy";
-import { phonePhotoCheck, type GrayImage } from "./phone-photo-check";
+import { gradeProbeDetail, phonePhotoCheck, type GrayImage } from "./phone-photo-check";
 
 const W = 192;
 const H = 256;
@@ -57,6 +57,13 @@ describe("P1-16 on-phone photo check", () => {
   it("flags a blurry photo with the shared copy", () => {
     const r = phonePhotoCheck(boxBlur(cardPhoto({ noise: 0 }), 4));
     expect(r.reasons).toContain(PREGRADE_COPY.blurry);
+  });
+
+  it("auto-capture probe: a blurry still is flagged blurry (move back), never a corner hit", () => {
+    const blurry = gradeProbeDetail(boxBlur(cardPhoto({ noise: 0 }), 4));
+    expect(blurry).toMatchObject({ corners: 0, blurry: true });
+    expect(blurry.sharpness).toBeGreaterThanOrEqual(0);
+    expect(gradeProbeDetail(cardPhoto()).blurry).toBe(false);
   });
 
   it("flags a card that isn't in the frame", () => {

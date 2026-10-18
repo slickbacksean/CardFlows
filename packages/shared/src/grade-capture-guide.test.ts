@@ -3,7 +3,6 @@ import {
   captureMetaFromExif,
   gradeZoomFromProbe,
   GRADE_CARD_ASPECT,
-  gradeAutoCaptureHold,
   gradeCaptureReadiness,
   gradeGuideFrame,
   gradeLevelState,
@@ -74,12 +73,6 @@ describe("grade capture guide", () => {
     expect(gradeCaptureReadiness({ ...base, steady: false, cardInFrame: null }).autoCaptureReady).toBe(false);
   });
 
-  it("waits out the hold before auto-capture", () => {
-    expect(gradeAutoCaptureHold({ autoCaptureReady: true, readySinceMs: 1000, nowMs: 1400 })).toBe(false);
-    expect(gradeAutoCaptureHold({ autoCaptureReady: true, readySinceMs: 1000, nowMs: 1500 })).toBe(true);
-    expect(gradeAutoCaptureHold({ autoCaptureReady: false, readySinceMs: 1000, nowMs: 5000 })).toBe(false);
-    expect(gradeAutoCaptureHold({ autoCaptureReady: true, readySinceMs: null, nowMs: 5000 })).toBe(false);
-  });
 });
 
 describe("sharp capture helpers", () => {

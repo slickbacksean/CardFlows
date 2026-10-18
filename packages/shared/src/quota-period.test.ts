@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addMonthsClamped, quotaAnchor, quotaPeriodFor, resetDateLabel } from "./quota-period";
+import { addMonthsClamped, CALENDAR_MONTH_ANCHOR, quotaAnchor, quotaPeriodFor, resetDateLabel } from "./quota-period";
 
 describe("allowance resets on the account's own date", () => {
   it("resets on the anchor day each month", () => {
@@ -16,10 +16,21 @@ describe("allowance resets on the account's own date", () => {
   });
   it("billing date wins over creation date", () => {
     expect(quotaAnchor({ billingAnchorAt: "2026-05-02T00:00:00Z", createdAt: "2026-01-01T00:00:00Z" })).toBe("2026-05-02T00:00:00Z");
-    expect(quotaAnchor({ billingAnchorAt: null, createdAt: "2026-01-01T00:00:00Z" })).toBe("2026-01-01T00:00:00Z");
+    expect(quotaAnchor({ billingAnchorAt: null, createdAt: "2026-03-15T10:00:00Z" })).toBe(CALENDAR_MONTH_ANCHOR);
+  });
+  it("resets everyone without a billing date on the 1st of the month, UTC (Sean, Oct 18)", () => {
+    const anchor = quotaAnchor({ billingAnchorAt: null, createdAt: "2026-03-15T10:00:00Z" });
+    expect(quotaPeriodFor(anchor, new Date("2026-10-20T00:00:00Z"))).toEqual({
+      key: "2026-10-01",
+      startsAt: "2026-10-01T00:00:00.000Z",
+      resetsAt: "2026-11-01T00:00:00.000Z",
+    });
+    expect(quotaPeriodFor(anchor, new Date("2026-12-31T23:59:59Z")).resetsAt).toBe("2027-01-01T00:00:00.000Z");
+    expect(quotaPeriodFor(anchor, new Date("2027-02-01T00:00:00Z")).key).toBe("2027-02-01");
   });
   it("labels the reset date", () => {
     expect(resetDateLabel("2026-11-15T10:00:00.000Z")).toBe("Resets Nov 15");
+    expect(resetDateLabel("2026-11-01T00:00:00.000Z")).toBe("Resets Nov 1");
   });
 });
 
@@ -45,7 +56,7 @@ describe("reset date in the user's local time zone (Policy Reviewer)", () => {
   it("signup allowance note is the exact approved copy", async () => {
     const { SIGNUP_ALLOWANCE_NOTE } = await import("./premium");
     expect(SIGNUP_ALLOWANCE_NOTE).toBe(
-      "Free accounts get 5 pre-grade estimates a month, resetting on your monthly reset date, and see their 10 most recent estimates per card. Older estimates stay saved, not deleted.",
+      "Free accounts get 10 quick pre-grade estimates a month, resetting on the 1st of each month, and see their 10 most recent estimates per card. Older estimates stay saved, not deleted.",
     );
   });
 });

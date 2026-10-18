@@ -666,7 +666,6 @@ export {
   type LiveTrackFrame,
 } from "./live-card-track";
 export {
-  GRADE_AUTO_CAPTURE_HOLD_MS,
   GRADE_CARD_ASPECT,
   GRADE_FRAME_HEIGHT_FILL,
   GRADE_FRAME_MAX_WIDTH_FILL,
@@ -674,10 +673,6 @@ export {
   GRADE_LEVEL_NEAR_DEG,
   GRADE_LEVEL_OK_DEG,
   GRADE_STEADY_MAX_DEG_PER_S,
-  gradeAutoCaptureHold,
-  gradeAutoCaptureStep,
-  GRADE_AUTO_CAPTURE_INITIAL,
-  GRADE_AUTO_CAPTURE_COPY,
   gradeCaptureReadiness,
   gradeGuideFrame,
   gradeLevelState,
@@ -701,7 +696,6 @@ export type {
   GradeCaptureReadinessInput,
   GradeFrameSize,
   GradeLevelState,
-  GradeAutoCaptureState,
   GradeTilt,
 } from "./grade-capture-guide";
 export {
@@ -744,7 +738,8 @@ export {
   GRADE_QUOTA_COPY,
   CREDITS_NEVER_EXPIRE_COPY,
   GRADE_QUOTA_FREE_PER_MONTH,
-  GRADE_QUOTA_PREMIUM_PER_MONTH,
+  GRADE_QUOTA_PREMIUM_UNLIMITED,
+  GRADE_QUOTA_UNLIMITED_LIMIT,
   gradeQuotaSnapshot,
   isGradePlan,
   isOutOfGradesStatus,
@@ -809,6 +804,8 @@ export type {
 export * from "./batch-grade-queue";
 export * from "./listing-builder";
 export * from "./phone-photo-check";
+export * from "./grade-auto-capture";
+export * from "./grade-probe-loop";
 export * from "./screen-states";
 export * from "./a11y-copy";
 export * from "./practice-mode";
@@ -841,6 +838,7 @@ export * from "./account-auth";
 export * from "./email-verification";
 export * from "./cardsight-consent";
 export * from "./age-gate";
+export * from "./grade-full-mode";
 export * from "./account-deletion";
 export * from "./sign-in-with-apple";
 export * from "./crash-reports";

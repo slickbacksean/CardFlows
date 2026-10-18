@@ -3,7 +3,7 @@ import {
   DEFAULT_INVITED_USER_ID,
   GRADE_QUOTA_COPY,
   GRADE_QUOTA_FREE_PER_MONTH,
-  GRADE_QUOTA_PREMIUM_PER_MONTH,
+  GRADE_QUOTA_UNLIMITED_LIMIT,
   type GradeQuotaSnapshot,
 } from "@cardflow/shared";
 import { createApp } from "./app";
@@ -87,16 +87,20 @@ describe("monthly grade quotas", () => {
     expect(blocked.body.quota?.extraCredits).toBe(0);
   });
 
-  it("gives premium accounts 30 grades in the UTC month", async () => {
+  it("gives premium accounts unlimited quick estimates (Sean, Oct 18)", async () => {
     const store = createMemoryStore();
     store.setGradePlan(DEFAULT_INVITED_USER_ID, "premium", "2026-10-13T00:00:00.000Z");
     const app = createApp(store, { devAutoSession: true, gradeQuota: true });
     const listed = await json<QuotaBody>(app, "/v1/grade/quota");
-    expect(listed.body.quota?.monthlyLimit).toBe(GRADE_QUOTA_PREMIUM_PER_MONTH);
-    expect(listed.body.quota?.remainingGrades).toBe(GRADE_QUOTA_PREMIUM_PER_MONTH);
+    expect(listed.body.quota?.monthlyLimit).toBe(GRADE_QUOTA_UNLIMITED_LIMIT);
+    expect(listed.body.quota?.unlimited).toBe(true);
+    for (let i = 0; i < GRADE_QUOTA_FREE_PER_MONTH + 2; i += 1) {
+      const used = await json<QuotaBody>(app, "/v1/grade/credits/consume", { method: "POST", body: "{}" });
+      expect(used.status).toBe(200);
+    }
   });
 
-  it("resets the allowance on the account's own date with no rollover; bought credits never expire", async () => {
+  it("resets the allowance on the 1st of each month (UTC) with no rollover; bought credits never expire", async () => {
     let nowMs = Date.parse("2026-10-31T12:00:00.000Z");
     const store = createMemoryStore();
     const app = createApp(store, {
@@ -104,23 +108,23 @@ describe("monthly grade quotas", () => {
       gradeQuota: true,
       now: () => new Date(nowMs),
     });
-    // First seen Oct 31 12:00 UTC: that is the free user's reset anchor.
+    // Sean (Oct 18): the 1st of the calendar month, not the account creation date.
     const first = await json<QuotaBody>(app, "/v1/grade/quota");
-    expect(first.body.quota).toMatchObject({ month: "2026-10-31", resetsAt: "2026-11-30T12:00:00.000Z" });
+    expect(first.body.quota).toMatchObject({ month: "2026-10-01", resetsAt: "2026-11-01T00:00:00.000Z" });
     store.addGradeCredits(DEFAULT_INVITED_USER_ID, 3, "2026-10-31T12:00:00.000Z", "2026-10-31");
     for (let i = 0; i < GRADE_QUOTA_FREE_PER_MONTH; i += 1) {
       expect(
         (await json<QuotaBody>(app, "/v1/grade/credits/consume", { method: "POST", body: "{}" })).status,
       ).toBe(200);
     }
-    // A calendar month change is not a reset any more.
-    nowMs = Date.parse("2026-11-01T00:00:00.000Z");
+    // Just before the 1st: still used up.
+    nowMs = Date.parse("2026-10-31T23:59:59.000Z");
     const stillOld = await json<QuotaBody>(app, "/v1/grade/quota");
-    expect(stillOld.body.quota).toMatchObject({ month: "2026-10-31", remainingMonthly: 0, extraCredits: 3 });
-    // The reset date: fresh allowance (unused estimates don't roll over); the 3 bought credits stay.
-    nowMs = Date.parse("2026-11-30T12:00:00.000Z");
+    expect(stillOld.body.quota).toMatchObject({ month: "2026-10-01", remainingMonthly: 0, extraCredits: 3 });
+    // The 1st: fresh allowance (unused estimates don't roll over); the 3 bought credits stay.
+    nowMs = Date.parse("2026-11-01T00:00:00.000Z");
     const next = await json<QuotaBody>(app, "/v1/grade/quota");
-    expect(next.body.quota).toMatchObject({ month: "2026-11-30", usedThisMonth: 0, remainingMonthly: 5, remainingGrades: 8, extraCredits: 3, resetsAt: "2026-12-31T12:00:00.000Z" });
+    expect(next.body.quota).toMatchObject({ month: "2026-11-01", usedThisMonth: 0, remainingMonthly: GRADE_QUOTA_FREE_PER_MONTH, remainingGrades: GRADE_QUOTA_FREE_PER_MONTH + 3, extraCredits: 3, resetsAt: "2026-12-01T00:00:00.000Z" });
     // The allowance is spent first; credits only once it is used up.
     for (let i = 0; i < GRADE_QUOTA_FREE_PER_MONTH; i += 1) {
       await json<QuotaBody>(app, "/v1/grade/credits/consume", { method: "POST", body: "{}" });
@@ -128,11 +132,11 @@ describe("monthly grade quotas", () => {
     expect((await json<QuotaBody>(app, "/v1/grade/quota")).body.quota).toMatchObject({ remainingMonthly: 0, extraCredits: 3 });
     await json<QuotaBody>(app, "/v1/grade/credits/consume", { method: "POST", body: "{}" });
     // A year later the remaining credits are still there.
-    nowMs = Date.parse("2027-11-30T12:00:00.000Z");
+    nowMs = Date.parse("2027-11-15T12:00:00.000Z");
     expect((await json<QuotaBody>(app, "/v1/grade/quota")).body.quota).toMatchObject({ usedThisMonth: 0, extraCredits: 2 });
   });
 
-  it("uses the billing date when there is one", async () => {
+  it("keeps the billing date when there is one (Apple subscription)", async () => {
     const store = createMemoryStore();
     store.ensureGradeAnchor(DEFAULT_INVITED_USER_ID, "2026-01-05T00:00:00.000Z");
     store.setBillingAnchor(DEFAULT_INVITED_USER_ID, "2026-03-20T08:00:00.000Z", "2026-03-20T08:00:00.000Z");
@@ -186,7 +190,7 @@ describe("monthly grade quotas", () => {
       body: JSON.stringify({ credits: 3, plan: "premium" }),
     });
     expect(granted.status).toBe(200);
-    expect(granted.body.quota).toMatchObject({ extraCredits: 3, plan: "premium", monthlyLimit: 30 });
+    expect(granted.body.quota).toMatchObject({ extraCredits: 3, plan: "premium", unlimited: true });
   });
 
   it("free users can't buy credit packs (Premium-only)", async () => {
@@ -222,7 +226,7 @@ describe("monthly grade quotas", () => {
       extraCredits: 10,
       remainingGrades: GRADE_QUOTA_FREE_PER_MONTH + 10,
     });
-    // The 5 free estimates go first; then the leftover credits, with no Premium needed.
+    // The 10 free estimates go first; then the leftover credits, with no Premium needed.
     for (let i = 0; i < GRADE_QUOTA_FREE_PER_MONTH; i += 1) {
       await json<QuotaBody>(app, "/v1/grade/credits/consume", { method: "POST", body: "{}" });
     }

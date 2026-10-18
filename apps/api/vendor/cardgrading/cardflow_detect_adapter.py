@@ -71,6 +71,7 @@ def main(argv: list[str]) -> int:
     payload["ok"] = bool(payload["ok"]) and all(g["passed"] or not g["hard"] for g in checks["gates"])
     payload["cardflow_capture"] = checks["metrics"]
     payload["rotated_90"] = rotated
+    payload["detect_method"] = detect.LAST_CONTOUR_METHOD
     payload["image_size"] = [int(image.shape[1]), int(image.shape[0])]
     payload["has_crop"] = result.warped is not None
     if result.warped is not None:

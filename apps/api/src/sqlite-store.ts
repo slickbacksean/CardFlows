@@ -1874,6 +1874,9 @@ export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStor
           extraCredits: getGradeAccount(userId).extraCredits,
         };
       }
+      if (input.noCredits) {
+        return { ok: false as const, usedThisMonth: getGradeQuotaUsage(userId, input.monthKey), extraCredits: getGradeAccount(userId).extraCredits };
+      }
       // Allowance used up: spend a bought credit. Bought credits never expire.
       const credit = sqlite
         .prepare(

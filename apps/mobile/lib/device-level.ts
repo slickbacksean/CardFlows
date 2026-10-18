@@ -1,9 +1,12 @@
 import {
-  GRADE_STEADY_MAX_DEG_PER_S,
-  gradeLevelState,
+  GRADE_STEADY_WINDOW,
+  gradeLevelHysteresis,
+  gradeLevelStateHeld,
+  gradeMotionSteady,
   tiltFromGravity,
   tiltFromRotation,
   type GradeLevelState,
+  type MotionSample,
 } from "@cardflow/shared";
 import { requireOptionalNativeModule } from "expo";
 import { useEffect, useState } from "react";
@@ -25,8 +28,13 @@ export interface DeviceLevel {
   rollDeg: number | null;
   tiltDeg: number | null;
   level: GradeLevelState;
-  /** null until enough samples; true when rotation rate stays low. */
+  /**
+   * null until the motion window is full; true when the gyro and accelerometer
+   * variance over the last ~0.7 s stay under the thresholds (gradeMotionSteady).
+   */
   steady: boolean | null;
+  /** Motion permission (Mobile Tech Lead review 7): "denied" gets its own hint; auto-capture is manual then. */
+  permission: "granted" | "denied" | "unknown";
 }
 
 const UNAVAILABLE: DeviceLevel = {
@@ -36,7 +44,10 @@ const UNAVAILABLE: DeviceLevel = {
   tiltDeg: null,
   level: "unknown",
   steady: null,
+  permission: "unknown",
 };
+
+const DENIED: DeviceLevel = { ...UNAVAILABLE, permission: "denied" };
 
 type DeviceMotionModule = typeof import("expo-sensors").DeviceMotion;
 
@@ -74,14 +85,25 @@ export function useDeviceLevel(enabled: boolean): DeviceLevel {
     let pitch: number | null = null;
     let roll: number | null = null;
     let tilt: number | null = null;
-    let rate: number | null = null;
-    let samples = 0;
+    const window: MotionSample[] = [];
+    // UX review P0-2: enter level at ≤ 2.0°, leave above 2.5°.
+    let levelHeld = false;
 
     void (async () => {
       try {
         const available = await motion.isAvailableAsync();
         if (cancelled || !available) {
           if (!cancelled) setState(UNAVAILABLE);
+          return;
+        }
+        // Ask for Motion only here, when the Grade camera opens (never at launch).
+        let permission = await motion.getPermissionsAsync().catch(() => null);
+        if (permission && !permission.granted && permission.canAskAgain) {
+          permission = await motion.requestPermissionsAsync().catch(() => null);
+        }
+        if (cancelled) return;
+        if (permission && !permission.granted) {
+          setState(DENIED);
           return;
         }
         motion.setUpdateInterval(UPDATE_MS);
@@ -102,15 +124,21 @@ export function useDeviceLevel(enabled: boolean): DeviceLevel {
           roll = blend(roll, reading.rollDeg);
           tilt = blend(tilt, reading.tiltDeg);
           const rr = m.rotationRate;
-          if (rr) rate = blend(rate, Math.hypot(rr.alpha, rr.beta, rr.gamma));
-          samples += 1;
+          const acc = m.acceleration;
+          window.push({
+            gyro: rr ? Math.hypot(rr.alpha, rr.beta, rr.gamma) : null,
+            accel: acc ? Math.hypot(acc.x, acc.y, acc.z) : null,
+          });
+          if (window.length > GRADE_STEADY_WINDOW) window.shift();
+          levelHeld = gradeLevelHysteresis(levelHeld, tilt);
           setState({
             available: true,
             pitchDeg: pitch,
             rollDeg: roll,
             tiltDeg: tilt,
-            level: gradeLevelState(tilt),
-            steady: rate == null || samples < 5 ? null : rate <= GRADE_STEADY_MAX_DEG_PER_S,
+            level: gradeLevelStateHeld(levelHeld, tilt),
+            steady: gradeMotionSteady(window),
+            permission: "granted",
           });
         });
       } catch {

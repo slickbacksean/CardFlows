@@ -1,4 +1,13 @@
-import { PHONE_CHECK_LONG_SIDE, phonePhotoCheck, rgbaToGray, type PhoneCheckResult } from "@cardflow/shared";
+import {
+  gradeProbeDetail,
+  type GradeProbeDetail,
+  PHONE_CHECK_LONG_SIDE,
+  phonePhotoCheck,
+  rgbaToGray,
+  type GrayImage,
+  type PhoneCheckResult,
+} from "@cardflow/shared";
+import { File } from "expo-file-system";
 import { manipulateAsync, SaveFormat } from "expo-image-manipulator";
 import jpeg from "jpeg-js";
 
@@ -8,23 +17,61 @@ import jpeg from "jpeg-js";
  * runs the shared check. Any failure here returns null so the photo just goes
  * to the server, which always makes the final call.
  */
+async function smallGray(uri: string): Promise<GrayImage | null> {
+  const small = await manipulateAsync(uri, [{ resize: { height: PHONE_CHECK_LONG_SIDE } }], {
+    compress: 0.9,
+    format: SaveFormat.JPEG,
+    base64: true,
+  });
+  deleteQuietly(small.uri);
+  if (!small.base64) return null;
+  const decoded = jpeg.decode(base64ToBytes(small.base64), { useTArray: true, formatAsRGBA: true });
+  return rgbaToGray(decoded.width, decoded.height, decoded.data);
+}
+
+function deleteQuietly(uri: string) {
+  try {
+    const file = new File(uri);
+    if (file.exists) file.delete();
+  } catch {
+    // cache files are cleaned up by the OS anyway
+  }
+}
+
+/**
+ * Auto-capture corner probe on a small preview still: corners (0-4),
+ * sharpness, and whether it was too blurry to judge; null if the check
+ * failed. Logs one line per probe. The probe still is deleted either way.
+ */
+export async function probeGradeCorners(uri: string, frameFill: number | null): Promise<GradeProbeDetail | null> {
+  try {
+    const gray = await smallGray(uri);
+    if (!gray) return null;
+    const detail = gradeProbeDetail(gray, frameFill ?? undefined);
+    console.info(
+      `grade-probe corners=${detail.corners} sharpness=${detail.sharpness} blurry=${detail.blurry} size=${gray.width}x${gray.height}`,
+    );
+    return detail;
+  } catch {
+    return null;
+  } finally {
+    deleteQuietly(uri);
+  }
+}
+
 export async function checkGradeStillOnPhone(
   uri: string,
   options: { fromGuide: boolean },
 ): Promise<PhoneCheckResult | null> {
   try {
-    const small = await manipulateAsync(uri, [{ resize: { height: PHONE_CHECK_LONG_SIDE } }], {
-      compress: 0.9,
-      format: SaveFormat.JPEG,
-      base64: true,
-    });
-    if (!small.base64) return null;
-    const bytes = base64ToBytes(small.base64);
-    const decoded = jpeg.decode(bytes, { useTArray: true, formatAsRGBA: true });
-    const gray = rgbaToGray(decoded.width, decoded.height, decoded.data);
+    const gray = await smallGray(uri);
+    if (!gray) return null;
     const result = phonePhotoCheck(gray);
-    if (options.fromGuide) return result;
-    // Library photos weren't taken against the guide frame, so only blur and "nothing there" apply.
+    // Only blur and "nothing there" are checked on the phone. The "whole card" corner patches
+    // assumed a fixed frame position (0.55 fill) that the camera's preview crop doesn't keep
+    // (Sean, Oct 18: every finder photo came back "Couldn't see the whole card"). The server
+    // finds the card in the full photo and makes that call.
+    void options.fromGuide;
     const reasons = result.reasons.filter((r) => !/whole card/i.test(r));
     return { ...result, ok: reasons.length === 0, reasons };
   } catch {

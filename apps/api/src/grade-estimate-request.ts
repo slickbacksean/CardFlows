@@ -1,5 +1,7 @@
 import {
+  GRADE_EXTRA_SHOTS,
   GRADE_IMAGE_MAX_BYTES,
+  type GradeExtraShot,
   GRADE_UPLOAD_EXPIRED_COPY,
   isGradeImageMime,
   type GradeImageMimeType,
@@ -28,6 +30,8 @@ const GRADE_ESTIMATE_FORM_SCHEMA = z
     frontUploadId: uploadIdSchema,
     backUploadId: uploadIdSchema,
     reestimate: z.string().optional(),
+    /** "true" = full 14-photo grade (extras sent to /v1/grade/extra); spends the full allowance. */
+    fullGrade: z.enum(["true", "false"]).optional(),
     angled_0: z.unknown().optional(),
     angled_1: z.unknown().optional(),
     angled_2: z.unknown().optional(),
@@ -50,6 +54,7 @@ export interface ParsedGradeEstimateRequest {
   frontImage: ParsedGradeStill | null;
   backImage: ParsedGradeStill | null;
   reestimate: boolean;
+  fullGrade?: boolean;
   /** Raking-light front photos, in shot order. Empty when skipped. */
   angledFront?: ParsedGradeStill[];
   captureMeta?: string | null;
@@ -133,6 +138,7 @@ export function parseGradeEstimateFormFields(
       frontUploadId: string | undefined;
       backUploadId: string | undefined;
       reestimate: boolean;
+      fullGrade: boolean;
       angled: unknown[];
       captureMeta: string | null;
     }
@@ -150,6 +156,7 @@ export function parseGradeEstimateFormFields(
     frontUploadId: parsed.data.frontUploadId,
     backUploadId: parsed.data.backUploadId,
     reestimate: parsed.data.reestimate === "true",
+    fullGrade: parsed.data.fullGrade === "true",
     angled: GRADE_ANGLED_FIELDS.map((field) => parsed.data[field]).filter(
       (value) => value !== undefined && value !== null && value !== "",
     ),
@@ -208,6 +215,7 @@ export async function parseGradeEstimateRequest(
       frontImage: front,
       backImage: back,
       reestimate: fields.reestimate,
+      fullGrade: fields.fullGrade,
       angledFront,
       captureMeta: fields.captureMeta,
       frontUploadId: fields.frontUploadId,
@@ -259,4 +267,36 @@ export async function parseGradeDetectRequest(
   }
   if ("error" in still) return still;
   return { still, side: parsed.data.side ?? "front", captureMeta: parsed.data.captureMeta ?? null };
+}
+
+const GRADE_EXTRA_FORM_SCHEMA = z
+  .object({
+    image: z.unknown().optional(),
+    side: z.enum(["front", "back"]),
+    shot: z.enum(GRADE_EXTRA_SHOTS as [GradeExtraShot, ...GradeExtraShot[]]),
+  })
+  .strict();
+
+export interface ParsedGradeExtraRequest {
+  still: ParsedGradeStill;
+  side: GradeSide;
+  shot: GradeExtraShot;
+}
+
+/** POST /v1/grade/extra: one tilted or corner close-up photo from the full 14-photo mode. */
+export async function parseGradeExtraRequest(
+  c: Context,
+): Promise<ParsedGradeExtraRequest | GradeEstimateRequestError> {
+  const contentType = c.req.header("content-type") ?? "";
+  if (!contentType.toLowerCase().includes("multipart/form-data")) {
+    return { error: "Image must be jpeg, png, or webp", status: 400 };
+  }
+  const parsed = GRADE_EXTRA_FORM_SCHEMA.safeParse(await c.req.parseBody());
+  if (!parsed.success) {
+    return unexpectedFieldError(parsed.error) ?? { error: "Invalid grade photo request", status: 400 };
+  }
+  const still = await stillFromFormValue(parsed.data.image);
+  if (still === null) return { error: "Image must be jpeg, png, or webp", status: 400 };
+  if ("error" in still) return still;
+  return { still, side: parsed.data.side, shot: parsed.data.shot };
 }

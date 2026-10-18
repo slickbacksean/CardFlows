@@ -90,6 +90,7 @@ async function detectCardForGradeUncoalesced(input: {
       photoExt: photoExtension(input.still.mimeType),
     });
     const mapped = mapDetectReport(ran.report, input.side, ran.cropBytes);
+    console.info(detectLogLine(ran.report, mapped, Date.now() - startedAt));
     saveGradeDetectDebug({
       still: input.still,
       side: input.side,
@@ -110,6 +111,26 @@ async function detectCardForGradeUncoalesced(input: {
       message: PREGRADE_DETECT_UNAVAILABLE_MESSAGE,
     };
   }
+}
+
+/**
+ * One line per detect call, no image data or user ids:
+ * `grade-detect side=front found=false method=edge size=4032x3024 sharpness=41.2 tilt=1.6 aspect=0.4 fails=sharpness ms=812`.
+ * "confidence" here is the gate values (tilt degrees, aspect deviation %).
+ */
+export function detectLogLine(report: unknown, mapped: DetectCropResult, ms: number): string {
+  const r = (report && typeof report === "object" ? report : {}) as Record<string, unknown>;
+  const gates = Array.isArray(r.gates) ? (r.gates as Array<Record<string, unknown>>) : [];
+  const value = (name: string) => {
+    const v = gates.find((gate) => gate.name === name)?.value;
+    return typeof v === "number" && Number.isFinite(v) ? v.toFixed(1) : "-";
+  };
+  const size = Array.isArray(r.image_size) ? r.image_size.join("x") : "-";
+  const capture = (r.cardflow_capture && typeof r.cardflow_capture === "object" ? r.cardflow_capture : {}) as Record<string, unknown>;
+  const sharp = typeof capture.sharpness === "number" ? capture.sharpness.toFixed(1) : "-";
+  const fails = gates.filter((gate) => gate.passed === false).map((gate) => String(gate.name)).join(",") || "none";
+  const method = typeof r.detect_method === "string" ? r.detect_method : "-";
+  return `grade-detect side=${mapped.side} found=${mapped.ok} method=${method} size=${size} sharpness=${sharp} tilt=${value("tilt")} aspect=${value("aspect_ratio")} fails=${fails} ms=${ms}`;
 }
 
 /** One still → `detect_and_normalize`. A hard gate is a retake, never a grade. */
