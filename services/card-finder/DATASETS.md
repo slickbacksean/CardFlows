@@ -14,7 +14,18 @@ real photos dropped because they show a baseline card).
 - Pseudo-labels use the same edge snapping as the finder, so scores on that val split are optimistic (same caveat as the provisional baseline). The antokun val split has independent author labels and is the one to trust.
 - Some antokun photos show more than one card (stacks, packs) with only one outlined; the unlabelled cards count as background in training.
 - Build: `python3 train/real_data.py --ext <download dir> --out <manifest dir>`. Training mixes 40% real / 60% synthetic (`train.py --real ... --real-frac 0.4`).
-- Roboflow sets (pokemon-card-corners, CC BY 4.0?; pokemon-card-obb, MIT?) are **not used**: no API key yet, and their licences still need re-checking when logged in.
+
+### Roboflow Universe (added 2026-10-18)
+
+| Dataset | Licence | Version | Quads kept (train/val) | Notes |
+|---|---|---|---|---|
+| [pokemoncarddetect/pokemon-card-obb-egjdh](https://universe.roboflow.com/pokemoncarddetect/pokemon-card-obb-egjdh) | **MIT** | v2 (no-aug export; Stretch-to 640) | 263 (205/58) | Best of the three; OBB → minAreaRect quads |
+| [samuels-workspace-ayfij/pokemon-card-corners-jbrsi](https://universe.roboflow.com/samuels-workspace-ayfij/pokemon-card-corners-jbrsi) | **CC BY 4.0** | v1 (least images; still aug) | 89 (76/13) | COCO-seg → quads; credit required |
+| [pokemon-card-detection-a3etk/pokemon-scanner-rzy69](https://universe.roboflow.com/pokemon-card-detection-a3etk/pokemon-scanner-rzy69) | **CC BY 4.0** | v2 (least with OBB; still aug) | 184 (152/32) | Multi-card → largest quad; credit required |
+
+All three versions apply Roboflow **Stretch-to square**, so image-space aspect ≠ physical 63:88. Rows are tagged `square_stretched: true` and sampled at weight 0.25 in `train/real.py`. Do not score corner error on Roboflow val — keep antokun author labels as the comparable split.
+
+- Roboflow Universe (exported 2026-10-18; commercial licences only): see table below. Primary JSONL manifests use stretch-aware geometry (Roboflow Stretch-to-square); `sample_weight` 0.25 so they do not dominate antokun/steve. Corner-precision reporting stays on the **antokun val** split only.
 
 ## Prints visible in external data (exclude from the test-set pool)
 Read from the rectified name bars of every front (132 fronts). Most antokun cards are Indonesian prints; names are as printed.

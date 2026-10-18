@@ -1,15 +1,15 @@
 {
   "weights": {
-    "agreement": 14.63269372966995,
-    "outside": -6.305802119291627,
-    "aspect_err": -11.684803918800514,
-    "inner": 1.2696959501909106,
-    "refine_failed": -1.1129948462961332,
-    "area": 2.1106736253782135,
-    "largest_share": 12.13824405507279
+    "agreement": 11.323704229763782,
+    "outside": -5.155419156073579,
+    "aspect_err": -12.129035309177157,
+    "inner": 6.614483049289915,
+    "refine_failed": -1.323192456353684,
+    "area": 6.513225277688678,
+    "largest_share": -2.8263863500820823
   },
-  "bias": -23.72747440201873,
-  "fit_samples": 573,
-  "positives": 478,
+  "bias": -11.412285812993225,
+  "fit_samples": 293,
+  "positives": 248,
   "split": "synthetic, train-split art, seed 424242, 512px"
 }

@@ -1,0 +1,40 @@
+{
+  "detector": "finder",
+  "manifest": "/workspace/cf/real/val-antokun.jsonl",
+  "provisional_circular_labels": 0,
+  "cards": {
+    "all": {
+      "count": 18,
+      "found_rate": 0.16666666666666666,
+      "iou_rate": 0.1111111111111111,
+      "mean_corner_error": 0.014953220638829682,
+      "p95_corner_error": 0.02042941827072843,
+      "wrong_accept_rate": 0.0,
+      "wrong_accept_count": 0,
+      "false_retake_rate": 0.0,
+      "passes": false
+    },
+    "back": {
+      "count": 0,
+      "found_rate": 0.0,
+      "iou_rate": 0.0,
+      "mean_corner_error": null,
+      "p95_corner_error": null,
+      "wrong_accept_rate": 0.0,
+      "wrong_accept_count": 0,
+      "false_retake_rate": 0.0,
+      "passes": false
+    },
+    "full-art": {
+      "count": 0,
+      "found_rate": 0.0,
+      "iou_rate": 0.0,
+      "mean_corner_error": null,
+      "p95_corner_error": null,
+      "wrong_accept_rate": 0.0,
+      "wrong_accept_count": 0,
+      "false_retake_rate": 0.0,
+      "passes": false
+    }
+  }
+}

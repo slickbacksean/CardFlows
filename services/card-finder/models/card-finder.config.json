@@ -2,11 +2,19 @@
   "model": "Unet/timm-mobilenetv3_large_100",
   "encoder_weights": null,
   "size": 256,
-  "steps": 6000,
+  "steps": 1000,
   "batch": 16,
-  "lr": 0.0005,
+  "lr": 0.0003,
   "loss": "bce+dice",
   "art_train_ids": 2882,
-  "seed": 2,
-  "resumed_from": "/workspace/cf/models-v0.2/card-finder.pt"
+  "seed": 4,
+  "resumed_from": "/workspace/cf/models-v0.3/card-finder.pt",
+  "real_manifests": [
+    "antokun.jsonl",
+    "steve.jsonl",
+    "pokemon-card-corners-jbrsi.jsonl",
+    "pokemon-card-obb-egjdh.jsonl",
+    "pokemon-scanner-rzy69.jsonl"
+  ],
+  "real_frac": 0.4
 }

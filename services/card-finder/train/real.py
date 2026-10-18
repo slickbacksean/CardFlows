@@ -23,11 +23,15 @@ class RealSampler:
         self.size = size
         self.rng = random.Random(seed)
         self.rows = []
+        self.weights = []
         for m in manifests:
             for line in Path(m).read_text().splitlines():
                 r = json.loads(line)
                 if r["split"] == split and r.get("corners"):
+                    # Roboflow Stretch-to-square rows carry sample_weight < 1 (or square_stretched).
+                    w = float(r.get("sample_weight", 0.25 if r.get("square_stretched") else 1.0))
                     self.rows.append(r)
+                    self.weights.append(max(w, 1e-6))
         self._cache: dict[str, tuple[np.ndarray, np.ndarray]] = {}
 
     def __len__(self) -> int:
@@ -44,7 +48,7 @@ class RealSampler:
 
     def sample(self, augment: bool = True) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         rng = self.rng
-        img, quad = self.load(rng.choice(self.rows))
+        img, quad = self.load(rng.choices(self.rows, weights=self.weights, k=1)[0])
         h, w = img.shape[:2]
         if augment:
             ang = rng.uniform(-180, 180) if rng.random() < 0.3 else rng.gauss(0, 8)

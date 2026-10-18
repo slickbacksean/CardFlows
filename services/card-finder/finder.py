@@ -24,7 +24,7 @@ from label_assist import refine  # noqa: E402
 from score import order_corners  # noqa: E402
 
 MODEL_PATH = HERE / "models" / "card-finder.onnx"
-VERSION = "card-finder@0.2.1"
+VERSION = "card-finder@0.3.0"
 SIZE = 256
 MEAN = np.array([0.485, 0.456, 0.406], np.float32)
 STD = np.array([0.229, 0.224, 0.225], np.float32)
