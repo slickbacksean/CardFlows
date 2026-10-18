@@ -100,7 +100,7 @@ export function clearScanQueue(): void {
   for (const listener of listeners) listener();
 }
 
-/** A guest hit the scan limit (403 signup_required). Not a real refusal of this scan. */
+/** 403 signup_required (a guest; Sean, Oct 17: guests can't scan). Not a real refusal of this scan. */
 export function isSignupRequiredError(error: unknown): boolean {
   return (error as { signupRequired?: unknown } | null)?.signupRequired != null;
 }
@@ -151,7 +151,7 @@ export async function flushScanQueue(): Promise<void> {
         save(markScanReady(load(), item.id, result.scan.scanId));
       } catch (error) {
         if (isSignupRequiredError(error)) {
-          // Guest 4th scan: keep it queued; the sign-up prompt is already showing (api.ts).
+          // A guest (e.g. signed out with a queued still): keep it queued for after sign-up; the prompt is showing (api.ts).
           // It sends once the user signs up.
           save(markScanFailed(load(), item.id));
           break;

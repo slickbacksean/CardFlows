@@ -10,7 +10,7 @@ import {
   classifyLoadError,
   SCAN_SESSION_ENDED_COPY,
 } from "@cardflow/shared";
-import { isOfflineScanError, isSignupRequiredError, queueOfflineScan } from "@/lib/scan-queue";
+import { isOfflineScanError, queueOfflineScan } from "@/lib/scan-queue";
 import { trackScanStarted } from "@/lib/product-events";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { CameraView, useCameraPermissions } from "expo-camera";
@@ -34,7 +34,7 @@ import { createScan } from "@/lib/api";
 import { ensureAccountAgeConfirmed } from "@/lib/age-confirmation";
 import { askCardSightConsentOnce } from "@/lib/cardsight-consent";
 import { isGuestSession } from "@/lib/identity";
-import { confirmGuestNoticeOnce } from "@/lib/guest-notice";
+import { requireAccount, useAccountOrLeave } from "@/lib/signup-prompt";
 import { getMockScenario } from "@/lib/mock-scenario";
 import { prepareScanStill, rememberScanCapture } from "@/lib/scan-capture";
 import { launchSystemImagePicker } from "@/lib/system-photo-picker";
@@ -45,6 +45,8 @@ const STILL_PHOTO = { quality: 1, imageType: "jpg" as const };
 
 export default function CaptureScreen() {
   const router = useRouter();
+  // Browse-only guests (Sean, Oct 17): no camera for a guest; the sign-up prompt instead.
+  useAccountOrLeave();
   const cameraRef = useRef<CameraView>(null);
   const [permission, requestPermission] = useCameraPermissions();
   const [devForceDenied, setDevForceDenied] = useState(false);
@@ -87,8 +89,8 @@ export default function CaptureScreen() {
     imageMimeType?: string | null,
     size?: { width?: number; height?: number },
   ) {
-    // Guests see the 24-hour deletion note and the scan-count note before their first scan.
-    if (!(await confirmGuestNoticeOnce())) return;
+    // Browse-only guests (Sean, Oct 17): sign up before any scan.
+    if (!requireAccount()) return;
     // Sean: the one-time CardSight disclosure comes before the first photo is uploaded.
     // Policy Reviewer (Oct 17): guests never see it (they never get CardSight), and accounts
     // confirm 18+ first (testers and existing accounts once; new accounts did at sign-up).
@@ -120,11 +122,6 @@ export default function CaptureScreen() {
         queueOfflineScan({ imageUri: uploadUri, mimeType: uploadMime ?? "image/jpeg", captureMethod })
       ) {
         router.replace("/(tabs)/collection");
-        return;
-      }
-      // Guest over the scan limit: keep the still queued; it sends after sign-up (prompt shows).
-      if (uploadUri && isSignupRequiredError(caught)) {
-        queueOfflineScan({ imageUri: uploadUri, mimeType: uploadMime ?? "image/jpeg", captureMethod });
         return;
       }
       throw caught;

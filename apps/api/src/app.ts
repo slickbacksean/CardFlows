@@ -7,7 +7,7 @@ import { ageGateEnabledFromEnv, CARDSIGHT_GUEST_MONTHLY_CAP, CARDSIGHT_USER_MONT
 import { createRecognitionWithFallback } from "./cardsight-adapter";
 import { normalizeEmail, type DeletionAuditKind } from "./account-store";
 import { routePath } from "hono/route";
-import { CARDSIGHT_CONSENT_VERSION, INVITED_USERS, EMAIL_CODE_LIFETIME_SENDS, EMAIL_SENDS_PER_ADDRESS_PER_DAY, UNVERIFIED_ACCOUNT_TTL_DAYS, EMAIL_CODE_LENGTH, EMAIL_RESEND_COOLDOWN_MS, EMAIL_UNVERIFIED_CODE, EMAIL_VERIFICATION_COPY, EMAIL_VERIFICATION_TTL_MS, isEmailCode, passwordResetEmailText, verificationEmailText, quotaAnchor, quotaPeriodFor, ACCOUNT_AUTH_COPY, ACCOUNT_DELETION_COPY, PASSWORD_RESET_TTL_MS, GUEST_MINT_WINDOW_MS, GUEST_SESSION_TTL_MS, isValidEmail, passwordProblem, GUEST_FREE_SCANS, GUEST_USER_PREFIX, SIGNUP_REQUIRED_CODE, guestIdentity, guestRouteAllowed, isGuestUserId, isHot, parsePerfBatch, signupMessage, type SignupReason } from "@cardflow/shared";
+import { CARDSIGHT_CONSENT_VERSION, INVITED_USERS, EMAIL_CODE_LIFETIME_SENDS, EMAIL_SENDS_PER_ADDRESS_PER_DAY, UNVERIFIED_ACCOUNT_TTL_DAYS, EMAIL_CODE_LENGTH, EMAIL_RESEND_COOLDOWN_MS, EMAIL_UNVERIFIED_CODE, EMAIL_VERIFICATION_COPY, EMAIL_VERIFICATION_TTL_MS, isEmailCode, passwordResetEmailText, verificationEmailText, quotaAnchor, quotaPeriodFor, ACCOUNT_AUTH_COPY, ACCOUNT_DELETION_COPY, PASSWORD_RESET_TTL_MS, GUEST_MINT_WINDOW_MS, GUEST_SESSION_TTL_MS, isValidEmail, passwordProblem, GUEST_USER_PREFIX, SIGNUP_REQUIRED_CODE, guestIdentity, guestRouteBlockReason, isGuestUserId, isHot, parsePerfBatch, signupMessage, type SignupReason } from "@cardflow/shared";
 import { NORTH_STAR_NAME, SCANS_PER_WAR_NAME, northStarUserWeekTotals, northStarWeekly, type NorthStarWeekTotal } from "@cardflow/shared";
 import { ANONYMIZED_USER_PREFIX } from "./purchase-ledger";
 import { opsMetrics, type OpsMetrics } from "./ops-metrics";
@@ -339,7 +339,11 @@ function gradePhotoHash(
 export interface CreateAppOptions {
   /** When true, a missing Authorization header acts as the default invited user. */
   devAutoSession?: boolean;
-  /** D9: allow guest sessions with 3 free scans. Default from CARD_FLOW_GUEST_SCANS=true. */
+  /**
+   * Browse-only guest sessions (Sean, Oct 17): guests look around; every scan, grade, livestream,
+   * save and CardSight route answers 403 signup_required. Default from CARD_FLOW_GUEST_BROWSE=true
+   * (off otherwise). CARD_FLOW_GUEST_SCANS is gone: there are no guest scans any more.
+   */
   guestMode?: boolean;
   /** D9: how often ended-guest data is purged (default hourly; always within 24 h). */
   guestCleanupIntervalMs?: number;
@@ -545,17 +549,18 @@ export function createApp(
   const premiumUserIds = new Set(options.premiumUserIds ?? premiumUserIdsFromEnv());
   const appApiKey = options.appApiKey === undefined ? appApiKeyFromEnv() : options.appApiKey;
   const devAutoSession = options.devAutoSession ?? resolveDevAutoSession();
-  // D9: guest mode is off with dev auto-session (that already signs everyone in).
+  // Guest mode is off with dev auto-session (that already signs everyone in).
   const guestMode =
     !devAutoSession &&
-    (options.guestMode ?? process.env.CARD_FLOW_GUEST_SCANS?.trim().toLowerCase() === "true");
+    (options.guestMode ?? process.env.CARD_FLOW_GUEST_BROWSE?.trim().toLowerCase() === "true");
+  if (options.guestMode === undefined && process.env.CARD_FLOW_GUEST_SCANS?.trim()) {
+    console.warn("[guest] CARD_FLOW_GUEST_SCANS is ignored: guests are browse-only now. Use CARD_FLOW_GUEST_BROWSE=true for guest sessions.");
+  }
   const guestMintsPerHour = options.guestMintsPerHour ?? 10;
   /** Scan Idempotency-Key -> first scan ID (body hash, in-flight, 24 h). */
   const scanIdempotency = createIdempotencyRegistry<string>(() => now().getTime());
   /** Guest mints per client IP in the last hour. Pruned on every mint. */
   const guestMints = new Map<string, { windowStart: number; count: number }>();
-  /** In-flight guest scans, reserved synchronously so parallel requests can't pass the 3-scan limit. */
-  const guestScanInflight = new Map<string, number>();
   /**
    * Backend review M1 (P4): user IDs deleted in the last 24 h. Work that was in flight when the
    * account was deleted (a scan waiting on recognition, a grade job) checks this before it saves.
@@ -1049,40 +1054,10 @@ export function createApp(
       token: minted.token,
       identity: guestIdentity(userId),
       guest: true as const,
-      freeScans: GUEST_FREE_SCANS,
-      scansRemaining: GUEST_FREE_SCANS,
+      browseOnly: true as const,
       expiresAt: minted.expiresAt,
     });
   });
-
-  /** D9: reserve a guest scan slot before any await; released when the request ends. */
-  const guestScanGate = async (c: Context, next: () => Promise<void>) => {
-    const userId = c.get("userId");
-    if (!isGuestUserId(userId)) return next();
-    // Backend review: a replay (same Idempotency-Key, within 24 h) is not a new scan, so it is
-    // checked before the limit and never refused at the limit.
-    const key = c.req.header("idempotency-key")?.trim();
-    if (key) {
-      const replayed =
-        scanIdempotency.peek(`${userId}\0${key}`) ||
-        Boolean(
-          ((scan) => scan && now().getTime() - Date.parse(scan.capturedAt) < IDEMPOTENCY_TTL_MS)(
-            getScan(userId, scanIdForIdempotency(userId, key)),
-          ),
-        );
-      if (replayed) return next();
-    }
-    const inflight = guestScanInflight.get(userId) ?? 0;
-    if (listScans(userId).length + inflight >= GUEST_FREE_SCANS) return signupRequired(c, "scan_limit");
-    guestScanInflight.set(userId, inflight + 1);
-    try {
-      await next();
-    } finally {
-      const left = (guestScanInflight.get(userId) ?? 1) - 1;
-      if (left <= 0) guestScanInflight.delete(userId);
-      else guestScanInflight.set(userId, left);
-    }
-  };
 
   app.use("/v1/*", async (c, next) => {
     if (c.req.method === "GET" || c.req.method === "HEAD") return next();
@@ -1198,7 +1173,9 @@ export function createApp(
         if (!guestMode) return c.json({ ok: false, error: "Unauthorized" }, 401);
         c.set("userId", session.userId);
         c.set("identity", guestIdentity(session.userId));
-        if (!guestRouteAllowed(c.req.method, c.req.path)) return signupRequired(c, "save");
+        // Sean (Oct 17): browse-only. Scans, grades, livestream, saves and CardSight need sign-up.
+        const blocked = guestRouteBlockReason(c.req.method, c.req.path);
+        if (blocked) return signupRequired(c, blocked);
         return next();
       }
       const identity = resolveIdentity(session.userId);
@@ -1913,7 +1890,7 @@ export function createApp(
   });
   app.post("/v1/age-confirmation", async (c) => {
     const userId = c.get("userId");
-    if (isGuestUserId(userId)) return signupRequired(c, "save");
+    if (isGuestUserId(userId)) return signupRequired(c, "cardsight");
     const body = await c.req.json<Record<string, unknown>>().catch(() => ({}) as Record<string, unknown>);
     if (body.ageConfirmed18Plus !== true) return c.json({ ok: false, error: "ageConfirmed18Plus must be true" }, 400);
     if (body.version !== AGE_GATE_VERSION) {
@@ -1930,7 +1907,7 @@ export function createApp(
   app.post("/v1/consents/cardsight", async (c) => {
     const userId = c.get("userId");
     // Policy Reviewer (Oct 17): guests never get CardSight, so they can't give consent either.
-    if (isGuestUserId(userId)) return signupRequired(c, "save");
+    if (isGuestUserId(userId)) return signupRequired(c, "cardsight");
     const body = await c.req.json<{ granted?: unknown; version?: unknown }>().catch(() => ({}) as Record<string, unknown>);
     if (typeof body.granted !== "boolean") return c.json({ ok: false, error: "granted must be true or false" }, 400);
     const at = now().toISOString();
@@ -2108,7 +2085,6 @@ export function createApp(
     scanIdempotency.purgePrefix(`${userId}\0`);
     writeIdempotency.purgePrefix(`${userId}\0`);
     gradeJobRoutes?.purgeUser(userId);
-    guestScanInflight.delete(userId);
     // Backend review L3: audit row with no PII.
     const rowsDeleted = Object.values(rows).reduce((sum, n) => sum + n, 0);
     store.accounts.recordDeletionAudit({ at: now().toISOString(), kind, rowsDeleted });
@@ -2396,13 +2372,13 @@ export function createApp(
     isPremium: (userId) => resolveAccountPlan(userId, getGradeAccount(userId).plan) === "premium",
   });
 
-  app.post("/v1/scans", guestScanGate, bodyLimit({
+  app.post("/v1/scans", bodyLimit({
       maxSize: SCAN_IMAGE_MAX_BYTES,
       onError: (c) => c.json({ ok: false, error: "Image must be 20 MB or smaller" }, 413),
     }), async (c) => {
       const userId = c.get("userId");
-      // P1-10 + backend review: replays are checked first (before the guest limit), the body hash
-      // must match (422 otherwise), concurrent same-key requests share one run, keys last 24 h.
+      // P1-10 + backend review: the body hash must match (422 otherwise), concurrent same-key
+      // requests share one run, keys last 24 h. Guests never get here (signup_required).
       const scanIdempotencyKey = c.req.header("idempotency-key")?.trim() || null;
       const regKey = scanIdempotencyKey ? `${userId}\0${scanIdempotencyKey}` : null;
       const claim = regKey ? scanIdempotency.claim(regKey) : null;
@@ -2412,7 +2388,6 @@ export function createApp(
           : undefined;
       const freshPersisted =
         persistedReplay && now().getTime() - Date.parse(persistedReplay.capturedAt) < IDEMPOTENCY_TTL_MS ? persistedReplay : undefined;
-      // The D9 guest limit is enforced by guestScanGate, which lets replays through.
       const parsed = await parseScanCreateRequest(c);
       if ("error" in parsed) {
         if (claim?.kind === "new") claim.finish("", undefined);

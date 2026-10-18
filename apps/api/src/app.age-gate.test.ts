@@ -60,10 +60,12 @@ describe.each(["memory", "sqlite"] as const)("Sean (Oct 17): 18+ is stated at si
     });
   });
 
-  it("scans and uploads no longer need an age statement (guests and accounts)", async () => {
+  it("scans and uploads need no age statement from accounts; guests can't scan at all (browse-only)", async () => {
     const { app, store } = open();
     const guest = (await req(app, "/v1/sessions/guest", { method: "POST" })).body.token as string;
-    expect((await req(app, "/v1/scans", { form: scanForm(), token: guest })).status).toBe(201);
+    const guestScan = await req(app, "/v1/scans", { form: scanForm(), token: guest });
+    expect(guestScan.status).toBe(403);
+    expect(guestScan.body).toMatchObject({ code: "signup_required" });
     const up = await req(app, "/v1/accounts", { body: signUp("tester@example.com", over18) });
     store.ageConfirmations.deleteUser(store.accounts.findByEmail("tester@example.com")!.userId);
     expect((await req(app, "/v1/scans", { form: scanForm(), token: up.body.token })).status).toBe(201);

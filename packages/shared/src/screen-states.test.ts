@@ -304,7 +304,12 @@ describe("UX review: data, stale banner, slow loading", () => {
   });
 
   it("empty-state copy from the reviews", () => {
-    expect(SCREEN_EMPTY_COPY.collectionPurchased.body).toBe("Scan and confirm a card, then mark it Purchased.");
+    expect(SCREEN_EMPTY_COPY.collectionPurchased.title).toBe("No cards yet");
+    expect(SCREEN_EMPTY_COPY.collectionPurchased.body).toBe(
+      "Scan a card, confirm it, then mark it Purchased to start tracking its value in MyDEX.",
+    );
+    // Grade's empty state keeps its own body and its "Open MyDEX" action.
+    expect(SCREEN_EMPTY_COPY.gradePrepare.body).toBe("Scan and confirm a card, then mark it Purchased.");
     expect(SCREEN_EMPTY_COPY.gradePrepareDone.body).toBe("Copies you've moved are under Submitted or Returned.");
     expect(SCREEN_EMPTY_COPY.gradeReturned.body).toBe("Copies you mark Returned show up here.");
     expect(SCREEN_EMPTY_COPY.gradePrepare.action).toBe(`Open ${COLLECTION_DESTINATION_NAME}`);

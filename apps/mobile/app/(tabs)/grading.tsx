@@ -37,7 +37,8 @@ import {
   submitGradingCopy,
   type InventoryItem,
 } from "@/lib/api";
-import { loadActiveIdentity, peekActiveUserId } from "@/lib/identity";
+import { isGuestSession, loadActiveIdentity, peekActiveUserId } from "@/lib/identity";
+import { requireAccount } from "@/lib/signup-prompt";
 import { colors, radii, space } from "@/lib/theme";
 
 function inventoryMaxBuyAmount(item: InventoryItem): string | null {
@@ -64,7 +65,8 @@ function matchesSearch(item: InventoryItem, query: string): boolean {
 }
 
 export default function GradingScreen() {
-  const [pane, setPane] = useState<"photo" | "pipeline">("photo");
+  // Browse-only guests (Sean, Oct 17) open on the (empty) pipeline; the photo pre-grade needs sign-up.
+  const [pane, setPane] = useState<"photo" | "pipeline">(() => (isGuestSession() ? "pipeline" : "photo"));
   const [segment, setSegment] = useState<Segment>("prepare");
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [activeUserId, setActiveUserId] = useState(peekActiveUserId);
@@ -316,7 +318,9 @@ export default function GradingScreen() {
           accessibilityLabel="Photo grade"
           accessibilityRole="button"
           hitSlop={10}
-          onPress={() => setPane("photo")}
+          onPress={() => {
+            if (requireAccount()) setPane("photo");
+          }}
         >
           <Text style={styles.photoLink}>Photo grade</Text>
         </Pressable>
@@ -370,7 +374,9 @@ export default function GradingScreen() {
           <StaleBanner loadedAt={segmentLoadedAt} onRetry={() => void retryLoad()} retrying={retrying} />
         ) : null}
         {segment === "prepare" ? (
-          <Pressable accessibilityLabel="Batch pre-grade" accessibilityRole="button" onPress={() => router.push("/grade-batch")}>
+          <Pressable accessibilityLabel="Batch pre-grade" accessibilityRole="button" onPress={() => {
+            if (requireAccount()) router.push("/grade-batch");
+          }}>
             <Text style={styles.batchLink}>Batch pre-grade</Text>
           </Pressable>
         ) : null}

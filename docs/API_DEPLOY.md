@@ -61,5 +61,5 @@ Behind a load balancer or reverse proxy, set `CARD_FLOW_TRUST_PROXY_HOPS` to the
 The API also **refuses to start** in production without `CARD_FLOW_SERVER_PEPPER`: a random secret of 32+ characters (e.g. `openssl rand -base64 48`), stored as a platform secret. It keys the HMAC-SHA256 hashes of email addresses in `email_send_counts` (Backend review L3, P4). Rotating it only resets today's per-address email caps.
 
 ## Open sign-up env
-- `CARD_FLOW_GUEST_SCANS=true` turns on guest sessions (3 scans, 24-hour sessions in `crm_sessions`).
+- `CARD_FLOW_GUEST_BROWSE=true` turns on **browse-only** guest sessions (24-hour sessions in `crm_sessions`; off by default). Guests get 403 `signup_required` on every scan, grade, livestream, save, purchase, watchlist, inventory and CardSight route (`guestRouteBlockReason` in `packages/shared/src/guest-access.ts`); browse reads stay open, and `POST /v1/account/delete` deletes their session data. `CARD_FLOW_GUEST_SCANS` was removed (Sean, Oct 17: no guest scans); if it's still set, the API logs a warning and ignores it.
 - `CARD_FLOW_INVITE_ALEX` / `CARD_FLOW_INVITE_JORDAN` are tester invite codes. **There are no defaults;** unset means invite sign-in is off for that tester.
