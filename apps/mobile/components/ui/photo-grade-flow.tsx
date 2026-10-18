@@ -15,6 +15,9 @@ import {
   type GradeQuotaSnapshot,
   type PhotoPregradeSubgrade,
   GRADE_AUTO_COPY,
+  GRADE_FULL_COPY,
+  gradeFullProgressLabel,
+  gradeFullRemainingCaption,
 } from "@cardflow/shared";
 import { Image } from "expo-image";
 import { useFocusEffect } from "expo-router";
@@ -23,6 +26,7 @@ import { checkGradeStillOnPhone } from "@/lib/phone-photo-check";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { AccessibilityInfo, ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { GradeCardFinder } from "@/components/ui/grade-card-finder";
+import { GradeExtraShots } from "@/components/ui/grade-extra-shots";
 import { PrimaryButton } from "@/components/ui/primary-button";
 import { detectGradePhoto, getGradeQuota, grantGradeCredits, requestPhotoPregrade } from "@/lib/api";
 import { gradeFlowSession } from "@/lib/grade-flow-session";
@@ -99,6 +103,17 @@ export function PhotoGradeFlow({ onOpenPipeline }: PhotoGradeFlowProps) {
     freezeUri,
   } = state;
   const [quota, setQuota] = useState<GradeQuotaSnapshot | null>(null);
+  // Full 14-photo grade (server flag; own monthly allowance): chosen on the guidelines screen.
+  const [mode, setModeState] = useState<"quick" | "full">("quick");
+  const modeRef = useRef<"quick" | "full">("quick");
+  const setMode = (next: "quick" | "full") => {
+    modeRef.current = next;
+    setModeState(next);
+  };
+  // The side whose 6 extra shots are being taken.
+  const [extrasSide, setExtrasSide] = useState<"front" | "back" | null>(null);
+  const fullAllowance = quota?.fullGrade;
+  const fullGrade = mode === "full";
   /** P1-16: a photo the phone flagged; "Check anyway" sends it to the server. */
   const [phoneFlag, setPhoneFlag] = useState<{ side: Side; still: SideStill } | null>(null);
   const [quotaNotice, setQuotaNotice] = useState<string | null>(null);
@@ -124,6 +139,8 @@ export function PhotoGradeFlow({ onOpenPipeline }: PhotoGradeFlowProps) {
   function reset() {
     requestId.current += 1;
     gradeFlowSession.reset();
+    setMode("quick");
+    setExtrasSide(null);
     setQuotaNotice(null);
     refreshQuota();
   }
@@ -290,7 +307,16 @@ export function PhotoGradeFlow({ onOpenPipeline }: PhotoGradeFlowProps) {
     if (!latest.detected) return;
     const still = latest.side === "front" ? latest.front : latest.back;
     if (!still?.cropUri) return;
-    if (latest.side === "front") {
+    if (fullGrade) {
+      setExtrasSide(latest.side);
+      return;
+    }
+    continueAfterSide(latest.side);
+  }
+
+  function continueAfterSide(done: "front" | "back") {
+    setExtrasSide(null);
+    if (done === "front") {
       openFinder("back");
       return;
     }
@@ -307,6 +333,7 @@ export function PhotoGradeFlow({ onOpenPipeline }: PhotoGradeFlowProps) {
       backUri: latest.back.uri,
       backMimeType: latest.back.mimeType,
       backUploadId: latest.back.uploadId,
+      fullGrade: modeRef.current === "full",
     });
     if (!gradeFlowSession.isSubmitLocked()) return;
     if (graded.quota) setQuota(graded.quota);
@@ -321,6 +348,8 @@ export function PhotoGradeFlow({ onOpenPipeline }: PhotoGradeFlowProps) {
       return;
     }
     if (!graded.ok) {
+      // Full grades used up mid-flow: Try again sends the same flat photos as a quick grade.
+      if (graded.status === "unavailable" && graded.fullGradeUsedUp) setMode("quick");
       gradeFlowSession.applyUnavailable(graded.message);
       return;
     }
@@ -353,9 +382,20 @@ export function PhotoGradeFlow({ onOpenPipeline }: PhotoGradeFlowProps) {
 
   const sideLabel = side === "front" ? "Front" : "Back";
 
+  if (extrasSide) {
+    return (
+      <GradeExtraShots
+        onBack={() => setExtrasSide(null)}
+        onDone={() => continueAfterSide(extrasSide)}
+        side={extrasSide}
+      />
+    );
+  }
+
   if (step === "finder") {
     return (
       <GradeCardFinder
+        title={fullGrade ? `${gradeFullProgressLabel(side, 0)} flat` : undefined}
         detecting={checking}
         freezeUri={freezeUri}
         notice={notice ?? (retakeReasons.length > 0 ? retakeSideCopy(side, retakeReasons) : null)}
@@ -374,6 +414,25 @@ export function PhotoGradeFlow({ onOpenPipeline }: PhotoGradeFlowProps) {
       {step === "guidelines" ? (
         <View style={styles.block}>
           <Text style={styles.section}>Photo guidelines</Text>
+          {fullAllowance ? (
+            <View style={styles.block}>
+              <Text style={styles.section}>{GRADE_FULL_COPY.modeTitle}</Text>
+              <Text style={styles.body}>{GRADE_FULL_COPY.modeBody}</Text>
+              <Text style={styles.caption}>{gradeFullRemainingCaption(fullAllowance)}</Text>
+              {fullAllowance.remaining > 0 ? (
+                <PrimaryButton
+                  disabled={scoring}
+                  label={GRADE_FULL_COPY.startFull}
+                  onPress={() => {
+                    setMode("full");
+                    openFinder("front");
+                  }}
+                />
+              ) : (
+                <Text style={styles.body}>{GRADE_FULL_COPY.usedUp}</Text>
+              )}
+            </View>
+          ) : null}
           {quota ? (
             isOutOfGrades ? (
               <ErrorText text={remainingGradesCaption(quota)} />
@@ -404,11 +463,21 @@ export function PhotoGradeFlow({ onOpenPipeline }: PhotoGradeFlowProps) {
                   {line}
                 </Text>
               ))}
-              <PrimaryButton disabled={scoring} label="Take front photo" onPress={() => openFinder("front")} />
+              <PrimaryButton
+                disabled={scoring}
+                label={fullAllowance ? GRADE_FULL_COPY.startQuick : "Take front photo"}
+                onPress={() => {
+                  setMode("quick");
+                  openFinder("front");
+                }}
+              />
               <PrimaryButton
                 disabled={scoring}
                 label="Choose a photo"
-                onPress={() => void takePhoto("front", "library")}
+                onPress={() => {
+                  setMode("quick");
+                  void takePhoto("front", "library");
+                }}
                 tone="muted"
               />
               <PipelineLink onPress={onOpenPipeline} />

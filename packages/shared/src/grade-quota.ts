@@ -14,6 +14,9 @@ export const GRADE_PLAN_PREMIUM = "premium" as const;
 export const GRADE_PLANS = [GRADE_PLAN_FREE, GRADE_PLAN_PREMIUM] as const;
 export type GradePlan = (typeof GRADE_PLANS)[number];
 
+// TODO(Sean, Oct 18 tiers): the new spec says quick = 10/month free, unlimited on Premium.
+// Kept at 5 / 30 here on purpose (no billing redesign in the full-grade change); update together
+// with the paywall, sign-up and App Review copy that quote these numbers.
 export const GRADE_QUOTA_FREE_PER_MONTH = 5;
 export const GRADE_QUOTA_PREMIUM_PER_MONTH = 30;
 
@@ -94,6 +97,8 @@ export interface GradeQuotaSnapshot {
   remainingGrades: number;
   resetsAt: string;
   iapEnabled: boolean;
+  /** Full 14-photo grade allowance; absent while CARD_FLOW_GRADE_FULL_MODE is off. */
+  fullGrade?: { monthlyLimit: number; usedThisMonth: number; remaining: number };
 }
 
 export function gradeQuotaSnapshot(input: {

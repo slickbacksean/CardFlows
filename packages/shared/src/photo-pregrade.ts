@@ -86,6 +86,8 @@ export interface PhotoPregradeUnavailable {
   code: "UNAVAILABLE";
   message: string;
   quota?: GradeQuotaSnapshot;
+  /** App-side: this period's full grades are used up; Try again sends the quick grade. */
+  fullGradeUsedUp?: true;
 }
 
 /** Monthly allowance and extra credits are both spent. Never a number. */

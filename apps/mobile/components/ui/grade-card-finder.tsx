@@ -64,6 +64,8 @@ interface GradeCardFinderProps {
   detecting: boolean;
   freezeUri: string | null;
   notice?: string | null;
+  /** Header override, e.g. "Front 1/7" in the full 14-photo mode. */
+  title?: string;
   onCaptured: (still: PickedGradeStill) => void;
   onLibrary: () => void;
   onBack: () => void;
@@ -74,6 +76,7 @@ export function GradeCardFinder({
   detecting,
   freezeUri,
   notice,
+  title,
   onCaptured,
   onLibrary,
   onBack,
@@ -268,7 +271,7 @@ export function GradeCardFinder({
   if (!permission) {
     return (
       <View style={styles.flex}>
-        <FinderHeader onBack={onBack} title={`${sideLabel} photo`} />
+        <FinderHeader onBack={onBack} title={title ?? `${sideLabel} photo`} />
         <View style={styles.panel}>
           <ActivityIndicator color={colors.accent} />
         </View>
@@ -287,7 +290,7 @@ export function GradeCardFinder({
     const canPrompt = IS_NATIVE && (permission.canAskAgain || cameraMountFailed);
     return (
       <View style={styles.flex}>
-        <FinderHeader onBack={onBack} title={`${sideLabel} photo`} />
+        <FinderHeader onBack={onBack} title={title ?? `${sideLabel} photo`} />
         <View style={styles.panel}>
           <Text style={styles.title}>
             {!IS_NATIVE || cameraMountFailed
@@ -321,7 +324,7 @@ export function GradeCardFinder({
 
   return (
     <View style={styles.flex}>
-      <FinderHeader onBack={detecting ? undefined : onBack} title={`${sideLabel} photo`} />
+      <FinderHeader onBack={detecting ? undefined : onBack} title={title ?? `${sideLabel} photo`} />
       <View style={styles.helper}>
         {auto.showExplainer ? (
           // Mobile Tech Lead review 8: one-time explainer; Auto waits until it's dismissed.

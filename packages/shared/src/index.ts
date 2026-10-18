@@ -837,3 +837,4 @@ export * from "./account-auth";
 export * from "./email-verification";
 export * from "./cardsight-consent";
 export * from "./age-gate";
+export * from "./grade-full-mode";

@@ -11,6 +11,13 @@ import { CARDSIGHT_CONSENT_VERSION, INVITED_USERS, EMAIL_CODE_LIFETIME_SENDS, EM
 import { NORTH_STAR_NAME, SCANS_PER_WAR_NAME, northStarWeekly } from "@cardflow/shared";
 import { opsMetrics, type OpsMetrics } from "./ops-metrics";
 import { parseUserPriceAmount } from "@cardflow/shared";
+import { OUT_OF_FULL_GRADES_CODE, GRADE_FULL_COPY, gradeFullAllowance, gradeFullModeEnabled, gradeFullMonthlyLimit, gradeFullUsageKey } from "@cardflow/shared";
+import { saveGradeExtraShot } from "./grade-extra-store";
+
+/** Full 14-photo mode flag (docs/GRADE_FULL_MODE.md). Read per request so tests can flip it. */
+function gradeFullModeFlag(): string | undefined {
+  return process.env.CARD_FLOW_GRADE_FULL_MODE;
+}
 import {
   cachedPricingProvider,
   createRecognitionCache,
@@ -175,7 +182,7 @@ import {
   unconfiguredScanIdentifyResult,
 } from "./scan-identify";
 import { parseScanCreateRequest } from "./scan-request";
-import { parseGradeDetectRequest, parseGradeEstimateRequest, type ParsedGradeStill } from "./grade-estimate-request";
+import { parseGradeDetectRequest, parseGradeEstimateRequest, parseGradeExtraRequest, type ParsedGradeStill } from "./grade-estimate-request";
 import { detectCardForGrade, pregradePhotoPair } from "./grade-photo-flow";
 import type { CardgradingRunner } from "./cardgrading-run";
 import {
@@ -240,6 +247,7 @@ async function boundedProbe(
 export function requiresVerifiedEmail(pathName: string): boolean {
   return (
     pathName === "/v1/grade/detect" ||
+    pathName === "/v1/grade/extra" ||
     pathName === "/v1/grade/pregrade" ||
     pathName === "/v1/grading/batch" ||
     /^\/v1\/inventory\/[^/]+\/(grade-jobs|grade-estimate)$/.test(pathName)
@@ -1042,7 +1050,7 @@ export function createApp(
     const at = now();
     const { account, period } = quotaPeriodForUser(userId, at);
     const plan = resolveAccountPlan(userId, account.plan);
-    return gradeQuotaSnapshot({
+    const snapshot = gradeQuotaSnapshot({
       plan,
       usedThisMonth: getGradeQuotaUsage(userId, period.key),
       extraCredits: account.extraCredits,
@@ -1050,6 +1058,33 @@ export function createApp(
       now: at,
       period,
     });
+    return withFullGrade(snapshot, userId, plan, period.key);
+  }
+
+  /** Full 14-photo grade allowance (Sean, Oct 18), only while CARD_FLOW_GRADE_FULL_MODE=on. */
+  function withFullGrade(snapshot: GradeQuotaSnapshot, userId: string, plan: GradePlan, periodKey: string): GradeQuotaSnapshot {
+    if (!gradeFullModeEnabled(gradeFullModeFlag())) return snapshot;
+    return { ...snapshot, fullGrade: gradeFullAllowance(plan, getGradeQuotaUsage(userId, gradeFullUsageKey(periodKey))) };
+  }
+
+  /** Spends one full grade from this period's allowance; bought credits are never used for it. */
+  function takeFullGradeAllowance(userId: string) {
+    const at = now();
+    const { account, period } = quotaPeriodForUser(userId, at);
+    const plan = resolveAccountPlan(userId, account.plan);
+    const consumed = quotaEnabled
+      ? consumeGradeQuota(userId, {
+          monthKey: gradeFullUsageKey(period.key),
+          monthlyLimit: gradeFullMonthlyLimit(plan),
+          at: at.toISOString(),
+          noCredits: true,
+        })
+      : { ok: true as const };
+    return { ok: consumed.ok, quota: quotaSnapshotFor(userId) };
+  }
+
+  function outOfFullGradesResponse(c: Context, quota: GradeQuotaSnapshot) {
+    return c.json({ ok: false, code: OUT_OF_FULL_GRADES_CODE, error: GRADE_FULL_COPY.usedUp, quota }, 429);
   }
 
   function takeGradeAllowance(userId: string) {
@@ -2584,6 +2619,32 @@ export function createApp(
     },
   );
 
+  // Full 14-photo grade (Sean, Oct 18): needs CARD_FLOW_GRADE_FULL_MODE=on and a full grade left
+  // this period. Uploading doesn't spend one; /v1/grade/pregrade with fullGrade=true does.
+  app.post(
+    "/v1/grade/extra",
+    detectRateLimit,
+    bodyLimit({
+      maxSize: GRADE_ROUTE_BODY_MAX_BYTES,
+      onError: gradeBodyTooLarge,
+    }),
+    async (c) => {
+      const userId = c.get("userId") as string;
+      if (!gradeFullModeEnabled(gradeFullModeFlag())) {
+        return c.json({ ok: false, error: "Full grade isn't turned on" }, 404);
+      }
+      const quota = quotaSnapshotFor(userId);
+      if (quotaEnabled && (quota.fullGrade?.remaining ?? 0) <= 0) return outOfFullGradesResponse(c, quota);
+      const parsed = await parseGradeExtraRequest(c);
+      if ("error" in parsed) {
+        return c.json({ ok: false, error: parsed.error }, parsed.status);
+      }
+      const stored = saveGradeExtraShot({ userId, side: parsed.side, shot: parsed.shot, still: parsed.still });
+      console.log(`grade-extra side=${parsed.side} shot=${parsed.shot} bytes=${parsed.still.bytes.byteLength} stored=${stored}`);
+      return c.json({ ok: true as const, side: parsed.side, shot: parsed.shot, used: false, stored });
+    },
+  );
+
   app.post(
     "/v1/grade/pregrade",
     gradeRateLimit,
@@ -2604,8 +2665,14 @@ export function createApp(
       if (!parsed.frontImage || !parsed.backImage) {
         return c.json({ ok: false, error: "Front and back photos are required" }, 400);
       }
-      const taken = takeGradeAllowance(c.get("userId"));
-      if (!taken.ok) return outOfGradesResponse(c, taken.quota);
+      if (parsed.fullGrade && !gradeFullModeEnabled(gradeFullModeFlag())) {
+        return c.json({ ok: false, error: "Full grade isn't turned on" }, 400);
+      }
+      // A full grade spends the full allowance only; a quick one spends the quick allowance.
+      const taken = parsed.fullGrade ? takeFullGradeAllowance(c.get("userId")) : takeGradeAllowance(c.get("userId"));
+      if (!taken.ok) {
+        return parsed.fullGrade ? outOfFullGradesResponse(c, taken.quota) : outOfGradesResponse(c, taken.quota);
+      }
       const result = await pregradePhotoPair({
         runner: cardgrading,
         front: parsed.frontImage,
