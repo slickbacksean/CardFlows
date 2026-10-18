@@ -284,7 +284,7 @@ export default function ScanScreen() {
       </View>
 
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-        {scan && scan.mapping.provider === "mock" && !__DEV__ ? (
+        {scan && scan.recognition.provider === "mock" && !__DEV__ ? (
           <Text accessibilityRole="text" style={styles.body}>
             {STATUS_BANNER_COPY.identify_demo}
           </Text>
