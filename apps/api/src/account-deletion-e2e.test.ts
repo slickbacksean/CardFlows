@@ -258,55 +258,60 @@ describe("Backend review M5: every user table and file on a real temp-dir store"
     const purchaseId = "purchase-everything";
 
     const raw = new Database(sqlitePath);
+    // Seeding raw rows needs foreign keys off on this connection only; always restored.
     raw.pragma("foreign_keys = OFF");
-    const tables = (
-      raw.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '__drizzle%'").all() as Array<{ name: string }>
-    ).map((t) => t.name);
     const seeded: string[] = [];
-    for (const table of tables) {
-      const cols = raw.prepare(`PRAGMA table_info(\`${table}\`)`).all() as Array<{ name: string; type: string; notnull: number; dflt_value: unknown; pk: number }>;
-      if (!cols.some((c) => c.name === "user_id")) continue;
-      const already = (raw.prepare(`SELECT COUNT(*) AS n FROM \`${table}\` WHERE user_id = ?`).get(userId) as { n: number }).n;
-      if (already > 0) {
+    try {
+      const tables = (
+        raw.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '__drizzle%'").all() as Array<{ name: string }>
+      ).map((t) => t.name);
+      for (const table of tables) {
+        const cols = raw.prepare(`PRAGMA table_info(\`${table}\`)`).all() as Array<{ name: string; type: string; notnull: number; dflt_value: unknown; pk: number }>;
+        if (!cols.some((c) => c.name === "user_id")) continue;
+        const already = (raw.prepare(`SELECT COUNT(*) AS n FROM \`${table}\` WHERE user_id = ?`).get(userId) as { n: number }).n;
+        if (already > 0) {
+          seeded.push(table);
+          continue;
+        }
+        const values: Record<string, unknown> = {};
+        for (const col of cols) {
+          if (col.name === "user_id") values[col.name] = userId;
+          else if (col.name === "kind") values[col.name] = KIND[table] ?? "grant";
+          else if (col.name in CHECKED) values[col.name] = CHECKED[col.name];
+          else if (col.name === "scan_id") values[col.name] = scanId;
+          else if (col.name === "inventory_item_id") values[col.name] = itemId;
+          else if (col.name === "purchase_id") values[col.name] = purchaseId;
+          else if (col.name === "image_storage_ref") values[col.name] = `scans/${scanId}.jpg`;
+          else if (col.name === "image_mime_type") values[col.name] = "image/jpeg";
+          else if (col.name === "purchased_at" || col.name === "captured_at") values[col.name] = "2026-10-14T00:00:00.000Z";
+          else if (col.pk && /INT/i.test(col.type)) continue;
+          else if (!col.notnull && col.dflt_value === null) continue;
+          else if (/INT|REAL/i.test(col.type)) values[col.name] = 1;
+          else values[col.name] = `${table}-${col.name}`;
+        }
+        const names = Object.keys(values);
+        raw.prepare(`INSERT INTO \`${table}\` (${names.map((n) => `\`${n}\``).join(", ")}) VALUES (${names.map(() => "?").join(", ")})`).run(
+          ...names.map((n) => values[n] as never),
+        );
         seeded.push(table);
-        continue;
       }
-      const values: Record<string, unknown> = {};
-      for (const col of cols) {
-        if (col.name === "user_id") values[col.name] = userId;
-        else if (col.name === "kind") values[col.name] = KIND[table] ?? "grant";
-        else if (col.name in CHECKED) values[col.name] = CHECKED[col.name];
-        else if (col.name === "scan_id") values[col.name] = scanId;
-        else if (col.name === "inventory_item_id") values[col.name] = itemId;
-        else if (col.name === "purchase_id") values[col.name] = purchaseId;
-        else if (col.name === "image_storage_ref") values[col.name] = `scans/${scanId}.jpg`;
-        else if (col.name === "image_mime_type") values[col.name] = "image/jpeg";
-        else if (col.name === "purchased_at" || col.name === "captured_at") values[col.name] = "2026-10-14T00:00:00.000Z";
-        else if (col.pk && /INT/i.test(col.type)) continue;
-        else if (!col.notnull && col.dflt_value === null) continue;
-        else if (/INT|REAL/i.test(col.type)) values[col.name] = 1;
-        else values[col.name] = `${table}-${col.name}`;
+      // Child rows with no user_id of their own: the purchase under the seeded inventory item.
+      const purchaseCols = raw.prepare("PRAGMA table_info(`crm_purchases`)").all() as Array<{ name: string; type: string; notnull: number; dflt_value: unknown }>;
+      const pv: Record<string, unknown> = {};
+      for (const col of purchaseCols) {
+        if (col.name === "purchase_id") pv[col.name] = purchaseId;
+        else if (col.name === "inventory_item_id") pv[col.name] = itemId;
+        else if (col.name in CHECKED) pv[col.name] = CHECKED[col.name];
+        else if (!col.notnull || col.dflt_value !== null) continue;
+        else pv[col.name] = /INT|REAL/i.test(col.type) ? 1 : "2026-10-17T00:00:00.000Z";
       }
-      const names = Object.keys(values);
-      raw.prepare(`INSERT INTO \`${table}\` (${names.map((n) => `\`${n}\``).join(", ")}) VALUES (${names.map(() => "?").join(", ")})`).run(
-        ...names.map((n) => values[n] as never),
+      raw.prepare(`INSERT INTO crm_purchases (${Object.keys(pv).join(", ")}) VALUES (${Object.keys(pv).map(() => "?").join(", ")})`).run(
+        ...Object.values(pv).map((v) => v as never),
       );
-      seeded.push(table);
+    } finally {
+      raw.pragma("foreign_keys = ON");
+      raw.close();
     }
-    // Child rows with no user_id of their own: the purchase under the seeded inventory item.
-    const purchaseCols = raw.prepare("PRAGMA table_info(`crm_purchases`)").all() as Array<{ name: string; type: string; notnull: number; dflt_value: unknown }>;
-    const pv: Record<string, unknown> = {};
-    for (const col of purchaseCols) {
-      if (col.name === "purchase_id") pv[col.name] = purchaseId;
-      else if (col.name === "inventory_item_id") pv[col.name] = itemId;
-      else if (col.name in CHECKED) pv[col.name] = CHECKED[col.name];
-      else if (!col.notnull || col.dflt_value !== null) continue;
-      else pv[col.name] = /INT|REAL/i.test(col.type) ? 1 : "2026-10-17T00:00:00.000Z";
-    }
-    raw.prepare(`INSERT INTO crm_purchases (${Object.keys(pv).join(", ")}) VALUES (${Object.keys(pv).map(() => "?").join(", ")})`).run(
-      ...Object.values(pv).map((v) => v as never),
-    );
-    raw.close();
 
     // Photos on disk: the scan still and both grade sides.
     const files = [`scans/${scanId}.jpg`, `grade/${itemId}-front.jpg`, `grade/${itemId}-back.png`].map((ref) => path.join(dir, ref));

@@ -27,11 +27,22 @@ export function applyMvpMigrations(sqlitePath: string): {
   if (!isMemorySqlitePath(sqlitePath)) {
     sqlite.pragma("journal_mode = WAL");
   }
-  sqlite.pragma("foreign_keys = OFF");
+  sqlite.pragma("busy_timeout = 5000");
   const db = drizzle(sqlite, { schema });
-  migrate(db, { migrationsFolder: mvpMigrationsFolder() });
-  // 0016 adds `anchor_at`; existing accounts get their creation/activity date (see the module).
-  backfillQuotaAnchors(sqlite);
-  sqlite.pragma("foreign_keys = ON");
+  withForeignKeysOff(sqlite, () => {
+    migrate(db, { migrationsFolder: mvpMigrationsFolder() });
+    // 0016 adds `anchor_at`; existing accounts get their creation/activity date (see the module).
+    backfillQuotaAnchors(sqlite);
+  });
   return { sqlite, db };
+}
+
+/** Runs `fn` with foreign keys off (table rebuilds), and always turns them back on, even if it throws. */
+export function withForeignKeysOff<T>(sqlite: InstanceType<typeof Database>, fn: () => T): T {
+  sqlite.pragma("foreign_keys = OFF");
+  try {
+    return fn();
+  } finally {
+    sqlite.pragma("foreign_keys = ON");
+  }
 }
