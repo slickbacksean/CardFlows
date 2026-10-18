@@ -66,6 +66,7 @@ export const GradeQuotaSnapshotSchema = typed<GradeQuotaSnapshot>(
     remainingGrades: num,
     resetsAt: str,
     iapEnabled: z.boolean(),
+    unlimited: z.boolean().optional(),
     fullGrade: z.looseObject({ monthlyLimit: num, usedThisMonth: num, remaining: num }).optional(),
   }),
 );

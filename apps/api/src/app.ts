@@ -1037,8 +1037,8 @@ export function createApp(
   }
 
   /**
-   * Sean: the allowance resets on the billing date, else the account creation date, with no
-   * rollover. Bought credits are separate and never expire (Sean, Oct 16; Apple 3.1.1).
+   * Sean (Oct 18): allowances reset on the 1st of each calendar month (UTC); an account with a
+   * billing date (Apple) keeps that date. No rollover. Bought credits are separate and never expire (Sean, Oct 16; Apple 3.1.1).
    */
   function quotaPeriodForUser(userId: string, at: Date) {
     const account = store.ensureGradeAnchor(userId, at.toISOString());

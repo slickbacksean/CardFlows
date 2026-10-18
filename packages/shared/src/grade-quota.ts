@@ -1,7 +1,7 @@
 /**
  * Monthly pre-grade estimate quotas per account (P0-11 / D9).
- * Free: 5 per month. Premium: 30. The month runs from the user's own reset date (billing date,
- * or account creation date for free users), not the calendar month. Unused allowance doesn't roll
+ * Quick estimates: free 10 a month, Premium unlimited (Sean, Oct 18). The month is the calendar
+ * month (resets on the 1st, UTC), or the billing period for an account with a billing date. Unused allowance doesn't roll
  * over. Bought credits are spent only after the allowance and never expire (Sean, Oct 16; Apple
  * 3.1.1). Copy never says "AI" and never
  * names a grading company.
@@ -14,11 +14,14 @@ export const GRADE_PLAN_PREMIUM = "premium" as const;
 export const GRADE_PLANS = [GRADE_PLAN_FREE, GRADE_PLAN_PREMIUM] as const;
 export type GradePlan = (typeof GRADE_PLANS)[number];
 
-// TODO(Sean, Oct 18 tiers): the new spec says quick = 10/month free, unlimited on Premium.
-// Kept at 5 / 30 here on purpose (no billing redesign in the full-grade change); update together
-// with the paywall, sign-up and App Review copy that quote these numbers.
-export const GRADE_QUOTA_FREE_PER_MONTH = 5;
-export const GRADE_QUOTA_PREMIUM_PER_MONTH = 30;
+/** Sean (Oct 18): quick 2-photo estimates are 10 a month on free and unlimited on Premium. */
+export const GRADE_QUOTA_FREE_PER_MONTH = 10;
+export const GRADE_QUOTA_PREMIUM_UNLIMITED = true;
+/**
+ * Premium's "unlimited" as a finite number so the JSON and the SQLite `used < limit` check stay
+ * plain numbers. Usage is still counted. Show `unlimited` on the snapshot, never this number.
+ */
+export const GRADE_QUOTA_UNLIMITED_LIMIT = Number.MAX_SAFE_INTEGER;
 
 /** Default CardSight identify budget (vendor free tier). */
 export const CARDSIGHT_MONTHLY_BUDGET_DEFAULT = 750;
@@ -29,6 +32,7 @@ export const CREDITS_NEVER_EXPIRE_COPY =
 
 export const GRADE_QUOTA_COPY = {
   remainingOne: "1 pre-grade estimate left this month",
+  unlimited: "Unlimited quick pre-grade estimates",
   outOfGrades: "You're out of pre-grade estimates this month.",
   outOfGradesHint:
     // Policy Reviewer (exact): only the monthly allowance resets; bought credits never expire.
@@ -57,7 +61,9 @@ export function remainingGradesCaption(input: {
   remainingGrades: number;
   /** When present, the caption ends with the user's own reset date ("Resets Nov 15"). */
   resetsAt?: string;
+  unlimited?: boolean;
 }): string {
+  if (input.unlimited) return GRADE_QUOTA_COPY.unlimited;
   const reset = input.resetsAt ? resetDateLabel(input.resetsAt) : "";
   const withReset = (text: string) => (reset ? `${text.replace(/\.$/, "")}. ${reset}.` : text);
   if (input.remainingGrades <= 0) return withReset(GRADE_QUOTA_COPY.outOfGrades);
@@ -71,7 +77,7 @@ export function isGradePlan(value: string): value is GradePlan {
 }
 
 export function monthlyLimitForPlan(plan: GradePlan): number {
-  return plan === GRADE_PLAN_PREMIUM ? GRADE_QUOTA_PREMIUM_PER_MONTH : GRADE_QUOTA_FREE_PER_MONTH;
+  return plan === GRADE_PLAN_PREMIUM ? GRADE_QUOTA_UNLIMITED_LIMIT : GRADE_QUOTA_FREE_PER_MONTH;
 }
 
 /** UTC calendar month `YYYY-MM`. Server and clients share this clock. */
@@ -97,6 +103,8 @@ export interface GradeQuotaSnapshot {
   remainingGrades: number;
   resetsAt: string;
   iapEnabled: boolean;
+  /** Premium: unlimited quick estimates (monthlyLimit is then GRADE_QUOTA_UNLIMITED_LIMIT). */
+  unlimited?: boolean;
   /** Full 14-photo grade allowance; absent while CARD_FLOW_GRADE_FULL_MODE is off. */
   fullGrade?: { monthlyLimit: number; usedThisMonth: number; remaining: number };
 }
@@ -124,6 +132,7 @@ export function gradeQuotaSnapshot(input: {
     remainingGrades: remainingMonthly + extraCredits,
     resetsAt: input.period?.resetsAt ?? nextMonthResetAt(input.now).toISOString(),
     iapEnabled: input.iapEnabled,
+    ...(monthlyLimit === GRADE_QUOTA_UNLIMITED_LIMIT ? { unlimited: true } : {}),
   };
 }
 

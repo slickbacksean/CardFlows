@@ -7,19 +7,15 @@ Estimate only. Not an official grade.
 | | Quick | Full |
 |---|---|---|
 | Photos | 2 (front flat, back flat) | 14: per side 1 flat, 2 tilted (~15-25°, opposite ways), 4 corner close-ups (TL, TR, BR, BL) |
-| Free | 5 a month (code value) | **2 a month** |
-| Premium | 30 a month (code value) | **25 a month** |
+| Free | **10 a month** | **2 a month** |
+| Premium | **Unlimited** | **25 a month** |
 | Bought credits | Spent after the allowance | Not used |
 
 The full grade is **not Premium-locked**. Its allowance is counted per account per allowance
-period, with the same reset date as the quick estimates (`grade_quota_usage`, period key
+period, resetting on the 1st of each month (UTC) like the quick estimates (`grade_quota_usage`, period key
 `<period>#full`). A full grade spends one full grade and no quick estimate. When the full grades
 run out the app says so before you start, and you can still pick the quick grade. If they run
 out midway, Try again sends the same flat photos as a quick grade.
-
-TODO: the Oct 18 tier spec says quick = 10 a month free and unlimited on Premium. The code still
-uses 5 / 30 (`GRADE_QUOTA_FREE_PER_MONTH` / `GRADE_QUOTA_PREMIUM_PER_MONTH`). Change them together
-with the paywall, sign-up and App Review copy. Billing was not redesigned here.
 
 ## Turning it on (dev/test flag)
 

@@ -179,7 +179,7 @@ export function quotaExhaustedMessage(quota?: Partial<GradeQuotaSnapshot> | null
   const second = reset ? `Your allowance resets on ${reset}.` : "Your allowance resets on your reset date.";
   const lines = [first, second];
   if (quota?.plan === "free") {
-    lines.push(`Premium will include ${PREMIUM_PLACEHOLDER_PRICING.premiumEstimatesPerMonth} a month. ${PREMIUM_PROMPT_COPY.notYet}`);
+    lines.push(`Premium will include unlimited quick estimates. ${PREMIUM_PROMPT_COPY.notYet}`);
   }
   if (quota?.iapEnabled === true) lines.push(CREDIT_PACK_COPY.neverExpire);
   return lines.join(" ");
