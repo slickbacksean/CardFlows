@@ -38,3 +38,10 @@ Card photos are uploaded to CardFlow. If the user allows it (accounts that confi
 ## Age (18+ accounts)
 
 **No new data label.** No birth date is collected. Accounts tick "I confirm I'm 18 or older." at sign-up, and the server stores only that attestation, when (`age_attested_at`), and the wording version, as part of the account record (App functionality). Guests make no age statement and never get CardSight. Age rating: App Store **18+** (set the higher rating after answering the questionnaire truthfully); Google Play target audience **18 and over**. See `APP_REVIEW_NOTES.md`.
+
+## Crash reports (Sentry, P4)
+
+Crash reports go to **Sentry** (Functional Software, Inc.), a service provider, only when `EXPO_PUBLIC_SENTRY_DSN` is set and Settings > **Send crash reports** is on (on by default). The user can turn it off. Reports carry the error, stack trace, app version, device model, OS version and a request ID. Emails, IP addresses, tokens, passwords, photos, photo paths and request bodies are removed before sending (`packages/shared/src/sentry-scrub.ts`).
+
+- **App Store:** Diagnostics > Crash Data. Purpose: App Functionality. Linked to the user: No (not linked). Used for tracking: No (not used for tracking).
+- **Google Play:** App info and performance > Crash logs. Collected: Yes (collected; the user can turn it off). Shared: No (not shared; Sentry is a service provider acting for CardFlow). Purpose: App functionality. Encrypted in transit: Yes.

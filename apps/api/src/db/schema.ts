@@ -315,7 +315,11 @@ export const passwordResetTokens = sqliteTable(
   (table) => [index("password_reset_tokens_user_idx").on(table.userId)],
 );
 
-/** Server-side CardFlow invited user → PokéCollector user. Never a client JWT. */
+/**
+ * Server-side CardFlow user → their own PokéCollector user. Never a client JWT. Opaque accounts:
+ * `pokecollector_username` is `cardflow-u-<HMAC>`; `password_ciphertext` is the per-link random
+ * password, AES-256-GCM encrypted (null on legacy email-derived links, which are never used).
+ */
 export const crmPokecollectorUsers = sqliteTable(
   "crm_pokecollector_users",
   {
@@ -323,6 +327,7 @@ export const crmPokecollectorUsers = sqliteTable(
     pokecollectorUserId: text("pokecollector_user_id").notNull(),
     pokecollectorUsername: text("pokecollector_username").notNull(),
     updatedAt: text("updated_at").notNull(),
+    passwordCiphertext: text("password_ciphertext"),
   },
   (table) => [
     unique("crm_pokecollector_users_pokecollector_user_id").on(table.pokecollectorUserId),
@@ -550,6 +555,48 @@ export const purchaseEvents = sqliteTable(
   ],
 );
 
+/**
+ * Backend review L3 (P4): one row per account deletion, with no PII (no user_id, email or token).
+ * kind: self | under18_report | unverified_purge | orphan_sweep.
+ */
+export const accountDeletionAudit = sqliteTable(
+  "account_deletion_audit",
+  {
+    seq: integer("seq").primaryKey({ autoIncrement: true }),
+    at: text("at").notNull(),
+    kind: text("kind").notNull(),
+    rowsDeleted: integer("rows_deleted").notNull(),
+  },
+  (table) => [check("account_deletion_audit_kind_chk", sql`${table.kind} in ('self', 'under18_report', 'unverified_purge', 'orphan_sweep')`)],
+);
+
+/**
+ * Backend review H2 (P4): deleted accounts' weekly North Star counts, as anonymous totals (no
+ * user ID or any other ID). Added to the live rows by /ops/north-star so past weeks don't change.
+ */
+export const northStarWeeklyTotals = sqliteTable("north_star_weekly_totals", {
+  weekStart: text("week_start").primaryKey(),
+  purchased: integer("purchased").notNull().default(0),
+  scans: integer("scans").notNull().default(0),
+  activeResellers: integer("active_resellers").notNull().default(0),
+});
+
+/**
+ * Backend re-review H1 (P4): PokéCollector users still to delete after a CardFlow account was
+ * deleted, retried by the background queue with backoff. Only PokéCollector's numeric user ID is
+ * kept (no CardFlow user ID, email or username). `mode` "hold" rows (a remote user shared with
+ * other CardFlow users, a guest's shared user, or a legacy link) are never deleted here; the
+ * opaque-accounts relink script freezes them.
+ */
+export const pokecollectorPendingDeletions = sqliteTable("pokecollector_pending_deletions", {
+  remoteUserId: text("remote_user_id").primaryKey(),
+  mode: text("mode").notNull(),
+  attempts: integer("attempts").notNull().default(0),
+  nextAttemptAt: text("next_attempt_at").notNull(),
+  createdAt: text("created_at").notNull(),
+  lastResult: text("last_result"),
+});
+
 /** Backend review M3: persisted Idempotency-Key results for queued writes (24 h). */
 export const idempotencyKeys = sqliteTable(
   "idempotency_keys",
@@ -589,6 +636,9 @@ export const schema = {
   consentEvents,
   cardsightUserUsage,
   emailSendCounts,
+  accountDeletionAudit,
+  northStarWeeklyTotals,
+  pokecollectorPendingDeletions,
   cardExternalIds,
   crmScans,
   crmConfirmations,

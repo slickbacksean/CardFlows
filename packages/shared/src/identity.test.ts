@@ -24,7 +24,6 @@ import {
   invitedIdentityByUserId,
   isInvitedUserId,
   listInvitedIdentities,
-  pokecollectorUsernameForIdentity,
   requireInvitedIdentity,
   shouldConfirmAccountSwitch,
 } from "./identity";
@@ -103,12 +102,8 @@ describe("Private-beta identity model", () => {
     expect(listInvitedIdentities().some((user) => "inviteCode" in user)).toBe(false);
     expect(readRepoFile("packages/shared/src/identity.ts")).not.toContain("alex-beta");
     expect(readRepoFile("apps/mobile/lib/identity.ts")).not.toContain("alex-beta");
-    expect(pokecollectorUsernameForIdentity(INVITED_USERS[0])).toBe("cardflow-alex");
-    expect(pokecollectorUsernameForIdentity(INVITED_USERS[0])).toBe("cardflow-alex");
-    expect(pokecollectorUsernameForIdentity(INVITED_USERS[1])).toBe("cardflow-jordan");
-    expect(pokecollectorUsernameForIdentity(INVITED_USERS[0])).not.toBe(
-      pokecollectorUsernameForIdentity(INVITED_USERS[1]),
-    );
+    // PokéCollector usernames are never derived from the label (opaque per-user accounts).
+    expect(readRepoFile("packages/shared/src/identity.ts")).not.toContain("export function pokecollectorUsernameForIdentity");
   });
 
   it("does not add a real IdP", () => {

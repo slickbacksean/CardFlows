@@ -159,10 +159,12 @@ export const accountRoutes = {
     body: InviteBody,
     response: SessionResponse,
   }),
+  /** P4: deletes the account. Accounts with a password send it (Backend review M4). */
   deleteAccountPhotos: defineRoute({
     method: "POST",
     path: "/v1/account/delete",
-    bodyKind: "none",
+    bodyKind: "json",
+    body: z.object({ password: z.string().optional() }),
     response: z.looseObject({ ok: z.literal(true), photosDeleted: z.number() }),
   }),
   getPreferences: defineRoute({

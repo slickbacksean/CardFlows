@@ -5,7 +5,8 @@ import { purchaseEvents, schema } from "./db/schema";
 
 /**
  * Data Engineer review: append-only purchase ledger. Each change is a new row; rows are never
- * updated in place (except account deletion, which anonymizes them) and never deleted.
+ * updated in place. Backend review H2 (P4): account deletion hard-deletes the user's rows after
+ * rolling their weekly counts into north_star_weekly_totals (anonymous totals, no IDs).
  * - "recorded": first save, with a full snapshot of the purchase (price, costs, Max Buy).
  * - "edited": a later save whose snapshot or date changed.
  * - "voided": the Purchased card was undone or removed. Written once per purchase, inside the
@@ -43,13 +44,14 @@ export interface PurchaseLedger {
   activePurchaseTimes(userId: string): string[];
   /** Every user_id in the ledger, including anonymized deleted accounts. */
   listUserIds(): string[];
-  /**
-   * Account deletion: the rows stay (so past North Star weeks don't shift) under a random
-   * anonymous ID with the snapshot removed. Returns rows anonymized.
-   */
-  anonymizeUser(userId: string): number;
+  /** Account deletion (H2): every row for this user_id is deleted. Returns rows deleted. */
+  deleteUser(userId: string): number;
 }
 
+/**
+ * Before H2, deleted accounts' rows stayed under a random `deleted_<uuid>` ID. Those buckets are
+ * folded into north_star_weekly_totals and deleted when the API starts (see app.ts).
+ */
 export const ANONYMIZED_USER_PREFIX = "deleted_";
 
 function stableJson(value: unknown): string {
@@ -102,13 +104,11 @@ export function createMemoryPurchaseLedger(): PurchaseLedger {
     list: (userId) => rows.filter((r) => r.userId === userId).map(({ userId: _u, ...r }) => ({ ...r })),
     activePurchaseTimes: (userId) => activeTimes(rows.filter((r) => r.userId === userId)),
     listUserIds: () => [...new Set(rows.map((r) => r.userId))],
-    anonymizeUser(userId) {
-      const anon = `${ANONYMIZED_USER_PREFIX}${randomUUID()}`;
+    deleteUser(userId) {
       let count = 0;
-      for (const row of rows) {
-        if (row.userId !== userId) continue;
-        row.userId = anon;
-        row.snapshot = null;
+      for (let i = rows.length - 1; i >= 0; i--) {
+        if (rows[i]!.userId !== userId) continue;
+        rows.splice(i, 1);
         count += 1;
       }
       return count;
@@ -152,11 +152,6 @@ export function createSqlitePurchaseLedger(db: BetterSQLite3Database<typeof sche
     activePurchaseTimes: (userId) =>
       activeTimes(db.select().from(purchaseEvents).where(eq(purchaseEvents.userId, userId)).orderBy(asc(purchaseEvents.seq)).all()),
     listUserIds: () => db.selectDistinct({ userId: purchaseEvents.userId }).from(purchaseEvents).all().map((r) => r.userId),
-    anonymizeUser: (userId) =>
-      db
-        .update(purchaseEvents)
-        .set({ userId: `${ANONYMIZED_USER_PREFIX}${randomUUID()}`, snapshot: null })
-        .where(eq(purchaseEvents.userId, userId))
-        .run().changes,
+    deleteUser: (userId) => db.delete(purchaseEvents).where(eq(purchaseEvents.userId, userId)).run().changes,
   };
 }
