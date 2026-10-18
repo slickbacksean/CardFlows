@@ -12,7 +12,7 @@ export interface SessionRecord {
   userId: string;
   createdAt: string;
   expiresAt: string;
-  /** D9: a guest session (3 free scans, 24-hour expiry). */
+  /** A browse-only guest session (24-hour expiry; Sean, Oct 17: no scans, grades or saves). */
   isGuest?: boolean;
 }
 

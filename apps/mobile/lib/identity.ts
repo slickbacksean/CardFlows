@@ -103,7 +103,7 @@ async function restoreIdentitySession(): Promise<IdentitySession> {
     setSessionToken(null);
     await persistSessionToken(null);
   }
-  // D9: no stored session -> try a guest session (3 free scans). 404 = guest mode is off.
+  // No stored session -> try a browse-only guest session. 404 = guest mode is off.
   try {
     const guest = await createGuestSession();
     setSessionToken(guest.token);

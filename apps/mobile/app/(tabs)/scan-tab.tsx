@@ -19,6 +19,7 @@ import { InlineError, ScreenError } from "@/components/ui/screen-state";
 import { ScreenerOverlay } from "@/components/ui/screener-overlay";
 import { undoLivestreamPurchase } from "@/lib/api";
 import { cancelQueuedWrite, isQueuedId, runQueueableWrite } from "@/lib/write-queue";
+import { requireAccount } from "@/lib/signup-prompt";
 import {
   injectMockLiveVideoCard,
   startLiveVideoIdentify,
@@ -119,6 +120,8 @@ export default function ScanTabScreen() {
   function toggleScanner() {
     if (scannerUnavailable) return;
     const next = !scannerOn;
+    // Browse-only guests (Sean, Oct 17): watching is fine; identifying needs sign-up.
+    if (next && !requireAccount()) return;
     setScannerOn(next);
     if (next) startLiveVideoIdentify();
     else stopLiveVideoIdentify();

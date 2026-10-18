@@ -1,7 +1,7 @@
 import {
   ACCOUNT_AUTH_COPY,
   AGE_GATE_COPY,
-  GUEST_RETENTION_NOTE,
+  GUEST_SIGNUP_COPY,
   PASSWORD_MIN_LENGTH,
   SIGNUP_ALLOWANCE_NOTE,
   isValidEmail,
@@ -60,7 +60,7 @@ export default function SignUpScreen() {
     <View style={authStyles.flex}>
       <PreferencesScreenHeader dismiss="back" title={title} />
       <ScrollView contentContainerStyle={authStyles.content} keyboardShouldPersistTaps="handled">
-        {guest ? <Text style={authStyles.body}>Your guest scans move to your account. {GUEST_RETENTION_NOTE}</Text> : null}
+        {guest ? <Text style={authStyles.body}>{GUEST_SIGNUP_COPY.body}</Text> : null}
         {mode === "sign_up" ? <Text style={authStyles.body}>{SIGNUP_ALLOWANCE_NOTE}</Text> : null}
         <TextInput
           accessibilityLabel="Email"
