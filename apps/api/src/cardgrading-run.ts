@@ -50,6 +50,7 @@ export interface GradeCardPhotoInput {
   backExt: string;
   /** Optional raking-light front photos (card turned a quarter-turn each). */
   angledFront?: Array<{ bytes: Uint8Array; ext: string }>;
+  extrasDir?: string;
 }
 
 export interface DetectCropPhotoInput {
@@ -342,8 +343,11 @@ function createUngatedRunner(python: string): CardgradingRunner {
             "--thresholds",
             THRESHOLDS,
             ...(angledPaths.length > 0 ? ["--angled-front", ...angledPaths] : []),
+            ...(input.extrasDir ? ["--extras-dir", input.extrasDir] : []),
           ],
-          angledPaths.length > 0 ? GRADE_CARD_ANGLED_TIMEOUT_MS : GRADE_CARD_TIMEOUT_MS,
+          angledPaths.length > 0 || input.extrasDir
+            ? GRADE_CARD_ANGLED_TIMEOUT_MS
+            : GRADE_CARD_TIMEOUT_MS,
           "Vendored grade_card",
         );
       } finally {

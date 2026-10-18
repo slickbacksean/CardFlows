@@ -40,6 +40,8 @@ export interface PhotoPregradeSuccess {
   estimate: number;
   subgrades: PhotoPregradeSubgrades;
   note: string;
+  /** Per-check findings from full-grade extras. */
+  checkNotes?: string[];
   warning?: string;
   /** Per-side capture measurements (sharpness, effective DPI). Diagnostics only. */
   capture?: Partial<Record<PhotoPregradeSide, PhotoCaptureMetrics>>;

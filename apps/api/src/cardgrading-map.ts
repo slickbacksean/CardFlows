@@ -297,9 +297,9 @@ export function mapGradeCardReport(input: unknown): PhotoPregradeSuccess | Photo
   const ef = sideGrade(subgrades, "front", "edges", asRecord(cornersEdges?.front)?.edges_grade);
   const eb = sideGrade(subgrades, "back", "edges", asRecord(cornersEdges?.back)?.edges_grade);
   const angled = angledResult(report);
-  // Surface is graded only from the raking-light photos, and only when the
-  // adapter accepted them. Anything else stays "not assessed" — never guessed.
-  const surfaceTrusted = angled.status === "graded";
+  const fullExtras = asRecord(asRecord(report.cardflow)?.full_extras);
+  const surfaceTrusted =
+    angled.status === "graded" || fullExtras?.surface_trusted === true;
   const sf = surfaceTrusted ? sideGrade(subgrades, "front", "surface", asRecord(surface?.front)?.grade) : null;
   const sb = surfaceTrusted ? sideGrade(subgrades, "back", "surface", asRecord(surface?.back)?.grade) : null;
 
@@ -313,7 +313,12 @@ export function mapGradeCardReport(input: unknown): PhotoPregradeSuccess | Photo
 
   const surfaceNull = sf === null && sb === null;
   const noteParts: string[] = [];
-  noteParts.push(surfaceNull ? PREGRADE_COPY.surfaceExcludedNote : PREGRADE_COPY.surfaceIncludedNote);
+  if (surfaceNull) noteParts.push(PREGRADE_COPY.surfaceExcludedNote);
+  else if (fullExtras?.surface_trusted === true && angled.status !== "graded") {
+    noteParts.push(PREGRADE_COPY.surfaceTiltIncludedNote);
+  } else {
+    noteParts.push(PREGRADE_COPY.surfaceIncludedNote);
+  }
   if (dimensions?.measurable === false) noteParts.push(PREGRADE_COPY.sizeNotCheckedNote);
 
   const surfaceRow: PhotoPregradeSubgrade = {
@@ -344,6 +349,12 @@ export function mapGradeCardReport(input: unknown): PhotoPregradeSuccess | Photo
     note: noteParts.join(" "),
     angled,
   };
+  const checkNotes = Array.isArray(fullExtras?.check_notes)
+    ? (fullExtras!.check_notes as unknown[])
+        .filter((n): n is string => typeof n === "string" && n.trim().length > 0)
+        .slice(0, 8)
+    : [];
+  if (checkNotes.length > 0) body.checkNotes = checkNotes;
   const capture = asRecord(asRecord(report.cardflow)?.capture);
   const front = captureMetrics(capture?.front);
   const back = captureMetrics(capture?.back);

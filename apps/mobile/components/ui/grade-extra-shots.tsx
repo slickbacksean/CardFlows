@@ -38,10 +38,12 @@ const CORNER_BOX: Record<string, object> = {
 
 export function GradeExtraShots({
   side,
+  sessionId,
   onBack,
   onDone,
 }: {
   side: "front" | "back";
+  sessionId: string;
   onBack: () => void;
   onDone: () => void;
 }) {
@@ -89,7 +91,12 @@ export function GradeExtraShots({
     if (!preview || busy) return;
     setBusy(true);
     try {
-      await uploadGradeExtra({ uri: preview, side, shot });
+      const uploaded = await uploadGradeExtra({ uri: preview, side, shot, sessionId });
+      if (uploaded && "ok" in uploaded && uploaded.ok === false && uploaded.status === "retake") {
+        setError(uploaded.reasons[0] ?? GRADE_FULL_COPY.blurry);
+        setBusy(false);
+        return;
+      }
     } catch (caught) {
       console.warn(`[grade-extra] ${side} ${shot} upload failed: ${caught instanceof Error ? caught.message : String(caught)}`);
       setError(GRADE_FULL_COPY.sendFailed);

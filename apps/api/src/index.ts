@@ -13,6 +13,7 @@ import { createSlabPricingFromEnv } from "./poketrace-env";
 import { resolveDevAutoSession } from "./session";
 import { installUnmappedSetNameLogger } from "./tcgdex-catalog";
 import { startPhotoRetentionJob } from "./photo-retention";
+import { purgeExpiredGradeExtras } from "./grade-extra-store";
 import { createStoreFromEnv } from "./store-env";
 import { loadOptionalPhashIndex } from "./obb-phash-provider";
 import { resolveLiveIdentityOpenclipFromEnv } from "./live-identity-openclip";
@@ -73,10 +74,14 @@ const app = createApp(store, {
   liveIdentifyEnabled: recognitionSelection.identifyEnabled,
 });
 startPhotoRetentionJob({
-  purge: (now) => store.purgeExpiredGradePhotos(now),
+  purge: (now) => {
+    const graded = store.purgeExpiredGradePhotos(now);
+    const extras = purgeExpiredGradeExtras(now);
+    return { deleted: graded.deleted + extras.deleted };
+  },
   onPurge: (result) => {
     if (result.deleted > 0) {
-      console.log(`Photo retention: deleted ${result.deleted} graded photo(s) older than 30 days`);
+      console.log(`Photo retention: deleted ${result.deleted} graded photo(s)/extra(s) older than 30 days`);
     }
   },
 });

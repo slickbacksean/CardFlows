@@ -1,0 +1,42 @@
+{
+  "card_grader": {
+    "dataset": "group-6-major-project/card-grader",
+    "license": "CC BY 4.0",
+    "corner_wear": {
+      "positives": 209,
+      "negatives": 492,
+      "hits": 91,
+      "false_alarms": 356,
+      "recall": 0.435,
+      "false_positive_rate": 0.724,
+      "precision": 0.204
+    },
+    "scratch": {
+      "positives": 213,
+      "negatives": 163,
+      "hits": 167,
+      "false_alarms": 43,
+      "recall": 0.784,
+      "false_positive_rate": 0.264,
+      "precision": 0.795
+    }
+  },
+  "tcg_condition": {
+    "dataset": "maurices-workspace-sglak/pokemon-tcg-condition",
+    "license": "MIT",
+    "damage_or_discoloration": {
+      "positives": 54,
+      "negatives": 52,
+      "hits": 10,
+      "false_alarms": 15,
+      "recall": 0.185,
+      "false_positive_rate": 0.288,
+      "precision": 0.4
+    }
+  },
+  "notes": [
+    "Classical OpenCV only; no model training.",
+    "Scratch eval synthesizes a second tilt via brightness shift (dataset is single-image).",
+    "Corner Wear positives: score<=8 counts as detection; measurable center-face crops are negatives."
+  ]
+}

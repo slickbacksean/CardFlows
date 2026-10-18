@@ -111,6 +111,7 @@ export function PhotoGradeFlow({ onOpenPipeline }: PhotoGradeFlowProps) {
     setModeState(next);
   };
   // The side whose 6 extra shots are being taken.
+  const gradeSessionIdRef = useRef<string | null>(null);
   const [extrasSide, setExtrasSide] = useState<"front" | "back" | null>(null);
   const fullAllowance = quota?.fullGrade;
   const fullGrade = mode === "full";
@@ -308,6 +309,11 @@ export function PhotoGradeFlow({ onOpenPipeline }: PhotoGradeFlowProps) {
     const still = latest.side === "front" ? latest.front : latest.back;
     if (!still?.cropUri) return;
     if (fullGrade) {
+      if (!gradeSessionIdRef.current) {
+        gradeSessionIdRef.current =
+          globalThis.crypto?.randomUUID?.() ??
+          `gs_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+      }
       setExtrasSide(latest.side);
       return;
     }
@@ -334,6 +340,7 @@ export function PhotoGradeFlow({ onOpenPipeline }: PhotoGradeFlowProps) {
       backMimeType: latest.back.mimeType,
       backUploadId: latest.back.uploadId,
       fullGrade: modeRef.current === "full",
+      sessionId: modeRef.current === "full" ? gradeSessionIdRef.current ?? undefined : undefined,
     });
     if (!gradeFlowSession.isSubmitLocked()) return;
     if (graded.quota) setQuota(graded.quota);
@@ -387,6 +394,7 @@ export function PhotoGradeFlow({ onOpenPipeline }: PhotoGradeFlowProps) {
       <GradeExtraShots
         onBack={() => setExtrasSide(null)}
         onDone={() => continueAfterSide(extrasSide)}
+        sessionId={gradeSessionIdRef.current ?? ""}
         side={extrasSide}
       />
     );
@@ -622,6 +630,11 @@ export function PhotoGradeFlow({ onOpenPipeline }: PhotoGradeFlowProps) {
                 ))}
               </View>
               {result.note ? <Text style={styles.caption}>{`Note: ${result.note}.`}</Text> : null}
+              {result.checkNotes?.length
+                ? result.checkNotes.map((line) => (
+                    <Text key={line} style={styles.caption}>{line}</Text>
+                  ))
+                : null}
               <PrimaryButton disabled={scoring} label="Grade another card" onPress={reset} />
             </>
           ) : resultKind === "out_of_grades" ? (

@@ -5,10 +5,10 @@
  * 25), counted per account per allowance period like the quick estimates, with no bought-credit
  * spending. Behind CARD_FLOW_GRADE_FULL_MODE=on on the server until it's ready (off by default).
  *
- * What the grader uses (see docs/GRADE_FULL_MODE.md): only the flat photos. The tilted
- * shots can't feed its surface solve (that needs 3+ shots with the light moving relative to
- * the card; tilting the phone moves the camera, not the light), and it has no input for
- * corner close-ups. The extras are blur-checked on the phone and accepted by the server.
+ * What the grader uses (see docs/GRADE_FULL_MODE.md): flat photos always; when a sessionId
+ * links extras, corner close-ups adjust the corners sub-score and the two tilted shots
+ * feed a difference-of-images surface check (not photometric stereo). Extras are
+ * blur-checked on the phone and again on the server.
  */
 import type { GradeSide } from "./grade-estimate";
 
