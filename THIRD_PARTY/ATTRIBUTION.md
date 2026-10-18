@@ -10,6 +10,11 @@
 | [samuels-workspace-ayfij/pokemon-card-corners-jbrsi](https://universe.roboflow.com/samuels-workspace-ayfij/pokemon-card-corners-jbrsi) | **CC BY 4.0** | Card-finder real-photo fine-tune (seg quads, down-weighted) | **Credit:** “pokemon-card-corners dataset by Samuels Workspace, Roboflow Universe, licensed under CC BY 4.0” — https://universe.roboflow.com/samuels-workspace-ayfij/pokemon-card-corners-jbrsi |
 | [pokemon-card-detection-a3etk/pokemon-scanner-rzy69](https://universe.roboflow.com/pokemon-card-detection-a3etk/pokemon-scanner-rzy69) | **CC BY 4.0** | Card-finder real-photo fine-tune (OBB quads, down-weighted) | **Credit:** “Pokemon Scanner dataset on Roboflow Universe, licensed under CC BY 4.0” — https://universe.roboflow.com/pokemon-card-detection-a3etk/pokemon-scanner-rzy69 |
 
+| [pokemoncarddetect/pokemon-cards-merged](https://universe.roboflow.com/pokemoncarddetect/pokemon-cards-merged) | Public Domain | Card-finder fine-tune (OBB quads, down-weighted) | Public Domain via Roboflow Universe (PokemonCardDetect). |
+| [tcg-detector/pokemon-card-detection-7aaz7-mxbhx](https://universe.roboflow.com/tcg-detector/pokemon-card-detection-7aaz7-mxbhx) | **CC BY 4.0** | Card-finder fine-tune (seg quads, down-weighted) | **Credit:** TCG Detector / Roboflow Universe, CC BY 4.0 — https://universe.roboflow.com/tcg-detector/pokemon-card-detection-7aaz7-mxbhx |
+| [lewis-xaa6i/pokemon-cards-sk39y](https://universe.roboflow.com/lewis-xaa6i/pokemon-cards-sk39y) | **CC BY 4.0** | Card-finder fine-tune (seg quads, down-weighted) | **Credit:** Lewis / Roboflow Universe, CC BY 4.0 — https://universe.roboflow.com/lewis-xaa6i/pokemon-cards-sk39y |
+| [dhvazquez/mtg_synthetic_cards_semantic_segmentation](https://huggingface.co/datasets/dhvazquez/mtg_synthetic_cards_semantic_segmentation) | MIT | Card-finder fine-tune (synthetic corners, weight 0.5) | © Diego Vázquez. MIT — retain license notice. |
+
 Sean's own photos are CardFlow-owned and are the frozen **test set** only (never trained on).
 
 ## Card-finder model code / weights

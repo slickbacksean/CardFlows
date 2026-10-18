@@ -3,18 +3,22 @@
   "encoder_weights": null,
   "size": 256,
   "steps": 1000,
-  "batch": 16,
-  "lr": 0.0003,
+  "batch": 8,
+  "lr": 0.00015,
   "loss": "bce+dice",
   "art_train_ids": 2882,
-  "seed": 4,
-  "resumed_from": "/workspace/cf/models-v0.3/card-finder.pt",
+  "seed": 5,
+  "resumed_from": "/workspace/cf/models-v031/card-finder.pt",
   "real_manifests": [
     "antokun.jsonl",
     "steve.jsonl",
     "pokemon-card-corners-jbrsi.jsonl",
     "pokemon-card-obb-egjdh.jsonl",
-    "pokemon-scanner-rzy69.jsonl"
+    "pokemon-scanner-rzy69.jsonl",
+    "manifest.jsonl",
+    "manifest.jsonl",
+    "manifest.jsonl",
+    "manifest-train800.jsonl"
   ],
   "real_frac": 0.4
 }

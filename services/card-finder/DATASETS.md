@@ -25,6 +25,16 @@ real photos dropped because they show a baseline card).
 
 All three versions apply Roboflow **Stretch-to square**, so image-space aspect ≠ physical 63:88. Rows are tagged `square_stretched: true` and sampled at weight 0.25 in `train/real.py`. Do not score corner error on Roboflow val — keep antokun author labels as the comparable split.
 
+### Additional real / synthetic (2026-10-18)
+
+| Dataset | Licence | Quads kept (train/val) | Notes |
+|---|---|---|---|
+| [pokemoncarddetect/pokemon-cards-merged](https://universe.roboflow.com/pokemoncarddetect/pokemon-cards-merged) v4 | **Public Domain** | 202 (150/52) | OBB; Stretch-to; `sample_weight` 0.25; deduped vs prior Roboflow |
+| [tcg-detector/pokemon-card-detection-7aaz7-mxbhx](https://universe.roboflow.com/tcg-detector/pokemon-card-detection-7aaz7-mxbhx) v1 | **CC BY 4.0** | 210 (154/56) | Seg; only version is augmented; weight 0.25 |
+| [lewis-xaa6i/pokemon-cards-sk39y](https://universe.roboflow.com/lewis-xaa6i/pokemon-cards-sk39y) v1 | **CC BY 4.0** | 30 (29/1) | Seg; mostly near-dups after aHash; weight 0.25 |
+| [dhvazquez/mtg_synthetic_cards_semantic_segmentation](https://huggingface.co/datasets/dhvazquez/mtg_synthetic_cards_semantic_segmentation) | **MIT** | 5987 full (train subsample 800 used for v0.3.1 economy) | BlenderProc synthetic MTG; `sample_weight` 0.5; geometry pretrain |
+
+
 - Roboflow Universe (exported 2026-10-18; commercial licences only): see table below. Primary JSONL manifests use stretch-aware geometry (Roboflow Stretch-to-square); `sample_weight` 0.25 so they do not dominate antokun/steve. Corner-precision reporting stays on the **antokun val** split only.
 
 ## Prints visible in external data (exclude from the test-set pool)
