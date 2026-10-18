@@ -57,5 +57,5 @@ The API **refuses to start** with `NODE_ENV=production` unless this is set to a 
 Behind a load balancer or reverse proxy, set `CARD_FLOW_TRUST_PROXY_HOPS` to the number of proxies that append to `X-Forwarded-For` (usually `1`). With the default `0`, every request appears to come from the proxy's IP. Per-IP limits (guest mints, sign-up, sign-in, grading) then become one shared bucket. Setting it too high lets clients spoof their IP. Tests cover the default: a spoofed `X-Forwarded-For` does not reset the guest mint limit.
 
 ## Open sign-up env
-- `CARD_FLOW_GUEST_SCANS=true` turns on guest sessions (3 scans, 24-hour sessions in `crm_sessions`).
+- `CARD_FLOW_GUEST_BROWSE=true` turns on **browse-only** guest sessions (24-hour sessions in `crm_sessions`; off by default). Guests get 403 `signup_required` on every scan, grade, livestream, save, purchase, watchlist, inventory and CardSight route (`guestRouteBlockReason` in `packages/shared/src/guest-access.ts`); browse reads stay open, and `POST /v1/account/delete` deletes their session data. `CARD_FLOW_GUEST_SCANS` was removed (Sean, Oct 17: no guest scans); if it's still set, the API logs a warning and ignores it.
 - `CARD_FLOW_INVITE_ALEX` / `CARD_FLOW_INVITE_JORDAN` are tester invite codes. **There are no defaults;** unset means invite sign-in is off for that tester.
