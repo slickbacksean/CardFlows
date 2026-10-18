@@ -364,7 +364,7 @@ export const SCREEN_EMPTY_COPY = {
   noMatches: { title: "No matching cards", body: "Try a different name or number." },
   collectionPurchased: {
     title: "No cards yet",
-    body: "Scan and confirm a card, then mark it Purchased.",
+    body: `Scan a card, confirm it, then mark it Purchased to start tracking its value in ${COLLECTION_DESTINATION_NAME}.`,
     action: "Scan a card",
   },
   collectionWatchlist: {
