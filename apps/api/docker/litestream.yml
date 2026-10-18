@@ -5,11 +5,11 @@ logging:
   level: info
   type: json
 
-# Full snapshot daily; keep 7 days of snapshots + LTX history (point-in-time window).
-# 7 days sits inside the 2-week account-deletion promise.
+# Full snapshot daily; keep 90 days of snapshots + LTX history (point-in-time window).
+# 90 days matches the backup window in the privacy draft (Sean): deleted data is gone within 90 days.
 snapshot:
   interval: 24h
-  retention: 168h
+  retention: 2160h
 
 # Check replica LTX contiguity every 6h.
 validation:

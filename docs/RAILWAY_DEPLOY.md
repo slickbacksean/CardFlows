@@ -12,7 +12,7 @@ What the repo does now:
 - `CARD_FLOW_MAINTENANCE=1` runs `src/maintenance.ts` (no DB; /health 200, all else 503 + Retry-After).
 - CI `api-image`: also boots the image on a root-owned volume, checks ownership, WAL, restart survival and the volume guard.
 
-Not in this PR yet (follow-ups, see the source plan §6, §7 A, §8.5): the in-app nightly DB snapshot + photo mirror to the bucket (`@aws-sdk/client-s3`), `restore-photos.ts`, `GET /ops/db-stats`, and the `backup_failed` / `volume_low` ops alerts. Until then, DB backups are Litestream (continuous, 7 days) plus Railway Daily volume backups (6 days); **photos are only covered by the Railway volume backup**.
+Not in this PR yet (follow-ups, see the source plan §6, §7 A, §8.5): the in-app nightly DB snapshot + photo mirror to the bucket (`@aws-sdk/client-s3`), `restore-photos.ts`, `GET /ops/db-stats`, and the `backup_failed` / `volume_low` ops alerts. Until then, DB backups are Litestream (continuous, 90 days) plus Railway Daily volume backups (6 days); **photos are only covered by the Railway volume backup**.
 
 ## Railway project layout
 
@@ -53,7 +53,7 @@ Optional, later: Environment "drill" (temporary, for restore drills §7.B; delet
 | Overlap seconds | leave default/0 | Railway already prevents two deployments mounting the same volume, so there's a few seconds of downtime per deploy. Accepted. |
 | Resources | Memory limit **2 GB**, vCPU limit 2 | One grade peaks at about 1 GB (`docs/API_DEPLOY.md`). Hobby allows up to 48 GB per service. Billing follows actual use, not the limit. |
 | Public networking | Railway-generated `*.up.railway.app` domain on port 8080. Optional custom domain `api.<domain>` (§10). | Hobby allows 2 custom domains. |
-| Volume backups (Railway built-in) | Enable **Daily only** (kept 6 days) | A cheap third layer, but it can only restore into the same project and environment. Don't enable Weekly (kept 27 days) or Monthly (89 days): they'd keep deleted users' data longer than the 2-week deletion promise (§6.4). |
+| Volume backups (Railway built-in) | Enable **Daily only** (kept 6 days) | A cheap third layer, but it can only restore into the same project and environment. Weekly (27 days) and Monthly (89 days) also fit the 90-day backup window; do not keep volume backups longer than 90 days (§6.4). |
 
 ## Paths, volume, permissions
 
@@ -124,7 +124,7 @@ Railway-provided (don't set): `RAILWAY_VOLUME_MOUNT_PATH`, `RAILWAY_VOLUME_NAME`
 | `LITESTREAM_HEARTBEAT_URL` | optional | Healthchecks URL | low | |
 | `CARD_FLOW_BACKUPS_REQUIRED` | `true` | `true` | no | boot fails if backup env is missing |
 | `CARD_FLOW_BACKUP_BUCKET/ENDPOINT/REGION/ACCESS_KEY_ID/SECRET_ACCESS_KEY` | reference the `LITESTREAM_*` values | same | keys **yes** | same bucket, `snapshots/` and `photos/` prefixes |
-| `CARD_FLOW_BACKUP_RETENTION_DAYS` / `CARD_FLOW_BACKUP_HOUR_UTC` / `CARD_FLOW_BACKUP_HEARTBEAT_URL` | 14 / 10 / optional | 14 / 10 / Healthchecks URL | low | |
+| `CARD_FLOW_BACKUP_RETENTION_DAYS` / `CARD_FLOW_BACKUP_HOUR_UTC` / `CARD_FLOW_BACKUP_HEARTBEAT_URL` | 90 / 10 / optional | 90 / 10 / Healthchecks URL | low | |
 | `MAX_CONCURRENT_GRADES` / `MAX_QUEUED_GRADES` | 1 / 3 | 1 / 3 | no | revisit with a 2 GB limit |
 
 **Must stay unset in staging and production:** `CARD_FLOW_DEV_AUTO_SESSION`, `CARD_FLOW_IAP_STUB`, `CARD_FLOW_ULTRALYTICS_AGPL_ACCEPTED` (until the license decision), `CARD_FLOW_STORE=memory`, `CARDSIGHT_MOCK_SCENARIO`, `CARDFLOW_GRADE_DEBUG_IMAGES`, `CARD_FLOW_REQUIRE_VOLUME=false`, `CARD_FLOW_MAINTENANCE` (except during a restore).
@@ -150,7 +150,7 @@ Agents don't create accounts, add payment methods, create cloud resources or dep
 | 4 | Create environments: `staging` (alongside the default `production`). Turn **PR environments off**. | **Required** | |
 | 5 | Attach a volume at `/data` to `api` in **each** environment (5 GB) | **Required** | |
 | 6 | Apply the §1.3 settings: replicas 1, healthcheck `/health` with 120 s, restart ON_FAILURE ×10, draining 30 s, watch paths, branches (staging=`main`, production=`production`), memory limit 2 GB, wait-for-CI | **Required** | Can be done with an agent driving the dashboard if Sean approves |
-| 7a | **Backups, recommended: Cloudflare** account → enable R2 (may ask for a payment method; free tier covers this) → create buckets `cardflow-backups-production` and `cardflow-backups-staging` (location hint WNAM) → create 3 R2 API tokens: production **Object Read & Write** scoped to the production bucket; staging **Object Read & Write** scoped to the staging bucket; production **Object Read only** for drills (keep it private). Note the Account ID for the endpoint. | **Required (one of 7a/7b)** | Optional: an R2 lifecycle rule deleting `snapshots/` after 15 days as a backstop |
+| 7a | **Backups, recommended: Cloudflare** account → enable R2 (may ask for a payment method; free tier covers this) → create buckets `cardflow-backups-production` and `cardflow-backups-staging` (location hint WNAM) → create 3 R2 API tokens: production **Object Read & Write** scoped to the production bucket; staging **Object Read & Write** scoped to the staging bucket; production **Object Read only** for drills (keep it private). Note the Account ID for the endpoint. | **Required (one of 7a/7b)** | Optional: an R2 lifecycle rule deleting `snapshots/` after 90 days as a backstop |
 | 7b | *Alternative:* create a Railway Bucket `backups` in the project (each environment gets its own instance) and wire the `${{backups.*}}` references | (alternative to 7a) | Same-vendor risk; no lifecycle rules |
 | 8 | Generate and paste the secrets into Railway variables per environment: `CARD_FLOW_SERVER_PEPPER` (`openssl rand -base64 48`, different per environment), `CARD_FLOW_OPS_TOKEN` (`openssl rand -hex 32`), `CARD_FLOW_APP_API_KEY`, the R2 keys, plus the §9.1 non-secret values | **Required** | |
 | 9 | Turn on Railway **Daily** volume backups for the production volume (not Weekly or Monthly) | **Required** | |

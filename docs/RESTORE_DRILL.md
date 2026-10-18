@@ -56,10 +56,10 @@ On Sean's Mac (not a shared machine): `litestream restore -integrity-check full 
 
 | Copy | Holds deleted users' data for at most |
 |---|---|
-| Litestream (snapshot.retention 168 h) | 7 days |
-| Nightly DB snapshots | 14 days (`CARD_FLOW_BACKUP_RETENTION_DAYS`) |
+| Litestream (snapshot.retention 2160 h) | 90 days |
+| Nightly DB snapshots | 90 days (`CARD_FLOW_BACKUP_RETENTION_DAYS`) |
 | Photo mirror | ~24 h after local deletion |
 | Railway volume backups (Daily only) | 6 days |
 | `/data/pre-migrate/` (keep 3) | until 3 newer migration deploys; also add a 14-day age prune in `apply-migration.ts` |
 
-All of these fit within "up to 2 weeks", the deletion copy in PR #97's latest commit. Update `docs/PRIVACY_DATA_MAP.md` and `docs/RELEASE_ENV.md` (account deletion section) with this table. **Don't enable Railway Weekly or Monthly volume backups** (27 and 89 days).
+All of these fit within **90 days**, the backup window in the privacy draft (Sean). Update `docs/PRIVACY_DATA_MAP.md` and `docs/RELEASE_ENV.md` (account deletion section) with this table. Railway Weekly (27 days) and Monthly (89 days) volume backups also fit; do not keep anything longer than 90 days.
