@@ -169,6 +169,13 @@
       "when": 1791566400000,
       "tag": "0023_pokecollector_pending_deletions",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "6",
+      "when": 1791609600000,
+      "tag": "0024_pokecollector_opaque_links",
+      "breakpoints": true
     }
   ]
 }
