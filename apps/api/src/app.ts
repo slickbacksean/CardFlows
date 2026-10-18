@@ -2055,7 +2055,6 @@ export function createApp(
     scanIdempotency.purgePrefix(`${userId}\0`);
     writeIdempotency.purgePrefix(`${userId}\0`);
     gradeJobRoutes?.purgeUser(userId);
-    guestScanInflight.delete(userId);
     // Backend review L3: audit row with no PII.
     const rowsDeleted = Object.values(rows).reduce((sum, n) => sum + n, 0);
     store.accounts.recordDeletionAudit({ at: now().toISOString(), kind, rowsDeleted });

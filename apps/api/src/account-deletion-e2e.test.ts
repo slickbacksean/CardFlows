@@ -55,12 +55,15 @@ const deleteWith = (app: App, token: string, password?: string) =>
 
 describe("P4 account deletion end to end", () => {
   it("a guest can delete their guest data now (not only after 24 hours), no password needed", async () => {
+    // Browse-only guests (#99) can't scan; they still must be able to wipe their session.
     const { app, store } = open();
     const guest = await call(app, "/v1/sessions/guest", { method: "POST" });
     const token = guest.body.token as string;
     const userId = (guest.body.identity as { userId: string }).userId;
-    await call(app, "/v1/scans", { body: { captureMethod: "camera_photo", scenario: "high-confidence" }, token });
-    expect(store.accounts.countUserRows(userId).crm_scans).toBe(1);
+    const blocked = await call(app, "/v1/scans", { body: { captureMethod: "camera_photo", scenario: "high-confidence" }, token });
+    expect(blocked.status).toBe(403);
+    expect(blocked.body.code).toBe("signup_required");
+    expect(store.accounts.countUserRows(userId).crm_scans).toBe(0);
     const deleted = await call(app, "/v1/account/delete", { method: "POST", token });
     expect(deleted.status).toBe(200);
     expect(deleted.body.ok).toBe(true);
