@@ -314,6 +314,6 @@ See `docs/STORE_PRIVACY_LABELS.md` for the App Store / Play answers and the perf
 
 **Perf timings (`/v1/telemetry/perf`):** optional and opt-in. They're sent only when the analytics switch is on (the same switch as PostHog, off by default), and pending timings are dropped when it's turned off. They go to CardFlow's own API, not PostHog, and are kept as in-memory aggregates only. Store declaration if declared: Diagnostics > Performance Data, not linked, not tracking.
 
-**Accounts:** `user_accounts` (email, scrypt password hash, created_at). Sessions in `crm_sessions` (guest sessions flagged `is_guest`, 24-hour expiry). Account deletion removes every `user_id` row in one transaction. Guest data moves to the account on sign-up; guests who never sign up are purged within 24 h after their session ends.
+**Accounts:** `user_accounts` (email, scrypt password hash, created_at). Sessions in `crm_sessions` (guest sessions flagged `is_guest`, 24-hour expiry). Account deletion removes every `user_id` row in one transaction. Guests are browse-only (Sean, Oct 17): they can't scan, grade or save, so a guest has only its session row (and nothing else to move at sign-up). Guests can delete it (`POST /v1/account/delete`); otherwise it's purged within 24 h after the session ends. Rows left from guest scans made before this change still move to the account on sign-up, or are purged with the session.
 
 **Device model:** sent with perf timings (opt-in analytics only) and not stored server-side.

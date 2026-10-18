@@ -1,6 +1,6 @@
 import { QueryClientProvider } from "@tanstack/react-query";
 import { type ErrorBoundaryProps, Link, Stack, router } from "expo-router";
-import { EMAIL_VERIFICATION_COPY, GUEST_RETENTION_NOTE, GUEST_SCAN_WALL_NOTE, GUEST_SIGNUP_COPY, signupMessage } from "@cardflow/shared";
+import { EMAIL_VERIFICATION_COPY } from "@cardflow/shared";
 import { onEmailUnverified, onSignupRequired } from "@/lib/api";
 import { StatusBar } from "expo-status-bar";
 import { useEffect, useState } from "react";
@@ -11,6 +11,7 @@ import { Alert, AppState, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { PrimaryButton } from "@/components/ui/primary-button";
 import { ensureIdentitySession } from "@/lib/identity";
+import { showSignupPrompt } from "@/lib/signup-prompt";
 import { cardFlowQueryClient } from "@/lib/query-client";
 import { captureMobileException, initMobileSentry } from "@/lib/sentry";
 import { colors, space } from "@/lib/theme";
@@ -52,19 +53,8 @@ export default function RootLayout() {
       .finally(() => setReady(true));
   }, []);
 
-  // D9: one sign-up prompt when the API says a guest has to sign up.
-  useEffect(() => {
-    let showing = false;
-    return onSignupRequired((reason) => {
-      if (showing) return;
-      showing = true;
-      const message = `${signupMessage(reason)}\n\n${reason === "scan_limit" ? GUEST_SCAN_WALL_NOTE : GUEST_RETENTION_NOTE}`;
-      Alert.alert(GUEST_SIGNUP_COPY.title, message, [
-        { text: GUEST_SIGNUP_COPY.dismiss, style: "cancel", onPress: () => { showing = false; } },
-        { text: GUEST_SIGNUP_COPY.action, onPress: () => { showing = false; router.push("/sign-up"); } },
-      ], { cancelable: true, onDismiss: () => { showing = false; } });
-    });
-  }, []);
+  // Browse-only guests (Sean, Oct 17): the API's 403 signup_required opens the one sign-up prompt.
+  useEffect(() => onSignupRequired(() => showSignupPrompt()), []);
   // Sean: pre-grade estimates need a verified email. One prompt, then the code screen.
   useEffect(() => {
     let showing = false;
