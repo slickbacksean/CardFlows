@@ -2,17 +2,21 @@
   "expo": {
     "name": "CardFlow",
     "slug": "cardflow",
-    "version": "0.0.0",
+    "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "cardflow",
     "userInterfaceStyle": "dark",
     "ios": {
-      "supportsTablet": true,
+      "supportsTablet": false,
       "bundleIdentifier": "app.cardflow.mobile",
       "infoPlist": {
-        "NSCameraUsageDescription": "CardFlow uses the camera to photograph your Pokémon cards. Photos are uploaded to CardFlow, and to our card-recognition provider if you allow it, to identify your cards.",
+        "NSCameraUsageDescription": "CardFlow uses the camera to photograph your Pok\u00e9mon cards. Photos are uploaded to CardFlow, and to our card-recognition provider if you allow it, to identify your cards.",
         "NSMotionUsageDescription": "CardFlow uses motion to help you hold your phone level over a card."
+      },
+      "buildNumber": "1",
+      "config": {
+        "usesNonExemptEncryption": false
       }
     },
     "android": {
@@ -30,7 +34,8 @@
         "android.permission.READ_MEDIA_VISUAL_USER_SELECTED",
         "android.permission.READ_EXTERNAL_STORAGE",
         "android.permission.WRITE_EXTERNAL_STORAGE"
-      ]
+      ],
+      "versionCode": 1
     },
     "web": {
       "output": "static",
@@ -41,7 +46,7 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "CardFlow uses the camera to photograph your Pokémon cards. Photos are uploaded to CardFlow, and to our card-recognition provider if you allow it, to identify your cards.",
+          "cameraPermission": "CardFlow uses the camera to photograph your Pok\u00e9mon cards. Photos are uploaded to CardFlow, and to our card-recognition provider if you allow it, to identify your cards.",
           "microphonePermission": false,
           "recordAudioAndroid": false
         }
