@@ -16,7 +16,7 @@ import { cardFlowQueryClient } from "@/lib/query-client";
 import { captureMobileException, initMobileSentry, loadCrashReportsPreference } from "@/lib/sentry";
 import { colors, space } from "@/lib/theme";
 
-// Policy Reviewer (P4): Settings > Send crash reports (on by default) gates Sentry.
+// Policy Reviewer (P4): Settings > Send crash reports (off by default, opt-in) gates Sentry.
 void loadCrashReportsPreference().then(() => initMobileSentry());
 
 export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {

@@ -7,7 +7,7 @@ type SentryModule = typeof import("@sentry/react-native");
 
 let sentry: SentryModule | null = null;
 let enabled = false;
-/** Settings > Send crash reports (on by default). Independent of the analytics opt-in. */
+/** Settings > Send crash reports (off by default, opt-in). Independent of the analytics opt-in. */
 let crashReportsOn = crashReportsEnabledFrom(null);
 
 function sentryDsn(): string | undefined {

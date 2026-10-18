@@ -114,9 +114,11 @@ If your account was linked to PokéCollector, CardFlow removes the link and dele
 
 CardFlow keeps only anonymous totals that can't identify you. Purchases you made on a marketplace aren't affected.
 
-Deleted data is removed from backups within [30] days.
+When you delete your account we keep a one-way scrambled version of your email for 90 days, only to prevent free-allowance resets.
 
-> **Open (Sean):** confirm the backup window (the number in brackets) against the real backup retention before this is published. That includes the PokéCollector server CardFlow runs: its automatic pre-upgrade SQL dumps (`/app/backups`, newest `PRE_UPGRADE_BACKUP_KEEP`, default 10) keep deleted users' cards until they rotate out, so they need the same window.
+Deleted data is removed from backups within 90 days.
+
+**Decided (Sean):** backup retention window is 90 days. PokéCollector pre-upgrade SQL dumps (`/app/backups`, newest `PRE_UPGRADE_BACKUP_KEEP`) must be sized so deleted users' cards rotate out within that window.
 
 ---
 
@@ -172,7 +174,7 @@ If you turn on usage analytics, CardFlow sends counts and timings to **PostHog I
 
 **Privacy policy draft: crash-report service provider (Sentry)**
 
-We use **Sentry** (Functional Software, Inc.), a service provider that processes crash and error reports on our behalf, to find and fix crashes. A report contains the error and stack trace, the app version, device model and OS version, and a request ID. We remove emails, IP addresses, passwords and sign-in tokens, photos and photo file paths, and the content of your requests before a report is sent. Reports aren't used for advertising or tracking. Crash reports are on by default, and you can turn them off in Settings > Send crash reports.
+We use **Sentry** (Functional Software, Inc.), a service provider that processes crash and error reports on our behalf, to find and fix crashes. A report contains the error and stack trace, the app version, device model and OS version, and a request ID. We remove emails, IP addresses, passwords and sign-in tokens, photos and photo file paths, and the content of your requests before a report is sent. Reports aren't used for advertising or tracking. Crash reports are off by default. You can turn them on in Settings > Send crash reports.
 
 **Performance timings:** when analytics is on, a small sample of scan-step timings, a coarse device class, OS and phone model are also sent to CardFlow's own servers (not to PostHog) to keep scanning fast. The same switch controls this; with it off nothing is sent. Our servers keep only aggregate timings by step and device class; the phone model and OS are not stored.
 
@@ -196,7 +198,7 @@ Draft list for Settings:
 - Use CardSight for card recognition: On / Off (decided: ask once, then this toggle; off = CardFlow's matcher only)
 - Save scan photos: On / Off
 - Usage analytics: On / Off (hidden if no SDK)
-- Send crash reports: On / Off (on by default; P4)
+- Send crash reports: On / Off (off by default; opt-in; P4)
 - Live visual analysis: Off (unavailable in MVP)
 - Sign out
 - Delete account
