@@ -129,8 +129,8 @@ describe("opaque per-user PokéCollector accounts", () => {
       expect((await call(app, "/v1/identity", { token: g.token })).status).toBe(200);
       expect(store.getPokecollectorUserMapping(g.userId)).toBeUndefined();
     }
-    // Guest scans and collection reads never create a remote user either.
-    expect((await call(app, "/v1/scans", { body: { captureMethod: "camera_photo", scenario: "high-confidence" }, token: guests[0]!.token })).status).toBe(201);
+    // Browse-only guests (#99): scans need sign-up; browse reads still never create a remote user.
+    expect((await call(app, "/v1/scans", { body: { captureMethod: "camera_photo", scenario: "high-confidence" }, token: guests[0]!.token })).status).toBe(403);
     expect((await call(app, "/v1/collection", { token: guests[0]!.token })).status).toBe(200);
     expect((await call(app, "/v1/inventory", { token: guests[1]!.token })).status).toBe(200);
     expect(store.getPokecollectorUserMapping(guests[0]!.userId)).toBeUndefined();
