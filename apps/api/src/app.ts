@@ -1261,6 +1261,7 @@ export function createApp(
         pricingProvider: pricingProviderHealth(pricing.name),
         gradeEstimate: gradeEstimateHealth(gradingProvider.name),
         gradeEngineOk: engine ? healthOk(engine) : null,
+        recognitionMock: recognitionProvider.name === "mock",
         opsMessage: process.env.CARD_FLOW_STATUS_MESSAGE ?? null,
       };
     },

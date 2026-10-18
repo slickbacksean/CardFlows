@@ -30,4 +30,15 @@ describe("P1-21 status banners", () => {
     expect(statusBanners({ ...base, opsMessage: "Maintenance at 9 PM PT" })).toHaveLength(1);
     for (const copy of Object.values(STATUS_BANNER_COPY)) expect(statusCopyViolations(copy)).toEqual([]);
   });
+
+  it("labels mock recognition as demo data", () => {
+    const banners = statusBanners({
+      pricingProvider: "pokecollector",
+      gradeEstimate: "cardgrading",
+      gradeEngineOk: true,
+      recognitionMock: true,
+    });
+    expect(banners.map((b) => b.id)).toEqual(["identify_demo"]);
+    expect(banners[0]?.message).toMatch(/Demo card matching/i);
+  });
 });

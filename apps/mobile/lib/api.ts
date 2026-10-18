@@ -6,8 +6,10 @@ import {
   resolveClientApiUrl,
   emptySlabEstimate,
   GRADE_QUOTA_COPY,
+  PREGRADE_COPY,
   PREGRADE_DETECT_UNAVAILABLE_MESSAGE,
   PREGRADE_UNAVAILABLE_MESSAGE,
+  isScoredEstimate,
   unavailableGradeEstimate,
   pollGradeJob,
   GradeJobCancelled,
@@ -736,9 +738,15 @@ export async function requestPhotoPregrade(input: {
       form,
       timeoutMs: GRADE_PREGRADE_TIMEOUT_MS,
     });
-    // 0.0 is grade_card's "nothing measurable", not a grade: never show it.
-    if (data.ok && (typeof data.estimate !== "number" || !(data.estimate >= 1))) {
-      return { ok: false, status: "unavailable", code: "UNAVAILABLE", message: PREGRADE_UNAVAILABLE_MESSAGE };
+    // 0.0 is grade_card's "nothing measurable", not a grade: retake, never a score or "unavailable".
+    if (data.ok && (typeof data.estimate !== "number" || !isScoredEstimate(data.estimate))) {
+      return {
+        ok: false,
+        status: "retake",
+        code: "PHOTO_RETAKE",
+        side: "front",
+        reasons: [PREGRADE_COPY.nothingMeasured],
+      };
     }
     return data;
   } catch (error) {
