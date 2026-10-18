@@ -4,7 +4,7 @@ import { CREDIT_PACK_COPY, PREMIUM_PLACEHOLDER_PRICING, PREMIUM_PROMPT_COPY, pre
 
 describe("D14 premium", () => {
   it("placeholder prices and limits", () => {
-    expect(PREMIUM_PLACEHOLDER_PRICING).toMatchObject({ monthly: "$6.99/month", yearly: "$59.99/year", premiumEstimatesPerMonth: 30, freeEstimatesPerMonth: 5 });
+    expect(PREMIUM_PLACEHOLDER_PRICING).toMatchObject({ monthly: "$6.99/month", yearly: "$59.99/year", premiumEstimatesPerMonth: "unlimited", freeEstimatesPerMonth: 10 });
     expect(PREMIUM_PROMPT_COPY.plans).toBe("$6.99/month or $59.99/year");
     expect(PREMIUM_PLACEHOLDER_PRICING).toMatchObject({ estimatesRollOver: false, creditsExpire: false, freeHistoryVisible: 10 });
     expect(PREMIUM_PLACEHOLDER_PRICING.creditPacks).toEqual([

@@ -218,7 +218,7 @@ Public GitHub product docs (`MVP_SCOPE.md`, `PRODUCT_OVERVIEW.md`, `NON_GOALS.md
 | Field | Value |
 | --- | --- |
 | **Data type** | Device / diagnostic data |
-| **Source** | App runtime and API. Crash reporter is **Sentry** (Functional Software, Inc., service provider; founder-approved, P0-12). Init only when `SENTRY_DSN` / `EXPO_PUBLIC_SENTRY_DSN` is set. In the app also only while Settings > **Send crash reports** is on (on by default, P4); turning it off stops sending right away. Not tied to the analytics opt-in. |
+| **Source** | App runtime and API. Crash reporter is **Sentry** (Functional Software, Inc., service provider; founder-approved, P0-12). Init only when `SENTRY_DSN` / `EXPO_PUBLIC_SENTRY_DSN` is set. In the app also only while Settings > **Send crash reports** is on (off by default, opt-in; P4); turning it off stops sending right away. Not tied to the analytics opt-in. |
 | **Purpose** | Debug crashes and unexpected errors. Request id (`x-request-id`) is attached on API events. |
 | **Storage location** | Sentry (US SaaS). See [SENTRY.md](./SENTRY.md). |
 | **Access permissions** | Engineering only |

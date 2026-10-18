@@ -7,6 +7,7 @@ import {
   PREGRADE_DISCLAIMER,
   PREGRADE_LABEL,
   PREGRADE_SURFACE_NULL_REASON,
+  isScoredEstimate,
   type CardFlowGradeEstimate,
   type PhotoCaptureMetrics,
   type PhotoPregradeAngled,
@@ -91,9 +92,8 @@ const DECODE_FAILURE_REASON = PREGRADE_COPY.unreadable;
 export const NOTHING_MEASURED_REASON = PREGRADE_COPY.nothingMeasured;
 
 /** Pre-grade numbers are 1.0–10.0. 0 is a retake, never a score. */
-export function isScoredEstimate(estimate: number): boolean {
-  return Number.isFinite(estimate) && estimate >= 1 && estimate <= 10;
-}
+export { isScoredEstimate };
+
 
 function hardGateReason(gate: LibraryGate): string {
   if (gate.detail === DECODE_FAILURE_DETAIL) return DECODE_FAILURE_REASON;
@@ -142,6 +142,26 @@ function toCrop(cropBytes: Buffer | null): DetectedCardCrop | undefined {
   return { mimeType: "image/jpeg", base64: cropBytes.toString("base64") };
 }
 
+/**
+ * Blur breaks edge finding, so a blurry photo often also fails a geometry gate
+ * ("tilt"). Say "blurry" first then. When the photo is sharp but the card
+ * still wasn't found or its outline was wrong, the usual cause is a card that
+ * blends into a light table, so add the darker-background tip.
+ */
+function detectRetakeReasons(hardFailures: LibraryGate[]): string[] {
+  const blurry = hardFailures.some((gate) => gate.name === "sharpness");
+  const ordered = blurry
+    ? [...hardFailures].sort((a, b) => Number(b.name === "sharpness") - Number(a.name === "sharpness"))
+    : hardFailures;
+  const reasons = ordered.map(hardGateReason);
+  const outlineMissed = hardFailures.some(
+    (gate) =>
+      (gate.name === "card_detection" || gate.name === "aspect_ratio") && gate.detail !== DECODE_FAILURE_DETAIL,
+  );
+  if (!blurry && outlineMissed) reasons.push(PREGRADE_COPY.darkerBackground);
+  return uniqueReasons(reasons);
+}
+
 export function mapDetectReport(
   input: unknown,
   side: PhotoPregradeSide,
@@ -159,7 +179,7 @@ export function mapDetectReport(
       status: "retake",
       code: "PHOTO_RETAKE",
       side,
-      reasons: uniqueReasons(hardFailures.map(hardGateReason)),
+      reasons: detectRetakeReasons(hardFailures),
     };
     if (crop) body.crop = crop;
     if (capture) body.capture = capture;
@@ -277,9 +297,9 @@ export function mapGradeCardReport(input: unknown): PhotoPregradeSuccess | Photo
   const ef = sideGrade(subgrades, "front", "edges", asRecord(cornersEdges?.front)?.edges_grade);
   const eb = sideGrade(subgrades, "back", "edges", asRecord(cornersEdges?.back)?.edges_grade);
   const angled = angledResult(report);
-  // Surface is graded only from the raking-light photos, and only when the
-  // adapter accepted them. Anything else stays "not assessed" — never guessed.
-  const surfaceTrusted = angled.status === "graded";
+  const fullExtras = asRecord(asRecord(report.cardflow)?.full_extras);
+  const surfaceTrusted =
+    angled.status === "graded" || fullExtras?.surface_trusted === true;
   const sf = surfaceTrusted ? sideGrade(subgrades, "front", "surface", asRecord(surface?.front)?.grade) : null;
   const sb = surfaceTrusted ? sideGrade(subgrades, "back", "surface", asRecord(surface?.back)?.grade) : null;
 
@@ -293,7 +313,12 @@ export function mapGradeCardReport(input: unknown): PhotoPregradeSuccess | Photo
 
   const surfaceNull = sf === null && sb === null;
   const noteParts: string[] = [];
-  noteParts.push(surfaceNull ? PREGRADE_COPY.surfaceExcludedNote : PREGRADE_COPY.surfaceIncludedNote);
+  if (surfaceNull) noteParts.push(PREGRADE_COPY.surfaceExcludedNote);
+  else if (fullExtras?.surface_trusted === true && angled.status !== "graded") {
+    noteParts.push(PREGRADE_COPY.surfaceTiltIncludedNote);
+  } else {
+    noteParts.push(PREGRADE_COPY.surfaceIncludedNote);
+  }
   if (dimensions?.measurable === false) noteParts.push(PREGRADE_COPY.sizeNotCheckedNote);
 
   const surfaceRow: PhotoPregradeSubgrade = {
@@ -324,6 +349,12 @@ export function mapGradeCardReport(input: unknown): PhotoPregradeSuccess | Photo
     note: noteParts.join(" "),
     angled,
   };
+  const checkNotes = Array.isArray(fullExtras?.check_notes)
+    ? (fullExtras!.check_notes as unknown[])
+        .filter((n): n is string => typeof n === "string" && n.trim().length > 0)
+        .slice(0, 8)
+    : [];
+  if (checkNotes.length > 0) body.checkNotes = checkNotes;
   const capture = asRecord(asRecord(report.cardflow)?.capture);
   const front = captureMetrics(capture?.front);
   const back = captureMetrics(capture?.back);

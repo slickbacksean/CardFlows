@@ -114,3 +114,139 @@ export function phonePhotoCheck(img: GrayImage, frameFill: number = GRADE_FRAME_
   }
   return { ok: reasons.length === 0, reasons, sharpness: Math.round(sharpness * 10) / 10, cornersWithEdges };
 }
+
+/** Auto-capture: brightness step across a frame edge that counts as the card's edge (0-255 gray). */
+export const GRADE_PROBE_EDGE_STEP_MIN = 14;
+/** How far (share of the frame's short side) the card edge may sit from the drawn frame line. */
+export const GRADE_PROBE_EDGE_SLACK = 0.08;
+/** Each edge is checked in this many segments along it; all must step the same way. */
+export const GRADE_PROBE_EDGE_SEGMENTS = 3;
+
+function regionMean(img: GrayImage, x0: number, y0: number, x1: number, y1: number): number | null {
+  const xa = Math.max(0, Math.min(x0, x1));
+  const xb = Math.min(img.width, Math.max(x0, x1));
+  const ya = Math.max(0, Math.min(y0, y1));
+  const yb = Math.min(img.height, Math.max(y0, y1));
+  if (xb - xa < 1 || yb - ya < 1) return null;
+  let total = 0;
+  for (let y = ya; y < yb; y += 1) {
+    for (let x = xa; x < xb; x += 1) total += img.data[y * img.width + x]!;
+  }
+  return total / ((xb - xa) * (yb - ya));
+}
+
+/**
+ * One frame edge near a corner: is there a straight brightness step along
+ * the frame line (within the slack), the same sign in every segment? Random
+ * texture (a patterned mat) has no consistent step, so it fails.
+ */
+function edgeAligned(
+  img: GrayImage,
+  axis: "h" | "v",
+  line: number,
+  from: number,
+  to: number,
+  slack: number,
+  band: number,
+): boolean {
+  const seg = (to - from) / GRADE_PROBE_EDGE_SEGMENTS;
+  for (let offset = -slack; offset <= slack; offset += 1) {
+    const at = line + offset;
+    let sign = 0;
+    let ok = true;
+    for (let k = 0; k < GRADE_PROBE_EDGE_SEGMENTS && ok; k += 1) {
+      const a = Math.round(from + seg * k);
+      const b = Math.round(from + seg * (k + 1));
+      const before = axis === "h" ? regionMean(img, a, at - band, b, at) : regionMean(img, at - band, a, at, b);
+      const after = axis === "h" ? regionMean(img, a, at, b, at + band) : regionMean(img, at, a, at + band, b);
+      if (before == null || after == null) {
+        ok = false;
+        break;
+      }
+      const step = after - before;
+      if (Math.abs(step) < GRADE_PROBE_EDGE_STEP_MIN || (sign !== 0 && Math.sign(step) !== sign)) ok = false;
+      sign = Math.sign(step);
+    }
+    if (ok) return true;
+  }
+  return false;
+}
+
+/**
+ * Auto-capture corner probe (Mobile Tech Lead review 3): how many of the 4
+ * frame corners have a card edge lined up with BOTH frame lines that meet
+ * there. An empty or clearly soft still counts as 0, so a blurry preview never
+ * starts a hold. Stricter than phonePhotoCheck's corner patches, which only
+ * look for any texture.
+ */
+export function gradeProbeCorners(img: GrayImage, frameFill: number = GRADE_FRAME_FILL.zoomed): number {
+  return gradeProbeDetail(img, frameFill).corners;
+}
+
+export interface GradeProbeDetail {
+  /** Frame corners with a lined-up card edge (0-4); 0 when blurry or empty. */
+  corners: number;
+  /** Centre Laplacian variance of the probe (higher is sharper). */
+  sharpness: number;
+  /** Too soft to judge: the phone is likely closer than the camera can focus. */
+  blurry: boolean;
+}
+
+/** gradeProbeCorners plus why: a blurry probe is not a miss, it means "move back". */
+export function gradeProbeDetail(img: GrayImage, frameFill: number = GRADE_FRAME_FILL.zoomed): GradeProbeDetail {
+  const basic = phonePhotoCheck(img, frameFill);
+  const sharpness = basic.sharpness;
+  if (basic.reasons[0] === PREGRADE_COPY.notFound) return { corners: 0, sharpness, blurry: false };
+  if (basic.reasons[0] === PREGRADE_COPY.blurry) return { corners: 0, sharpness, blurry: true };
+  return { corners: probeCornerCount(img, frameFill), sharpness, blurry: false };
+}
+
+/**
+ * Sean, Oct 18: probes were sharp but found 0 corners. expo-camera (iOS) crops each still to
+ * the preview's aspect, but with the phone lying flat it skips the portrait swap, so the
+ * probe comes back a little wider than tall (274x256) and a slightly different crop than
+ * the preview. The frame was then laid out as a landscape card at the wrong scale. The
+ * on-screen frame is a portrait card, so check portrait first (landscape too, for the
+ * surface step), over a range of scales around the measured fill, and keep the best.
+ */
+export const GRADE_PROBE_FILL_SCALES = [0.82, 0.9, 1, 1.1, 1.22] as const;
+
+function probeCornerCount(img: GrayImage, frameFill: number): number {
+  let best = 0;
+  for (const orientation of ["portrait", "landscape"] as const) {
+    for (const scale of GRADE_PROBE_FILL_SCALES) {
+      best = Math.max(best, probeCornerCountAt(img, frameFill * scale, orientation));
+      if (best === 4) return best;
+    }
+  }
+  return best;
+}
+
+function probeCornerCountAt(img: GrayImage, frameFill: number, orientation: "portrait" | "landscape"): number {
+  const { width: w, height: h } = img;
+  const frame = gradeGuideFrame(w, h, frameFill, orientation);
+  if (!(frame.width > 8) || !(frame.height > 8)) return 0;
+  const left = Math.round((w - frame.width) / 2);
+  const top = Math.round((h - frame.height) / 2);
+  const right = left + frame.width;
+  const bottom = top + frame.height;
+  const short = Math.min(frame.width, frame.height);
+  const slack = Math.max(2, Math.round(short * GRADE_PROBE_EDGE_SLACK));
+  const band = Math.max(2, Math.round(short * 0.04));
+  // Check each edge over the 35% of its length nearest the corner, clear of the slack zone.
+  const spanX = Math.round(frame.width * 0.35);
+  const spanY = Math.round(frame.height * 0.35);
+  const corners: Array<{ y: number; x: number; xs: [number, number]; ys: [number, number] }> = [
+    { y: top, x: left, xs: [left + slack, left + slack + spanX], ys: [top + slack, top + slack + spanY] },
+    { y: top, x: right, xs: [right - slack - spanX, right - slack], ys: [top + slack, top + slack + spanY] },
+    { y: bottom, x: left, xs: [left + slack, left + slack + spanX], ys: [bottom - slack - spanY, bottom - slack] },
+    { y: bottom, x: right, xs: [right - slack - spanX, right - slack], ys: [bottom - slack - spanY, bottom - slack] },
+  ];
+  let found = 0;
+  for (const c of corners) {
+    const horizontal = edgeAligned(img, "h", c.y, c.xs[0], c.xs[1], slack, band);
+    const vertical = horizontal && edgeAligned(img, "v", c.x, c.ys[0], c.ys[1], slack, band);
+    if (horizontal && vertical) found += 1;
+  }
+  return found;
+}

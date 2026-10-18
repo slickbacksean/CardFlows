@@ -72,12 +72,22 @@ def effective_scale(corners: np.ndarray | None) -> dict | None:
     }
 
 
-def sharpness(warped: np.ndarray | None) -> float | None:
-    """Laplacian variance of the card face at a fixed measurement size."""
+def sharpness(warped: np.ndarray | None, card_short_px: float | None = None) -> float | None:
+    """Laplacian variance of the card face at a fixed measurement size.
+
+    CardFlow, Oct 18: never measure above the card's own resolution. When the card
+    is under 750 px wide in the photo, the canonical warp was upscaled and the
+    interpolation alone read as blur (Sean's 2160 px stills scored 13). Then the
+    measurement size drops to the card's width.
+    """
     if warped is None or warped.size == 0:
         return None
     gray = warped if warped.ndim == 2 else cv2.cvtColor(warped, cv2.COLOR_BGR2GRAY)
-    small = cv2.resize(gray, SHARPNESS_SIZE, interpolation=cv2.INTER_AREA)
+    size = SHARPNESS_SIZE
+    if card_short_px is not None and 0 < card_short_px < SHARPNESS_SIZE[0]:
+        w = max(64, int(round(card_short_px)))
+        size = (w, int(round(w * SHARPNESS_SIZE[1] / SHARPNESS_SIZE[0])))
+    small = cv2.resize(gray, size, interpolation=cv2.INTER_AREA)
     h, w = small.shape[:2]
     dy, dx = int(round(h * SHARPNESS_TRIM)), int(round(w * SHARPNESS_TRIM))
     face = small[dy : h - dy, dx : w - dx]
@@ -92,8 +102,8 @@ def _gate(name: str, passed: bool, detail: str, value: float | None, hard: bool)
 
 def capture_checks(warped: np.ndarray | None, corners: np.ndarray | None) -> dict:
     """Metrics plus upstream-shaped gate dicts (hard = retake, never a grade)."""
-    sharp = sharpness(warped)
     scale = effective_scale(corners)
+    sharp = sharpness(warped, scale["card_px"][0] if scale else None)
     gates: list[dict] = []
     if sharp is not None:
         gates.append(

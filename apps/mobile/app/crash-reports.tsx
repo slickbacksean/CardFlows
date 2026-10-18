@@ -6,7 +6,7 @@ import { crashReportsEnabled, loadCrashReportsPreference, setCrashReportsEnabled
 import { colors, space } from "@/lib/theme";
 
 /**
- * Policy Reviewer (P4): Send crash reports. On by default; gates initMobileSentry, and turning it
+ * Policy Reviewer (P4): Send crash reports. Off by default (opt-in); gates initMobileSentry, and turning it
  * off stops sending right away. Separate from Usage analytics (PostHog), which is opt-in.
  */
 export default function CrashReportsScreen() {

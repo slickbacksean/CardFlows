@@ -6,7 +6,7 @@ import {
   extraCreditsLabel,
   GRADE_QUOTA_COPY,
   GRADE_QUOTA_FREE_PER_MONTH,
-  GRADE_QUOTA_PREMIUM_PER_MONTH,
+  GRADE_QUOTA_UNLIMITED_LIMIT,
   gradeQuotaSnapshot,
   monthlyLimitForPlan,
   nextMonthResetAt,
@@ -15,11 +15,20 @@ import {
 } from "./grade-quota";
 
 describe("grade quota", () => {
-  it("gives free accounts 5 and premium accounts 30 per UTC month", () => {
+  it("gives free accounts 10 quick estimates a month and premium unlimited (Sean, Oct 18)", () => {
     expect(monthlyLimitForPlan("free")).toBe(GRADE_QUOTA_FREE_PER_MONTH);
-    expect(monthlyLimitForPlan("premium")).toBe(GRADE_QUOTA_PREMIUM_PER_MONTH);
-    expect(GRADE_QUOTA_FREE_PER_MONTH).toBe(5);
-    expect(GRADE_QUOTA_PREMIUM_PER_MONTH).toBe(30);
+    expect(GRADE_QUOTA_FREE_PER_MONTH).toBe(10);
+    expect(monthlyLimitForPlan("premium")).toBe(GRADE_QUOTA_UNLIMITED_LIMIT);
+    const now = new Date("2026-10-18T00:00:00.000Z");
+    const premium = gradeQuotaSnapshot({ plan: "premium", usedThisMonth: 500, extraCredits: 0, iapEnabled: false, now });
+    expect(premium.unlimited).toBe(true);
+    expect(premium.remainingGrades).toBeGreaterThan(0);
+    expect(JSON.parse(JSON.stringify(premium)).monthlyLimit).toBe(GRADE_QUOTA_UNLIMITED_LIMIT);
+    expect(remainingGradesCaption(premium)).toBe("Unlimited quick pre-grade estimates");
+    expect(decideGradeConsume({ usedThisMonth: 10_000, monthlyLimit: premium.monthlyLimit, extraCredits: 3 })).toEqual({ ok: true, source: "monthly" });
+    const free = gradeQuotaSnapshot({ plan: "free", usedThisMonth: 0, extraCredits: 0, iapEnabled: false, now });
+    expect(free.unlimited).toBeUndefined();
+    expect(remainingGradesCaption(free)).toBe("10 pre-grade estimates left this month. Resets Nov 1.");
   });
 
   it("keys the month in UTC and resets at the next UTC month", () => {
@@ -54,10 +63,10 @@ describe("grade quota", () => {
     });
     expect(snap).toMatchObject({
       month: "2026-10",
-      monthlyLimit: 5,
-      remainingMonthly: 2,
+      monthlyLimit: 10,
+      remainingMonthly: 7,
       extraCredits: 2,
-      remainingGrades: 4,
+      remainingGrades: 9,
       iapEnabled: false,
     });
     expect(snap.resetsAt).toBe("2026-11-01T00:00:00.000Z");

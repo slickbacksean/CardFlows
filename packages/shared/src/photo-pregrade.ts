@@ -13,6 +13,12 @@ export const PREGRADE_SURFACE_NULL_REASON = PREGRADE_COPY.surfaceNotAssessed;
 export const PREGRADE_UNAVAILABLE_MESSAGE = "Photo scoring is unavailable." as const;
 export const PREGRADE_DETECT_UNAVAILABLE_MESSAGE = "Card detection is not available." as const;
 
+/** Pre-grade numbers are 1.0–10.0. 0 (or anything outside that) is a retake, never a score. */
+export function isScoredEstimate(estimate: number): boolean {
+  return Number.isFinite(estimate) && estimate >= 1 && estimate <= 10;
+}
+
+
 export type PhotoPregradeSide = "front" | "back";
 
 export interface PhotoPregradeSubgrade {
@@ -40,6 +46,8 @@ export interface PhotoPregradeSuccess {
   estimate: number;
   subgrades: PhotoPregradeSubgrades;
   note: string;
+  /** Per-check findings from full-grade extras. */
+  checkNotes?: string[];
   warning?: string;
   /** Per-side capture measurements (sharpness, effective DPI). Diagnostics only. */
   capture?: Partial<Record<PhotoPregradeSide, PhotoCaptureMetrics>>;
@@ -86,6 +94,8 @@ export interface PhotoPregradeUnavailable {
   code: "UNAVAILABLE";
   message: string;
   quota?: GradeQuotaSnapshot;
+  /** App-side: this period's full grades are used up; Try again sends the quick grade. */
+  fullGradeUsedUp?: true;
 }
 
 /** Monthly allowance and extra credits are both spent. Never a number. */

@@ -14,6 +14,7 @@ import {
   resolveNorthStarTotals,
   type AccountRecord,
   type AccountStore,
+  type AllowanceTombstone,
   type DeletionAuditEntry,
   type PokecollectorDeletionMode,
   type PokecollectorPendingDeletion,
@@ -158,6 +159,8 @@ export interface GradeQuotaConsumeInput {
   monthKey: string;
   monthlyLimit: number;
   at: string;
+  /** Full 14-photo grades: monthly allowance only, bought credits are not spent. */
+  noCredits?: boolean;
 }
 
 export type GradeQuotaConsumeResult =
@@ -824,6 +827,8 @@ export interface StorePort {
   ensureGradeAnchor: (userId: string, at: string) => GradeAccountRecord;
   setBillingAnchor: (userId: string, billingAnchorAt: string | null, at: string) => GradeAccountRecord;
   getGradeQuotaUsage: (userId: string, monthKey: string) => number;
+  /** Restore used allowance from a deleted-account tombstone (never lowers an existing count). */
+  setGradeQuotaUsage: (userId: string, monthKey: string, used: number) => void;
   consumeGradeQuota: (userId: string, input: GradeQuotaConsumeInput) => GradeQuotaConsumeResult;
   getVendorQuotaUsage: (provider: string, monthKey: string) => number;
   consumeVendorQuota: (provider: string, monthKey: string, cap: number) => boolean;
@@ -945,6 +950,12 @@ export function createMemoryStore(): StorePort {
     return gradeUsage.get(usageKey(userId, monthKey)) ?? 0;
   }
 
+  function setGradeQuotaUsage(userId: string, monthKey: string, used: number): void {
+    const n = Math.max(0, Math.floor(used));
+    const key = usageKey(userId, monthKey);
+    gradeUsage.set(key, Math.max(getGradeQuotaUsage(userId, monthKey), n));
+  }
+
   function consumeGradeQuota(userId: string, input: GradeQuotaConsumeInput): GradeQuotaConsumeResult {
     const usedThisMonth = getGradeQuotaUsage(userId, input.monthKey);
     const stored = getGradeAccount(userId);
@@ -953,7 +964,7 @@ export function createMemoryStore(): StorePort {
     const decision = decideGradeConsume({
       usedThisMonth,
       monthlyLimit: input.monthlyLimit,
-      extraCredits: account.extraCredits,
+      extraCredits: input.noCredits ? 0 : account.extraCredits,
     });
     if (!decision.ok) {
       return { ok: false, usedThisMonth, extraCredits: account.extraCredits };
@@ -1082,6 +1093,7 @@ export function createMemoryStore(): StorePort {
     ensureGradeAnchor,
     setBillingAnchor,
     getGradeQuotaUsage,
+    setGradeQuotaUsage,
     consumeGradeQuota,
     getVendorQuotaUsage,
     consumeVendorQuota,
@@ -1114,6 +1126,7 @@ function createMemoryAccountStore(
   const sendsByAddressDay = new Map<string, number>();
   const byEmail = new Map<string, string>();
   const deletionAudit: DeletionAuditEntry[] = [];
+  const allowanceTombstones = new Map<string, AllowanceTombstone>();
   const northStarTotals = new Map<string, NorthStarWeekTotal>();
   const pendingDeletions = new Map<string, PokecollectorPendingDeletion>();
   const enqueueDeletion = ({ remoteUserId, mode, at }: { remoteUserId: string; mode: PokecollectorDeletionMode; at: string }) => {
@@ -1203,6 +1216,23 @@ function createMemoryAccountStore(
     },
     listDeletionAudit() {
       return deletionAudit.map((entry) => ({ ...entry }));
+    },
+    upsertAllowanceTombstone(entry) {
+      allowanceTombstones.set(entry.emailHmac, { ...entry });
+    },
+    findAllowanceTombstone(emailHmac) {
+      const row = allowanceTombstones.get(emailHmac);
+      return row ? { ...row } : null;
+    },
+    purgeAllowanceTombstonesBefore(cutoff) {
+      let n = 0;
+      for (const [hmac, row] of allowanceTombstones) {
+        if (row.deletedAt < cutoff) {
+          allowanceTombstones.delete(hmac);
+          n += 1;
+        }
+      }
+      return n;
     },
     listAccountUserIds() {
       return [...accounts.values()].map((account) => account.userId);

@@ -56,6 +56,7 @@ describe("MVP CRM schema", () => {
     expect(tables.map((row) => row.name)).toEqual([
       "account_deletion_audit",
       "age_confirmations",
+      "allowance_tombstones",
       "card_external_ids",
       "cardflow_cards",
       "cardsight_user_usage",

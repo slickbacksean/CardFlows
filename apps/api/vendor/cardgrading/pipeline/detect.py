@@ -184,6 +184,11 @@ def _nearest_color_distance(pixels: np.ndarray, colors: np.ndarray) -> np.ndarra
 CARD_ASPECT = 63.0 / 88.0
 MIN_CANDIDATE_AREA_FRAC = 0.05
 THRESHOLD_MULTIPLIERS = (0.15, 0.2, 0.3, 0.5, 1.0, 1.5, 2.0, 2.5)
+# CardFlow local change: Canny (low, high) pairs for the edge candidates.
+EDGE_CANNY_THRESHOLDS = ((10, 30), (20, 60), (40, 120))
+EDGE_WORK_LONG_SIDE_PX = 800
+# CardFlow local change: which candidate source won the last search ("colour" or "edge"), for the detect log.
+LAST_CONTOUR_METHOD: str | None = None
 
 
 def _quads_from_contour(contour: np.ndarray) -> list[np.ndarray]:
@@ -216,6 +221,20 @@ def _card_likeness_penalty(quad: np.ndarray, contour: np.ndarray, area_frac: flo
     quad_area = cv2.contourArea(quad.astype(np.int32))
     solidity = cv2.contourArea(contour) / max(quad_area, 1e-9)
     return aspect_dev * 3.0 + tilt * 1.0 + (1.0 - min(solidity, 1.0)) * 1.0 - min(area_frac, 0.5) * 0.2
+
+
+# CardFlow local change: edge candidates must be card-shaped (short/long side
+# within 12% of 63/88, i.e. 0.716 portrait or 1.397 landscape). Edges also trace
+# strips, art boxes and table seams, which the colour candidates never see.
+EDGE_MAX_ASPECT_DEV = 0.12
+
+
+def _card_shaped(quad: np.ndarray) -> bool:
+    tl, tr, br, bl = quad
+    w = (np.linalg.norm(tr - tl) + np.linalg.norm(br - bl)) / 2
+    h = (np.linalg.norm(bl - tl) + np.linalg.norm(br - tr)) / 2
+    ratio = min(w, h) / max(max(w, h), 1e-9)
+    return abs(ratio - CARD_ASPECT) / CARD_ASPECT <= EDGE_MAX_ASPECT_DEV
 
 
 def find_card_contour(image: np.ndarray) -> np.ndarray | None:
@@ -262,8 +281,10 @@ def find_card_contour(image: np.ndarray) -> np.ndarray | None:
         mean_color = np.mean(_corner_samples(image), axis=0)
         distance_maps.append(_nearest_color_distance(pixels, mean_color[None, :]))
 
+    global LAST_CONTOUR_METHOD
     best_quad = None
     best_penalty = np.inf
+    method = None
     for dist in distance_maps:
         blurred = cv2.GaussianBlur(np.clip(dist, 0, 255).astype(np.uint8), (5, 5), 0)
         otsu_val, _ = cv2.threshold(blurred, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
@@ -283,7 +304,42 @@ def find_card_contour(image: np.ndarray) -> np.ndarray | None:
                     if penalty < best_penalty:
                         best_penalty = penalty
                         best_quad = quad
+                        method = "colour"
 
+    # CardFlow local change: edge candidates for low-contrast phone photos.
+    # A light card on a beige table under uneven light has corner samples
+    # 100 levels apart and a pale text panel close to the table colour, so
+    # every colour-distance split above loses the lower half of the card and
+    # the best quad is a skewed box around the artwork ("tilt" retake).
+    # The card's outline still shows as a gradient edge, so faint Canny edges
+    # add candidates. Like the extra thresholds, they only add candidates; the
+    # same card-likeness score decides.
+    # Run at a fixed working size so a 12 MP photo's soft edges look like the
+    # same step a small preview has, then scale the quad back.
+    scale = min(1.0, EDGE_WORK_LONG_SIDE_PX / max(image.shape[:2]))
+    small = image if scale >= 1.0 else cv2.resize(image, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
+    small_area = small.shape[0] * small.shape[1]
+    gray = cv2.GaussianBlur(cv2.cvtColor(small, cv2.COLOR_BGR2GRAY), (5, 5), 0)
+    for low, high in EDGE_CANNY_THRESHOLDS:
+        edges = cv2.Canny(gray, low, high)
+        edges = cv2.dilate(edges, np.ones((5, 5), np.uint8))
+        contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        for contour in contours:
+            area_frac = cv2.contourArea(contour) / small_area
+            if area_frac < MIN_CANDIDATE_AREA_FRAC:
+                continue
+            for small_quad in _quads_from_contour(contour):
+                if not _card_shaped(small_quad):
+                    continue
+                quad = (small_quad / scale).astype(np.float32)
+                contour_full = (contour.astype(np.float32) / scale).astype(np.int32)
+                penalty = _card_likeness_penalty(quad, contour_full, area_frac)
+                if penalty < best_penalty:
+                    best_penalty = penalty
+                    best_quad = quad
+                    method = "edge"
+
+    LAST_CONTOUR_METHOD = method
     return best_quad
 
 

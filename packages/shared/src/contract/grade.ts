@@ -4,6 +4,7 @@ import { defineRoute } from "./core";
 import {
   DetectCropResultSchema,
   GradeEstimateSchema,
+  GradeExtraShotResultSchema,
   GradeQuotaSnapshotSchema,
   PhotoPregradeResultSchema,
 } from "./models";
@@ -39,6 +40,12 @@ export const gradeRoutes = {
     path: "/v1/grade/detect",
     bodyKind: "form",
     response: DetectCropResultSchema,
+  }),
+  uploadGradeExtra: defineRoute({
+    method: "POST",
+    path: "/v1/grade/extra",
+    bodyKind: "form",
+    response: GradeExtraShotResultSchema,
   }),
   requestPhotoPregrade: defineRoute({
     method: "POST",

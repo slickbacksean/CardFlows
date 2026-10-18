@@ -73,6 +73,10 @@ export function gradeStillPixelRatio(
  * Android returns "WxH" strings; iOS returns presets, where "Photo" is full resolution.
  */
 export function largestPictureSize(sizes: readonly string[]): string | undefined {
+  // iOS lists session presets: "3840x2160" is a 16:9 *video* preset (8 MP), while "Photo" is
+  // the full 4:3 still (12 MP on recent iPhones). Sean's Oct 18 stills were 2160 px wide
+  // because the video preset won on area. Android lists real sizes and no "Photo".
+  if (sizes.includes("Photo")) return "Photo";
   let best: { size: string; area: number } | undefined;
   for (const size of sizes) {
     const match = /^(\d+)x(\d+)$/i.exec(size.trim());

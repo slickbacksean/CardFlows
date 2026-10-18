@@ -2,26 +2,27 @@
  * D14 (Sean-approved): premium tier. Placeholder prices until IAP ships (CARD_FLOW_IAP_ENABLED off).
  * Batch grading and full estimate history are premium-only. Free users see their 10 most recent
  * estimates per card; older ones keep saving on the server and show once the user upgrades.
- * The monthly allowance resets on the user's own date (billing date) and doesn't roll over.
+ * Monthly allowances reset on the 1st of each month (UTC; the billing date once Apple billing exists) and don't roll over.
  * Bought credit packs never expire (Sean, Oct 16; Apple 3.1.1) and are spent after the allowance.
  */
 import { GRADE_HISTORY_FREE_VISIBLE } from "./grade-history";
-import { GRADE_QUOTA_FREE_PER_MONTH, GRADE_QUOTA_PREMIUM_PER_MONTH } from "./grade-quota";
+import { GRADE_QUOTA_FREE_PER_MONTH } from "./grade-quota";
 
 /** The one place the placeholder prices live. */
 export const PREMIUM_PLACEHOLDER_PRICING = {
   monthly: "$6.99/month",
   yearly: "$59.99/year",
-  premiumEstimatesPerMonth: GRADE_QUOTA_PREMIUM_PER_MONTH,
+  /** Sean (Oct 18): quick estimates are unlimited on Premium. */
+  premiumEstimatesPerMonth: "unlimited" as const,
   freeEstimatesPerMonth: GRADE_QUOTA_FREE_PER_MONTH,
-  /** Sean: allowances reset monthly on the user's own date; unused estimates don't roll over. */
+  /** Sean (Oct 18): allowances reset on the 1st of each month; unused estimates don't roll over. */
   estimatesRollOver: false,
   /** Sean (Oct 16): bought credit-pack credits never expire (Apple 3.1.1). */
   creditsExpire: false,
   /**
    * Credit packs (Sean, Oct 16): buying is Premium-only, built after the Apple developer account
    * exists. Sean (Oct 17): spending leftover credits does not need Premium; on Free they're
-   * spent after the 5 free estimates.
+   * spent after the 10 free estimates.
    * Not for sale yet. Credits are spent only after the monthly allowance is used up.
    */
   creditPacks: [
@@ -33,7 +34,7 @@ export const PREMIUM_PLACEHOLDER_PRICING = {
 
 /** Shown on the sign-up screen. */
 export const SIGNUP_ALLOWANCE_NOTE =
-  "Free accounts get 5 pre-grade estimates a month, resetting on your monthly reset date, and see their 10 most recent estimates per card. Older estimates stay saved, not deleted.";
+  "Free accounts get 10 quick pre-grade estimates a month, resetting on the 1st of each month, and see their 10 most recent estimates per card. Older estimates stay saved, not deleted.";
 
 export const PREMIUM_REQUIRED_CODE = "premium_required";
 /**
@@ -53,7 +54,7 @@ const FEATURE_LINE: Record<PremiumFeature, string> = {
 export const PREMIUM_PROMPT_COPY = {
   title: "Premium is coming",
   plans: `${PREMIUM_PLACEHOLDER_PRICING.monthly} or ${PREMIUM_PLACEHOLDER_PRICING.yearly}`,
-  includes: `${PREMIUM_PLACEHOLDER_PRICING.premiumEstimatesPerMonth} pre-grade estimates a month (free: ${PREMIUM_PLACEHOLDER_PRICING.freeEstimatesPerMonth}), batch pre-grade and full estimate history. Your monthly allowance resets on your reset date and unused monthly estimates don't roll over. Credits you buy never expire.`,
+  includes: `Unlimited quick pre-grade estimates (free: ${PREMIUM_PLACEHOLDER_PRICING.freeEstimatesPerMonth} a month), batch pre-grade and full estimate history. Your monthly allowance resets on your reset date and unused monthly estimates don't roll over. Credits you buy never expire.`,
   notYet: "Upgrades aren't available yet. Prices may change before launch.",
 } as const;
 

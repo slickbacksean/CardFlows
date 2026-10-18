@@ -26,6 +26,7 @@ describe("grade estimate Zod validation", () => {
       frontUploadId: undefined,
       backUploadId: undefined,
       reestimate: false,
+      fullGrade: false,
       angled: [],
       captureMeta: null,
     });
@@ -35,6 +36,7 @@ describe("grade estimate Zod validation", () => {
       frontUploadId: undefined,
       backUploadId: undefined,
       reestimate: false,
+      fullGrade: false,
       angled: [],
       captureMeta: null,
     });

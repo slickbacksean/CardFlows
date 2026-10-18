@@ -66,6 +66,8 @@ export const GradeQuotaSnapshotSchema = typed<GradeQuotaSnapshot>(
     remainingGrades: num,
     resetsAt: str,
     iapEnabled: z.boolean(),
+    unlimited: z.boolean().optional(),
+    fullGrade: z.looseObject({ monthlyLimit: num, usedThisMonth: num, remaining: num }).optional(),
   }),
 );
 
@@ -129,6 +131,26 @@ export const GradeEstimateSchema = typed<CardFlowGradeEstimate>(
 
 const side = z.enum(["front", "back"]);
 
+/** POST /v1/grade/extra (full 14-photo grade). Blurry stills return a retake body instead. */
+export const GradeExtraShotResultSchema = z.union([
+  z.looseObject({
+    ok: z.literal(true),
+    side: z.enum(["front", "back"]),
+    shot: z.enum(["tilt_a", "tilt_b", "corner_tl", "corner_tr", "corner_br", "corner_bl"]),
+    sessionId: z.string().optional(),
+    used: z.boolean(),
+    stored: z.boolean(),
+  }),
+  z.looseObject({
+    ok: z.literal(false),
+    status: z.literal("retake"),
+    code: z.literal("PHOTO_RETAKE"),
+    side: z.enum(["front", "back"]),
+    shot: z.enum(["tilt_a", "tilt_b", "corner_tl", "corner_tr", "corner_br", "corner_bl"]).optional(),
+    reasons: z.array(z.string()),
+  }),
+]);
+
 export const DetectCropResultSchema = typed<DetectCropResult>(
   z.discriminatedUnion("status", [
     z.looseObject({
@@ -166,6 +188,7 @@ export const PhotoPregradeResultSchema = typed<PhotoPregradeResult>(
       estimate: num,
       subgrades: z.looseObject({}),
       note: str,
+      checkNotes: z.array(str).optional(),
       warning: str.optional(),
       quota: GradeQuotaSnapshotSchema.optional(),
     }),

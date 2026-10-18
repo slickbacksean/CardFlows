@@ -1,4 +1,4 @@
-import { AGE_GATE_VERSION, BATCH_GRADE_HEADER, EMAIL_UNVERIFIED_CODE, EMAIL_VERIFICATION_COPY, PREMIUM_REQUIRED_CODE, SIGNUP_REQUIRED_CODE, isPremiumFeature, OUT_OF_GRADES_CODE, pregradeFailureMessage, quotaExhaustedMessage, type PremiumFeature, type SignupReason } from "@cardflow/shared";
+import { AGE_GATE_VERSION, BATCH_GRADE_HEADER, EMAIL_UNVERIFIED_CODE, EMAIL_VERIFICATION_COPY, PREMIUM_REQUIRED_CODE, SIGNUP_REQUIRED_CODE, isPremiumFeature, OUT_OF_GRADES_CODE, OUT_OF_FULL_GRADES_CODE, GRADE_FULL_COPY, pregradeFailureMessage, quotaExhaustedMessage, type PremiumFeature, type SignupReason } from "@cardflow/shared";
 import {
   CARD_FLOW_REQUEST_TIMEOUT_MS,
   cardFlowHttpErrorMessage,
@@ -6,8 +6,10 @@ import {
   resolveClientApiUrl,
   emptySlabEstimate,
   GRADE_QUOTA_COPY,
+  PREGRADE_COPY,
   PREGRADE_DETECT_UNAVAILABLE_MESSAGE,
   PREGRADE_UNAVAILABLE_MESSAGE,
+  isScoredEstimate,
   unavailableGradeEstimate,
   pollGradeJob,
   GradeJobCancelled,
@@ -19,6 +21,7 @@ import {
   type CardFlowGradeEstimate,
   type CardFlowSlabEstimate,
   type DetectCropResult,
+  type GradeExtraShot,
   type PhotoPregradeResult,
   type GradeQuotaSnapshot,
   type RecognitionScenario,
@@ -710,6 +713,21 @@ export async function detectGradePhoto(
   }
 }
 
+/** Full 14-photo mode: one tilted or corner close-up (Premium + server flag). Not charged. */
+export async function uploadGradeExtra(input: {
+  uri: string;
+  side: "front" | "back";
+  shot: GradeExtraShot;
+  sessionId: string;
+}): Promise<{ ok: true; used: boolean; stored: boolean } | { ok: false; status: "retake"; reasons: string[] }> {
+  const form = new FormData();
+  await appendGradeStill(form, "image", input.uri, "image/jpeg");
+  form.append("side", input.side);
+  form.append("shot", input.shot);
+  form.append("sessionId", input.sessionId);
+  return callApi(apiContract.uploadGradeExtra, { form, timeoutMs: GRADE_DETECT_TIMEOUT_MS });
+}
+
 /**
  * Both original photos → offline `grade_card`. The number is
  * `grade_estimate.overall_grade` only. A failure is "unavailable", never a number.
@@ -721,8 +739,13 @@ export async function requestPhotoPregrade(input: {
   backUri: string;
   backMimeType: string | null;
   backUploadId?: string | null;
+  /** Full 14-photo grade: spends the full allowance instead of the quick one. */
+  fullGrade?: boolean;
+  sessionId?: string;
 }): Promise<PhotoPregradeResult> {
   const form = new FormData();
+  if (input.fullGrade) form.append("fullGrade", "true");
+  if (input.sessionId) form.append("sessionId", input.sessionId);
   const frontMime =
     normalizeScanImageMime(input.frontMimeType) ?? mimeFromUri(input.frontUri) ?? "image/jpeg";
   const backMime =
@@ -736,13 +759,29 @@ export async function requestPhotoPregrade(input: {
       form,
       timeoutMs: GRADE_PREGRADE_TIMEOUT_MS,
     });
-    // 0.0 is grade_card's "nothing measurable", not a grade: never show it.
-    if (data.ok && (typeof data.estimate !== "number" || !(data.estimate >= 1))) {
-      return { ok: false, status: "unavailable", code: "UNAVAILABLE", message: PREGRADE_UNAVAILABLE_MESSAGE };
+    // 0.0 is grade_card's "nothing measurable", not a grade: retake, never a score or "unavailable".
+    if (data.ok && (typeof data.estimate !== "number" || !isScoredEstimate(data.estimate))) {
+      return {
+        ok: false,
+        status: "retake",
+        code: "PHOTO_RETAKE",
+        side: "front",
+        reasons: [PREGRADE_COPY.nothingMeasured],
+      };
     }
     return data;
   } catch (error) {
     const extra = error as Error & { status?: number; quota?: GradeQuotaSnapshot; code?: string };
+    if (extra.status === 429 && extra.code === OUT_OF_FULL_GRADES_CODE) {
+      return {
+        ok: false,
+        status: "unavailable",
+        code: "UNAVAILABLE",
+        message: GRADE_FULL_COPY.usedUpMidway,
+        quota: extra.quota,
+        fullGradeUsedUp: true,
+      };
+    }
     if (extra.status === 429 && (extra.code === OUT_OF_GRADES_CODE || extra.message === GRADE_QUOTA_COPY.outOfGrades)) {
       return {
         ok: false,

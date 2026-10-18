@@ -5,13 +5,26 @@ import { AGE_CONFIRMATION_REQUIRED_CODE, AGE_GATE_COPY, AGE_GATE_VERSION } from 
 import { ageConfirmationState, hasAgeConfirmation } from "./age-store";
 import { ageGateEnabledFromEnv, CARDSIGHT_GUEST_MONTHLY_CAP, CARDSIGHT_USER_MONTHLY_CAP_DEFAULT } from "./grade-quota-env";
 import { createRecognitionWithFallback } from "./cardsight-adapter";
-import { normalizeEmail, type DeletionAuditKind } from "./account-store";
+import { ALLOWANCE_TOMBSTONE_TTL_MS, allowanceTombstoneKey, normalizeEmail, type DeletionAuditKind } from "./account-store";
 import { routePath } from "hono/route";
 import { CARDSIGHT_CONSENT_VERSION, INVITED_USERS, EMAIL_CODE_LIFETIME_SENDS, EMAIL_SENDS_PER_ADDRESS_PER_DAY, UNVERIFIED_ACCOUNT_TTL_DAYS, EMAIL_CODE_LENGTH, EMAIL_RESEND_COOLDOWN_MS, EMAIL_UNVERIFIED_CODE, EMAIL_VERIFICATION_COPY, EMAIL_VERIFICATION_TTL_MS, isEmailCode, passwordResetEmailText, verificationEmailText, quotaAnchor, quotaPeriodFor, ACCOUNT_AUTH_COPY, ACCOUNT_DELETION_COPY, PASSWORD_RESET_TTL_MS, GUEST_MINT_WINDOW_MS, GUEST_SESSION_TTL_MS, isValidEmail, passwordProblem, GUEST_USER_PREFIX, SIGNUP_REQUIRED_CODE, guestIdentity, guestRouteBlockReason, isGuestUserId, isHot, parsePerfBatch, signupMessage, type SignupReason } from "@cardflow/shared";
 import { NORTH_STAR_NAME, SCANS_PER_WAR_NAME, northStarUserWeekTotals, northStarWeekly, type NorthStarWeekTotal } from "@cardflow/shared";
 import { ANONYMIZED_USER_PREFIX } from "./purchase-ledger";
 import { opsMetrics, type OpsMetrics } from "./ops-metrics";
 import { parseUserPriceAmount } from "@cardflow/shared";
+import { OUT_OF_FULL_GRADES_CODE, GRADE_FULL_COPY, gradeFullAllowance, gradeFullModeEnabled, gradeFullMonthlyLimit, gradeFullUsageKey } from "@cardflow/shared";
+import {
+  checkExtraBlur,
+  deleteUserGradeExtras,
+  gradeExtrasSessionPath,
+  purgeExpiredGradeExtras,
+  saveGradeExtraShot,
+} from "./grade-extra-store";
+
+/** Full 14-photo mode flag (docs/GRADE_FULL_MODE.md). Read per request so tests can flip it. */
+function gradeFullModeFlag(): string | undefined {
+  return process.env.CARD_FLOW_GRADE_FULL_MODE;
+}
 import {
   cachedPricingProvider,
   createRecognitionCache,
@@ -181,7 +194,7 @@ import {
   unconfiguredScanIdentifyResult,
 } from "./scan-identify";
 import { parseScanCreateRequest } from "./scan-request";
-import { parseGradeDetectRequest, parseGradeEstimateRequest, type ParsedGradeStill } from "./grade-estimate-request";
+import { parseGradeDetectRequest, parseGradeEstimateRequest, parseGradeExtraRequest, type ParsedGradeStill } from "./grade-estimate-request";
 import { detectCardForGrade, pregradePhotoPair } from "./grade-photo-flow";
 import type { CardgradingRunner } from "./cardgrading-run";
 import {
@@ -246,6 +259,7 @@ async function boundedProbe(
 export function requiresVerifiedEmail(pathName: string): boolean {
   return (
     pathName === "/v1/grade/detect" ||
+    pathName === "/v1/grade/extra" ||
     pathName === "/v1/grade/pregrade" ||
     pathName === "/v1/grading/batch" ||
     /^\/v1\/inventory\/[^/]+\/(grade-jobs|grade-estimate)$/.test(pathName)
@@ -554,6 +568,7 @@ export function createApp(
     setGradePlan,
     addGradeCredits,
     getGradeQuotaUsage,
+    setGradeQuotaUsage,
     consumeGradeQuota,
   } = store;
   const now = options.now ?? (() => new Date());
@@ -631,6 +646,7 @@ export function createApp(
       if (store.accounts.hasLiveSession(userId, at)) continue;
       const scans = store.listScans(userId).length;
       store.deleteUserPhotos(userId);
+      deleteUserGradeExtras(userId);
       // Re-review H1: a guest's PokéCollector user is shared (legacy `cardflow-guest`): held, never deleted.
       const link = getPokecollectorUserMapping(userId);
       store.accounts.deleteAllUserRows(userId, {
@@ -1103,8 +1119,8 @@ export function createApp(
   }
 
   /**
-   * Sean: the allowance resets on the billing date, else the account creation date, with no
-   * rollover. Bought credits are separate and never expire (Sean, Oct 16; Apple 3.1.1).
+   * Sean (Oct 18): allowances reset on the 1st of each calendar month (UTC); an account with a
+   * billing date (Apple) keeps that date. No rollover. Bought credits are separate and never expire (Sean, Oct 16; Apple 3.1.1).
    */
   function quotaPeriodForUser(userId: string, at: Date) {
     const account = store.ensureGradeAnchor(userId, at.toISOString());
@@ -1116,7 +1132,7 @@ export function createApp(
     const at = now();
     const { account, period } = quotaPeriodForUser(userId, at);
     const plan = resolveAccountPlan(userId, account.plan);
-    return gradeQuotaSnapshot({
+    const snapshot = gradeQuotaSnapshot({
       plan,
       usedThisMonth: getGradeQuotaUsage(userId, period.key),
       extraCredits: account.extraCredits,
@@ -1124,6 +1140,33 @@ export function createApp(
       now: at,
       period,
     });
+    return withFullGrade(snapshot, userId, plan, period.key);
+  }
+
+  /** Full 14-photo grade allowance (Sean, Oct 18), only while CARD_FLOW_GRADE_FULL_MODE=on. */
+  function withFullGrade(snapshot: GradeQuotaSnapshot, userId: string, plan: GradePlan, periodKey: string): GradeQuotaSnapshot {
+    if (!gradeFullModeEnabled(gradeFullModeFlag())) return snapshot;
+    return { ...snapshot, fullGrade: gradeFullAllowance(plan, getGradeQuotaUsage(userId, gradeFullUsageKey(periodKey))) };
+  }
+
+  /** Spends one full grade from this period's allowance; bought credits are never used for it. */
+  function takeFullGradeAllowance(userId: string) {
+    const at = now();
+    const { account, period } = quotaPeriodForUser(userId, at);
+    const plan = resolveAccountPlan(userId, account.plan);
+    const consumed = quotaEnabled
+      ? consumeGradeQuota(userId, {
+          monthKey: gradeFullUsageKey(period.key),
+          monthlyLimit: gradeFullMonthlyLimit(plan),
+          at: at.toISOString(),
+          noCredits: true,
+        })
+      : { ok: true as const };
+    return { ok: consumed.ok, quota: quotaSnapshotFor(userId) };
+  }
+
+  function outOfFullGradesResponse(c: Context, quota: GradeQuotaSnapshot) {
+    return c.json({ ok: false, code: OUT_OF_FULL_GRADES_CODE, error: GRADE_FULL_COPY.usedUp, quota }, 429);
   }
 
   function takeGradeAllowance(userId: string) {
@@ -1278,6 +1321,7 @@ export function createApp(
         pricingProvider: pricingProviderHealth(pricing.name),
         gradeEstimate: gradeEstimateHealth(gradingProvider.name),
         gradeEngineOk: engine ? healthOk(engine) : null,
+        recognitionMock: recognitionProvider.name === "mock",
         opsMessage: process.env.CARD_FLOW_STATUS_MESSAGE ?? null,
       };
     },
@@ -1808,7 +1852,20 @@ export function createApp(
       }
       account = existing;
     }
-    if (created) sendVerificationCode(created);
+    if (created) {
+      sendVerificationCode(created);
+      // Carry over this month's used allowances from a live tombstone (HMAC match). No new-account bonus.
+      const tomb = store.accounts.findAllowanceTombstone(allowanceTombstoneKey(created.email));
+      if (tomb) {
+        const ageMs = now().getTime() - Date.parse(tomb.deletedAt);
+        if (Number.isFinite(ageMs) && ageMs >= 0 && ageMs <= ALLOWANCE_TOMBSTONE_TTL_MS) {
+          const { period } = quotaPeriodForUser(created.userId, now());
+          if (tomb.periodKey === period.key && tomb.used > 0) {
+            store.setGradeQuotaUsage(created.userId, period.key, tomb.used);
+          }
+        }
+      }
+    }
     const moved = adoptGuestData(c.req.header("authorization"), account.userId);
     if (bodyConfirmed && !hasAgeConfirmation(store.ageConfirmations, account.userId)) {
       store.ageConfirmations.confirm(account.userId, AGE_GATE_VERSION, now().toISOString());
@@ -2062,6 +2119,20 @@ export function createApp(
     // Data Engineer review: every user_id row in one transaction first, then the files (whose
     // locations were collected before the rows went). A crash in between leaves orphan files
     // with no personal rows, which the photo retention sweep removes, never rows without files.
+    // Allowance tombstone: remember this month's used grades under an HMAC of the email (no
+    // plaintext) so a re-sign-up can't reset the free allowance for 90 days.
+    const deletingAccount = store.accounts.getAccount(userId);
+    let allowanceTombstone: { emailHmac: string; periodKey: string; used: number; deletedAt: string } | undefined;
+    if (deletingAccount?.email) {
+      const at = now();
+      const { period } = quotaPeriodForUser(userId, at);
+      allowanceTombstone = {
+        emailHmac: allowanceTombstoneKey(deletingAccount.email),
+        periodKey: period.key,
+        used: getGradeQuotaUsage(userId, period.key),
+        deletedAt: at.toISOString(),
+      };
+    }
     const removePhotos = store.prepareUserPhotoDeletion(userId);
     // Backend review H2 (P4): the user's weekly North Star counts become anonymous totals in the
     // same transaction that hard-deletes every row, including purchase_events, so past weeks
@@ -2087,6 +2158,7 @@ export function createApp(
     const rows = store.accounts.deleteAllUserRows(userId, { northStarTotals, pokecollectorRemote });
     const photos = removePhotos();
     const staged = gradeUploads.releaseUser(userId);
+    deleteUserGradeExtras(userId);
     let pokecollector: "not_linked" | "queued" | "held" = "not_linked";
     if (pokecollectorRemote && pokecollectorLink) {
       const queued = store.accounts.listPokecollectorDeletions().find((row) => row.remoteUserId === pokecollectorLink.pokecollectorUserId);
@@ -2105,6 +2177,7 @@ export function createApp(
     // Backend review L3: audit row with no PII.
     const rowsDeleted = Object.values(rows).reduce((sum, n) => sum + n, 0);
     store.accounts.recordDeletionAudit({ at: now().toISOString(), kind, rowsDeleted });
+    if (allowanceTombstone) store.accounts.upsertAllowanceTombstone(allowanceTombstone);
     return { rows, photos, staged, rowsDeleted, pokecollector };
   };
 
@@ -2162,6 +2235,8 @@ export function createApp(
       accountsSwept += 1;
     }
     const imagesSwept = store.sweepOrphanScanImages(new Date(now().getTime() - 60 * 60 * 1000));
+    // Allowance tombstones older than 90 days (HMAC only; no email left).
+    store.accounts.purgeAllowanceTombstonesBefore(new Date(now().getTime() - ALLOWANCE_TOMBSTONE_TTL_MS).toISOString());
     // Re-review H1: the sweep also retries due PokéCollector deletes (the queue's timer does too).
     pokecollectorDeletions.kick();
     return { accountsSwept, imagesSwept };
@@ -2816,6 +2891,61 @@ export function createApp(
     },
   );
 
+  // Full 14-photo grade (Sean, Oct 18): needs CARD_FLOW_GRADE_FULL_MODE=on and a full grade left
+  // this period. Uploading doesn't spend one; /v1/grade/pregrade with fullGrade=true does.
+  app.post(
+    "/v1/grade/extra",
+    detectRateLimit,
+    bodyLimit({
+      maxSize: GRADE_ROUTE_BODY_MAX_BYTES,
+      onError: gradeBodyTooLarge,
+    }),
+    async (c) => {
+      const userId = c.get("userId") as string;
+      if (!gradeFullModeEnabled(gradeFullModeFlag())) {
+        return c.json({ ok: false, error: "Full grade isn't turned on" }, 404);
+      }
+      const quota = quotaSnapshotFor(userId);
+      if (quotaEnabled && (quota.fullGrade?.remaining ?? 0) <= 0) return outOfFullGradesResponse(c, quota);
+      const parsed = await parseGradeExtraRequest(c);
+      if ("error" in parsed) {
+        return c.json({ ok: false, error: parsed.error }, parsed.status);
+      }
+      const blur = await checkExtraBlur(parsed.still);
+      if (!blur.ok) {
+        console.log(
+          `grade-extra side=${parsed.side} shot=${parsed.shot} blur=fail sharpness=${blur.sharpness ?? "-"}`,
+        );
+        return c.json({
+          ok: false as const,
+          status: "retake" as const,
+          code: "PHOTO_RETAKE" as const,
+          side: parsed.side,
+          shot: parsed.shot,
+          reasons: [blur.reason ?? "Too blurry. Move back a little and retake."],
+        });
+      }
+      const stored = saveGradeExtraShot({
+        userId,
+        sessionId: parsed.sessionId,
+        side: parsed.side,
+        shot: parsed.shot,
+        still: parsed.still,
+      });
+      console.log(
+        `grade-extra side=${parsed.side} shot=${parsed.shot} session=${parsed.sessionId} bytes=${parsed.still.bytes.byteLength} stored=${stored} sharpness=${blur.sharpness ?? "-"}`,
+      );
+      return c.json({
+        ok: true as const,
+        side: parsed.side,
+        shot: parsed.shot,
+        sessionId: parsed.sessionId,
+        used: false,
+        stored,
+      });
+    },
+  );
+
   app.post(
     "/v1/grade/pregrade",
     gradeRateLimit,
@@ -2836,16 +2966,27 @@ export function createApp(
       if (!parsed.frontImage || !parsed.backImage) {
         return c.json({ ok: false, error: "Front and back photos are required" }, 400);
       }
-      const taken = takeGradeAllowance(c.get("userId"));
-      if (!taken.ok) return outOfGradesResponse(c, taken.quota);
+      if (parsed.fullGrade && !gradeFullModeEnabled(gradeFullModeFlag())) {
+        return c.json({ ok: false, error: "Full grade isn't turned on" }, 400);
+      }
+      // A full grade spends the full allowance only; a quick one spends the quick allowance.
+      const taken = parsed.fullGrade ? takeFullGradeAllowance(c.get("userId")) : takeGradeAllowance(c.get("userId"));
+      if (!taken.ok) {
+        return parsed.fullGrade ? outOfFullGradesResponse(c, taken.quota) : outOfGradesResponse(c, taken.quota);
+      }
+      const userId = c.get("userId") as string;
+      const extrasDir =
+        parsed.fullGrade && parsed.sessionId
+          ? gradeExtrasSessionPath(userId, parsed.sessionId)
+          : null;
       const result = await pregradePhotoPair({
         runner: cardgrading,
         front: parsed.frontImage,
         back: parsed.backImage,
         angledFront: parsed.angledFront ?? [],
+        extrasDir: extrasDir ?? undefined,
         captureMeta: parsed.captureMeta ?? null,
       });
-      const userId = c.get("userId");
       if (parsed.frontUploadId) gradeUploads.release(userId, parsed.frontUploadId);
       if (parsed.backUploadId) gradeUploads.release(userId, parsed.backUploadId);
       return c.json({ ...result, quota: taken.quota });
