@@ -230,7 +230,7 @@ export default function DraftScreen() {
         result.allInTotal ?? result.costToAsk?.allInTotal ?? null,
       );
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not mark ready");
+      setError(caught instanceof Error ? caught.message : "Couldn't mark ready");
     } finally {
       setIsSaving(false);
     }
@@ -385,7 +385,7 @@ export default function DraftScreen() {
                     </Text>
                   </View>
                   <Text style={styles.body}>
-                    {estimatedSpread ? estimatedSpread.line : allInTotal ? "Enter an asking price." : "Cost missing. Add your cost in Collection."}
+                    {estimatedSpread ? estimatedSpread.line : allInTotal ? "Enter an asking price." : "Cost missing. Add your cost in MyDEX."}
                   </Text>
                   <Text style={styles.body}>{ESTIMATED_SPREAD_NOTE}</Text>
                 </View>

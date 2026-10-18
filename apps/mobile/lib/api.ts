@@ -1,4 +1,4 @@
-import { AGE_GATE_VERSION, BATCH_GRADE_HEADER, EMAIL_UNVERIFIED_CODE, EMAIL_VERIFICATION_COPY, PREMIUM_REQUIRED_CODE, SIGNUP_REQUIRED_CODE, isPremiumFeature, type PremiumFeature, type SignupReason } from "@cardflow/shared";
+import { AGE_GATE_VERSION, BATCH_GRADE_HEADER, EMAIL_UNVERIFIED_CODE, EMAIL_VERIFICATION_COPY, PREMIUM_REQUIRED_CODE, SIGNUP_REQUIRED_CODE, isPremiumFeature, OUT_OF_GRADES_CODE, pregradeFailureMessage, quotaExhaustedMessage, type PremiumFeature, type SignupReason } from "@cardflow/shared";
 import {
   CARD_FLOW_REQUEST_TIMEOUT_MS,
   cardFlowHttpErrorMessage,
@@ -125,6 +125,8 @@ interface HttpResult {
   ok: boolean;
   status: number;
   text: () => Promise<string>;
+  /** Read for Retry-After (busy vs out of allowance). */
+  headers?: { get(name: string): string | null };
 }
 
 /**
@@ -163,6 +165,7 @@ function postNativeForm(
         ok: status >= 200 && status < 300,
         status,
         text: async () => xhr.responseText ?? "",
+        headers: { get: (name: string) => xhr.getResponseHeader(name) },
       });
     };
     xhr.onerror = () => {
@@ -273,11 +276,24 @@ async function request<T>(
       throw unverified;
     }
     const error = new Error(cardFlowHttpErrorMessage(response.status, data.error));
-    const extra = error as Error & { status?: number; code?: string; quota?: GradeQuotaSnapshot };
+    const extra = error as Error & {
+      status?: number;
+      quota?: GradeQuotaSnapshot;
+      code?: string;
+      userMessage?: string;
+      retryAfterSeconds?: number;
+    };
     extra.status = response.status;
-    // The server's machine-readable code (e.g. password_incorrect), never shown as text.
-    const code = (data as { code?: unknown }).code;
-    if (typeof code === "string") extra.code = code;
+    // P5 (Community + UX reviews): the screen copy keys off the server's code, never its text.
+    const body = data as { code?: unknown; error?: unknown; userFacing?: unknown };
+    if (typeof body.code === "string") extra.code = body.code;
+    else if (typeof body.error === "string" && /^[a-z][a-z0-9_]*$/.test(body.error)) extra.code = body.error;
+    // Only text the API explicitly marked as written for people is ever shown as-is.
+    if (body.userFacing === true && typeof body.error === "string" && body.error.trim()) {
+      extra.userMessage = body.error.trim();
+    }
+    const retryAfter = Number(response.headers?.get("retry-after") ?? "");
+    if (Number.isFinite(retryAfter) && retryAfter > 0) extra.retryAfterSeconds = retryAfter;
     const quota = (data as { quota?: GradeQuotaSnapshot }).quota;
     if (quota) extra.quota = quota;
     // D14: premium-only feature.
@@ -725,13 +741,13 @@ export async function requestPhotoPregrade(input: {
     }
     return data;
   } catch (error) {
-    const extra = error as Error & { status?: number; quota?: GradeQuotaSnapshot };
-    if (extra.status === 429 && extra.message === GRADE_QUOTA_COPY.outOfGrades) {
+    const extra = error as Error & { status?: number; quota?: GradeQuotaSnapshot; code?: string };
+    if (extra.status === 429 && (extra.code === OUT_OF_GRADES_CODE || extra.message === GRADE_QUOTA_COPY.outOfGrades)) {
       return {
         ok: false,
         status: "out_of_grades",
         code: "OUT_OF_GRADES",
-        message: extra.message,
+        message: quotaExhaustedMessage(extra.quota),
         quota: extra.quota,
       };
     }
@@ -739,7 +755,8 @@ export async function requestPhotoPregrade(input: {
       ok: false,
       status: "unavailable",
       code: "UNAVAILABLE",
-      message: extra instanceof Error && extra.message ? extra.message : PREGRADE_UNAVAILABLE_MESSAGE,
+      // UX review P0-3: 404 has fixed copy; nothing raw reaches the screen.
+      message: pregradeFailureMessage(extra, PREGRADE_UNAVAILABLE_MESSAGE),
     };
   }
 }

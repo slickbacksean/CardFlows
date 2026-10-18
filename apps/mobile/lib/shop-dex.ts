@@ -111,15 +111,15 @@ async function fetchNationalDex(): Promise<DexEntry[]> {
   try {
     response = await fetch(POKEAPI_SPECIES);
   } catch {
-    throw new Error("Could not load the Pokédex.");
+    throw new Error("Couldn't load the Pokédex.");
   }
-  if (!response.ok) throw new Error("Could not load the Pokédex.");
+  if (!response.ok) throw new Error("Couldn't load the Pokédex.");
   const payload: unknown = await response.json();
   const results =
     payload && typeof payload === "object" && "results" in payload
       ? (payload as { results?: unknown }).results
       : null;
-  if (!Array.isArray(results)) throw new Error("Could not load the Pokédex.");
+  if (!Array.isArray(results)) throw new Error("Couldn't load the Pokédex.");
 
   const entries: DexEntry[] = [];
   for (const row of results) {
@@ -138,6 +138,6 @@ async function fetchNationalDex(): Promise<DexEntry[]> {
     });
   }
   entries.sort((left, right) => left.dexId - right.dexId);
-  if (entries.length === 0) throw new Error("Could not load the Pokédex.");
+  if (entries.length === 0) throw new Error("Couldn't load the Pokédex.");
   return entries;
 }

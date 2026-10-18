@@ -19,7 +19,7 @@ describe("cardFlowHttpErrorMessage", () => {
   it("keeps a plain server error and maps a text 500 away from a JSON parse error", () => {
     expect(cardFlowHttpErrorMessage(400, "Enter a valid price.")).toBe("Enter a valid price.");
     expect(cardFlowHttpErrorMessage(404)).toBe("That item was not found.");
-    expect(cardFlowHttpErrorMessage(401)).toBe("CardFlow could not authorize that request.");
+    expect(cardFlowHttpErrorMessage(401)).toBe("CardFlow couldn't authorize that request.");
     expect(cardFlowHttpErrorMessage(500)).toBe("CardFlow couldn't finish that request.");
     expect(cardFlowHttpErrorMessage(500, "Unexpected token < in JSON at position 0")).toBe(
       "CardFlow couldn't finish that request.",

@@ -292,7 +292,7 @@ function PrepareSheetForm({
       if (side === "front") setPickedFront(result.still);
       else setPickedBack(result.still);
     } catch (caught) {
-      setPhotoError(caught instanceof Error ? caught.message : "Could not add that photo.");
+      setPhotoError(caught instanceof Error ? caught.message : "Couldn't add that photo.");
     }
   }
 

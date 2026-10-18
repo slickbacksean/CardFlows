@@ -21,7 +21,7 @@ export interface PracticeStep {
 export const PRACTICE_STEPS: readonly PracticeStep[] = [
   { id: "scan", title: "Scan a card", hint: "Pick a sample card to see how a scan finds it." },
   { id: "max_buy", title: "Check Max Buy", hint: "See the most you'd pay under your own rule." },
-  { id: "purchased", title: "Mark Purchased", hint: "Practice cards never go into your real collection." },
+  { id: "purchased", title: "Mark Purchased", hint: "Practice cards never go into your real MyDEX." },
   { id: "pregrade", title: `Try a ${PREGRADE_TITLE.toLowerCase()}`, hint: PREGRADE_DISCLAIMER_TEXT },
 ];
 
@@ -29,7 +29,7 @@ export const PRACTICE_COPY = {
   screenTitle: "Practice mode",
   entryLabel: "Practice with sample cards",
   checklistTitle: "Getting started",
-  banner: "Practice mode. Sample cards only. Nothing is saved to your collection.",
+  banner: "Practice mode. Sample cards only. Nothing is saved to MyDEX.",
   pickCard: "Pick a sample card",
   scanned: (name: string) => `Found ${name}`,
   purchasedToast: "Marked Purchased (practice) · Undo",

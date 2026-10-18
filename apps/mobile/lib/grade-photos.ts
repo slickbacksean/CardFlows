@@ -60,7 +60,7 @@ function mimeFromPickerAsset(asset: ImagePicker.ImagePickerAsset): string | null
 export function validatePickedGradeStill(
   asset: ImagePicker.ImagePickerAsset | undefined,
 ): { still: PickedGradeStill } | { error: string } {
-  if (!asset?.uri) return { error: "Could not read that photo. Try another." };
+  if (!asset?.uri) return { error: "Couldn't read that photo. Try another." };
   if (typeof asset.fileSize === "number" && asset.fileSize > GRADE_IMAGE_MAX_BYTES) {
     return { error: "Image must be 20 MB or smaller" };
   }
@@ -115,7 +115,7 @@ export async function prepareGradeStill(input: {
   width?: number;
   height?: number;
 }): Promise<{ still: PickedGradeStill } | { error: string }> {
-  if (!input.uri) return { error: "Could not read that photo. Try another." };
+  if (!input.uri) return { error: "Couldn't read that photo. Try another." };
   try {
     const size = await stillDimensions(input.uri, input.width, input.height);
     const resize = size ? gradeStillResizeAction(size.width, size.height) : null;
@@ -142,7 +142,7 @@ export async function prepareGradeStill(input: {
     };
   } catch {
     return {
-      error: "Could not prepare that photo. Try another, or take it in the app.",
+      error: "Couldn't prepare that photo. Try another, or take it in the app.",
     };
   }
 }

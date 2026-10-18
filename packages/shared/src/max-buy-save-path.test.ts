@@ -48,7 +48,7 @@ describe("PATCH is the Max Buy save path", () => {
     );
     expect(preferences).toContain("Last successful GET/PATCH only");
     expect(screen).toContain("saveMaxBuyPreferences(parsed.preferences)");
-    expect(screen).toContain('caught instanceof Error ? caught.message : "Could not save rules"');
-    expect(screen).toContain("Could not load rules");
+    expect(screen).toContain(`caught instanceof Error ? caught.message : "Couldn't save rules"`);
+    expect(screen).toContain("Couldn't load rules");
   });
 });

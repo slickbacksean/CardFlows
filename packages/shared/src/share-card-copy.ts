@@ -5,7 +5,7 @@ import { PREGRADE_COPY } from "./pregrade-copy";
  * PREGRADE_COPY so share text cannot drift into banned wording.
  */
 export const SHARE_CARD_COPY = {
-  collectionTitle: "My collection",
+  collectionTitle: "MyDEX",
   estimateTitle: PREGRADE_COPY.title,
   estimateDisclaimer: PREGRADE_COPY.disclaimer,
 } as const;
