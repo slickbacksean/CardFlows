@@ -86,8 +86,8 @@ jobs:
       - name: Install
         run: pnpm install --frozen-lockfile
 
-      - name: Grader unit tests (EXIF orientation)
-        run: apps/api/.venv/bin/python -m unittest apps/api/vendor/cardgrading/test_pixel_cap.py
+      - name: Grader unit tests (EXIF orientation, beige-table detect)
+        run: apps/api/.venv/bin/python -m unittest apps/api/vendor/cardgrading/test_pixel_cap.py apps/api/vendor/cardgrading/test_cardflow_detect_beige.py
 
       - name: Livestream 4-corner warp + recorded stream
         run: |

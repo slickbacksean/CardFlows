@@ -406,8 +406,11 @@ function statusLine(readiness: GradeCaptureReadiness): string {
 
 /** Same frame size the overlay draws; the corner probe looks in the same place. */
 function finderFrameSize(width: number, height: number): { width: number; height: number } {
-  const maxFrameHeight = Math.max(180, height * 0.46);
-  const frameWidth = Math.min(width * 0.72, 280, maxFrameHeight * CARD_ASPECT_RATIO);
+  // Smaller than the old 72% / 280 pt frame so the phone sits ~22-25 cm away:
+  // iPhone Pro main cameras can't focus much closer than ~20 cm, and the card
+  // still spans ~30% of a 12 MP photo (~380 dpi, above the grader's 300 minimum).
+  const maxFrameHeight = Math.max(160, height * 0.32);
+  const frameWidth = Math.min(width * 0.46, 180, maxFrameHeight * CARD_ASPECT_RATIO);
   return { width: frameWidth, height: frameWidth / CARD_ASPECT_RATIO };
 }
 
@@ -529,10 +532,19 @@ function CardFinderStage({
   onCameraReady,
   onMountError,
 }: CardFinderStageProps) {
+  // expo-camera 57 has no tap-to-focus API. autofocus "off" is iOS continuous
+  // autofocus (the default); "on" focuses once and locks. A tap flips to "on"
+  // for a moment, which runs one fresh focus pass, then back to continuous.
+  const [focusOnce, setFocusOnce] = useState(false);
+  const refocus = () => {
+    setFocusOnce(true);
+    setTimeout(() => setFocusOnce(false), 600);
+  };
   return (
     <View style={styles.viewfinder}>
       <View
         onLayout={(e) => onStageLayout({ width: e.nativeEvent.layout.width, height: e.nativeEvent.layout.height })}
+        onTouchEnd={refocus}
         style={styles.viewfinderStage}
       >
         {enableLivePreview ? (
@@ -543,6 +555,7 @@ function CardFinderStage({
             mute
             // No flash on the silent corner-probe stills; the haptic marks the real capture.
             animateShutter={false}
+            autofocus={focusOnce ? "on" : "off"}
             pictureSize={pictureSize}
             onCameraReady={onCameraReady}
             onMountError={onMountError}

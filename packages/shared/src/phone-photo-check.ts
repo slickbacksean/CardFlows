@@ -180,8 +180,28 @@ function edgeAligned(
  * look for any texture.
  */
 export function gradeProbeCorners(img: GrayImage, frameFill: number = GRADE_FRAME_FILL.zoomed): number {
+  return gradeProbeDetail(img, frameFill).corners;
+}
+
+export interface GradeProbeDetail {
+  /** Frame corners with a lined-up card edge (0-4); 0 when blurry or empty. */
+  corners: number;
+  /** Centre Laplacian variance of the probe (higher is sharper). */
+  sharpness: number;
+  /** Too soft to judge: the phone is likely closer than the camera can focus. */
+  blurry: boolean;
+}
+
+/** gradeProbeCorners plus why: a blurry probe is not a miss, it means "move back". */
+export function gradeProbeDetail(img: GrayImage, frameFill: number = GRADE_FRAME_FILL.zoomed): GradeProbeDetail {
   const basic = phonePhotoCheck(img, frameFill);
-  if (basic.reasons[0] === PREGRADE_COPY.notFound || basic.reasons[0] === PREGRADE_COPY.blurry) return 0;
+  const sharpness = basic.sharpness;
+  if (basic.reasons[0] === PREGRADE_COPY.notFound) return { corners: 0, sharpness, blurry: false };
+  if (basic.reasons[0] === PREGRADE_COPY.blurry) return { corners: 0, sharpness, blurry: true };
+  return { corners: probeCornerCount(img, frameFill), sharpness, blurry: false };
+}
+
+function probeCornerCount(img: GrayImage, frameFill: number): number {
   const { width: w, height: h } = img;
   const frame = gradeGuideFrame(w, h, frameFill, w > h ? "landscape" : "portrait");
   if (!(frame.width > 8) || !(frame.height > 8)) return 0;

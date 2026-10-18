@@ -177,7 +177,7 @@ describe("cardgrading mapper (GitHub contract)", () => {
     expect(pregradeCopyViolations(text)).toEqual([]);
   });
 
-  it("is a retake 'Photo is blurry' on the sharpness gate, and 'move closer' on capture scale", () => {
+  it("is a retake 'Too blurry' on the sharpness gate, and 'move closer' on capture scale", () => {
     const blurry = mapGradeCardReport(
       withGate(successReport, "front", { name: "sharpness", passed: false, hard: true, detail: "laplacian variance=45.8" }),
     );
@@ -335,7 +335,7 @@ describe("grade photo flow", () => {
       ok: false,
       status: "retake",
       side: "front",
-      reasons: ["Card not found"],
+      reasons: ["Card not found", PREGRADE_COPY.darkerBackground],
     });
   });
 

@@ -79,6 +79,7 @@ export const GRADE_AUTO_COPY = {
   fitCorners: "Fit all 4 corners inside the frame",
   holdFlat: "Hold your phone flat above the card",
   holdStill: "Keep the phone still",
+  moveBack: "Move the phone back a little",
   holding: "Hold it there…",
   capturing: "Taking photo",
   offHint: "Auto-capture is off. Tap the shutter to take the photo.",

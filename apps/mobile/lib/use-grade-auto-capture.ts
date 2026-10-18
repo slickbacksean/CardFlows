@@ -1,5 +1,6 @@
 import {
   createGradeProbeLoop,
+  GRADE_AUTO_COPY,
   GRADE_AUTO_CORNER_HITS_REQUIRED,
   GRADE_AUTO_CORNER_MISS_CANCEL,
   GRADE_AUTO_INITIAL,
@@ -105,6 +106,8 @@ export function useGradeAutoCapture(input: {
   const stateRef = useRef(GRADE_AUTO_INITIAL);
   const statsRef = useRef<GradeProbeStats>({ allFoundAtMs: null, hitStreak: 0, missStreak: 0, errorStreak: 0 });
   const hintRef = useRef<StableHint | null>(null);
+  const probeBlurryRef = useRef(false);
+  const [probeBlurry, setProbeBlurry] = useState(false);
   const loopRef = useRef<GradeProbeLoop | null>(null);
   const latest = useRef({ level, busy, onFire: input.onFire, frameFill: input.frameFill });
   useEffect(() => {
@@ -170,7 +173,14 @@ export function useGradeAutoCapture(input: {
         if (!shot?.uri) return null;
         const fill = latest.current.frameFill(shot.width, shot.height);
         if (fill == null) return null;
-        return probeGradeCorners(shot.uri, fill);
+        const detail = await probeGradeCorners(shot.uri, fill);
+        // Blurry is never a corner hit; the hint asks to move back (too close to focus).
+        const blurry = detail?.blurry === true;
+        if (blurry !== probeBlurryRef.current) {
+          probeBlurryRef.current = blurry;
+          setProbeBlurry(blurry);
+        }
+        return detail ? detail.corners : null;
       },
       onResult: (stats) => {
         statsRef.current = stats;
@@ -205,7 +215,12 @@ export function useGradeAutoCapture(input: {
       nowMs: Date.now(),
     });
     stateRef.current = step.state;
-    hintRef.current = gradeStableHint(hintRef.current, gradeAutoHint(step), Date.now());
+    const baseHint = gradeAutoHint(step);
+    const wantHint =
+      probeBlurryRef.current && step.state.phase === "searching" && baseHint === GRADE_AUTO_COPY.fitCorners
+        ? GRADE_AUTO_COPY.moveBack
+        : baseHint;
+    hintRef.current = gradeStableHint(hintRef.current, wantHint, Date.now());
     const hint = hintRef.current.shown;
     setView((prev) =>
       prev.phase === step.state.phase && prev.progress === step.progress && prev.hint === hint
@@ -213,7 +228,7 @@ export function useGradeAutoCapture(input: {
         : { phase: step.state.phase, progress: step.progress, hint },
     );
     if (step.fire) latest.current.onFire();
-  }, [level, busy, enabled, explained, detectorAvailable, probeSizeAvailable, active, appActive, probeStats]);
+  }, [level, busy, enabled, explained, detectorAvailable, probeSizeAvailable, active, appActive, probeStats, probeBlurry]);
 
   const waitForProbe = useCallback(async () => {
     await loopRef.current?.waitForIdle();

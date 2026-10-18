@@ -142,6 +142,26 @@ function toCrop(cropBytes: Buffer | null): DetectedCardCrop | undefined {
   return { mimeType: "image/jpeg", base64: cropBytes.toString("base64") };
 }
 
+/**
+ * Blur breaks edge finding, so a blurry photo often also fails a geometry gate
+ * ("tilt"). Say "blurry" first then. When the photo is sharp but the card
+ * still wasn't found or its outline was wrong, the usual cause is a card that
+ * blends into a light table, so add the darker-background tip.
+ */
+function detectRetakeReasons(hardFailures: LibraryGate[]): string[] {
+  const blurry = hardFailures.some((gate) => gate.name === "sharpness");
+  const ordered = blurry
+    ? [...hardFailures].sort((a, b) => Number(b.name === "sharpness") - Number(a.name === "sharpness"))
+    : hardFailures;
+  const reasons = ordered.map(hardGateReason);
+  const outlineMissed = hardFailures.some(
+    (gate) =>
+      (gate.name === "card_detection" || gate.name === "aspect_ratio") && gate.detail !== DECODE_FAILURE_DETAIL,
+  );
+  if (!blurry && outlineMissed) reasons.push(PREGRADE_COPY.darkerBackground);
+  return uniqueReasons(reasons);
+}
+
 export function mapDetectReport(
   input: unknown,
   side: PhotoPregradeSide,
@@ -159,7 +179,7 @@ export function mapDetectReport(
       status: "retake",
       code: "PHOTO_RETAKE",
       side,
-      reasons: uniqueReasons(hardFailures.map(hardGateReason)),
+      reasons: detectRetakeReasons(hardFailures),
     };
     if (crop) body.crop = crop;
     if (capture) body.capture = capture;

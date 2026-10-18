@@ -1,5 +1,6 @@
 import {
-  gradeProbeCorners,
+  gradeProbeDetail,
+  type GradeProbeDetail,
   PHONE_CHECK_LONG_SIDE,
   phonePhotoCheck,
   rgbaToGray,
@@ -38,14 +39,19 @@ function deleteQuietly(uri: string) {
 }
 
 /**
- * Auto-capture corner probe on a small preview still: how many of the 4
- * frame corners show a card edge (0-4), or null if the check failed. The
- * probe still is deleted either way.
+ * Auto-capture corner probe on a small preview still: corners (0-4),
+ * sharpness, and whether it was too blurry to judge; null if the check
+ * failed. Logs one line per probe. The probe still is deleted either way.
  */
-export async function probeGradeCorners(uri: string, frameFill: number | null): Promise<number | null> {
+export async function probeGradeCorners(uri: string, frameFill: number | null): Promise<GradeProbeDetail | null> {
   try {
     const gray = await smallGray(uri);
-    return gray ? gradeProbeCorners(gray, frameFill ?? undefined) : null;
+    if (!gray) return null;
+    const detail = gradeProbeDetail(gray, frameFill ?? undefined);
+    console.info(
+      `grade-probe corners=${detail.corners} sharpness=${detail.sharpness} blurry=${detail.blurry} size=${gray.width}x${gray.height}`,
+    );
+    return detail;
   } catch {
     return null;
   } finally {
