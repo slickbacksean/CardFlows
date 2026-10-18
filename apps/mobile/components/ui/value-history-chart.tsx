@@ -9,7 +9,9 @@ import { colors, radii, space, type } from "@/lib/theme";
  * Points are real recorded daily snapshots only. Fewer than two points shows no line.
  */
 
-const CHART_HEIGHT = 120;
+/** Exported so the loading skeleton matches the chart exactly (UX review P1-2). */
+export const VALUE_HISTORY_CHART_HEIGHT = 120;
+const CHART_HEIGHT = VALUE_HISTORY_CHART_HEIGHT;
 const LINE_THICKNESS = 2;
 const DOT_SIZE = 6;
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -105,7 +107,7 @@ export function ValueHistoryChart({
           rangeLabel: option.days ? `${option.days} days` : "all time",
         })}
       >
-      <Text style={styles.label}>Collection value</Text>
+      <Text style={styles.label}>MyDEX value</Text>
       <Text maxFontSizeMultiplier={1.5} style={styles.value}>
         {latestCents !== null ? formatUsd(latestCents) : loading ? "…" : "No estimate"}
       </Text>

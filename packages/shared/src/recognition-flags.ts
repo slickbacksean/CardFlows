@@ -16,7 +16,7 @@ export const CARDSIGHT_IDENTIFY_FEATURE_DISABLED_MESSAGE = CONFIRM_COULD_NOT_CON
 
 export const STILL_IDENTIFY_SKIPPED_MESSAGE = CARDSIGHT_IDENTIFY_FEATURE_DISABLED_MESSAGE;
 
-export const STILL_IDENTIFY_UNCONFIGURED_MESSAGE = "Could not identify";
+export const STILL_IDENTIFY_UNCONFIGURED_MESSAGE = "Couldn't identify";
 
 /** Live still identify was enabled but the stored still is missing or oversize — never run the model. */
 export function stillIdentifySkippedResult(

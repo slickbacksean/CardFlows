@@ -3,6 +3,10 @@ import {
   PHONE_CHECK_COPY,
   GRADE_FLOW_RETRY_LABEL,
   GRADE_FLOW_UNAVAILABLE_BODY,
+  actionErrorMessage,
+  GRADE_ESTIMATE_NOT_FOUND_COPY,
+  quotaExhaustedMessage,
+  SCREEN_STATE_COPY,
   GRADE_QUOTA_COPY,
   PREGRADE_DISCLAIMER,
   PREGRADE_LABEL,
@@ -194,7 +198,7 @@ export function PhotoGradeFlow({ onOpenPipeline }: PhotoGradeFlowProps) {
       patch({
         side: nextSide,
         step: "capture",
-        notice: caught instanceof Error ? caught.message : "Could not open the camera.",
+        notice: actionErrorMessage(caught, "Couldn't open the camera."),
       });
       return;
     }
@@ -381,8 +385,9 @@ export function PhotoGradeFlow({ onOpenPipeline }: PhotoGradeFlowProps) {
           ) : null}
           {isOutOfGrades ? (
             <View style={styles.block}>
-              <Text style={styles.section}>Out of grades</Text>
-              <Text style={styles.body}>{GRADE_QUOTA_COPY.outOfGrades}</Text>
+              <Text style={styles.section}>{SCREEN_STATE_COPY.quotaTitle}</Text>
+              {/* Community review 1: "You've used all N … resets on [date]." Not "busy". */}
+              <Text style={styles.body}>{quotaExhaustedMessage(quota)}</Text>
               <Text style={styles.caption}>{GRADE_QUOTA_COPY.outOfGradesHint}</Text>
               {quotaNotice ? <ErrorText text={quotaNotice} /> : null}
               <PrimaryButton
@@ -552,8 +557,8 @@ export function PhotoGradeFlow({ onOpenPipeline }: PhotoGradeFlowProps) {
             </>
           ) : resultKind === "out_of_grades" ? (
             <>
-              <Text style={styles.section}>Out of grades</Text>
-              <Text style={styles.body}>{GRADE_QUOTA_COPY.outOfGrades}</Text>
+              <Text style={styles.section}>{SCREEN_STATE_COPY.quotaTitle}</Text>
+              <Text style={styles.body}>{unavailableMessage ?? quotaExhaustedMessage(quota)}</Text>
               <Text style={styles.caption}>{GRADE_QUOTA_COPY.outOfGradesHint}</Text>
               {quotaNotice ? <ErrorText text={quotaNotice} /> : null}
               <PrimaryButton
@@ -565,8 +570,15 @@ export function PhotoGradeFlow({ onOpenPipeline }: PhotoGradeFlowProps) {
             </>
           ) : (
             <>
-              <Text style={styles.body}>{GRADE_FLOW_UNAVAILABLE_BODY}</Text>
-              {unavailableMessage ? <Text style={styles.caption}>{unavailableMessage}</Text> : null}
+              {unavailableMessage === GRADE_ESTIMATE_NOT_FOUND_COPY ? (
+                // UX review P0-3: a 404 shows exactly this, with no score.
+                <Text style={styles.body}>{GRADE_ESTIMATE_NOT_FOUND_COPY}</Text>
+              ) : (
+                <>
+                  <Text style={styles.body}>{GRADE_FLOW_UNAVAILABLE_BODY}</Text>
+                  {unavailableMessage ? <Text style={styles.caption}>{unavailableMessage}</Text> : null}
+                </>
+              )}
               <PrimaryButton
                 disabled={scoring}
                 label={GRADE_FLOW_RETRY_LABEL}

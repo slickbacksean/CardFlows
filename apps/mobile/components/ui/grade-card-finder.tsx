@@ -198,7 +198,7 @@ export function GradeCardFinder({
       }
       onCaptured(picked.still);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not take a photo. Try again.");
+      setError(caught instanceof Error ? caught.message : "Couldn't take a photo. Try again.");
     } finally {
       busyRef.current = false;
       setCapturing(false);
@@ -263,7 +263,7 @@ export function GradeCardFinder({
     const blocked = !IS_NATIVE
       ? "The live camera runs in the iOS and Android app. Choose a photo instead."
       : cameraMountFailed
-      ? "Camera could not start. Choose a library photo, or try again."
+      ? "Camera couldn't start. Choose a library photo, or try again."
       : permission.canAskAgain
         ? GRADE_CAMERA_PREPROMPT_BODY
         : "Enable camera in system Settings, or pick a photo from the library.";

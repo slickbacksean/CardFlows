@@ -99,7 +99,7 @@ export default function ExportScreen() {
       setItems(result.items);
       setError(null);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not load the collection");
+      setError(caught instanceof Error ? caught.message : "Couldn't load MyDEX");
     } finally {
       setIsLoading(false);
     }
@@ -143,7 +143,7 @@ export default function ExportScreen() {
           : `Shared ${copies.length} cards. Upload the file yourself. CardFlow did not list them.${priceNote}`,
       );
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not export");
+      setError(caught instanceof Error ? caught.message : "Couldn't export");
     } finally {
       setBusy(null);
     }
@@ -158,7 +158,7 @@ export default function ExportScreen() {
       </Text>
 
       {isLoading ? (
-        <ActivityIndicator accessibilityLabel="Loading collection" color={colors.accent} />
+        <ActivityIndicator accessibilityLabel="Loading MyDEX" color={colors.accent} />
       ) : (
         <View style={styles.list}>
           <DestinationCard

@@ -84,7 +84,7 @@ function isHardGate(gate: LibraryGate): boolean {
 }
 
 /** Adapter's own decode failure: not a detection result, so don't call it "not found". */
-const DECODE_FAILURE_DETAIL = "could not decode image";
+const DECODE_FAILURE_DETAIL = "couldn't decode image";
 const DECODE_FAILURE_REASON = PREGRADE_COPY.unreadable;
 
 /** grade_card scores 0.0 when no sub-grade could be measured; that is not a grade. */

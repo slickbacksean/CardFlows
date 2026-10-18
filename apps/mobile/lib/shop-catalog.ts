@@ -389,7 +389,7 @@ async function fetchSet(setId: string): Promise<CachedSet> {
   const cached = setCache.get(setId);
   if (cached) return cached;
   const payload = await fetchJson(`${TCGDEX_CARDS}/sets/${encodeURIComponent(setId)}`);
-  if (!isRecord(payload)) throw new Error("That set could not be found.");
+  if (!isRecord(payload)) throw new Error("That set couldn't be found.");
   const serie = isRecord(payload.serie) ? payload.serie : null;
   const info: ShopSetInfo = {
     id: typeof payload.id === "string" ? payload.id : setId,
@@ -418,7 +418,7 @@ async function loadCardRaw(cardId: string): Promise<Record<string, unknown>> {
   if (cached) return cached;
   const raw = await fetchJson(`${TCGDEX_CARDS}/cards/${encodeURIComponent(cardId)}`);
   if (!isRecord(raw) || typeof raw.id !== "string" || typeof raw.name !== "string") {
-    throw new Error("That card could not be found.");
+    throw new Error("That card couldn't be found.");
   }
   rawCache.set(cardId, raw);
   return raw;
@@ -429,11 +429,11 @@ async function fetchJson(url: string): Promise<unknown> {
   const timer = setTimeout(() => controller.abort(), 15000);
   try {
     const response = await fetch(url, { signal: controller.signal });
-    if (!response.ok) throw new Error("Could not reach the card catalog.");
+    if (!response.ok) throw new Error("Couldn't reach the card catalog.");
     return (await response.json()) as unknown;
   } catch (error) {
-    if (error instanceof Error && error.message === "Could not reach the card catalog.") throw error;
-    throw new Error("Could not reach the card catalog.");
+    if (error instanceof Error && error.message === "Couldn't reach the card catalog.") throw error;
+    throw new Error("Couldn't reach the card catalog.");
   } finally {
     clearTimeout(timer);
   }

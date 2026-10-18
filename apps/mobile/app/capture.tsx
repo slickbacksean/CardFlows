@@ -6,6 +6,9 @@ import {
   CAMERA_PREPROMPT_BODY,
   CAMERA_PREPROMPT_TITLE,
   PHOTO_PICKER_UNAVAILABLE_COPY,
+  actionErrorMessage,
+  classifyLoadError,
+  SCAN_SESSION_ENDED_COPY,
 } from "@cardflow/shared";
 import { isOfflineScanError, isSignupRequiredError, queueOfflineScan } from "@/lib/scan-queue";
 import { trackScanStarted } from "@/lib/product-events";
@@ -26,6 +29,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { DevScenarioPanel } from "@/components/ui/dev-scenario-panel";
 import { PermissionGate } from "@/components/ui/permission-gate";
+import { InlineError } from "@/components/ui/screen-state";
 import { createScan } from "@/lib/api";
 import { ensureAccountAgeConfirmed } from "@/lib/age-confirmation";
 import { askCardSightConsentOnce } from "@/lib/cardsight-consent";
@@ -158,18 +162,18 @@ export default function CaptureScreen() {
         try {
           const imageUri = await takeStillPhoto(cameraRef.current);
           if (!imageUri) {
-            setError("Could not take a photo. Try again.");
+            setError("Couldn't take a photo. Try again.");
             return;
           }
           await postScan("camera_photo", imageUri, "image/jpeg");
           return;
         } catch (caught) {
-          setError(scanFailureMessage(caught, "Could not take a photo. Try again."));
+          setError(scanFailureMessage(caught, "Couldn't take a photo. Try again."));
           return;
         }
       }
       if (IS_NATIVE && permission?.granted === true && !cameraMountFailed) {
-        setError("Could not take a photo. Try again.");
+        setError("Couldn't take a photo. Try again.");
         return;
       }
       if (Platform.OS === "web") {
@@ -194,7 +198,7 @@ export default function CaptureScreen() {
       if (!asset) return;
       const uri = asset.uri ?? null;
       if (!uri) {
-        setError("Could not read that photo. Try another.");
+        setError("Couldn't read that photo. Try another.");
         return;
       }
       setIsSubmitting(true);
@@ -203,9 +207,7 @@ export default function CaptureScreen() {
         height: asset.height,
       });
     } catch (caught) {
-      setError(
-        caught instanceof Error ? caught.message : PHOTO_PICKER_UNAVAILABLE_COPY,
-      );
+      setError(actionErrorMessage(caught, PHOTO_PICKER_UNAVAILABLE_COPY));
     } finally {
       setIsSubmitting(false);
     }
@@ -289,7 +291,11 @@ export default function CaptureScreen() {
         />
       )}
 
-      {error ? <Text style={styles.error}>{error}</Text> : null}
+      {error ? (
+        <View style={styles.errorWrap}>
+          <InlineError message={error} />
+        </View>
+      ) : null}
 
       {helpOpen ? (
         <View style={styles.helpCard}>
@@ -368,11 +374,12 @@ export default function CaptureScreen() {
 }
 
 function scanFailureMessage(caught: unknown, fallback: string): string {
-  const message = caught instanceof Error ? caught.message : fallback;
-  if (message === "Unauthorized") {
-    return "Invite session expired. Open Settings, enter your invite code, then take the photo again.";
+  // UX review P1-4: accounts, not invite codes, now.
+  if (classifyLoadError(caught) === "auth" || (caught instanceof Error && caught.message === "Unauthorized")) {
+    return SCAN_SESSION_ENDED_COPY;
   }
-  return message;
+  // P5: shared offline / can't-reach / server wording.
+  return actionErrorMessage(caught, fallback);
 }
 
 async function takeStillPhoto(camera: CameraView | null): Promise<string | null> {
@@ -513,6 +520,7 @@ const styles = StyleSheet.create({
     paddingVertical: space.md,
     backgroundColor: DIM,
   },
+  errorWrap: { paddingHorizontal: space.lg, paddingBottom: space.sm },
   error: {
     color: colors.danger,
     fontSize: 14,
