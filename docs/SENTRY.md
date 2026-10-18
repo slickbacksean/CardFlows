@@ -42,12 +42,22 @@ The shared scrubber (`packages/shared/src/sentry-scrub.ts`) drops:
 - Request bodies, cookies, and `Authorization` headers
 - Keys such as `photo`, `image`, `cropBytes`, `frontBytes`, `identityCropJpeg`, `base64`
 - Data-URL / long base64 payloads (card photos)
+- Local photo paths (`file://`, `content://`, `ph://`, `assets-library://` ending in .jpg/.png/.heic/.webp), added in P4
+- Bearer tokens, and the values of `token`, `access_token`, `refresh_token`, `code`, `password`, `key`, `api_key` and `dsn` query parameters (P4)
+- Keys named like `token`, `password` or `ip_address`, and any key ending in `token`, `secret`, `password` or `apiKey`/`api_key` (camelCase or snake_case) (P4)
+- The `X-CardFlow-App-Key` header, and JWT-like or long base64 blobs even inside a longer string (P4 Dev Ops review)
 
 Also disabled: session replay, screenshots, view hierarchy, failed-request bodies, default PII.
 
+## Consent
+
+Crash reporting is **not** tied to the in-app analytics opt-in. It has its own switch, Settings > **Send crash reports** (on by default, P4 Policy review): off means `initMobileSentry()` doesn't start Sentry, and turning it off later closes the client and drops anything queued. Sean may still choose opt-in instead (`CRASH_REPORTS_DEFAULT_ON`). Analytics consent covers PostHog product events only. Crash data is a separate, disclosed category (Crash Data, PRIVACY_DATA_MAP §14) and carries no PII or photos. P4 checked this and kept it. If it should require the opt-in too, gate `initMobileSentry()` on the stored analytics preference.
+
+EAS profiles and the rest of the env layout: [RELEASE_ENV.md](./RELEASE_ENV.md).
+
 ## Expo Go
 
-`initMobileSentry()` runs only when `EXPO_PUBLIC_SENTRY_DSN` is set. In Expo Go the native SDK is off (`enableNative: false`). Native crash reports need a dev client or store build.
+`initMobileSentry()` runs only when `EXPO_PUBLIC_SENTRY_DSN` is set and Send crash reports is on. Dev builds never send (`enabled: !__DEV__`). In Expo Go the native SDK is off (`enableNative: false`). Native crash reports need a dev client or store build.
 
 ## Privacy labels (App Store / Play)
 

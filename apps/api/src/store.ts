@@ -1,12 +1,23 @@
 import type { ConfirmEvent } from "@cardflow/shared";
 import type { UserPriceSnapshot } from "@cardflow/shared";
+import type { NorthStarWeekTotal } from "@cardflow/shared";
 import { createMemorySalesStore, type SalesStore } from "./sales-store";
 import { createMemoryPurchaseLedger, type PurchaseLedger } from "./purchase-ledger";
 import { createMemoryAgeConfirmationStore, type AgeConfirmationStore } from "./age-store";
 import { createMemoryConsentStore, type ConsentStore } from "./consent-store";
 import { createMemoryIdempotencyStore, type IdempotencyStore } from "./idempotency-store";
 import { createMemoryGradeHistoryStore, type GradeHistoryStore } from "./grade-history-store";
-import { EMAIL_CODE_MAX_ATTEMPTS, normalizeEmail, type AccountRecord, type AccountStore } from "./account-store";
+import {
+  EMAIL_CODE_MAX_ATTEMPTS,
+  emailSendKey,
+  normalizeEmail,
+  resolveNorthStarTotals,
+  type AccountRecord,
+  type AccountStore,
+  type DeletionAuditEntry,
+  type PokecollectorDeletionMode,
+  type PokecollectorPendingDeletion,
+} from "./account-store";
 import {
   catalogFingerprint,
   cachedCatalogCardMatches,
@@ -257,6 +268,13 @@ export function getPokecollectorUserMapping(userId: string): PokecollectorUserMa
   return store.pokecollectorUsers.get(userId);
 }
 
+/** CardFlow users linked to this PokéCollector user (a remote user must never be shared). */
+export function countPokecollectorLinks(pokecollectorUserId: string): number {
+  let n = 0;
+  for (const mapping of store.pokecollectorUsers.values()) if (mapping.pokecollectorUserId === pokecollectorUserId) n += 1;
+  return n;
+}
+
 export function savePokecollectorUserMapping(
   mapping: PokecollectorUserMapping,
 ): PokecollectorUserMapping {
@@ -307,6 +325,9 @@ export function saveScan(scan: ScanRecord): ScanRecord {
   return scan;
 }
 
+/** Backend review L1 (P4): when each in-memory image was saved (the orphan sweep's age cutoff). */
+const scanImageSavedAt = new WeakMap<ScanImageBytes, number>();
+
 export function saveScanImage(
   scanId: string,
   input: { bytes: Uint8Array; mimeType: ScanImageMimeType },
@@ -317,6 +338,7 @@ export function saveScanImage(
     bytes: stripImageMetadata(input.bytes, input.mimeType),
   };
   store.scanImages.set(scanId, record);
+  scanImageSavedAt.set(record, Date.now());
   return record;
 }
 
@@ -735,6 +757,7 @@ export interface StorePort {
   getSessionByToken: typeof getSessionByToken;
   getPokecollectorUserMapping: typeof getPokecollectorUserMapping;
   savePokecollectorUserMapping: typeof savePokecollectorUserMapping;
+  countPokecollectorLinks: typeof countPokecollectorLinks;
   listInvitedUsers: typeof listInvitedUsers;
   getPreferences: typeof getPreferences;
   setPreferences: typeof setPreferences;
@@ -746,6 +769,10 @@ export interface StorePort {
   readStoredScanImage: typeof readStoredScanImage;
   getScanImage: typeof getScanImage;
   deleteScanImage: typeof deleteScanImage;
+  /** Backend review M1: drops a temp image whose scan was never saved (account deleted mid-scan). */
+  discardScanImage: (scanId: string, storageRef: string) => boolean;
+  /** Backend review M1: scan image files with no crm_scans row, older than `olderThan`. Returns files removed. */
+  sweepOrphanScanImages: (olderThan: Date) => number;
   saveGradeImage: typeof saveGradeImage;
   getGradeImage: typeof getGradeImage;
   deleteGradeImage: typeof deleteGradeImage;
@@ -967,6 +994,7 @@ export function createMemoryStore(): StorePort {
     getSessionByToken,
     getPokecollectorUserMapping,
     savePokecollectorUserMapping,
+    countPokecollectorLinks,
     listInvitedUsers,
     getPreferences,
     setPreferences,
@@ -978,6 +1006,23 @@ export function createMemoryStore(): StorePort {
     readStoredScanImage,
     getScanImage,
     deleteScanImage,
+    discardScanImage(scanId: string, storageRef: string) {
+      const record = store.scanImages.get(scanId);
+      if (!record || record.storageRef !== storageRef) return false;
+      return store.scanImages.delete(scanId);
+    },
+    sweepOrphanScanImages(olderThan: Date) {
+      let removed = 0;
+      for (const [scanId, record] of [...store.scanImages]) {
+        // Same 1-hour cutoff as the SQLite store: a scan in flight saves its image first.
+        if ((scanImageSavedAt.get(record) ?? 0) >= olderThan.getTime()) continue;
+        if (!store.scans.has(scanId)) {
+          store.scanImages.delete(scanId);
+          removed += 1;
+        }
+      }
+      return removed;
+    },
     saveGradeImage,
     getGradeImage,
     deleteGradeImage,
@@ -1056,6 +1101,20 @@ function createMemoryAccountStore(
   const emailCodes = new Map<string, { codeHash: string; expiresAt: string; attempts: number }>();
   const sendsByAddressDay = new Map<string, number>();
   const byEmail = new Map<string, string>();
+  const deletionAudit: DeletionAuditEntry[] = [];
+  const northStarTotals = new Map<string, NorthStarWeekTotal>();
+  const pendingDeletions = new Map<string, PokecollectorPendingDeletion>();
+  const enqueueDeletion = ({ remoteUserId, mode, at }: { remoteUserId: string; mode: PokecollectorDeletionMode; at: string }) => {
+    const existing = pendingDeletions.get(remoteUserId);
+    pendingDeletions.set(remoteUserId, {
+      remoteUserId,
+      mode,
+      attempts: existing?.attempts ?? 0,
+      nextAttemptAt: at,
+      createdAt: existing?.createdAt ?? at,
+      lastResult: existing?.lastResult ?? null,
+    });
+  };
   const live = (s: StoredSession, now: string) => s.expiresAt > now;
   return {
     createAccount({ email, passwordHash, at }) {
@@ -1103,7 +1162,7 @@ function createMemoryAccountStore(
     takeEmailSendForAddress(email, day, cap) {
       const yesterday = new Date(Date.parse(`${day}T00:00:00Z`) - 86_400_000).toISOString().slice(0, 10);
       for (const key of [...sendsByAddressDay.keys()]) if (key.split("\0")[1]! < yesterday) sendsByAddressDay.delete(key);
-      const key = `${normalizeEmail(email)}\0${day}`;
+      const key = `${emailSendKey(email)}\0${day}`;
       const count = sendsByAddressDay.get(key) ?? 0;
       if (count >= cap) return false;
       sendsByAddressDay.set(key, count + 1);
@@ -1126,6 +1185,12 @@ function createMemoryAccountStore(
       const account = accounts.get(userId);
       if (account && !account.emailVerifiedAt) accounts.set(userId, { ...account, emailVerifiedAt: now });
       return "verified";
+    },
+    recordDeletionAudit(entry) {
+      deletionAudit.push({ ...entry });
+    },
+    listDeletionAudit() {
+      return deletionAudit.map((entry) => ({ ...entry }));
     },
     listAccountUserIds() {
       return [...accounts.values()].map((account) => account.userId);
@@ -1174,16 +1239,25 @@ function createMemoryAccountStore(
       this.deleteSessionsForUser(fromUserId);
       return { scans, confirmEvents: 0 };
     },
-    deleteAllUserRows(userId) {
+    deleteAllUserRows(userId, options = {}) {
       const counts: Record<string, number> = {};
+      for (const t of resolveNorthStarTotals(options.northStarTotals)) {
+        const row = northStarTotals.get(t.weekStart) ?? { weekStart: t.weekStart, purchased: 0, scans: 0, activeResellers: 0 };
+        northStarTotals.set(t.weekStart, {
+          weekStart: t.weekStart,
+          purchased: row.purchased + t.purchased,
+          scans: row.scans + t.scans,
+          activeResellers: row.activeResellers + t.activeResellers,
+        });
+      }
       port.deleteUserPhotos(userId);
       counts.crm_scans = port.deleteUserScans(userId);
       counts.scan_confirm_events = port.deleteUserConfirmEvents(userId);
       counts.user_price_snapshots = port.deleteUserPriceSnapshots(userId);
       counts.user_card_sales = port.sales.deleteUser(userId);
       counts.grade_estimate_history = port.gradeHistory.deleteUser(userId);
-      // Data Engineer review: the purchase ledger is anonymized, not deleted (North Star history).
-      counts.purchase_events_anonymized = port.purchaseLedger.anonymizeUser(userId);
+      // Backend review H2 (P4): hard-deleted; the weekly counts were added to the totals above.
+      counts.purchase_events = port.purchaseLedger.deleteUser(userId);
       counts.idempotency_keys = port.idempotency.deleteUser(userId);
       counts.provider_consents = port.consents.deleteUser(userId);
       counts.age_confirmations = port.ageConfirmations.deleteUser(userId);
@@ -1204,10 +1278,53 @@ function createMemoryAccountStore(
         accounts.delete(userId);
         counts.user_accounts = 1;
       }
+      const remote = options.pokecollectorRemote;
+      if (remote) {
+        const others = port.countPokecollectorLinks(remote.remoteUserId);
+        enqueueDeletion({ remoteUserId: remote.remoteUserId, mode: remote.hold || others > 0 ? "hold" : "delete", at: remote.at });
+      }
       return counts;
+    },
+    listPokecollectorDeletions() {
+      return [...pendingDeletions.values()]
+        .sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.remoteUserId.localeCompare(b.remoteUserId))
+        .map((row) => ({ ...row }));
+    },
+    listDuePokecollectorDeletions(now, limit) {
+      return [...pendingDeletions.values()]
+        .filter((row) => row.mode === "delete" && row.nextAttemptAt <= now)
+        .sort((a, b) => a.nextAttemptAt.localeCompare(b.nextAttemptAt) || a.remoteUserId.localeCompare(b.remoteUserId))
+        .slice(0, limit)
+        .map((row) => ({ ...row }));
+    },
+    enqueuePokecollectorDeletion: (entry) => enqueueDeletion(entry),
+    updatePokecollectorDeletion(remoteUserId, patch) {
+      const row = pendingDeletions.get(remoteUserId);
+      if (row) pendingDeletions.set(remoteUserId, { ...row, ...patch });
+    },
+    removePokecollectorDeletion(remoteUserId) {
+      pendingDeletions.delete(remoteUserId);
+    },
+    listNorthStarTotals() {
+      return [...northStarTotals.values()].sort((a, b) => a.weekStart.localeCompare(b.weekStart)).map((t) => ({ ...t }));
+    },
+    listAllUserIds() {
+      return [
+        ...new Set([
+          ...[...store.scans.values()].map((scan) => scan.userId),
+          ...store.inventory.map((item) => item.userId),
+          ...[...store.sessions.values()].map((s) => s.userId),
+          ...accounts.keys(),
+          ...port.purchaseLedger.listUserIds(),
+          ...store.pokecollectorUsers.keys(),
+          ...store.portfolioSnapshots.keys(),
+          ...extra.gradeAccounts.keys(),
+        ]),
+      ];
     },
     countUserRows(userId) {
       return {
+        purchase_events: port.purchaseLedger.list(userId).length,
         crm_scans: port.listScans(userId).length,
         crm_inventory_items: port.listInventory(userId).length,
         crm_sessions: [...store.sessions.values()].filter((s) => s.userId === userId).length,

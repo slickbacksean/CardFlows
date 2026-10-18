@@ -1,4 +1,5 @@
 import { emailSenderProblems } from "./email-sender";
+import { serverPepperProblem } from "./server-pepper";
 
 /**
  * Backend review H3: refuse to start in production without settings that keep abuse limits
@@ -14,6 +15,9 @@ export function productionConfigProblems(env: NodeJS.Dict<string | undefined>): 
   }
   // A sender that is named but half-configured would silently drop verification codes.
   problems.push(...emailSenderProblems(env));
+  // Backend review L3 (P4): email_send_counts keys are HMACs with this pepper.
+  const pepper = serverPepperProblem(env);
+  if (pepper) problems.push(pepper);
   return problems;
 }
 

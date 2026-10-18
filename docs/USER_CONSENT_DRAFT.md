@@ -106,6 +106,18 @@ Account deletion is not the same as turning the app off or “freezing” the ac
 
 **Buttons (draft):** Delete this scan · Delete account · Cancel
 
+**Privacy policy draft: deleting your account (P4, Policy Reviewer)**
+
+Settings > Delete account deletes your CardFlow account and everything in it right away: your sign-in, email and password, MyDEX, your Watchlist and purchase details, scans and card photos, pre-grade estimate history, sales, listing drafts, Max Buy rules, your CardSight choice and your 18+ confirmation. Guests can delete their guest data the same way.
+
+If your account was linked to PokéCollector, CardFlow removes the link and deletes the cards and wishlist it stored there. This can take up to 2 weeks, and PokéCollector's own backups may keep a copy for a while.
+
+CardFlow keeps only anonymous totals that can't identify you. Purchases you made on a marketplace aren't affected.
+
+Deleted data is removed from backups within [30] days.
+
+> **Open (Sean):** confirm the backup window (the number in brackets) against the real backup retention before this is published. That includes the PokéCollector server CardFlow runs: its automatic pre-upgrade SQL dumps (`/app/backups`, newest `PRE_UPGRADE_BACKUP_KEEP`, default 10) keep deleted users' cards until they rotate out, so they need the same window.
+
 ---
 
 ## 5. Optional future browser / live visual analysis
@@ -158,6 +170,10 @@ When you create an account, we email you a 6-digit code to confirm your address.
 
 If you turn on usage analytics, CardFlow sends counts and timings to **PostHog Inc.**, a service provider that processes this data on our behalf and stores it in the **United States**. PostHog briefly receives your device's IP address when events arrive, but we have turned off its location lookup (GeoIP), so no location is derived or stored, and events are not linked to a person profile. We never send photos, card details, prices or anything you type. You can turn analytics off at any time in Settings; events not yet sent are deleted from your phone.
 
+**Privacy policy draft: crash-report service provider (Sentry)**
+
+We use **Sentry** (Functional Software, Inc.), a service provider that processes crash and error reports on our behalf, to find and fix crashes. A report contains the error and stack trace, the app version, device model and OS version, and a request ID. We remove emails, IP addresses, passwords and sign-in tokens, photos and photo file paths, and the content of your requests before a report is sent. Reports aren't used for advertising or tracking. Crash reports are on by default, and you can turn them off in Settings > Send crash reports.
+
 **Performance timings:** when analytics is on, a small sample of scan-step timings, a coarse device class, OS and phone model are also sent to CardFlow's own servers (not to PostHog) to keep scanning fast. The same switch controls this; with it off nothing is sent. Our servers keep only aggregate timings by step and device class; the phone model and OS are not stored.
 
 ---
@@ -180,6 +196,7 @@ Draft list for Settings:
 - Use CardSight for card recognition: On / Off (decided: ask once, then this toggle; off = CardFlow's matcher only)
 - Save scan photos: On / Off
 - Usage analytics: On / Off (hidden if no SDK)
+- Send crash reports: On / Off (on by default; P4)
 - Live visual analysis: Off (unavailable in MVP)
 - Sign out
 - Delete account

@@ -1,4 +1,5 @@
 import {
+  legacyGradeHistoryKey,
   parseGradeHistory,
   type CardFlowGradeEstimate,
   type GradeHistoryEntry,
@@ -6,6 +7,7 @@ import {
 import * as SecureStore from "expo-secure-store";
 import { Platform } from "react-native";
 import { getGradeHistory, isPremiumRequired } from "./api";
+import { forgetDeviceItemIds, rememberDeviceItemIds } from "./device-item-index";
 import { peekActiveUserId } from "./identity";
 import { runQueueableWrite } from "./write-queue";
 
@@ -18,8 +20,35 @@ const webMemory = new Map<string, string>();
 const lastSeen = new Map<string, GradeHistoryEntry[]>();
 
 function legacyKey(inventoryItemId: string): string {
-  const safe = (value: string) => value.replace(/[^A-Za-z0-9._-]/g, "_");
-  return `cardflow.gradehist.${safe(peekActiveUserId())}.${safe(inventoryItemId)}`;
+  return legacyGradeHistoryKey(peekActiveUserId(), inventoryItemId);
+}
+
+/**
+ * Backend review M2 (P4): account deletion removes the on-phone history for every card the
+ * account had. SecureStore can't list keys, so the item IDs come from the phone's own index
+ * (device-item-index.ts, re-review M2) plus whatever the server listed before the delete.
+ */
+export async function clearLegacyGradeHistory(userId: string, inventoryItemIds: readonly string[]): Promise<void> {
+  lastSeen.clear();
+  lockedCount = 0;
+  nextCursor = null;
+  // Re-review L1: one failed delete doesn't stop the others; the step still reports the failure.
+  let failures = 0;
+  for (const id of inventoryItemIds) {
+    const key = legacyGradeHistoryKey(userId, id);
+    try {
+      if (Platform.OS === "web") webMemory.delete(key);
+      else await SecureStore.deleteItemAsync(key);
+    } catch {
+      failures += 1;
+    }
+  }
+  if (Platform.OS === "web") {
+    for (const key of [...webMemory.keys()]) if (key.startsWith(legacyGradeHistoryKey(userId, ""))) webMemory.delete(key);
+  }
+  // Backend final review R5: keep the index entry when any delete failed, so a later wipe retries.
+  if (failures > 0) throw new Error(`${failures} grade history entries could not be deleted`);
+  forgetDeviceItemIds(userId);
 }
 
 async function readLegacy(key: string): Promise<string | null> {
@@ -81,6 +110,7 @@ export function gradeHistoryLockedCount(): number {
 }
 
 export async function loadGradeHistory(inventoryItemId: string): Promise<GradeHistoryEntry[]> {
+  rememberDeviceItemIds([inventoryItemId]);
   const legacy = await migrateLocalGradeHistory(inventoryItemId);
   const cacheKey = `${peekActiveUserId()}|${inventoryItemId}`;
   try {
