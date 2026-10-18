@@ -27,6 +27,7 @@
       "extends": "base",
       "distribution": "internal",
       "environment": "preview",
+      "autoIncrement": true,
       "ios": {
         "resourceClass": "m-medium"
       },
@@ -39,6 +40,7 @@
     "production": {
       "extends": "base",
       "environment": "production",
+      "autoIncrement": true,
       "ios": {
         "resourceClass": "m-medium"
       },
@@ -46,27 +48,6 @@
         "APP_ENV": "production",
         "EXPO_PUBLIC_APP_ENV": "production",
         "SENTRY_DISABLE_AUTO_UPLOAD": "true"
-      }
-    },
-    "preview": {
-      "distribution": "internal",
-      "node": "22.22.0",
-      "autoIncrement": true,
-      "ios": {
-        "resourceClass": "m-medium"
-      },
-      "env": {
-        "EXPO_PUBLIC_API_URL": "https://REPLACE_WITH_STAGING_API"
-      }
-    },
-    "production": {
-      "node": "22.22.0",
-      "autoIncrement": true,
-      "ios": {
-        "resourceClass": "m-medium"
-      },
-      "env": {
-        "EXPO_PUBLIC_API_URL": "https://REPLACE_WITH_PRODUCTION_API"
       }
     }
   },
