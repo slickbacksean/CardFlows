@@ -124,6 +124,34 @@ jobs:
           cat health.json || true
           if [ "$ready" != 1 ]; then echo "grader not ready in image"; exit 1; fi
 
+      - name: Root-owned volume (Railway mounts volumes as root)
+        run: |
+          mkdir -p /tmp/vol && sudo chown root:root /tmp/vol
+          docker run -d --name cardflow-vol -p 8081:8080 --memory=2g --cpus=1 -v /tmp/vol:/data \
+            -e CARD_FLOW_TRUST_PROXY_HOPS=0 -e CARD_FLOW_SERVER_PEPPER=ci-only-server-pepper-not-a-secret-0000 \
+            -e CARD_FLOW_REQUIRE_VOLUME=true -e RAILWAY_VOLUME_MOUNT_PATH=/data cardflow-api:ci
+          wait_health() {
+            for i in $(seq 1 30); do
+              if curl -fsS http://127.0.0.1:8081/health -o vol.json \
+                && node -e "const h=require('./vol.json'); process.exit(h.db && h.db.ok && h.db.journalMode==='wal' ? 0 : 1)"; then
+                return 0
+              fi
+              sleep 2
+            done
+            cat vol.json || true; return 1
+          }
+          wait_health
+          test "$(sudo stat -c %u /tmp/vol/cardflow.sqlite)" = 10001
+          docker restart cardflow-vol
+          wait_health
+          test -f /tmp/vol/cardflow.sqlite
+          docker logs cardflow-vol 2>&1 | grep -q "applied 0 migrations"
+          # A DB outside the volume must refuse to start.
+          if docker run --rm -e CARD_FLOW_TRUST_PROXY_HOPS=0 -e CARD_FLOW_SERVER_PEPPER=ci-only-server-pepper-not-a-secret-0000 \
+            -e CARD_FLOW_REQUIRE_VOLUME=true -e RAILWAY_VOLUME_MOUNT_PATH=/vol cardflow-api:ci; then echo "volume guard did not fire"; exit 1; fi
+
       - name: Container logs
         if: ${{ always() }}
-        run: docker logs cardflow-api || true
+        run: |
+          docker logs cardflow-api || true
+          docker logs cardflow-vol || true

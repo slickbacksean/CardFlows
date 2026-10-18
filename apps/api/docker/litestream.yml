@@ -1,0 +1,40 @@
+# Litestream v0.5.x for the CardFlow API (docs/RAILWAY_DEPLOY.md). All values come from
+# env, expanded at load; nothing secret is committed. The entrypoint sets defaults for
+# LITESTREAM_PATH, LITESTREAM_REGION, LITESTREAM_REQUIRE_CONTENT_MD5 and LITESTREAM_HEARTBEAT_URL.
+logging:
+  level: info
+  type: json
+
+# Full snapshot daily; keep 90 days of snapshots + LTX history (point-in-time window).
+# 90 days matches the backup window in the privacy draft (Sean): deleted data is gone within 90 days.
+snapshot:
+  interval: 24h
+  retention: 2160h
+
+# Check replica LTX contiguity every 6h.
+validation:
+  interval: 6h
+
+# Dead-man's switch: pings only while every DB synced within the interval. Empty URL = disabled.
+heartbeat-url: ${LITESTREAM_HEARTBEAT_URL}
+heartbeat-interval: 5m
+
+shutdown-sync-timeout: 20s
+addr: "127.0.0.1:9090"
+
+dbs:
+  - path: ${CARD_FLOW_SQLITE_PATH}
+    busy-timeout: 5s
+    replica:
+      type: s3
+      bucket: ${LITESTREAM_BUCKET}
+      # Change to start a new generation after a point-in-time restore.
+      path: ${LITESTREAM_PATH}
+      # R2: https://<ACCOUNT_ID>.r2.cloudflarestorage.com ; Railway Buckets: https://t3.storageapi.dev
+      endpoint: ${LITESTREAM_ENDPOINT}
+      region: ${LITESTREAM_REGION}
+      access-key-id: ${LITESTREAM_ACCESS_KEY_ID}
+      secret-access-key: ${LITESTREAM_SECRET_ACCESS_KEY}
+      sync-interval: 10s
+      # true for R2 (unverified); false for Railway Buckets (Tigris).
+      require-content-md5: ${LITESTREAM_REQUIRE_CONTENT_MD5}

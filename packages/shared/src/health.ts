@@ -63,6 +63,10 @@ export interface CardFlowHealth {
   /** Real `import cv2, numpy` in the grader Python. Null when no grader runner is configured. */
   gradeEngine: GradeEngineHealth | null;
   slabPricing: HealthSlabPricing;
+  /** SQLite store only: `SELECT 1` on the live handle and WAL mode. A broken DB makes /health 503. */
+  db?: { ok: boolean; journalMode: string };
+  /** Litestream mode the container entrypoint chose. Replication lag never fails /health. */
+  backups?: { litestream: "replicate" | "restore-only" | "off" };
 }
 
 export interface HealthProviderStatus {

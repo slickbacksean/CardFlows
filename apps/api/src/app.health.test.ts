@@ -68,6 +68,7 @@ describe("GET /health", () => {
       gradeEstimate: "mock",
       gradeEngine: null,
       slabPricing: "off",
+      backups: { litestream: "off" },
     });
     expect(health.body.slabPricing).toBe("off");
     expect(healthLeaksSecrets(health.body)).toBe(false);
@@ -293,5 +294,35 @@ describe("GET /health", () => {
       gradeEngine: { ok: true, opencv: "4.10.0" },
     });
     expect(calls).toBe(2);
+  });
+});
+
+describe("/health db and backups (Railway plan §8.3)", () => {
+  it("reports the SQLite handle and Litestream mode, and 503s when the DB is broken", async () => {
+    const { mkdtempSync, rmSync } = await import("node:fs");
+    const { tmpdir } = await import("node:os");
+    const path = await import("node:path");
+    const { createSqliteStore } = await import("./sqlite-store");
+    const dir = mkdtempSync(path.join(tmpdir(), "cardflow-health-"));
+    const store = createSqliteStore({ sqlitePath: path.join(dir, "cardflow.sqlite") });
+    try {
+      // One app: createApp now touches the DB at boot (legacy anonymized ledger fold).
+      const app = createApp(store);
+      const ok = await json<{ ok: boolean; db: unknown; backups: unknown }>(app, "/health");
+      expect(ok.status).toBe(200);
+      expect(ok.body.db).toEqual({ ok: true, journalMode: "wal" });
+      expect(ok.body.backups).toEqual({ litestream: "off" });
+      store.close();
+      const broken = await json<{ ok: boolean; db: { ok: boolean } }>(app, "/health");
+      expect(broken.status).toBe(503);
+      expect(broken.body.db.ok).toBe(false);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("the memory store reports no db field", async () => {
+    const res = await json<Record<string, unknown>>(createApp(createMemoryStore()), "/health");
+    expect(res.body.db).toBeUndefined();
   });
 });

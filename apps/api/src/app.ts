@@ -498,6 +498,20 @@ export interface CreateAppOptions {
   gradeUploads?: GradeUploadCache;
 }
 
+/** SqliteStorePort exposes ping(); the memory store has no DB to check. */
+function storePing(store: StorePort): { ok: boolean; journalMode: string } | null {
+  const ping = (store as { ping?: () => { ok: boolean; journalMode: string } }).ping;
+  return typeof ping === "function" ? ping.call(store) : null;
+}
+
+/** Exported by apps/api/docker/entrypoint.sh; "off" outside the container. */
+export function litestreamModeFromEnv(
+  env: NodeJS.Dict<string | undefined> = process.env,
+): "replicate" | "restore-only" | "off" {
+  const mode = env.CARD_FLOW_LITESTREAM_MODE_EFFECTIVE?.trim();
+  return mode === "replicate" || mode === "restore-only" ? mode : "off";
+}
+
 /** Routes write through StorePort. Tests default to memory; local `pnpm dev:api` injects SQLite. */
 export function createApp(
   store: StorePort = createMemoryStore(),
@@ -1270,7 +1284,8 @@ export function createApp(
       slabPricing: slabPricingStatus,
     });
     const gradeEngine = gradeEngineProbe ? await boundedProbe(gradeEngineProbe) : null;
-    const ok = healthOk(gradeEngine);
+    const db = storePing(store);
+    const ok = healthOk(gradeEngine) && (db?.ok ?? true);
     return c.json(
       {
         ok,
@@ -1291,6 +1306,8 @@ export function createApp(
         // Real `import cv2, numpy` in the grader Python. Failed probes are not cached.
         gradeEngine,
         slabPricing: slabPricingStatus,
+        ...(db ? { db } : {}),
+        backups: { litestream: litestreamModeFromEnv() },
       },
       ok ? 200 : 503,
     );

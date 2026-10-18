@@ -12,7 +12,7 @@ Checked against `apps/api` (the hosting plan was written for the old `packages/a
 | On-device timings (P1-18) | The app sends sampled stage timings (20%, batched every 30 s) to `POST /v1/telemetry/perf`: grade and scan photo prep, livestream frame pull, detect, identify round trip, and frame-to-HUD. Each batch carries a bucketed device class, the model name, the OS, and the thermal state. It never includes images or card data. `/ops/metrics` shows p95 per stage and device class (24 h), the share of samples taken while the phone was hot, and the p95 when hot. Expo Go has no thermal API, so the thermal state stays `unknown` until a dev build adds one. |
 | Platform config | Use the platform dashboard or its current IaC. Don't add `railway.toml`; Railway's config-as-code is deprecated. |
 | Port | `PORT` (image default 8080, local 3001). |
-| Database | `CARD_FLOW_SQLITE_PATH` (image default `/data/cardflow.sqlite`, ephemeral unless a volume is mounted). Hosted DB choice is Sean's decision. |
+| Database | **Decided:** SQLite on a Railway volume at `/data` (`CARD_FLOW_SQLITE_PATH=/data/cardflow.sqlite`), Litestream to object storage. Single instance only (in-memory grade jobs, rate limits, caches, grade queue; SQLite single writer). See `docs/RAILWAY_DEPLOY.md` and `docs/RESTORE_DRILL.md`. Postgres after launch. |
 | CORS | `CARD_FLOW_CORS_ORIGINS` allowlist; empty allows no browser origin (native apps don't need CORS). |
 | Auth | Every `/v1/*` route except `POST /v1/sessions` needs a session token. Keep `CARD_FLOW_DEV_AUTO_SESSION` unset outside local dev. |
 | Health | `GET /health`; `gradeEngine` really imports `cv2` and `numpy` in the grader Python (5 s timeout). Successful probes are cached 5 min; failed probes are re-run. `/health` waits at most 3 s. HTTP 503 when the configured grader finished and failed. Every response includes `x-request-id`. |
@@ -33,7 +33,7 @@ Checked against `apps/api` (the hosting plan was written for the old `packages/a
 | Concurrency | `MAX_CONCURRENT_GRADES` (default 1, since one grade peaks at ~1 GB on a 2 GB instance), detect included. Up to `MAX_QUEUED_GRADES` (default 3) wait up to 30 s; a full queue answers 503 + `Retry-After`. |
 | Temp files | Grader output goes to a per-request temp dir that is deleted in `finally`. Debug PNGs only with `CARDFLOW_GRADE_DEBUG_IMAGES=1`. |
 
-Still open (Sean): hosting provider, hosted DB, photo retention, and the right `MAX_CONCURRENT_GRADES` for the chosen instance size.
+Decided: Railway (Hobby), SQLite on a volume, Litestream (`docs/RAILWAY_DEPLOY.md`). In-memory grade jobs are lost on redeploy; the app treats a missing job as retry. Still open (Sean): photo retention and the right `MAX_CONCURRENT_GRADES` for a 2 GB limit.
 
 ## Forgot password needs an email sender
 
