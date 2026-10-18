@@ -306,12 +306,14 @@ describe("/health db and backups (Railway plan §8.3)", () => {
     const dir = mkdtempSync(path.join(tmpdir(), "cardflow-health-"));
     const store = createSqliteStore({ sqlitePath: path.join(dir, "cardflow.sqlite") });
     try {
-      const ok = await json<{ ok: boolean; db: unknown; backups: unknown }>(createApp(store), "/health");
+      // One app: createApp now touches the DB at boot (legacy anonymized ledger fold).
+      const app = createApp(store);
+      const ok = await json<{ ok: boolean; db: unknown; backups: unknown }>(app, "/health");
       expect(ok.status).toBe(200);
       expect(ok.body.db).toEqual({ ok: true, journalMode: "wal" });
       expect(ok.body.backups).toEqual({ litestream: "off" });
       store.close();
-      const broken = await json<{ ok: boolean; db: { ok: boolean } }>(createApp(store), "/health");
+      const broken = await json<{ ok: boolean; db: { ok: boolean } }>(app, "/health");
       expect(broken.status).toBe(503);
       expect(broken.body.db.ok).toBe(false);
     } finally {
