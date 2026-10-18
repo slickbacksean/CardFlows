@@ -13,6 +13,7 @@ import {
   GRADE_AUTO_EXPLAINER,
   GRADE_STILL_MIN_SHORT_SIDE_PX,
   gradeFrameFillInPhoto,
+  gradeCameraMountErrorAction,
   gradeProbePictureSize,
   type GradeAutoPhase,
   type GradeCaptureReadiness,
@@ -82,6 +83,21 @@ export function GradeCardFinder({
   const [permission, requestPermission] = useCameraPermissions();
   const [cameraReady, setCameraReady] = useState(false);
   const [cameraMountFailed, setCameraMountFailed] = useState(false);
+  const [cameraKey, setCameraKey] = useState(0);
+  const remountsRef = useRef<number[]>([]);
+  function onCameraMountError(message: string | undefined) {
+    const now = Date.now();
+    const action = gradeCameraMountErrorAction(message, remountsRef.current, now);
+    console.warn(`[grade-finder] camera mount error (${action}): ${message ?? "no message"}`);
+    if (action === "ignore") return;
+    if (action === "remount") {
+      remountsRef.current = [...remountsRef.current.filter((t) => now - t < 60_000), now];
+      setCameraReady(false);
+      setCameraKey((k) => k + 1);
+      return;
+    }
+    setCameraMountFailed(true);
+  }
   const [error, setError] = useState<string | null>(null);
 
   const granted = permission?.granted === true;
@@ -198,7 +214,8 @@ export function GradeCardFinder({
       }
       onCaptured(picked.still);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Couldn't take a photo. Try again.");
+      console.warn(`[grade-finder] ${side} capture failed: ${caught instanceof Error ? caught.message : String(caught)}`);
+      setError("Couldn't take the photo. Hold still and tap the shutter again.");
     } finally {
       busyRef.current = false;
       setCapturing(false);
@@ -342,7 +359,8 @@ export function GradeCardFinder({
         pictureSize={pictureSize}
         onStageLayout={setStage}
         onCameraReady={() => void onCameraReady()}
-        onMountError={() => setCameraMountFailed(true)}
+        onMountError={onCameraMountError}
+        cameraKey={cameraKey}
       />
       {banner ? <Text style={styles.error}>{banner}</Text> : null}
       <View style={styles.toolbar}>
@@ -515,7 +533,8 @@ interface CardFinderStageProps {
   pictureSize?: string;
   onStageLayout: (size: { width: number; height: number }) => void;
   onCameraReady: () => void;
-  onMountError: () => void;
+  onMountError: (message: string | undefined) => void;
+  cameraKey: number;
 }
 
 function CardFinderStage({
@@ -531,6 +550,7 @@ function CardFinderStage({
   onStageLayout,
   onCameraReady,
   onMountError,
+  cameraKey,
 }: CardFinderStageProps) {
   // expo-camera 57 has no tap-to-focus API. autofocus "off" is iOS continuous
   // autofocus (the default); "on" focuses once and locks. A tap flips to "on"
@@ -549,6 +569,7 @@ function CardFinderStage({
       >
         {enableLivePreview ? (
           <CameraView
+            key={cameraKey}
             ref={cameraRef}
             facing="back"
             mode="picture"
@@ -558,7 +579,7 @@ function CardFinderStage({
             autofocus={focusOnce ? "on" : "off"}
             pictureSize={pictureSize}
             onCameraReady={onCameraReady}
-            onMountError={onMountError}
+            onMountError={(e) => onMountError(e?.message)}
             style={StyleSheet.absoluteFill}
           />
         ) : null}

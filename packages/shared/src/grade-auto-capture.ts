@@ -360,3 +360,25 @@ export function gradeAutoHint(step: Pick<GradeAutoStep, "state" | "blocker" | "m
 function clamp01(n: number): number {
   return Math.max(0, Math.min(1, n));
 }
+
+/**
+ * Sean, Oct 18: the Grade camera "randomly" showed "Camera unavailable". expo-camera (iOS)
+ * fires onMountError for "Camera session was reset" too, after it has already restarted the
+ * session itself, and the finder treated every mount error as permanent. Now: a session
+ * reset is ignored, any other error remounts the camera (at most 2 times a minute), and only
+ * then does the finder show "Camera unavailable".
+ */
+export const GRADE_CAMERA_REMOUNTS_PER_MINUTE = 2;
+
+export function gradeCameraMountErrorAction(
+  message: string | null | undefined,
+  recentRemountsMs: readonly number[],
+  nowMs: number,
+): "ignore" | "remount" | "fail" {
+  if (/session was reset/i.test(message ?? "")) return "ignore";
+  const recent = recentRemountsMs.filter((t) => nowMs - t < 60_000);
+  return recent.length < GRADE_CAMERA_REMOUNTS_PER_MINUTE ? "remount" : "fail";
+}
+
+/** After the corner check gives up (3 errors in a row), try again this much later. */
+export const GRADE_AUTO_PROBE_RETRY_MS = 5000;

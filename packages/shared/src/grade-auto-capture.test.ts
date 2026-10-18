@@ -3,6 +3,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
+  gradeCameraMountErrorAction,
   GRADE_AUTO_CAPTURE_HOLD_MS,
   GRADE_AUTO_COOLDOWN_MS,
   GRADE_AUTO_COPY,
@@ -352,7 +353,8 @@ describe("Grade camera wiring (Expo Go)", () => {
     expect(hook).toContain("createGradeProbeLoop(");
     expect(hook).toContain('AppState.addEventListener("change"');
     expect(hook).toMatch(/const probing =\s*active &&\s*appActive &&[\s\S]*probeSizeAvailable &&\s*layoutReady;/);
-    expect(hook).toContain("onUnavailable: () => setDetectorAvailable(false)");
+    // Oct 18: repeated probe errors pause the corner check and retry, never "unavailable" for good.
+    expect(hook).toMatch(/onUnavailable: \(\) => \{[\s\S]*setDetectorAvailable\(false\);[\s\S]*setTimeout\(\(\) => setDetectorAvailable\(true\), GRADE_AUTO_PROBE_RETRY_MS\)/);
     expect(hook).not.toMatch(/expo-sensors|vision-camera|frame-processor/);
     expect(finder).toContain("const isFocused = useIsFocused();");
     expect(finder).toContain("active: isFocused && showLivePreview");
@@ -393,5 +395,16 @@ describe("Grade camera wiring (Expo Go)", () => {
     expect("cooldown" in GRADE_AUTO_COPY).toBe(false);
     const all = [...Object.values(GRADE_AUTO_COPY), ...Object.values(GRADE_AUTO_EXPLAINER)].join(" ");
     expect(all).not.toMatch(/\bAI\b|PSA|BGS|CGC|grade|guarantee/i);
+  });
+});
+
+describe("camera mount errors (Sean, Oct 18)", () => {
+  it("ignores a session reset, remounts twice a minute, then fails", () => {
+    expect(gradeCameraMountErrorAction("Camera session was reset", [], 0)).toBe("ignore");
+    expect(gradeCameraMountErrorAction("Camera could not be started - x", [], 100_000)).toBe("remount");
+    expect(gradeCameraMountErrorAction(undefined, [90_000], 100_000)).toBe("remount");
+    expect(gradeCameraMountErrorAction("x", [90_000, 95_000], 100_000)).toBe("fail");
+    // Old remounts age out.
+    expect(gradeCameraMountErrorAction("x", [10_000, 20_000], 100_000)).toBe("remount");
   });
 });

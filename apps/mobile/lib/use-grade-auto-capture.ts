@@ -1,6 +1,7 @@
 import {
   createGradeProbeLoop,
   GRADE_AUTO_COPY,
+  GRADE_AUTO_PROBE_RETRY_MS,
   GRADE_AUTO_CORNER_HITS_REQUIRED,
   GRADE_AUTO_CORNER_MISS_CANCEL,
   GRADE_AUTO_INITIAL,
@@ -169,7 +170,14 @@ export function useGradeAutoCapture(input: {
         return !isBusy && pose && lv.steady !== false && cameraRef.current != null;
       },
       probe: async () => {
-        const shot = await cameraRef.current?.takePictureAsync({ quality: 0.1, shutterSound: false, exif: false });
+        let shot: { uri?: string; width: number; height: number } | undefined;
+        try {
+          shot = await cameraRef.current?.takePictureAsync({ quality: 0.1, shutterSound: false, exif: false });
+        } catch (error) {
+          // A probe that fails (e.g. while the camera switches picture size) is a retry, never "unavailable".
+          console.warn(`[grade-probe] takePictureAsync failed: ${error instanceof Error ? error.message : String(error)}`);
+          return null;
+        }
         if (!shot?.uri) return null;
         const fill = latest.current.frameFill(shot.width, shot.height);
         if (fill == null) return null;
@@ -186,7 +194,11 @@ export function useGradeAutoCapture(input: {
         statsRef.current = stats;
         setProbeStats(stats);
       },
-      onUnavailable: () => setDetectorAvailable(false),
+      onUnavailable: () => {
+        console.warn(`[grade-probe] corner check paused after repeated errors; retrying in ${GRADE_AUTO_PROBE_RETRY_MS} ms`);
+        setDetectorAvailable(false);
+        setTimeout(() => setDetectorAvailable(true), GRADE_AUTO_PROBE_RETRY_MS);
+      },
     });
     loop.start();
     loopRef.current = loop;
