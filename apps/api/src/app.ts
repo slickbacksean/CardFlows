@@ -5,7 +5,7 @@ import { AGE_CONFIRMATION_REQUIRED_CODE, AGE_GATE_COPY, AGE_GATE_VERSION } from 
 import { ageConfirmationState, hasAgeConfirmation } from "./age-store";
 import { ageGateEnabledFromEnv, CARDSIGHT_GUEST_MONTHLY_CAP, CARDSIGHT_USER_MONTHLY_CAP_DEFAULT } from "./grade-quota-env";
 import { createRecognitionWithFallback } from "./cardsight-adapter";
-import { normalizeEmail, type DeletionAuditKind } from "./account-store";
+import { ALLOWANCE_TOMBSTONE_TTL_MS, allowanceTombstoneKey, normalizeEmail, type DeletionAuditKind } from "./account-store";
 import { routePath } from "hono/route";
 import { CARDSIGHT_CONSENT_VERSION, INVITED_USERS, EMAIL_CODE_LIFETIME_SENDS, EMAIL_SENDS_PER_ADDRESS_PER_DAY, UNVERIFIED_ACCOUNT_TTL_DAYS, EMAIL_CODE_LENGTH, EMAIL_RESEND_COOLDOWN_MS, EMAIL_UNVERIFIED_CODE, EMAIL_VERIFICATION_COPY, EMAIL_VERIFICATION_TTL_MS, isEmailCode, passwordResetEmailText, verificationEmailText, quotaAnchor, quotaPeriodFor, ACCOUNT_AUTH_COPY, ACCOUNT_DELETION_COPY, PASSWORD_RESET_TTL_MS, GUEST_MINT_WINDOW_MS, GUEST_SESSION_TTL_MS, isValidEmail, passwordProblem, GUEST_USER_PREFIX, SIGNUP_REQUIRED_CODE, guestIdentity, guestRouteBlockReason, isGuestUserId, isHot, parsePerfBatch, signupMessage, type SignupReason } from "@cardflow/shared";
 import { NORTH_STAR_NAME, SCANS_PER_WAR_NAME, northStarUserWeekTotals, northStarWeekly, type NorthStarWeekTotal } from "@cardflow/shared";
@@ -540,6 +540,7 @@ export function createApp(
     setGradePlan,
     addGradeCredits,
     getGradeQuotaUsage,
+    setGradeQuotaUsage,
     consumeGradeQuota,
   } = store;
   const now = options.now ?? (() => new Date());
@@ -1791,7 +1792,20 @@ export function createApp(
       }
       account = existing;
     }
-    if (created) sendVerificationCode(created);
+    if (created) {
+      sendVerificationCode(created);
+      // Carry over this month's used allowances from a live tombstone (HMAC match). No new-account bonus.
+      const tomb = store.accounts.findAllowanceTombstone(allowanceTombstoneKey(created.email));
+      if (tomb) {
+        const ageMs = now().getTime() - Date.parse(tomb.deletedAt);
+        if (Number.isFinite(ageMs) && ageMs >= 0 && ageMs <= ALLOWANCE_TOMBSTONE_TTL_MS) {
+          const { period } = quotaPeriodForUser(created.userId, now());
+          if (tomb.periodKey === period.key && tomb.used > 0) {
+            store.setGradeQuotaUsage(created.userId, period.key, tomb.used);
+          }
+        }
+      }
+    }
     const moved = adoptGuestData(c.req.header("authorization"), account.userId);
     if (bodyConfirmed && !hasAgeConfirmation(store.ageConfirmations, account.userId)) {
       store.ageConfirmations.confirm(account.userId, AGE_GATE_VERSION, now().toISOString());
@@ -2045,6 +2059,20 @@ export function createApp(
     // Data Engineer review: every user_id row in one transaction first, then the files (whose
     // locations were collected before the rows went). A crash in between leaves orphan files
     // with no personal rows, which the photo retention sweep removes, never rows without files.
+    // Allowance tombstone: remember this month's used grades under an HMAC of the email (no
+    // plaintext) so a re-sign-up can't reset the free allowance for 90 days.
+    const deletingAccount = store.accounts.getAccount(userId);
+    let allowanceTombstone: { emailHmac: string; periodKey: string; used: number; deletedAt: string } | undefined;
+    if (deletingAccount?.email) {
+      const at = now();
+      const { period } = quotaPeriodForUser(userId, at);
+      allowanceTombstone = {
+        emailHmac: allowanceTombstoneKey(deletingAccount.email),
+        periodKey: period.key,
+        used: getGradeQuotaUsage(userId, period.key),
+        deletedAt: at.toISOString(),
+      };
+    }
     const removePhotos = store.prepareUserPhotoDeletion(userId);
     // Backend review H2 (P4): the user's weekly North Star counts become anonymous totals in the
     // same transaction that hard-deletes every row, including purchase_events, so past weeks
@@ -2088,6 +2116,7 @@ export function createApp(
     // Backend review L3: audit row with no PII.
     const rowsDeleted = Object.values(rows).reduce((sum, n) => sum + n, 0);
     store.accounts.recordDeletionAudit({ at: now().toISOString(), kind, rowsDeleted });
+    if (allowanceTombstone) store.accounts.upsertAllowanceTombstone(allowanceTombstone);
     return { rows, photos, staged, rowsDeleted, pokecollector };
   };
 
@@ -2145,6 +2174,8 @@ export function createApp(
       accountsSwept += 1;
     }
     const imagesSwept = store.sweepOrphanScanImages(new Date(now().getTime() - 60 * 60 * 1000));
+    // Allowance tombstones older than 90 days (HMAC only; no email left).
+    store.accounts.purgeAllowanceTombstonesBefore(new Date(now().getTime() - ALLOWANCE_TOMBSTONE_TTL_MS).toISOString());
     // Re-review H1: the sweep also retries due PokéCollector deletes (the queue's timer does too).
     pokecollectorDeletions.kick();
     return { accountsSwept, imagesSwept };

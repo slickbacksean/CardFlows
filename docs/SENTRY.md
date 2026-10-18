@@ -51,7 +51,7 @@ Also disabled: session replay, screenshots, view hierarchy, failed-request bodie
 
 ## Consent
 
-Crash reporting is **not** tied to the in-app analytics opt-in. It has its own switch, Settings > **Send crash reports** (on by default, P4 Policy review): off means `initMobileSentry()` doesn't start Sentry, and turning it off later closes the client and drops anything queued. Sean may still choose opt-in instead (`CRASH_REPORTS_DEFAULT_ON`). Analytics consent covers PostHog product events only. Crash data is a separate, disclosed category (Crash Data, PRIVACY_DATA_MAP §14) and carries no PII or photos. P4 checked this and kept it. If it should require the opt-in too, gate `initMobileSentry()` on the stored analytics preference.
+Crash reporting is **not** tied to the in-app analytics opt-in. It has its own switch, Settings > **Send crash reports** (off by default, opt-in; P4 Policy review): off means `initMobileSentry()` doesn't start Sentry, and turning it off later closes the client and drops anything queued. Analytics consent covers PostHog product events only. Crash data is a separate, disclosed category (Crash Data, PRIVACY_DATA_MAP §14) and carries no PII or photos. P4 checked this and kept it. If it should require the opt-in too, gate `initMobileSentry()` on the stored analytics preference.
 
 EAS profiles and the rest of the env layout: [RELEASE_ENV.md](./RELEASE_ENV.md).
 

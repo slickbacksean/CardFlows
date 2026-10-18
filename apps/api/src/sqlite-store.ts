@@ -1840,6 +1840,19 @@ export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStor
     return row?.used ?? 0;
   }
 
+  function setGradeQuotaUsage(userId: string, monthKey: string, used: number): void {
+    const n = Math.max(0, Math.floor(used));
+    const current = getGradeQuotaUsage(userId, monthKey);
+    const next = Math.max(current, n);
+    db.insert(gradeQuotaUsage)
+      .values({ userId, monthKey, used: next })
+      .onConflictDoUpdate({
+        target: [gradeQuotaUsage.userId, gradeQuotaUsage.monthKey],
+        set: { used: next },
+      })
+      .run();
+  }
+
   function consumeGradeQuota(userId: string, input: GradeQuotaConsumeInput): GradeQuotaConsumeResult {
     return sqlite.transaction(() => {
       ensureGradeAccount(userId, input.at);
@@ -2123,6 +2136,7 @@ export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStor
     ensureGradeAnchor,
     setBillingAnchor,
     getGradeQuotaUsage,
+    setGradeQuotaUsage,
     consumeGradeQuota,
     getVendorQuotaUsage,
     consumeVendorQuota,

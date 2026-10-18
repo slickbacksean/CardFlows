@@ -90,6 +90,11 @@ export interface AccountStore {
   /** Backend review L3: one PII-free row per deletion (no user ID, email or token). */
   recordDeletionAudit(entry: DeletionAuditEntry): void;
   listDeletionAudit(): DeletionAuditEntry[];
+  /** Allowance tombstone: upsert by email HMAC (no plaintext email). */
+  upsertAllowanceTombstone(entry: AllowanceTombstone): void;
+  findAllowanceTombstone(emailHmac: string): AllowanceTombstone | null;
+  /** Drop tombstones older than cutoff (ISO). Returns rows removed. */
+  purgeAllowanceTombstonesBefore(cutoff: string): number;
 }
 
 /**
@@ -143,6 +148,24 @@ export interface DeletionAuditEntry {
  */
 export function emailSendKey(email: string, pepper: string = serverPepper()): string {
   return createHmac("sha256", pepper).update(`cardflow-email-send\0${normalizeEmail(email)}`).digest("hex");
+}
+
+/** 90 days: how long a deleted account's allowance usage is remembered (HMAC only, no email). */
+export const ALLOWANCE_TOMBSTONE_TTL_MS = 90 * 24 * 60 * 60 * 1000;
+
+/**
+ * One-way email key for allowance tombstones (different purpose string from emailSendKey).
+ * Uses CARD_FLOW_SERVER_PEPPER; never stores the address.
+ */
+export function allowanceTombstoneKey(email: string, pepper: string = serverPepper()): string {
+  return createHmac("sha256", pepper).update(`cardflow-allowance-tombstone\0${normalizeEmail(email)}`).digest("hex");
+}
+
+export interface AllowanceTombstone {
+  emailHmac: string;
+  periodKey: string;
+  used: number;
+  deletedAt: string;
 }
 
 export function normalizeEmail(email: string): string {
@@ -323,6 +346,23 @@ export function createSqliteAccountStore(
           rows_deleted: number;
         }>
       ).map((row) => ({ at: row.at, kind: row.kind, rowsDeleted: row.rows_deleted }));
+    },
+    upsertAllowanceTombstone({ emailHmac, periodKey, used, deletedAt }) {
+      sqlite
+        .prepare(
+          "INSERT INTO allowance_tombstones (email_hmac, period_key, used, deleted_at) VALUES (?, ?, ?, ?) " +
+            "ON CONFLICT(email_hmac) DO UPDATE SET period_key = excluded.period_key, used = excluded.used, deleted_at = excluded.deleted_at",
+        )
+        .run(emailHmac, periodKey, used, deletedAt);
+    },
+    findAllowanceTombstone(emailHmac) {
+      const row = sqlite.prepare("SELECT email_hmac, period_key, used, deleted_at FROM allowance_tombstones WHERE email_hmac = ?").get(emailHmac) as
+        | { email_hmac: string; period_key: string; used: number; deleted_at: string }
+        | undefined;
+      return row ? { emailHmac: row.email_hmac, periodKey: row.period_key, used: row.used, deletedAt: row.deleted_at } : null;
+    },
+    purgeAllowanceTombstonesBefore(cutoff) {
+      return sqlite.prepare("DELETE FROM allowance_tombstones WHERE deleted_at < ?").run(cutoff).changes;
     },
     listAccountUserIds() {
       return db.select({ userId: userAccounts.userId }).from(userAccounts).all().map((row) => row.userId);
