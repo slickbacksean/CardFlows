@@ -54,10 +54,22 @@ class TestCornerCloseup(unittest.TestCase):
         self.assertLessEqual(worn.score, 8)
         self.assertIsNotNone(worn.note)
 
-    def test_combine_takes_worse(self):
-        self.assertEqual(combine_corner_scores(9, 6), 6)
+    def test_combine_advisory_unless_high_confidence(self):
+        # Without high_confidence, close-up never lowers the flat grade.
+        self.assertEqual(combine_corner_scores(9, 6), 9)
+        self.assertEqual(combine_corner_scores(9, 6, high_confidence=False), 9)
         self.assertEqual(combine_corner_scores(9, None), 9)
+        self.assertIsNone(combine_corner_scores(None, 4, high_confidence=True))
         self.assertIsNone(combine_corner_scores(None, None))
+        # High confidence: lower by at most 1 point.
+        self.assertEqual(combine_corner_scores(9, 6, high_confidence=True), 8)
+        self.assertEqual(combine_corner_scores(9, 8, high_confidence=True), 8)
+        self.assertEqual(combine_corner_scores(9, 9, high_confidence=True), 9)
+        self.assertEqual(combine_corner_scores(5, 1, high_confidence=True), 4)
+
+    def test_whitened_note_is_advisory(self):
+        worn = analyze_corner_closeup(_whiten_corner(_card(), "tl"), "tl")
+        self.assertTrue(worn.note and worn.note.startswith("Possible"))
 
 
 class TestTiltSurface(unittest.TestCase):

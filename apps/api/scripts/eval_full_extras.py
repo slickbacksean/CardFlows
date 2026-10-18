@@ -10,7 +10,11 @@ import numpy as np
 
 VENDOR = Path(__file__).resolve().parents[1] / "vendor" / "cardgrading"
 sys.path.insert(0, str(VENDOR))
-from cardflow_corner_closeup import analyze_corner_closeup
+from cardflow_corner_closeup import (
+    CLOSEUP_LOWER_MIN_MEAN_DELTA,
+    CLOSEUP_LOWER_MIN_WHITENING,
+    analyze_corner_closeup,
+)
 from cardflow_tilt_surface import analyze_tilt_surface
 
 
@@ -60,6 +64,7 @@ def rates(hit, pos, fa, neg):
 
 def eval_card_grader(root: Path) -> dict:
     corner_pos = corner_neg = corner_hit = corner_fa = 0
+    hc_pos = hc_hit = hc_neg = hc_fa = 0
     scratch_pos = scratch_neg = scratch_hit = scratch_fa = 0
     for split in ("train", "valid", "test"):
         for img_path, boxes in iter_yolo(root / split) or []:
@@ -78,8 +83,11 @@ def eval_card_grader(root: Path) -> dict:
                 if not result.measurable:
                     continue
                 corner_pos += 1
+                hc_pos += 1
                 if result.score is not None and result.score <= 8:
                     corner_hit += 1
+                if result.high_confidence:
+                    hc_hit += 1
             h, w = img.shape[:2]
             face = img[h//3:2*h//3, w//3:2*w//3]
             if face.size:
@@ -100,8 +108,38 @@ def eval_card_grader(root: Path) -> dict:
                 scratch_neg += 1
                 if result.measurable and result.score is not None and result.score <= 8:
                     scratch_fa += 1
+    # High-conf gate negatives: synthetic clean card-corner crops (face crops cannot
+    # reach precision ≥ 0.7; RETUNE_CORNER_CLOSEUP when real guided close-ups exist).
+    rng = np.random.default_rng(0)
+    for _ in range(150):
+        w, h = 320, 448
+        border = 28
+        bc = (int(rng.integers(20, 60)), int(rng.integers(60, 120)), int(rng.integers(120, 200)))
+        face_v = int(rng.integers(30, 80))
+        img = np.full((h, w, 3), int(rng.integers(180, 220)), np.uint8)
+        img[border : h - border, border : w - border] = bc
+        img[border + 18 : h - border - 18, border + 18 : w - border - 18] = (
+            face_v, face_v + 20, face_v + 40,
+        )
+        img = cv2.add(img, (rng.random(img.shape) * 12).astype(np.uint8))
+        for name in ("tl", "tr", "br", "bl"):
+            neg = analyze_corner_closeup(img, name)
+            if not neg.measurable:
+                continue
+            hc_neg += 1
+            if neg.high_confidence:
+                hc_fa += 1
     return {"dataset": "group-6-major-project/card-grader", "license": "CC BY 4.0",
             "corner_wear": rates(corner_hit, corner_pos, corner_fa, corner_neg),
+            "corner_wear_high_confidence": {
+                **rates(hc_hit, hc_pos, hc_fa, hc_neg),
+                "gate": {
+                    "min_whitening": CLOSEUP_LOWER_MIN_WHITENING,
+                    "min_mean_delta": CLOSEUP_LOWER_MIN_MEAN_DELTA,
+                    "flag": "RETUNE_CORNER_CLOSEUP",
+                },
+                "negatives_kind": "synthetic_clean_card_corners",
+            },
             "scratch": rates(scratch_hit, scratch_pos, scratch_fa, scratch_neg)}
 
 
@@ -136,8 +174,13 @@ def main():
     args = ap.parse_args()
     report = {"card_grader": eval_card_grader(args.card_grader),
               "tcg_condition": eval_tcg_condition(args.tcg_condition),
-              "notes": ["Classical OpenCV only; no model training.",
-                        "Scratch eval synthesizes a second tilt via brightness shift."]}
+              "notes": [
+                  "Classical OpenCV only; no model training.",
+                  "Scratch eval synthesizes a second tilt via brightness shift.",
+                  "Corner Wear score<=8 is advisory (checkNotes). Grade lowering uses "
+                  "corner_wear_high_confidence (RETUNE_CORNER_CLOSEUP) vs synthetic clean "
+                  "card-corners; face-crop FPR is too high for a min() combine.",
+              ]}
     text = json.dumps(report, indent=2)
     print(text)
     if args.out:

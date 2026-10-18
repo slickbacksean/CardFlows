@@ -7,8 +7,9 @@ location), then:
   * whitening/fraying — bright border pixels vs estimated border colour
   * rounding/dings — how far the outer contour sits from the expected radius
 
-Score is 0–10 (10 = clean). Combination with the flat-photo corner score is
-documented in combine_corner_scores (take the worse measurable score).
+Score is 0–10 (10 = clean). Findings always feed advisory checkNotes
+("Possible …"). Combination with the flat-photo corner score is documented
+in combine_corner_scores (lower by at most 1 only when high_confidence).
 """
 
 from __future__ import annotations
@@ -54,6 +55,13 @@ RADIUS_BANDS = [
     (1e9, 1),
 ]
 
+# High-confidence gate for *lowering* the corners sub-score (advisory otherwise).
+# Chosen on card-grader Corner Wear vs clean card-corner crops so precision ≥ 0.7
+# (measured 1.00 at these cuts; recall ~0.02). Flip/retune when we have real
+# guided close-ups — see docs/GRADE_FULL_MODE.md flag RETUNE_CORNER_CLOSEUP.
+CLOSEUP_LOWER_MIN_WHITENING = 35.0  # RETUNE_CORNER_CLOSEUP
+CLOSEUP_LOWER_MIN_MEAN_DELTA = 20.0  # RETUNE_CORNER_CLOSEUP
+
 CORNER_LABELS = {
     "tl": "top-left",
     "tr": "top-right",
@@ -71,6 +79,8 @@ class CornerCloseupResult:
     measurable: bool
     note: str | None = None
     reason: str | None = None
+    high_confidence: bool = False
+    mean_delta: float = 0.0
 
     def to_dict(self) -> dict:
         return {
@@ -81,6 +91,8 @@ class CornerCloseupResult:
             "measurable": self.measurable,
             "note": self.note,
             "reason": self.reason,
+            "high_confidence": self.high_confidence,
+            "mean_delta": round(self.mean_delta, 2),
         }
 
 
@@ -271,6 +283,13 @@ def analyze_corner_closeup(image_bgr: np.ndarray, corner: str) -> CornerCloseupR
         )
     whiten = _whitening_pct(patch)
     radius_dev = _radius_deviation_px(patch)
+    gray = cv2.cvtColor(patch, cv2.COLOR_BGR2GRAY).astype(np.float32)
+    tip, interior = gray[:56, :56], gray[120:200, 120:200]
+    mean_delta = (
+        abs(float(tip.mean()) - float(interior.mean()))
+        if tip.size and interior.size
+        else 0.0
+    )
     g_w = _grade_from_pct(whiten, WHITEN_BANDS)
     g_r = _grade_from_pct(radius_dev, RADIUS_BANDS)
     # Whitening primary; rounding only for a clear ding (radius grade ≤5).
@@ -280,23 +299,51 @@ def analyze_corner_closeup(image_bgr: np.ndarray, corner: str) -> CornerCloseupR
     else:
         score = g_w
         wear_note = False
+    high_confidence = (
+        whiten >= CLOSEUP_LOWER_MIN_WHITENING and mean_delta >= CLOSEUP_LOWER_MIN_MEAN_DELTA
+    )
     note = None
     label = CORNER_LABELS[corner]
     if score <= 8:
-        note = f"Wear on {label} corner" if wear_note else f"Whitening on {label} corner"
-    return CornerCloseupResult(corner, score, whiten, radius_dev, True, note=note)
+        # Advisory wording — grade impact needs high_confidence (see combine).
+        note = (
+            f"Possible wear on {label} corner"
+            if wear_note
+            else f"Possible whitening on {label} corner"
+        )
+    return CornerCloseupResult(
+        corner,
+        score,
+        whiten,
+        radius_dev,
+        True,
+        note=note,
+        high_confidence=high_confidence,
+        mean_delta=mean_delta,
+    )
 
 
-def combine_corner_scores(flat_score: int | None, closeup_score: int | None) -> int | None:
-    """Documented combine rule: take the worse (min) of measurable scores.
+def combine_corner_scores(
+    flat_score: int | None,
+    closeup_score: int | None,
+    *,
+    high_confidence: bool = False,
+) -> int | None:
+    """Advisory close-ups; lower the flat corners grade only when confident.
 
-    A missing close-up leaves the flat score unchanged. A missing flat score
-    (unmeasurable border on the flat warp) uses the close-up alone.
+    - Close-up findings always feed checkNotes ("Possible …").
+    - They lower the corners sub-score only when `high_confidence` (strict
+      whitening + structure gate, RETUNE_CORNER_CLOSEUP), and then by **at
+      most 1 point**.
+    - No flat score → leave None (close-ups do not invent a corners grade).
     """
-    scores = [s for s in (flat_score, closeup_score) if s is not None]
-    if not scores:
+    if flat_score is None:
         return None
-    return min(scores)
+    if closeup_score is None or not high_confidence:
+        return flat_score
+    if closeup_score >= flat_score:
+        return flat_score
+    return max(closeup_score, flat_score - 1)
 
 
 @dataclass
@@ -308,8 +355,20 @@ class SideCornerCloseups:
         measured = [c.score for c in self.corners.values() if c.measurable and c.score is not None]
         return min(measured) if measured else None
 
+    @property
+    def high_confidence_side_score(self) -> int | None:
+        """Min score among high-confidence corners only (for grade lowering)."""
+        measured = [
+            c.score
+            for c in self.corners.values()
+            if c.measurable and c.high_confidence and c.score is not None
+        ]
+        return min(measured) if measured else None
+
     def to_dict(self) -> dict:
         return {
             "corners": {k: v.to_dict() for k, v in self.corners.items()},
             "side_score": self.side_score,
+            "high_confidence_side_score": self.high_confidence_side_score,
+            "high_confidence": self.high_confidence_side_score is not None,
         }

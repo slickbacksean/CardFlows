@@ -11,14 +11,29 @@
       "false_positive_rate": 0.724,
       "precision": 0.204
     },
+    "corner_wear_high_confidence": {
+      "positives": 209,
+      "negatives": 600,
+      "hits": 4,
+      "false_alarms": 0,
+      "recall": 0.019,
+      "false_positive_rate": 0.0,
+      "precision": 1.0,
+      "gate": {
+        "min_whitening": 35.0,
+        "min_mean_delta": 20.0,
+        "flag": "RETUNE_CORNER_CLOSEUP"
+      },
+      "negatives_kind": "synthetic_clean_card_corners"
+    },
     "scratch": {
-      "positives": 213,
-      "negatives": 163,
-      "hits": 167,
-      "false_alarms": 43,
-      "recall": 0.784,
-      "false_positive_rate": 0.264,
-      "precision": 0.795
+      "positives": 225,
+      "negatives": 178,
+      "hits": 174,
+      "false_alarms": 103,
+      "recall": 0.773,
+      "false_positive_rate": 0.579,
+      "precision": 0.628
     }
   },
   "tcg_condition": {
@@ -36,7 +51,7 @@
   },
   "notes": [
     "Classical OpenCV only; no model training.",
-    "Scratch eval synthesizes a second tilt via brightness shift (dataset is single-image).",
-    "Corner Wear positives: score<=8 counts as detection; measurable center-face crops are negatives."
+    "Scratch eval synthesizes a second tilt via brightness shift.",
+    "Corner Wear score<=8 is advisory (checkNotes). Grade lowering uses corner_wear_high_confidence (RETUNE_CORNER_CLOSEUP) vs synthetic clean card-corners; face-crop FPR is too high for a min() combine."
   ]
 }

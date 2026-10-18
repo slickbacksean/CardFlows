@@ -7,9 +7,10 @@ Extras dir layout (written by apps/api grade-extra-store):
 Optional meta.json with createdAt / sessionId.
 
 Combine rules (documented for the PR):
-  * Corners: per-corner close-up score 0–10; side score = min of measurable
-    close-ups; combined with flat-photo corners_grade by taking the worse
-    (min). See cardflow_corner_closeup.combine_corner_scores.
+  * Corners: per-corner close-up score 0–10 (advisory checkNotes always).
+    Only high-confidence close-ups (RETUNE_CORNER_CLOSEUP gate) may lower
+    the flat corners grade, and by at most 1 point. See
+    cardflow_corner_closeup.combine_corner_scores.
   * Surface: tilt+flat difference score replaces "not assessed" when
     photometric stereo was not used. If photometric already graded, keep it
     and still attach tilt notes when they flag worse defects (min of scores).
@@ -77,10 +78,21 @@ def analyze_extras(extras_dir: Path, flat_front: Path | None, flat_back: Path | 
                 prefix = "Front" if side == "front" else "Back"
                 notes.append(f"{prefix}: {result.note}")
         if side_corners:
-            scores = [c["score"] for c in side_corners.values() if c.get("measurable") and c.get("score") is not None]
+            scores = [
+                c["score"]
+                for c in side_corners.values()
+                if c.get("measurable") and c.get("score") is not None
+            ]
+            hc_scores = [
+                c["score"]
+                for c in side_corners.values()
+                if c.get("measurable") and c.get("high_confidence") and c.get("score") is not None
+            ]
             out["corners"][side] = {
                 "corners": side_corners,
                 "side_score": min(scores) if scores else None,
+                "high_confidence_side_score": min(hc_scores) if hc_scores else None,
+                "high_confidence": bool(hc_scores),
             }
 
     for side, flat_path in (("front", flat_front), ("back", flat_back)):
@@ -122,19 +134,26 @@ def merge_full_extras_into_report(report: dict, extras: dict, thresholds: dict) 
     surface = report.get("surface") or {}
     ge = report.get("grade_estimate") or {}
 
-    # --- Corners: worse of flat vs close-up per side ---
+    # --- Corners: advisory close-ups; lower flat by ≤1 only if high-confidence ---
     for side in ("front", "back"):
         close = (extras.get("corners") or {}).get(side) or {}
-        close_score = _as_int(close.get("side_score"))
+        close_score = _as_int(close.get("high_confidence_side_score"))
+        # Fall back: legacy side_score only counts when high_confidence flag set.
+        high_confidence = bool(close.get("high_confidence"))
+        if close_score is None and high_confidence:
+            close_score = _as_int(close.get("side_score"))
         flat_side = (ce.get(side) or {})
         flat_corners = _as_int(flat_side.get("corners_grade"))
-        combined = combine_corner_scores(flat_corners, close_score)
+        combined = combine_corner_scores(
+            flat_corners, close_score, high_confidence=high_confidence and close_score is not None
+        )
         if combined is None:
             continue
         if side not in ce or not isinstance(ce[side], dict):
             ce[side] = {}
         ce[side]["corners_grade"] = combined
-        ce[side]["closeup_corners_grade"] = close_score
+        ce[side]["closeup_corners_grade"] = _as_int(close.get("side_score"))
+        ce[side]["closeup_high_confidence"] = high_confidence
         # Keep edges from flat; recompute side grade as min(corners, edges).
         edges = _as_int(ce[side].get("edges_grade"))
         parts = [g for g in (combined, edges) if g is not None]

@@ -21,7 +21,7 @@ describe("mapGradeCardReport full extras", () => {
         full_extras: {
           used: true,
           surface_trusted: true,
-          check_notes: ["Front: Whitening on top-left corner", "Front: Scratch on the surface"],
+          check_notes: ["Front: Possible whitening on top-left corner", "Front: Scratch on the surface"],
         },
       },
     });
@@ -30,7 +30,7 @@ describe("mapGradeCardReport full extras", () => {
     expect(mapped.subgrades.surface.points).not.toBeNull();
     expect(mapped.subgrades.surface.front).toBe(6);
     expect(mapped.checkNotes).toEqual([
-      "Front: Whitening on top-left corner",
+      "Front: Possible whitening on top-left corner",
       "Front: Scratch on the surface",
     ]);
     expect(mapped.note).toMatch(/tilted photos/i);
