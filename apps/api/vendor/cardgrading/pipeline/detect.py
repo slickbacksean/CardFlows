@@ -223,6 +223,20 @@ def _card_likeness_penalty(quad: np.ndarray, contour: np.ndarray, area_frac: flo
     return aspect_dev * 3.0 + tilt * 1.0 + (1.0 - min(solidity, 1.0)) * 1.0 - min(area_frac, 0.5) * 0.2
 
 
+# CardFlow local change: edge candidates must be card-shaped (short/long side
+# within 12% of 63/88, i.e. 0.716 portrait or 1.397 landscape). Edges also trace
+# strips, art boxes and table seams, which the colour candidates never see.
+EDGE_MAX_ASPECT_DEV = 0.12
+
+
+def _card_shaped(quad: np.ndarray) -> bool:
+    tl, tr, br, bl = quad
+    w = (np.linalg.norm(tr - tl) + np.linalg.norm(br - bl)) / 2
+    h = (np.linalg.norm(bl - tl) + np.linalg.norm(br - tr)) / 2
+    ratio = min(w, h) / max(max(w, h), 1e-9)
+    return abs(ratio - CARD_ASPECT) / CARD_ASPECT <= EDGE_MAX_ASPECT_DEV
+
+
 def find_card_contour(image: np.ndarray) -> np.ndarray | None:
     """Find the card's corner quad against a matte background.
 
@@ -315,6 +329,8 @@ def find_card_contour(image: np.ndarray) -> np.ndarray | None:
             if area_frac < MIN_CANDIDATE_AREA_FRAC:
                 continue
             for small_quad in _quads_from_contour(contour):
+                if not _card_shaped(small_quad):
+                    continue
                 quad = (small_quad / scale).astype(np.float32)
                 contour_full = (contour.astype(np.float32) / scale).astype(np.int32)
                 penalty = _card_likeness_penalty(quad, contour_full, area_frac)

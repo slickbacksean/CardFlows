@@ -67,8 +67,11 @@ export async function checkGradeStillOnPhone(
     const gray = await smallGray(uri);
     if (!gray) return null;
     const result = phonePhotoCheck(gray);
-    if (options.fromGuide) return result;
-    // Library photos weren't taken against the guide frame, so only blur and "nothing there" apply.
+    // Only blur and "nothing there" are checked on the phone. The "whole card" corner patches
+    // assumed a fixed frame position (0.55 fill) that the camera's preview crop doesn't keep
+    // (Sean, Oct 18: every finder photo came back "Couldn't see the whole card"). The server
+    // finds the card in the full photo and makes that call.
+    void options.fromGuide;
     const reasons = result.reasons.filter((r) => !/whole card/i.test(r));
     return { ...result, ok: reasons.length === 0, reasons };
   } catch {

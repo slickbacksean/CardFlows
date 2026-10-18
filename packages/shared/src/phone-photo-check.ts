@@ -201,9 +201,30 @@ export function gradeProbeDetail(img: GrayImage, frameFill: number = GRADE_FRAME
   return { corners: probeCornerCount(img, frameFill), sharpness, blurry: false };
 }
 
+/**
+ * Sean, Oct 18: probes were sharp but found 0 corners. expo-camera (iOS) crops each still to
+ * the preview's aspect, but with the phone lying flat it skips the portrait swap, so the
+ * probe comes back a little wider than tall (274x256) and a slightly different crop than
+ * the preview. The frame was then laid out as a landscape card at the wrong scale. The
+ * on-screen frame is a portrait card, so check portrait first (landscape too, for the
+ * surface step), over a range of scales around the measured fill, and keep the best.
+ */
+export const GRADE_PROBE_FILL_SCALES = [0.82, 0.9, 1, 1.1, 1.22] as const;
+
 function probeCornerCount(img: GrayImage, frameFill: number): number {
+  let best = 0;
+  for (const orientation of ["portrait", "landscape"] as const) {
+    for (const scale of GRADE_PROBE_FILL_SCALES) {
+      best = Math.max(best, probeCornerCountAt(img, frameFill * scale, orientation));
+      if (best === 4) return best;
+    }
+  }
+  return best;
+}
+
+function probeCornerCountAt(img: GrayImage, frameFill: number, orientation: "portrait" | "landscape"): number {
   const { width: w, height: h } = img;
-  const frame = gradeGuideFrame(w, h, frameFill, w > h ? "landscape" : "portrait");
+  const frame = gradeGuideFrame(w, h, frameFill, orientation);
   if (!(frame.width > 8) || !(frame.height > 8)) return 0;
   const left = Math.round((w - frame.width) / 2);
   const top = Math.round((h - frame.height) / 2);

@@ -54,5 +54,21 @@ class BeigeTableTest(unittest.TestCase):
         self.check_whole_card(image, 760, 1040)
 
 
+    def test_edge_candidates_must_be_card_shaped(self):
+        def box(w, h):
+            return np.array([[0, 0], [w, 0], [w, h], [0, h]], dtype=np.float32)
+        self.assertTrue(detect._card_shaped(box(630, 880)))   # 0.716 portrait
+        self.assertTrue(detect._card_shaped(box(880, 630)))   # 1.397 landscape
+        self.assertFalse(detect._card_shaped(box(300, 1020)))  # 3.4:1 strip
+        self.assertFalse(detect._card_shaped(box(800, 800)))   # square
+
+    def test_sharpness_is_not_measured_above_the_card_resolution(self):
+        from cardflow_capture_checks import sharpness
+        rng = np.random.default_rng(1)
+        card = (rng.random((700, 500)) * 255).astype(np.uint8)  # 500 px wide card, sharp texture
+        warp = cv2.resize(card, (1500, 2100), interpolation=cv2.INTER_LINEAR)  # canonical upscale
+        self.assertGreater(sharpness(warp, 500), 2 * sharpness(warp))
+
+
 if __name__ == "__main__":
     unittest.main()
