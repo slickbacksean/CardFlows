@@ -81,7 +81,7 @@ function overlayPending(base: Map<string, SaleRecord>): Map<string, SaleRecord> 
   return out;
 }
 
-/** Server sales plus anything still waiting to sync. `offline` when the server could not be reached. */
+/** Server sales plus anything still waiting to sync. `offline` when the server couldn't be reached. */
 export async function loadSales(): Promise<{ sales: Map<string, SaleRecord>; offline: boolean }> {
   try {
     const { sales } = await listSales();

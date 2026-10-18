@@ -8,6 +8,9 @@ interface PrimaryButtonProps {
   onPress: () => void;
   disabled?: boolean;
   tone?: PrimaryButtonTone;
+  /** Defaults to the label. */
+  accessibilityLabel?: string;
+  accessibilityHint?: string;
 }
 
 const TONE_STYLES: Record<PrimaryButtonTone, { backgroundColor: string; color: string }> = {
@@ -22,12 +25,15 @@ export function PrimaryButton({
   onPress,
   disabled,
   tone = "cta",
+  accessibilityLabel,
+  accessibilityHint,
 }: PrimaryButtonProps) {
   const { backgroundColor, color } = TONE_STYLES[tone];
 
   return (
     <Pressable
-      accessibilityLabel={label}
+      accessibilityHint={accessibilityHint}
+      accessibilityLabel={accessibilityLabel ?? label}
       accessibilityRole="button"
       accessibilityState={{ disabled: Boolean(disabled) }}
       disabled={disabled}

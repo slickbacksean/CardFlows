@@ -71,9 +71,11 @@ export default function RootLayout() {
     return onEmailUnverified(() => {
       if (showing) return;
       showing = true;
-      Alert.alert("Verify your email", EMAIL_VERIFICATION_COPY.required, [
+      // UX review P1-8 / Community review 2: plain copy, a Verify email button, and the
+      // code screen knows a pre-grade estimate is waiting.
+      Alert.alert(EMAIL_VERIFICATION_COPY.promptTitle, EMAIL_VERIFICATION_COPY.promptBody, [
         { text: "Not now", style: "cancel", onPress: () => { showing = false; } },
-        { text: "Enter code", onPress: () => { showing = false; router.push("/verify-email"); } },
+        { text: "Verify email", onPress: () => { showing = false; router.push({ pathname: "/verify-email", params: { from: "pregrade" } }); } },
       ], { cancelable: true, onDismiss: () => { showing = false; } });
     });
   }, []);

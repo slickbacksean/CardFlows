@@ -27,6 +27,9 @@ export const AGE_GATE_COPY = {
   captureTip: "Photograph only the card. Keep faces, hands, and personal details out of the shot.",
   /** API answer when sign-up arrives without the checkbox. */
   required: "Confirm you're 18 or older to create an account.",
+  /** UX review P1-7: why Create account is disabled, under the unchecked box. */
+  disabledCaption: "You must be 18 or older to create an account.",
+  disabledHint: "Confirm you're 18 or older to continue.",
 } as const;
 
 export interface AgeConfirmationState {

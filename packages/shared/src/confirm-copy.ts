@@ -8,7 +8,7 @@ export const CONFIRM_COULD_NOT_CONFIRM_MESSAGE =
 
 export const CONFIRM_FAIL_SOFT_TITLE = "Couldn't confirm";
 
-export const CONFIRM_COULD_NOT_IDENTIFY_TITLE = "Could not identify";
+export const CONFIRM_COULD_NOT_IDENTIFY_TITLE = "Couldn't identify";
 
 export const CONFIRM_AMBIGUOUS_TITLE = "Ambiguous — pick the print.";
 
