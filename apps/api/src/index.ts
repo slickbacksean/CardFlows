@@ -1,7 +1,7 @@
 import { serve } from "@hono/node-server";
 import { loadLocalApiEnv } from "./local-env";
 import { captureApiException, initApiSentry } from "./sentry";
-import { createApp } from "./app";
+import { createApp, litestreamModeFromEnv } from "./app";
 import { createCatalogFromEnv } from "./catalog-env";
 import { createPricingFromEnv, createPokecollectorAccountsFromEnv } from "./pokecollector-env";
 import { createRecognitionFromEnv } from "./recognition-env";
@@ -72,7 +72,7 @@ const app = createApp(store, {
   liveVideoObb: () => liveVideoYoloHolder.detector,
   liveIdentifyEnabled: recognitionSelection.identifyEnabled,
 });
-startPhotoRetentionJob({
+const photoRetention = startPhotoRetentionJob({
   purge: (now) => store.purgeExpiredGradePhotos(now),
   onPurge: (result) => {
     if (result.deleted > 0) {
@@ -88,8 +88,9 @@ void resolveLiveVideoObbDetector().then((detector) => {
   );
 });
 
-serve({ fetch: app.fetch, port }, (info) => {
+const server = serve({ fetch: app.fetch, port }, (info) => {
   console.log(`CardFlow API listening on http://localhost:${info.port}`);
+  console.log(`Backups: litestream ${litestreamModeFromEnv()}`);
   if (selection.kind === "sqlite") {
     console.log(`Store: sqlite (${selection.sqlitePath})`);
   } else {
@@ -112,3 +113,31 @@ serve({ fetch: app.fetch, port }, (info) => {
     );
   }
 });
+
+// Railway redeploys send SIGTERM (30 s drain). Stop taking requests, give in-flight work up
+// to 10 s, then close SQLite (checkpoints the WAL) so Litestream's final sync sees it all.
+// In-memory grade jobs are lost; the app treats a missing job as "retry".
+let shuttingDown = false;
+function shutdown(signal: string) {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  const startedAt = Date.now();
+  photoRetention.stop();
+  const finish = () => {
+    try {
+      (store as { close?: () => void }).close?.();
+    } catch (error) {
+      console.error("Store close failed", error);
+    }
+    console.log(JSON.stringify({ event: "shutdown", signal, ms: Date.now() - startedAt }));
+    process.exit(0);
+  };
+  const force = setTimeout(finish, 10_000);
+  force.unref();
+  server.close(() => {
+    clearTimeout(force);
+    finish();
+  });
+}
+process.on("SIGTERM", () => shutdown("SIGTERM"));
+process.on("SIGINT", () => shutdown("SIGINT"));

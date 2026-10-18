@@ -113,6 +113,8 @@ export interface CreateSqliteStoreOptions {
 export interface SqliteStorePort extends StorePort {
   close(): void;
   readonly sqlitePath: string;
+  /** /health: a cheap read on the live handle plus the journal mode. Never throws. */
+  ping(): { ok: boolean; journalMode: string };
 }
 
 interface PersistedRecognitionEnvelope {
@@ -1991,6 +1993,15 @@ export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStor
     sqlitePath: options.sqlitePath,
     close() {
       sqlite.close();
+    },
+    ping() {
+      try {
+        sqlite.prepare("SELECT 1").get();
+        const journalMode = String(sqlite.pragma("journal_mode", { simple: true }));
+        return { ok: isMemorySqlitePath(options.sqlitePath) || journalMode === "wal", journalMode };
+      } catch {
+        return { ok: false, journalMode: "unknown" };
+      }
     },
     sales: createSqliteSalesStore(db),
     purchaseLedger,

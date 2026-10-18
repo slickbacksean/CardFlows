@@ -317,3 +317,18 @@ See `docs/STORE_PRIVACY_LABELS.md` for the App Store / Play answers and the perf
 **Accounts:** `user_accounts` (email, scrypt password hash, created_at). Sessions in `crm_sessions` (guest sessions flagged `is_guest`, 24-hour expiry). Account deletion removes every `user_id` row in one transaction. Guest data moves to the account on sign-up; guests who never sign up are purged within 24 h after their session ends.
 
 **Device model:** sent with perf timings (opt-in analytics only) and not stored server-side.
+
+## Backups (Railway + Litestream, Oct 2026)
+
+Primary data is SQLite plus photo files on one Railway volume (US West). Backup copies and how long they can still hold a deleted user's data:
+
+| Copy | Holds deleted users' data for at most |
+|---|---|
+| Litestream replica (snapshot retention 168 h) | 7 days |
+| Railway volume backups (Daily only; never Weekly/Monthly) | 6 days |
+| `/data/pre-migrate/` copies (keep 3, pruned at 14 days) | 14 days |
+| Planned nightly DB snapshots (follow-up) | 14 days |
+| Planned photo mirror (follow-up) | ~24 h after local deletion |
+
+All fit inside the "up to 2 weeks" deletion promise. Providers: Cloudflare R2 (recommended) or Railway Buckets (Tigris), both encrypted at rest by the provider; Litestream v0.5 has **no client-side encryption**, so access relies on bucket-scoped tokens. Staging and production never share a bucket or token.
+
