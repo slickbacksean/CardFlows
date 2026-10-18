@@ -19,7 +19,7 @@ Checked against `apps/api` (the hosting plan was written for the old `packages/a
 | Crash reporting | Optional `SENTRY_DSN`. Unset is a no-op. Photos, image bytes, and emails are stripped. See [SENTRY.md](./SENTRY.md). |
 | Upload limits | 22 MB per request on the grading routes (checked before parsing; the 413 copy is derived from the cap), 20 MB per photo. The API reads width/height from the JPEG/PNG/WebP header and rejects a long edge over 4032 px before any decode. The grader still uses OpenCV's reduced decode as a second line of defense, then downsizes anything over 16 MP. |
 | Rate limit | Abuse limits (in memory, one instance): grades 6/min and 100/day **per client IP** and per user burst; detect has its own 20/min and 300/day bucket; whole-instance cap of 1000 grades/day (`CARD_FLOW_GRADE_*`, `CARD_FLOW_DETECT_*`). Client IP is the TCP peer unless `CARD_FLOW_TRUST_PROXY_HOPS` is set to the number of proxies in front (set it to 1 behind a single platform proxy). |
-| Monthly grade quota | Per account, persisted in SQLite: **5** pre-grade estimates a month on free, **30** on premium, resetting on each user's own date (billing date, else account creation date) with no rollover. Then bought credits (`grade_accounts.extra_credits`), which never expire (Sean, Oct 16). `GET /v1/grade/quota`, `POST /v1/grade/credits/consume`. Set `CARD_FLOW_GRADE_QUOTA=false` to turn off. `CARD_FLOW_PREMIUM_USER_IDS` is a comma list overlay. |
+| Monthly grade quota | Per account, persisted in SQLite: **10** quick pre-grade estimates a month on free, unlimited on premium (Sean, Oct 18), resetting on the 1st of each calendar month, 00:00 UTC, for everyone (Sean, Oct 18); an account with a billing date (Apple, not wired yet) keeps its billing date. No rollover. Full 14-photo grades: free 2, premium 25, same reset. Then bought credits (`grade_accounts.extra_credits`), which never expire (Sean, Oct 16). `GET /v1/grade/quota`, `POST /v1/grade/credits/consume`. Set `CARD_FLOW_GRADE_QUOTA=false` to turn off. `CARD_FLOW_PREMIUM_USER_IDS` is a comma list overlay. |
 | App API key | Speed bump, not a secret. When `CARD_FLOW_APP_API_KEY` is set, every `/v1/*` route needs `X-CardFlow-App-Key`. The Expo app sends `EXPO_PUBLIC_CARD_FLOW_APP_KEY` (works in Expo Go). |
 | Extra credits IAP | Not implemented (no Apple Developer account yet). Planned credit packs: 10 for $2.99, 25 for $5.99, Premium-only; credits never expire. `POST /v1/grade/credits` returns "Purchases aren't available yet." unless `CARD_FLOW_IAP_STUB=true` (local/dev grant). `CARD_FLOW_IAP_ENABLED` is reserved for a future StoreKit/Play path. |
 | CardSight budget | Global monthly identify cap, default 750 (`CARD_FLOW_CARDSIGHT_MONTHLY_BUDGET`), stored in `vendor_quota_usage`. The live adapter (`P1-05`) must call `consumeCardSightBudget` before a vendor identify. |
@@ -56,6 +56,25 @@ In production, the API refuses to start if `CARD_FLOW_EMAIL_SENDER` is set but i
 The API **refuses to start** with `NODE_ENV=production` unless this is set to a number (`0` when nothing sits in front of it).
 Behind a load balancer or reverse proxy, set `CARD_FLOW_TRUST_PROXY_HOPS` to the number of proxies that append to `X-Forwarded-For` (usually `1`). With the default `0`, every request appears to come from the proxy's IP. Per-IP limits (guest mints, sign-up, sign-in, grading) then become one shared bucket. Setting it too high lets clients spoof their IP. Tests cover the default: a spoofed `X-Forwarded-For` does not reset the guest mint limit.
 
+## Production must set `CARD_FLOW_SERVER_PEPPER`
+
+The API also **refuses to start** in production without `CARD_FLOW_SERVER_PEPPER`: a random secret of 32+ characters (e.g. `openssl rand -base64 48`), stored as a platform secret. It keys the HMAC-SHA256 hashes of email addresses in `email_send_counts` (Backend review L3, P4). Rotating it only resets today's per-address email caps.
+
 ## Open sign-up env
-- `CARD_FLOW_GUEST_SCANS=true` turns on guest sessions (3 scans, 24-hour sessions in `crm_sessions`).
+- `CARD_FLOW_GUEST_BROWSE=true` turns on **browse-only** guest sessions (24-hour sessions in `crm_sessions`; off by default). Guests get 403 `signup_required` on every scan, grade, livestream, save, purchase, watchlist, inventory and CardSight route (`guestRouteBlockReason` in `packages/shared/src/guest-access.ts`); browse reads stay open, and `POST /v1/account/delete` deletes their session data. `CARD_FLOW_GUEST_SCANS` was removed (Sean, Oct 17: no guest scans); if it's still set, the API logs a warning and ignores it.
 - `CARD_FLOW_INVITE_ALEX` / `CARD_FLOW_INVITE_JORDAN` are tester invite codes. **There are no defaults;** unset means invite sign-in is off for that tester.
+
+## Launch checklist §2 — Railway SQLite failure modes (Oct 18 audit)
+
+Blockers specific to launching the API on Railway with SQLite + Litestream. Full plan: agent doc `railway-sqlite-deploy-plan.md` (box) / PR #100.
+
+| Failure mode | Why it blocks ~150 users | Mitigation |
+|---|---|---|
+| Dockerfile `RUN --mount=type=cache,id=pnpm,…` | Railway only accepts cache mount ids shaped `s/<service>-…`; first production build likely fails. | Remove the pnpm cache mount from `apps/api/Dockerfile` before deploy. |
+| Migrations in Railway **pre-deploy** | Pre-deploy runs in a separate container **without the volume**, so migrations never touch the real DB. | Run migrations in the container **entrypoint** under `flock` on `/data` before Node listens. |
+| `migrate.ts` turns `foreign_keys` OFF then ON with no `try/finally` | A failed migration can leave FKs off for the process lifetime. | Wrap in `try/finally`; also set `busy_timeout=5000`, `journal_mode=WAL`, `synchronous=NORMAL` at startup. |
+| Missing Litestream / R2 (or Railway Buckets) | Volume loss or bad deploy can wipe user data with no restore path. | Continuous Litestream to object storage + one restore drill before submission. Railway **Daily-only** volume backups (not Weekly/Monthly — longer retention fights the ~2-week deletion promise). |
+| Photos only on the volume | If photo nightly mirror is deferred, photos depend solely on Railway volume backups. | Keep Daily volume backups on; add photo object-storage mirror before relying on multi-week retention claims. |
+| `replicas > 1` with a volume | Railway forbids replicas on volume services; in-memory grade jobs / rate limits also require one writer. | Force **1 replica**; move to Postgres when a second instance is needed. |
+| Release mobile build without `EXPO_PUBLIC_API_URL` | Falls back to localhost; every call fails in TestFlight. | Fail the EAS build when the URL is missing, not `https://`, or is a private/LAN host (also PR #96). |
+

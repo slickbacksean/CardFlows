@@ -261,7 +261,7 @@ describe("email sender", () => {
     expect(emailSenderFromEnv({ CARD_FLOW_EMAIL_SENDER: "resend", RESEND_API_KEY: "k", CARD_FLOW_EMAIL_FROM: "f" }).name).toBe("resend");
     vi.spyOn(console, "warn").mockImplementation(() => {});
     expect(emailSenderFromEnv({ CARD_FLOW_EMAIL_SENDER: "resend" }).name).toBe("dev-log");
-    const prod = { NODE_ENV: "production", CARD_FLOW_TRUST_PROXY_HOPS: "1" };
+    const prod = { NODE_ENV: "production", CARD_FLOW_TRUST_PROXY_HOPS: "1", CARD_FLOW_SERVER_PEPPER: "p".repeat(32) };
     expect(productionConfigProblems({ ...prod, CARD_FLOW_EMAIL_SENDER: "resend" })).toHaveLength(2);
     expect(productionConfigProblems(prod)).toEqual([]);
     expect(productionConfigWarnings(prod)).toHaveLength(1);

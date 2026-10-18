@@ -120,7 +120,7 @@ export const accountRoutes = {
     body: z.object({ ageConfirmed18Plus: z.literal(true), version: z.string() }),
     response: z.looseObject({ ok: z.literal(true), age: AgeConfirmationSchema }),
   }),
-  /** D9: guest session (3 free scans). 404 when guest mode is off. */
+  /** Browse-only guest session (Sean, Oct 17): no scans, grades or saves. 404 when guest mode is off. */
   createGuestSession: defineRoute({
     method: "POST",
     path: "/v1/sessions/guest",
@@ -130,8 +130,8 @@ export const accountRoutes = {
       token: z.string(),
       identity: InvitedIdentitySchema,
       guest: z.literal(true),
-      freeScans: z.number(),
-      scansRemaining: z.number(),
+      browseOnly: z.literal(true),
+      expiresAt: z.string(),
     }),
   }),
   createSession: defineRoute({
@@ -159,10 +159,12 @@ export const accountRoutes = {
     body: InviteBody,
     response: SessionResponse,
   }),
+  /** P4: deletes the account. Accounts with a password send it (Backend review M4). */
   deleteAccountPhotos: defineRoute({
     method: "POST",
     path: "/v1/account/delete",
-    bodyKind: "none",
+    bodyKind: "json",
+    body: z.object({ password: z.string().optional() }),
     response: z.looseObject({ ok: z.literal(true), photosDeleted: z.number() }),
   }),
   getPreferences: defineRoute({

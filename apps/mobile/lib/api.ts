@@ -6,8 +6,10 @@ import {
   resolveClientApiUrl,
   emptySlabEstimate,
   GRADE_QUOTA_COPY,
+  PREGRADE_COPY,
   PREGRADE_DETECT_UNAVAILABLE_MESSAGE,
   PREGRADE_UNAVAILABLE_MESSAGE,
+  isScoredEstimate,
   unavailableGradeEstimate,
   pollGradeJob,
   GradeJobCancelled,
@@ -42,6 +44,7 @@ import {
   type ScanImageMimeType,
 } from "@cardflow/shared";
 import { Platform } from "react-native";
+import { rememberDeviceItemIds } from "./device-item-index";
 import { createRequestId, rememberRequestId } from "./request-id";
 import { isPhysicalRuntime } from "./runtime-host";
 import { peekSessionToken, waitForSessionRestore } from "./session-token";
@@ -301,10 +304,11 @@ async function request<T>(
     if (response.status === 403 && premium.code === PREMIUM_REQUIRED_CODE && isPremiumFeature(premium.feature)) {
       (extra as Error & { premiumRequired?: PremiumFeature }).premiumRequired = premium.feature;
     }
-    // D9: the API says a guest must sign up (4th scan or a save step).
+    // Browse-only guests (Sean, Oct 17): any scan, grade or save needs sign-up.
     const signup = data as { code?: unknown; reason?: unknown };
     if (response.status === 403 && signup.code === SIGNUP_REQUIRED_CODE) {
-      const reason: SignupReason = signup.reason === "scan_limit" ? "scan_limit" : "save";
+      const reason: SignupReason =
+        signup.reason === "scan" || signup.reason === "grade" || signup.reason === "cardsight" ? signup.reason : "save";
       (extra as Error & { signupRequired?: SignupReason }).signupRequired = reason;
       notifySignupRequired(reason);
     }
@@ -508,8 +512,11 @@ export function identifyLivestreamFrame(input: {
   });
 }
 
-export function listInventory() {
-  return callApi(apiContract.listInventory);
+export async function listInventory() {
+  const result = await callApi(apiContract.listInventory);
+  // Backend re-review M2 (P4): kept on the phone so account deletion can find grade history keys.
+  rememberDeviceItemIds(result.items.map((item) => item.inventoryItemId));
+  return result;
 }
 
 export function getPortfolio() {
@@ -752,9 +759,15 @@ export async function requestPhotoPregrade(input: {
       form,
       timeoutMs: GRADE_PREGRADE_TIMEOUT_MS,
     });
-    // 0.0 is grade_card's "nothing measurable", not a grade: never show it.
-    if (data.ok && (typeof data.estimate !== "number" || !(data.estimate >= 1))) {
-      return { ok: false, status: "unavailable", code: "UNAVAILABLE", message: PREGRADE_UNAVAILABLE_MESSAGE };
+    // 0.0 is grade_card's "nothing measurable", not a grade: retake, never a score or "unavailable".
+    if (data.ok && (typeof data.estimate !== "number" || !isScoredEstimate(data.estimate))) {
+      return {
+        ok: false,
+        status: "retake",
+        code: "PHOTO_RETAKE",
+        side: "front",
+        reasons: [PREGRADE_COPY.nothingMeasured],
+      };
     }
     return data;
   } catch (error) {
@@ -991,6 +1004,12 @@ export function getHealth() {
 
 export function getIdentity() {
   return callApi(apiContract.getIdentity);
+}
+
+/** P4: Settings > Delete account. Deletes every row, photo and session for this user. */
+/** P4: accounts with a password must send it (Backend review M4); guests and testers send none. */
+export function deleteAccount(password?: string) {
+  return callApi(apiContract.deleteAccountPhotos, { body: password ? { password } : {} });
 }
 
 type SignupListener = (reason: SignupReason) => void;

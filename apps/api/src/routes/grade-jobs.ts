@@ -44,8 +44,14 @@ interface JobRecord extends GradeJobView {
 /** Only the body type is forwarded. Auth travels in-process via `owner`, never as headers. */
 const FORWARD_HEADERS = ["content-type"];
 
-export function registerGradeJobRoutes(app: CardFlowApp, deps: GradeJobRouteDeps): void {
+export interface GradeJobRoutes {
+  /** Backend review L1: account deletion drops this user's jobs and any photo bytes still held. */
+  purgeUser(userId: string): number;
+}
+
+export function registerGradeJobRoutes(app: CardFlowApp, deps: GradeJobRouteDeps): GradeJobRoutes {
   const jobs = new Map<string, JobRecord>();
+  const heldBodies = new Map<string, { body: ArrayBuffer | null }>();
   const ttlMs = deps.ttlMs ?? 60 * 60_000;
   const maxWaits = deps.maxWaits ?? 5;
   const maxActive = deps.maxActiveJobs ?? 200;
@@ -161,7 +167,9 @@ export function registerGradeJobRoutes(app: CardFlowApp, deps: GradeJobRouteDeps
     const url = new URL(c.req.url);
     url.pathname = `/v1/inventory/${encodeURIComponent(c.req.param("inventoryItemId"))}/grade-estimate`;
     const owner: JobOwner = { userId, identity: c.get("identity") };
-    void run(job, owner, url.toString(), headers, { body: body && body.byteLength > 0 ? body : null });
+    const held = { body: body && body.byteLength > 0 ? body : null };
+    heldBodies.set(job.jobId, held);
+    void run(job, owner, url.toString(), headers, held).finally(() => heldBodies.delete(job.jobId));
     return c.json({ ok: true, job: view(job) }, 202);
   });
 
@@ -172,4 +180,19 @@ export function registerGradeJobRoutes(app: CardFlowApp, deps: GradeJobRouteDeps
     if (!job || job.userId !== c.get("userId")) return c.json({ ok: false, error: "Job not found" }, 404);
     return c.json({ ok: true, job: view(job) });
   });
+
+  return {
+    purgeUser(userId) {
+      let n = 0;
+      for (const [id, job] of jobs) {
+        if (job.userId !== userId) continue;
+        const held = heldBodies.get(id);
+        if (held) held.body = null;
+        heldBodies.delete(id);
+        jobs.delete(id);
+        n += 1;
+      }
+      return n;
+    },
+  };
 }

@@ -36,15 +36,11 @@ describe("scan idempotency", () => {
     expect(ids.size).toBe(1);
   });
 
-  it("a guest's replay at the scan limit is a replay, not a 403", async () => {
+  it("browse-only guests (Sean, Oct 17): even a keyed scan is signup_required", async () => {
     const app = createApp(createMemoryStore(), { devAutoSession: false, guestMode: true });
     const token = ((await (await app.request("/v1/sessions/guest", { method: "POST" })).json()) as { token: string }).token;
-    const ids: string[] = [];
-    for (const key of ["g1", "g2", "g3"]) ids.push((await scan(app, key, "high-confidence", token)).body.scan!.scanId);
-    expect((await scan(app, "g4", "high-confidence", token)).status).toBe(403);
-    const replay = await scan(app, "g3", "high-confidence", token);
-    expect(replay.status).toBe(201);
-    expect(replay.body.scan?.scanId).toBe(ids[2]);
+    expect((await scan(app, "g1", "high-confidence", token)).status).toBe(403);
+    expect((await scan(app, "g1", "high-confidence", token)).status).toBe(403);
   });
 
   it("after a restart (empty registry) the persisted first scan is replayed", async () => {

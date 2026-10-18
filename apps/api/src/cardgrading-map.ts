@@ -7,6 +7,7 @@ import {
   PREGRADE_DISCLAIMER,
   PREGRADE_LABEL,
   PREGRADE_SURFACE_NULL_REASON,
+  isScoredEstimate,
   type CardFlowGradeEstimate,
   type PhotoCaptureMetrics,
   type PhotoPregradeAngled,
@@ -91,9 +92,8 @@ const DECODE_FAILURE_REASON = PREGRADE_COPY.unreadable;
 export const NOTHING_MEASURED_REASON = PREGRADE_COPY.nothingMeasured;
 
 /** Pre-grade numbers are 1.0–10.0. 0 is a retake, never a score. */
-export function isScoredEstimate(estimate: number): boolean {
-  return Number.isFinite(estimate) && estimate >= 1 && estimate <= 10;
-}
+export { isScoredEstimate };
+
 
 function hardGateReason(gate: LibraryGate): string {
   if (gate.detail === DECODE_FAILURE_DETAIL) return DECODE_FAILURE_REASON;

@@ -47,7 +47,7 @@ export type {
   HealthRecognition,
   HealthSlabPricing,
 } from "./health";
-export { scrubSentryEvent, REDACTED_EMAIL, REDACTED_IMAGE, REDACTED_VALUE } from "./sentry-scrub";
+export { scrubSentryEvent, REDACTED_BLOB, REDACTED_EMAIL, REDACTED_IMAGE, REDACTED_PHOTO_URI, REDACTED_TOKEN, REDACTED_VALUE, SECRET_KEY_SUFFIX } from "./sentry-scrub";
 export { catalogCardFromMapping, confirmIdentity } from "./confirm";
 export {
   CONFIDENCE_SCREEN_LABEL,
@@ -146,7 +146,6 @@ export {
   invitedIdentityByUserId,
   isInvitedUserId,
   listInvitedIdentities,
-  pokecollectorUsernameForIdentity,
   requireInvitedIdentity,
   shouldConfirmAccountSwitch,
 } from "./identity";
@@ -609,8 +608,8 @@ export {
   cardFlowHttpErrorMessage,
   cardFlowUnreachableMessage,
 } from "./cardflow-http-error";
-export { resolveClientApiUrl } from "./client-api-url";
-export type { ClientApiUrlInput } from "./client-api-url";
+export { isLoopbackOrLanHost, releaseApiUrlProblem, resolveClientApiUrl, ReleaseApiUrlError, RELEASE_API_URL_ERROR_COPY } from "./client-api-url";
+export type { ClientApiUrlInput, ReleaseApiUrlProblem } from "./client-api-url";
 export {
   PHOTO_PREGRADE_SOURCE,
   PREGRADE_DETECT_UNAVAILABLE_MESSAGE,
@@ -618,6 +617,7 @@ export {
   PREGRADE_LABEL,
   PREGRADE_SURFACE_NULL_REASON,
   PREGRADE_UNAVAILABLE_MESSAGE,
+  isScoredEstimate,
 } from "./photo-pregrade";
 export type {
   DetectCropResult,
@@ -738,7 +738,8 @@ export {
   GRADE_QUOTA_COPY,
   CREDITS_NEVER_EXPIRE_COPY,
   GRADE_QUOTA_FREE_PER_MONTH,
-  GRADE_QUOTA_PREMIUM_PER_MONTH,
+  GRADE_QUOTA_PREMIUM_UNLIMITED,
+  GRADE_QUOTA_UNLIMITED_LIMIT,
   gradeQuotaSnapshot,
   isGradePlan,
   isOutOfGradesStatus,
@@ -838,3 +839,6 @@ export * from "./email-verification";
 export * from "./cardsight-consent";
 export * from "./age-gate";
 export * from "./grade-full-mode";
+export * from "./account-deletion";
+export * from "./sign-in-with-apple";
+export * from "./crash-reports";

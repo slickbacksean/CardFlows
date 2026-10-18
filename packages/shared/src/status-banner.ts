@@ -3,7 +3,7 @@
  * the server (`GET /v1/status`); the phone only renders it. Copy is pending
  * Community & CS sign-off.
  */
-export type StatusBannerId = "pricing_delayed" | "pregrade_unavailable" | "identify_degraded" | "ops_notice";
+export type StatusBannerId = "pricing_delayed" | "pregrade_unavailable" | "identify_degraded" | "identify_demo" | "ops_notice";
 
 export interface StatusBanner {
   id: StatusBannerId;
@@ -15,6 +15,7 @@ export const STATUS_BANNER_COPY: Record<Exclude<StatusBannerId, "ops_notice">, s
   pricing_delayed: "Prices are delayed right now. You can enter your own.",
   pregrade_unavailable: "Pre-grade estimates are unavailable right now. Try again later.",
   identify_degraded: "Card matching is slower right now. You can search by name or number.",
+  identify_demo: "Demo card matching is on. Matches are sample data, not a live lookup.",
 };
 
 /**
@@ -42,6 +43,8 @@ export interface StatusInputs {
   /** Grader engine probe; null when not probed. */
   gradeEngineOk: boolean | null;
   recognitionUnhealthy?: boolean;
+  /** Recognition provider is the fixture/mock matcher. */
+  recognitionMock?: boolean;
   /** Optional operator message (`CARD_FLOW_STATUS_MESSAGE`), trimmed to 140 chars. */
   opsMessage?: string | null;
 }
@@ -56,6 +59,9 @@ export function statusBanners(input: StatusInputs): StatusBanner[] {
   }
   if (input.recognitionUnhealthy) {
     out.push({ id: "identify_degraded", message: STATUS_BANNER_COPY.identify_degraded, severity: "info" });
+  }
+  if (input.recognitionMock) {
+    out.push({ id: "identify_demo", message: STATUS_BANNER_COPY.identify_demo, severity: "info" });
   }
   const ops = input.opsMessage?.trim();
   if (ops && statusCopyViolations(ops).length === 0) out.push({ id: "ops_notice", message: ops.slice(0, 140), severity: "info" });

@@ -71,7 +71,7 @@ If the server returns several reasons, show the first one from this table only.
 ### Collection
 | State | Title / body | Actions |
 |---|---|---|
-| Empty | No cards yet / "Scan a card to start tracking what your collection is worth." | Scan a card (goes to the Scan tab) |
+| Empty | No cards yet / "Scan a card, confirm it, then mark it Purchased to start tracking its value in MyDEX." | Scan a card (goes to the Scan tab) |
 | Loading, first time | Skeleton: chart block at the chart's exact height, then 4 row skeletons. No spinner. | none |
 | Chart with fewer than 2 points | Chart area shows "Your value history starts after your second day of prices." with today's total above it. | none |
 | Refreshing | Pull to refresh, with the content kept on screen | none |

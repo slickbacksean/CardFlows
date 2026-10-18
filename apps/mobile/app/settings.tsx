@@ -1,5 +1,7 @@
 import {
+  ACCOUNT_DELETION_COPY,
   AGE_GATE_COPY,
+  CRASH_REPORTS_COPY,
   MARKETPLACE_AUTOMATION_NO_ENABLE_COPY,
   PRACTICE_COPY,
   SETTINGS_KICKER,
@@ -116,6 +118,12 @@ export default function SettingsScreen() {
         />
 
         <JobRow label="Usage analytics" onPress={() => router.push("/analytics")} />
+
+        {/* Policy Reviewer (P4): off by default (opt-in), gates Sentry; independent of Usage analytics. */}
+        <JobRow label={CRASH_REPORTS_COPY.label} onPress={() => router.push("/crash-reports")} />
+
+        {/* P4: in-app account deletion (Apple 5.1.1(v)). Guests can delete their guest data too. */}
+        <JobRow label={ACCOUNT_DELETION_COPY.settingsRow} onPress={() => router.push("/delete-account")} />
 
         {/* Policy Reviewer (Oct 17): guests get no provider toggle, only a sign-up row. */}
         {isGuestSession() ? (

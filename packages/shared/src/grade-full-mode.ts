@@ -74,7 +74,7 @@ export function gradeTiltShotHint(tiltDeg: number | null | undefined): string | 
   return null;
 }
 
-/** Full grades per allowance period (Sean, Oct 18). Same reset date as the quick estimates. */
+/** Full grades per allowance period (Sean, Oct 18). Same reset (1st of the month) as the quick estimates. */
 export const GRADE_FULL_FREE_PER_MONTH = 2;
 export const GRADE_FULL_PREMIUM_PER_MONTH = 25;
 export const OUT_OF_FULL_GRADES_CODE = "out_of_full_grades";
