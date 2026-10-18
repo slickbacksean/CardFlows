@@ -19,8 +19,8 @@ export function chartSummaryLabel(input: {
   rangeLabel: string;
 }): string {
   const today = input.todayDisplay ? `${input.todayDisplay} today` : "No estimate yet";
-  if (input.changePct == null) return `Collection value. ${today}.`;
+  if (input.changePct == null) return `MyDEX value. ${today}.`;
   const dir = input.changePct > 0 ? "up" : input.changePct < 0 ? "down" : "unchanged";
   const amount = input.changePct === 0 ? "" : ` ${Math.abs(input.changePct).toFixed(1)}%`;
-  return `Collection value. ${today}, ${dir}${amount} over ${input.rangeLabel}.`;
+  return `MyDEX value. ${today}, ${dir}${amount} over ${input.rangeLabel}.`;
 }

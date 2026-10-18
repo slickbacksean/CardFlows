@@ -894,7 +894,7 @@ export function createApp(
 
   const collectionUnavailable = {
     ok: false,
-    error: "Collection is temporarily unavailable. Confirm still works — try again in a moment.",
+    error: "MyDEX is temporarily unavailable. Confirm still works — try again in a moment.",
   };
 
   async function writePokecollectorCopy(
@@ -1096,7 +1096,7 @@ export function createApp(
     if (!appApiKey || c.get("internalOwner")) return next();
     const presented = c.req.header(APP_API_KEY_HEADER) ?? "";
     if (presented !== appApiKey) {
-      return c.json({ ok: false, error: "CardFlow could not authorize that request." }, 401);
+      return c.json({ ok: false, error: "CardFlow couldn't authorize that request." }, 401);
     }
     return next();
   });
@@ -1168,7 +1168,8 @@ export function createApp(
     );
     c.header("Retry-After", String(retryAfterSeconds));
     return c.json(
-      { ok: false, error: GRADE_QUOTA_COPY.outOfGrades, quota },
+      // P5: `code` lets the app tell an empty allowance from a rate limit (both are 429).
+      { ok: false, code: "out_of_grades", error: GRADE_QUOTA_COPY.outOfGrades, quota },
       429,
     );
   }
@@ -1643,7 +1644,7 @@ export function createApp(
         status: body.status,
       });
       const saved = next.find((copy) => copy.inventoryItemId === body.inventoryItemId);
-      if (!saved) return c.json({ ok: false, error: "Could not submit copy" }, 400);
+      if (!saved) return c.json({ ok: false, error: "Couldn't submit copy" }, 400);
       saveGradingSubmitted(saved);
       return c.json({ ok: true, submitted: listGradingSubmitted(userId) });
     } catch (error) {
@@ -1689,7 +1690,7 @@ export function createApp(
         },
       );
       const saved = moved.returned.find((copy) => copy.inventoryItemId === body.inventoryItemId);
-      if (!saved) return c.json({ ok: false, error: "Could not mark returned" }, 400);
+      if (!saved) return c.json({ ok: false, error: "Couldn't mark returned" }, 400);
       moveGradingSubmittedToReturned(saved);
       return c.json({
         ok: true,

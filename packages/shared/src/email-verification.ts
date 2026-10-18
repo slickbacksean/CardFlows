@@ -24,10 +24,20 @@ export const EMAIL_VERIFICATION_COPY = {
   tooSoon: "Wait a minute before requesting another code.",
   sendLimit: "You've reached the limit for verification codes. Contact support to verify your email.",
   dailyLimit: "Too many emails to this address today. Try again tomorrow.",
-  verified: "Your email is verified.",
+  verified: "Email verified. You can now get pre-grade estimates.",
+  /** UX review P1-8 (without "AI": estimate copy never says AI). */
+  fromPregrade: "Almost there. Verify your email to see your pre-grade estimate.",
+  promptTitle: "Verify your email first",
+  promptBody: "Pre-grade estimates need a verified email.",
   emailSubject: "Your CardFlow verification code",
   resetSubject: "Your CardFlow password reset code",
 } as const;
+
+/** UX review P1-8: what verifying unlocks, and where the code went. */
+export function verifyEmailIntro(email?: string | null): string {
+  const to = email && email.trim() ? email.trim() : "your email";
+  return `Verify your email to get pre-grade estimates. We sent a 6-digit code to ${to}.`;
+}
 
 export function isEmailCode(value: string): boolean {
   return new RegExp(`^\\d{${EMAIL_CODE_LENGTH}}$`).test(value.trim());

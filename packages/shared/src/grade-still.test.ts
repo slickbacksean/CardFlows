@@ -15,8 +15,8 @@ import {
 
 describe("stillFromCameraCapture", () => {
   it("fails without a uri", () => {
-    expect(stillFromCameraCapture({ uri: undefined })).toEqual({ error: "Could not take a photo. Try again." });
-    expect(stillFromCameraCapture({ uri: null })).toEqual({ error: "Could not take a photo. Try again." });
+    expect(stillFromCameraCapture({ uri: undefined })).toEqual({ error: "Couldn't take a photo. Try again." });
+    expect(stillFromCameraCapture({ uri: null })).toEqual({ error: "Couldn't take a photo. Try again." });
   });
 
   it("maps jpg and png formats to mime types, defaulting to jpeg", () => {

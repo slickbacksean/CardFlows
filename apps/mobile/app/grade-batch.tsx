@@ -40,7 +40,7 @@ export default function GradeBatchScreen() {
       setItems((await listInventory()).items);
       setError(null);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not load the collection");
+      setError(caught instanceof Error ? caught.message : "Couldn't load MyDEX");
     }
   }, []);
 
@@ -75,7 +75,7 @@ export default function GradeBatchScreen() {
         if (isPremiumRequired(caught, "batch_grading")) {
           setNeedsPremium(true);
         } else {
-          setError(caught instanceof Error ? caught.message : "Could not start the batch");
+          setError(caught instanceof Error ? caught.message : "Couldn't start the batch");
         }
         return;
       }

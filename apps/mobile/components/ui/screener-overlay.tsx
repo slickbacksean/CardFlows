@@ -162,6 +162,8 @@ export function ScreenerOverlay({
         setSavedKeys(savedKeysRef.current);
       }
       setToast({ inventoryItemId, matchKey });
+    } catch {
+      // The Livestream tab shows the failure under its header.
     } finally {
       savingKeyRef.current = "";
       setSavingKey("");
@@ -178,6 +180,8 @@ export function ScreenerOverlay({
       setSavedKeys(savedKeysRef.current);
       setToast(null);
       AccessibilityInfo.announceForAccessibility("Purchased undone");
+    } catch {
+      // Shown by the Livestream tab. The toast stays so Undo can be retried.
     } finally {
       setUndoing(false);
     }

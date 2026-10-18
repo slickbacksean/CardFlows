@@ -20,7 +20,7 @@ export function cardFlowHttpErrorMessage(status: number, serverError?: string | 
   const server = typeof serverError === "string" ? serverError.trim() : "";
   if (server && !JSON_PARSE_ERROR.test(server)) return server;
   if (status === 400) return "That request was not valid.";
-  if (status === 401 || status === 403) return "CardFlow could not authorize that request.";
+  if (status === 401 || status === 403) return "CardFlow couldn't authorize that request.";
   if (status === 404) return "That item was not found.";
   if (status === 408 || status === 504) return "CardFlow took too long to answer.";
   if (status === 429) return "CardFlow is busy. Try again in a moment.";

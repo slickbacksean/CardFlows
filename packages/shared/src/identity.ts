@@ -77,7 +77,7 @@ export function requireInvitedIdentity(userId: string): InvitedIdentity {
 export const ACCOUNT_SWITCH_SECTION_LABEL = "Invited testers";
 export const ACCOUNT_SWITCH_CONFIRM_TITLE = "Switch tester?";
 export const ACCOUNT_SWITCH_CONFIRM_MESSAGE =
-  "Collection will show the other tester's inventory. This tester's copies are not deleted.";
+  "MyDEX will show the other tester's inventory. This tester's copies are not deleted.";
 export const ACCOUNT_SWITCH_CONFIRM_ACTION = "Switch tester";
 export const ACCOUNT_SWITCH_STAY_ACTION = "Stay";
 
