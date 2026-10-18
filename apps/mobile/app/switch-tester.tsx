@@ -25,7 +25,8 @@ export default function SwitchTesterScreen() {
     setError(null);
     try {
       await switchActiveIdentity(inviteCode);
-      router.back();
+      if (router.canGoBack()) router.back();
+      else router.replace("/(tabs)/collection");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Unknown invite code.");
     } finally {

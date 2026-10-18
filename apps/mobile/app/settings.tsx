@@ -1,6 +1,5 @@
 import {
   ACCOUNT_DELETION_COPY,
-  AGE_GATE_COPY,
   CRASH_REPORTS_COPY,
   MARKETPLACE_AUTOMATION_NO_ENABLE_COPY,
   PRACTICE_COPY,
@@ -30,7 +29,7 @@ import { PrimaryButton } from "@/components/ui/primary-button";
 import { InfoRow } from "@/components/ui/screen-state";
 import { getHealth } from "@/lib/api";
 import {
-  isGuestSession,
+  signOutLocally,
   loadIdentitySession,
 } from "@/lib/identity";
 import { colors, space } from "@/lib/theme";
@@ -101,7 +100,7 @@ export default function SettingsScreen() {
 
         <Text style={styles.sectionFirst}>Account</Text>
         <Text style={styles.body}>{identity?.label ?? "Not signed in"}</Text>
-        <JobRow label="Sign in or sign up" onPress={() => router.push("/sign-up")} />
+        <JobRow label="Switch account" onPress={() => router.push("/sign-up")} />
         <JobRow
           label="Use a tester invite code"
           onPress={() => router.push("/switch-tester")}
@@ -122,15 +121,16 @@ export default function SettingsScreen() {
         {/* Policy Reviewer (P4): off by default (opt-in), gates Sentry; independent of Usage analytics. */}
         <JobRow label={CRASH_REPORTS_COPY.label} onPress={() => router.push("/crash-reports")} />
 
-        {/* P4: in-app account deletion (Apple 5.1.1(v)). Guests can delete their guest data too. */}
+        {/* P4: in-app account deletion (Apple 5.1.1(v)). */}
         <JobRow label={ACCOUNT_DELETION_COPY.settingsRow} onPress={() => router.push("/delete-account")} />
+        <JobRow
+          label="Sign out"
+          onPress={() => {
+            void signOutLocally().then(() => router.replace("/sign-up"));
+          }}
+        />
 
-        {/* Policy Reviewer (Oct 17): guests get no provider toggle, only a sign-up row. */}
-        {isGuestSession() ? (
-          <JobRow label={AGE_GATE_COPY.guestSettings} onPress={() => router.push("/sign-up")} />
-        ) : (
-          <JobRow label="Card recognition" onPress={() => router.push("/card-recognition")} />
-        )}
+        <JobRow label="Card recognition" onPress={() => router.push("/card-recognition")} />
 
         <Text style={styles.section}>{SETTINGS_STACK_SECTION_LABEL}</Text>
         {SETTINGS_STACK_STATUS_ROWS.map((row) => {

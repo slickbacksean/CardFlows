@@ -1089,6 +1089,7 @@ export function signInWithPassword(email: string, password: string) {
   return callApi(apiContract.signInWithPassword, { body: { email, password } });
 }
 
+/** Legacy API helper. The app never calls this (Sean, Oct 18: free account required). */
 export function createGuestSession() {
   return callApi(apiContract.createGuestSession, {});
 }

@@ -37,7 +37,7 @@ import {
   submitGradingCopy,
   type InventoryItem,
 } from "@/lib/api";
-import { isGuestSession, loadActiveIdentity, peekActiveUserId } from "@/lib/identity";
+import { loadActiveIdentity, peekActiveUserId } from "@/lib/identity";
 import { requireAccount } from "@/lib/signup-prompt";
 import { colors, radii, space } from "@/lib/theme";
 
@@ -65,8 +65,7 @@ function matchesSearch(item: InventoryItem, query: string): boolean {
 }
 
 export default function GradingScreen() {
-  // Browse-only guests (Sean, Oct 17) open on the (empty) pipeline; the photo pre-grade needs sign-up.
-  const [pane, setPane] = useState<"photo" | "pipeline">(() => (isGuestSession() ? "pipeline" : "photo"));
+  const [pane, setPane] = useState<"photo" | "pipeline">("photo");
   const [segment, setSegment] = useState<Segment>("prepare");
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [activeUserId, setActiveUserId] = useState(peekActiveUserId);

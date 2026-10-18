@@ -296,19 +296,20 @@ describe("CRM rows per invited user", () => {
   });
 });
 
-describe("No sign-up wall", () => {
-  it("cold-starts as the default invited user on Collection without Apple/Google", () => {
-    const captureRequiresLogin: false = CAPTURE_REQUIRES_LOGIN;
-    const signUpWallEnabled: false = SIGN_UP_WALL_ENABLED;
-    expect(captureRequiresLogin).toBe(false);
-    expect(signUpWallEnabled).toBe(false);
+describe("Auth-required wall (Sean, Oct 18)", () => {
+  it("requires a free account on launch; no Apple/Google social login yet", () => {
+    const captureRequiresLogin: true = CAPTURE_REQUIRES_LOGIN;
+    const signUpWallEnabled: true = SIGN_UP_WALL_ENABLED;
+    expect(captureRequiresLogin).toBe(true);
+    expect(signUpWallEnabled).toBe(true);
     expect(identityAfterNotThisTester()).toEqual(DEFAULT_INVITED_IDENTITY);
     expect(NOT_THIS_TESTER_LABEL).toBe("Not this tester");
+    // Social IdPs stay forbidden until Sign in with Apple ships; the account wall itself is required.
     expect(forbiddenSignUpWall("Sign in with Apple")).toBe("apple");
     expect(forbiddenSignUpWall("Sign in with Google")).toBe("google");
-    expect(forbiddenSignUpWall("Sign up to continue")).toBe("sign_up_to_continue");
-    expect(forbiddenSignUpWall("Please sign in")).toBe("please_sign_in");
-    expect(forbiddenSignUpWall("Create an account")).toBe("sign_up_to_continue");
+    expect(forbiddenSignUpWall("Sign up to continue")).toBeNull();
+    expect(forbiddenSignUpWall("Please sign in")).toBeNull();
+    expect(forbiddenSignUpWall("Create an account")).toBeNull();
 
     const store = readRepoFile("apps/api/src/store.ts");
     const api = readApiSource();
@@ -317,37 +318,33 @@ describe("No sign-up wall", () => {
     const tabsLayout = readRepoFile("apps/mobile/app/(tabs)/_layout.tsx");
     const tabsIndex = readRepoFile("apps/mobile/app/(tabs)/index.tsx");
     const collection = readRepoFile("apps/mobile/app/(tabs)/collection.tsx");
-    const capture = readRepoFile("apps/mobile/app/capture.tsx");
     const settings = readRepoFile("apps/mobile/app/settings.tsx");
 
     expect(store).not.toContain("activeUserId: DEFAULT_INVITED_USER_ID");
     expect(mobileIdentity).toContain("cachedUserId: string | null = null");
     expect(mobileIdentity).not.toContain("DEFAULT_INVITED_USER_ID");
-    expect(api).toContain("c.get(\"userId\")");
+    expect(mobileIdentity).not.toContain("createGuestSession");
+    expect(api).toContain('c.get("userId")');
     expect(api).toContain("devAutoSession");
 
     expect(tabsLayout).toContain('initialRouteName: "collection"');
     expect(tabsIndex).toContain('Redirect href="/(tabs)/collection"');
     expect(rootLayout).toContain('name="(tabs)"');
     expect(rootLayout).toContain("ensureIdentitySession");
+    expect(rootLayout).toContain('Redirect href="/sign-up"');
     expect(collection).toContain('router.push("/capture")');
 
+    expect(existsSync(path.join(repoRoot, "apps/mobile/app/sign-up.tsx"))).toBe(true);
     expect(existsSync(path.join(repoRoot, "apps/mobile/app/login.tsx"))).toBe(false);
     expect(existsSync(path.join(repoRoot, "apps/mobile/app/signup.tsx"))).toBe(false);
     expect(existsSync(path.join(repoRoot, "apps/mobile/app/sign-in.tsx"))).toBe(false);
-    // Open sign-up (Sean): the screen exists but is only opened from the guest prompt / Settings, never on launch.
-    expect(rootLayout).not.toMatch(/Redirect[^\n]*sign-up/);
     expect(existsSync(path.join(repoRoot, "apps/mobile/app/auth.tsx"))).toBe(false);
 
-    expect(forbiddenSignUpWall(rootLayout)).toBeNull();
-    expect(forbiddenSignUpWall(tabsIndex)).toBeNull();
-    expect(forbiddenSignUpWall(collection)).toBeNull();
-    expect(forbiddenSignUpWall(capture)).toBeNull();
-    expect(forbiddenSignUpWall(settings)).toBeNull();
     expect(forbiddenPrivateBetaIdp(settings)).toBeNull();
+    expect(settings).toContain("Sign out");
   });
 
-  it("opens without an invite-code gate and without gating Capture", () => {
+  it("opens without an invite-code gate; Capture stays behind the signed-in session", () => {
     const mobileIdentity = readRepoFile("apps/mobile/lib/identity.ts");
     const settings = readRepoFile("apps/mobile/app/settings.tsx");
     const capture = readRepoFile("apps/mobile/app/capture.tsx");
@@ -378,7 +375,7 @@ describe("No sign-up wall", () => {
     expect(draft).not.toContain("Redirect");
 
     const createScanRoute = routeHandler(api, 'app.post("/v1/scans"');
-    expect(createScanRoute).toContain("c.get(\"userId\")");
+    expect(createScanRoute).toContain('c.get("userId")');
     expect(createScanRoute).not.toContain("login");
     expect(api).toContain("devAutoSession");
   });
@@ -463,8 +460,8 @@ describe("Session loop check", () => {
     expect(api).toContain("c.get(\"userId\")");
     expect(api).not.toContain("export function setActiveIdentity(");
 
-    expect(SIGN_UP_WALL_ENABLED).toBe(false);
-    expect(CAPTURE_REQUIRES_LOGIN).toBe(false);
+    expect(SIGN_UP_WALL_ENABLED).toBe(true);
+    expect(CAPTURE_REQUIRES_LOGIN).toBe(true);
     expect(existsSync(path.join(repoRoot, "apps/mobile/app/login.tsx"))).toBe(false);
     expect(existsSync(path.join(repoRoot, "apps/mobile/app/signup.tsx"))).toBe(false);
     expect(forbiddenSignUpWall(settings)).toBeNull();

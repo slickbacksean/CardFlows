@@ -5,17 +5,16 @@ import { Alert, ScrollView, StyleSheet, Text, TextInput, View } from "react-nati
 import { PreferencesScreenHeader } from "@/components/ui/preferences-screen-header";
 import { PrimaryButton } from "@/components/ui/primary-button";
 import { deleteAccountEverywhere } from "@/lib/account-deletion";
-import { isGuestSession, isPasswordAccountSession } from "@/lib/identity";
+import { isPasswordAccountSession } from "@/lib/identity";
 import { colors, space } from "@/lib/theme";
 
 /**
  * P4: in-app account deletion (Apple 5.1.1(v)). Says exactly what goes, asks for the password
- * (accounts that have one, Backend review M4) or for DELETE typed (guests and invite testers),
+ * (accounts that have one, Backend review M4) or for DELETE typed (invite testers),
  * confirms once more, then deletes on the server before wiping the phone.
  */
 export default function DeleteAccountScreen() {
   const router = useRouter();
-  const guest = isGuestSession();
   const [typed, setTyped] = useState("");
   const [password, setPassword] = useState("");
   // The server is the source of truth: a password_required answer switches the field on.
@@ -75,11 +74,11 @@ export default function DeleteAccountScreen() {
                 {c.localFailed}
               </Text>
             ) : null}
-            <PrimaryButton label="Done" onPress={() => router.replace("/")} />
+            <PrimaryButton label="Done" onPress={() => router.replace("/sign-up")} />
           </>
         ) : (
           <>
-            <Text style={styles.body}>{guest ? c.guestIntro : c.intro}</Text>
+            <Text style={styles.body}>{c.intro}</Text>
             {c.deletes.map((line) => (
               <Text key={line} style={styles.item}>
                 {`• ${line}`}
