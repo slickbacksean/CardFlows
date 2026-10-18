@@ -9,6 +9,7 @@ import {
   CONFIRM_NOT_THIS_CARD_LABEL,
   CONFIRM_SEARCH_MANUALLY_LABEL,
   CONFIRM_TIPS,
+  STATUS_BANNER_COPY,
   HOW_THIS_WORKS_OPEN_LABEL,
   confidenceWord,
   confirmFailSoftBody,
@@ -283,6 +284,11 @@ export default function ScanScreen() {
       </View>
 
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+        {scan && scan.mapping.provider === "mock" && !__DEV__ ? (
+          <Text accessibilityRole="text" style={styles.body}>
+            {STATUS_BANNER_COPY.identify_demo}
+          </Text>
+        ) : null}
         {!scan && !error ? <Text style={styles.body}>Loading scan…</Text> : null}
         {!scan && error ? (
           <FailureBody

@@ -1,6 +1,6 @@
 /** WIREFRAMES.md §10b. Product About copy — no extra guarantees. */
 export const ABOUT_PARAGRAPHS = [
-  "CardFlow is not affiliated with, endorsed by, or sponsored by Nintendo, The Pokémon Company, or Game Freak.",
+  "CardFlow isn't affiliated with or endorsed by Nintendo, The Pokémon Company, or Game Freak.",
   "Catalog is TCGdex (via PokéCollector for collection and prices). Capture identify is YOLO OBB + pHash on a still. Livestream is YOLO + card-identity on live video. Grading Prepare may show a photo estimate, not a cert. No marketplace publish.",
   "Catalog images: TCGdex assets (display only). Capture approach: Pokemon-TCGP-Card-Scanner (pipeline only).",
   "PokéCollector AGPL source: https://github.com/Git-Romer/pokecollector",
