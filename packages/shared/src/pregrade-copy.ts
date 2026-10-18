@@ -20,6 +20,7 @@ export const PREGRADE_COPY = {
     "Surface not assessed. The extra photos didn't show the light from different sides.",
   surfaceExcludedNote: "Surface isn't part of this estimate.",
   surfaceIncludedNote: "Surface checked from your extra light photos.",
+  surfaceTiltIncludedNote: "Surface checked from your tilted photos.",
   sizeNotCheckedNote: "Card size isn't checked from photos.",
   // Retake reasons (no number is shown with these).
   blurry: "Too blurry, move back a little",

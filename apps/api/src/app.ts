@@ -13,7 +13,13 @@ import { ANONYMIZED_USER_PREFIX } from "./purchase-ledger";
 import { opsMetrics, type OpsMetrics } from "./ops-metrics";
 import { parseUserPriceAmount } from "@cardflow/shared";
 import { OUT_OF_FULL_GRADES_CODE, GRADE_FULL_COPY, gradeFullAllowance, gradeFullModeEnabled, gradeFullMonthlyLimit, gradeFullUsageKey } from "@cardflow/shared";
-import { saveGradeExtraShot } from "./grade-extra-store";
+import {
+  checkExtraBlur,
+  deleteUserGradeExtras,
+  gradeExtrasSessionPath,
+  purgeExpiredGradeExtras,
+  saveGradeExtraShot,
+} from "./grade-extra-store";
 
 /** Full 14-photo mode flag (docs/GRADE_FULL_MODE.md). Read per request so tests can flip it. */
 function gradeFullModeFlag(): string | undefined {
@@ -626,6 +632,7 @@ export function createApp(
       if (store.accounts.hasLiveSession(userId, at)) continue;
       const scans = store.listScans(userId).length;
       store.deleteUserPhotos(userId);
+      deleteUserGradeExtras(userId);
       // Re-review H1: a guest's PokéCollector user is shared (legacy `cardflow-guest`): held, never deleted.
       const link = getPokecollectorUserMapping(userId);
       store.accounts.deleteAllUserRows(userId, {
@@ -2134,6 +2141,7 @@ export function createApp(
     const rows = store.accounts.deleteAllUserRows(userId, { northStarTotals, pokecollectorRemote });
     const photos = removePhotos();
     const staged = gradeUploads.releaseUser(userId);
+    deleteUserGradeExtras(userId);
     let pokecollector: "not_linked" | "queued" | "held" = "not_linked";
     if (pokecollectorRemote && pokecollectorLink) {
       const queued = store.accounts.listPokecollectorDeletions().find((row) => row.remoteUserId === pokecollectorLink.pokecollectorUserId);
@@ -2886,9 +2894,38 @@ export function createApp(
       if ("error" in parsed) {
         return c.json({ ok: false, error: parsed.error }, parsed.status);
       }
-      const stored = saveGradeExtraShot({ userId, side: parsed.side, shot: parsed.shot, still: parsed.still });
-      console.log(`grade-extra side=${parsed.side} shot=${parsed.shot} bytes=${parsed.still.bytes.byteLength} stored=${stored}`);
-      return c.json({ ok: true as const, side: parsed.side, shot: parsed.shot, used: false, stored });
+      const blur = await checkExtraBlur(parsed.still);
+      if (!blur.ok) {
+        console.log(
+          `grade-extra side=${parsed.side} shot=${parsed.shot} blur=fail sharpness=${blur.sharpness ?? "-"}`,
+        );
+        return c.json({
+          ok: false as const,
+          status: "retake" as const,
+          code: "PHOTO_RETAKE" as const,
+          side: parsed.side,
+          shot: parsed.shot,
+          reasons: [blur.reason ?? "Too blurry. Move back a little and retake."],
+        });
+      }
+      const stored = saveGradeExtraShot({
+        userId,
+        sessionId: parsed.sessionId,
+        side: parsed.side,
+        shot: parsed.shot,
+        still: parsed.still,
+      });
+      console.log(
+        `grade-extra side=${parsed.side} shot=${parsed.shot} session=${parsed.sessionId} bytes=${parsed.still.bytes.byteLength} stored=${stored} sharpness=${blur.sharpness ?? "-"}`,
+      );
+      return c.json({
+        ok: true as const,
+        side: parsed.side,
+        shot: parsed.shot,
+        sessionId: parsed.sessionId,
+        used: false,
+        stored,
+      });
     },
   );
 
@@ -2920,14 +2957,19 @@ export function createApp(
       if (!taken.ok) {
         return parsed.fullGrade ? outOfFullGradesResponse(c, taken.quota) : outOfGradesResponse(c, taken.quota);
       }
+      const userId = c.get("userId") as string;
+      const extrasDir =
+        parsed.fullGrade && parsed.sessionId
+          ? gradeExtrasSessionPath(userId, parsed.sessionId)
+          : null;
       const result = await pregradePhotoPair({
         runner: cardgrading,
         front: parsed.frontImage,
         back: parsed.backImage,
         angledFront: parsed.angledFront ?? [],
+        extrasDir: extrasDir ?? undefined,
         captureMeta: parsed.captureMeta ?? null,
       });
-      const userId = c.get("userId");
       if (parsed.frontUploadId) gradeUploads.release(userId, parsed.frontUploadId);
       if (parsed.backUploadId) gradeUploads.release(userId, parsed.backUploadId);
       return c.json({ ...result, quota: taken.quota });

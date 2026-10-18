@@ -19,30 +19,63 @@ out midway, Try again sends the same flat photos as a quick grade.
 
 ## Turning it on (dev/test flag)
 
-`CARD_FLOW_GRADE_FULL_MODE=on` in `apps/api/.env` (off by default). Restart the API. Then
-`GET /v1/grade/quota` includes `fullGrade: { monthlyLimit, usedThisMonth, remaining }` and the
-Grading screen shows "Full pre-grade (14 photos)" with the number left. To test the Premium 25,
-put your user id in `CARD_FLOW_PREMIUM_USER_IDS`.
+`CARD_FLOW_GRADE_FULL_MODE=on` in `apps/api/.env` (off by default).
 
 ## Flow
 
-1. Flat photo of the front through the normal finder (auto-capture from the corners). Header: "Front 1/7 flat".
-2. "Use this crop", then 6 guided shots ("Front 2/7" … "Front 7/7"), each with its own prompt:
-   - tilted: auto-capture once the level sensor reads 15-25° and the phone is steady for 0.7 s (manual shutter if the sensor isn't there);
-   - corners: manual shutter, guide box over that corner.
-   Each photo is blur-checked on the phone and shown with Use / Retake. Use sends it to `POST /v1/grade/extra`.
-3. Same for the back, then the grade (`POST /v1/grade/pregrade` with `fullGrade=true`).
+1. Flat front via finder. Header: "Front 1/7 flat".
+2. Six guided extras with a shared **sessionId** → `POST /v1/grade/extra`.
+3. Same for the back, then `POST /v1/grade/pregrade` with `fullGrade=true` + `sessionId`.
 
-## What the grader uses from the extra shots: nothing yet
+## What the grader uses from the extras
 
-The grade comes from the two flat photos only, same as the quick grade. The extras are accepted
-(`used: false` in the response) and saved under `apps/api/data/grade-extras/<user>/` (gitignored).
+Stored under `apps/api/data/grade-extras/<user>/<sessionId>/` as `<side>-<shot>.jpg` + `meta.json`.
+Server blur-check: Laplacian variance ≥ 60. **30-day** purge with graded photos; account delete wipes extras.
 
-- **Tilted shots:** the grader's surface step (photometric stereo) needs 3+ photos with the
-  light moving relative to the card. Tilting the phone moves the camera, not the light, and two
-  shots are under the minimum. The existing "rotate the card under one lamp" angled set
-  (`angled_0..3`, front only) is the input that works.
-- **Corner close-ups:** the grader has no close-up input. Corners and edges are measured on the
-  flat photo's warp.
-- **Before a launch:** no retention or cleanup for the saved extras, no link between the extras
-  and the grade they belong to, and no server-side blur check (phone only).
+When `sessionId` is on pregrade, `cardflow_adapter.py --extras-dir` runs:
+
+### Corner close-ups (`cardflow_corner_closeup.py`)
+
+Rectify each `corner_*` still → 256×256 patch. Measure whitening/fraying and rounding/dings.
+Each corner **0–10**. Findings always appear in `checkNotes` as advisory text
+(e.g. `Possible whitening on top-left corner`).
+
+**Grade impact is gated.** Close-ups lower the flat-photo corners sub-score only when
+`high_confidence` (strict whitening + tip/interior mean-delta gate), and then by
+**at most 1 point** (`combine_corner_scores`). Low-confidence findings stay notes-only.
+
+`RETUNE_CORNER_CLOSEUP` — retune `CLOSEUP_LOWER_MIN_WHITENING` /
+`CLOSEUP_LOWER_MIN_MEAN_DELTA` in `cardflow_corner_closeup.py` once we have real
+guided phone close-ups. Current gate (wh≥35, mean_delta≥20) was chosen on
+card-grader Corner Wear positives vs synthetic clean card-corner crops so
+**precision ≥ 0.7** (measured **1.00**, recall **~0.019**); face-crop and
+unguided-corner negatives cannot hit that bar.
+
+### Tilted shots (`cardflow_tilt_surface.py`)
+
+Flat + `tilt_a` + `tilt_b`: warp to canonical card, normalize, difference-of-normalized-images,
+Hough/blobs → surface **0–10**, notes, mask. Not photometric stereo. Fills surface when
+raking-light did not; otherwise min with photometric.
+
+### Overall
+
+Reassembled via `scoring.assemble_grade`. Response may include `checkNotes`.
+Copy: **Pre-grade estimate** / **Estimate only. Not an official grade.** Never "AI".
+
+## Evaluation snapshot (threshold tuning only)
+
+Classical OpenCV only; no model training. See `apps/api/scripts/eval_full_extras.py` and
+`THIRD_PARTY/ATTRIBUTION.md`.
+
+| Set | Check | Precision | Recall | FPR | n (pos/neg) |
+|---|---|---:|---:|---:|---|
+| card-grader CC BY 4.0 | Corner Wear (score≤8, advisory) | 0.204 | 0.435 | 0.724 | 209/492 |
+| card-grader CC BY 4.0 | Corner Wear **high-conf gate** (wh≥35 & Δ≥20, vs clean card-corners) | **1.000** | **0.019** | 0.000 | 209/600 |
+| card-grader CC BY 4.0 | Scratch (score≤8) | 0.628 | 0.773 | 0.579 | 225/178 |
+| pokemon-tcg-condition MIT | damage/discoloration | 0.4 | 0.185 | 0.288 | 54/52 |
+
+### Known limits
+
+- Card-grader Corner Wear boxes are small label crops, not phone guide-box close-ups; face-crop FPR is high (~0.72 at score≤8). That is why close-ups are **advisory by default** and only the high-conf gate can lower the corners grade (≤1 pt). Flag: `RETUNE_CORNER_CLOSEUP`.
+- Tilt surface cannot match a moving lamp for holo glare vs scratches.
+- pokemon-tcg-condition is tiny/noisy; numbers are directional only.

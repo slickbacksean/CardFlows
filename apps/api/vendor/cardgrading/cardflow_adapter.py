@@ -221,6 +221,12 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         default=[],
         help="Optional raking-light shots of the front, card turned a quarter-turn each time.",
     )
+    parser.add_argument(
+        "--extras-dir",
+        type=Path,
+        default=None,
+        help="Full 14-photo extras dir: <side>-tilt_a|tilt_b|corner_*.{jpg,png,webp}.",
+    )
     return parser.parse_args(argv)
 
 
@@ -317,6 +323,11 @@ def main(argv: list[str]) -> int:
         if soft and isinstance(side_quality, dict) and isinstance(side_quality.get("gates"), list):
             side_quality["gates"].extend(soft)
     report["cardflow"] = cardflow
+    if args.extras_dir is not None:
+        from cardflow_full_extras import analyze_extras, merge_full_extras_into_report
+
+        extras = analyze_extras(args.extras_dir, front_path, back_path)
+        report = merge_full_extras_into_report(report, extras, thresholds)
     json.dump(report, sys.stdout)
     sys.stdout.write("\n")
     return 0

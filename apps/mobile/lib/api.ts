@@ -718,11 +718,13 @@ export async function uploadGradeExtra(input: {
   uri: string;
   side: "front" | "back";
   shot: GradeExtraShot;
-}): Promise<{ ok: true; used: boolean; stored: boolean }> {
+  sessionId: string;
+}): Promise<{ ok: true; used: boolean; stored: boolean } | { ok: false; status: "retake"; reasons: string[] }> {
   const form = new FormData();
   await appendGradeStill(form, "image", input.uri, "image/jpeg");
   form.append("side", input.side);
   form.append("shot", input.shot);
+  form.append("sessionId", input.sessionId);
   return callApi(apiContract.uploadGradeExtra, { form, timeoutMs: GRADE_DETECT_TIMEOUT_MS });
 }
 
@@ -739,9 +741,11 @@ export async function requestPhotoPregrade(input: {
   backUploadId?: string | null;
   /** Full 14-photo grade: spends the full allowance instead of the quick one. */
   fullGrade?: boolean;
+  sessionId?: string;
 }): Promise<PhotoPregradeResult> {
   const form = new FormData();
   if (input.fullGrade) form.append("fullGrade", "true");
+  if (input.sessionId) form.append("sessionId", input.sessionId);
   const frontMime =
     normalizeScanImageMime(input.frontMimeType) ?? mimeFromUri(input.frontUri) ?? "image/jpeg";
   const backMime =

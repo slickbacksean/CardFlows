@@ -165,6 +165,7 @@ async function pregradePhotoPairUncoalesced(input: {
   front: GradeStill;
   back: GradeStill;
   angledFront: GradeStill[];
+  extrasDir?: string;
   captureMeta?: string | null;
 }): Promise<PhotoPregradeResult> {
   const startedAt = Date.now();
@@ -182,6 +183,7 @@ async function pregradePhotoPairUncoalesced(input: {
             })),
           }
         : {}),
+      ...(input.extrasDir ? { extrasDir: input.extrasDir } : {}),
     });
     const mapped = rejectZeroGrade(mapGradeCardReport(report));
     saveGradePregradeDebug({
@@ -216,6 +218,7 @@ export async function pregradePhotoPair(input: {
   back: GradeStill;
   /** Optional raking-light front photos (surface step). */
   angledFront?: GradeStill[];
+  extrasDir?: string;
   captureMeta?: string | null;
 }): Promise<PhotoPregradeResult> {
   const runner = input.runner;
@@ -229,6 +232,7 @@ export async function pregradePhotoPair(input: {
       front: input.front,
       back: input.back,
       angledFront: angled,
+      extrasDir: input.extrasDir,
       captureMeta: input.captureMeta,
     }),
   );
