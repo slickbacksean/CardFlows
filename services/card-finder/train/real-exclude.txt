@@ -1,0 +1,2 @@
+# Real photos dropped from training/val because the card is on the baseline / test-set denylist (train/denylist.txt).
+pokemon_card_image_for_authenticity_classification/Images/5638.jpeg	Sizzlipede (baseline card)

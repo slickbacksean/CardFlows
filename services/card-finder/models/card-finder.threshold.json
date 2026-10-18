@@ -1,0 +1,9 @@
+{
+  "accept_threshold": 0.97,
+  "val_wrong_accept_rate": 0.0075,
+  "val_recall_findable": 0.4847,
+  "val_samples": 400,
+  "val_findable": 229,
+  "definition": "recall = accepted with quad IoU>=0.85 / findable (card fully in frame, not covered by a distractor); wrong = accepted with IoU<0.85 or on an empty/unfindable frame, over all accepted",
+  "split": "synthetic val (train/art-list.tsv split=val, seed 987654, 768px)"
+}

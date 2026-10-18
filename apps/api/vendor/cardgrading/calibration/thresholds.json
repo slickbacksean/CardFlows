@@ -23,7 +23,9 @@
     "axis_dpi_scale": {
       "x": 1.0,
       "y": 1.004
-    }
+    },
+    "max_out_of_plane_deg": 20.0,
+    "rectified_aspect_tolerance_pct": 6.0
   },
   "centering": {
     "front_tolerances": [

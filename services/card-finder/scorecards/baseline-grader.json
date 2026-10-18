@@ -1,0 +1,40 @@
+{
+  "detector": "grader",
+  "manifest": "baseline/manifest.jsonl",
+  "provisional_circular_labels": 24,
+  "cards": {
+    "all": {
+      "count": 24,
+      "found_rate": 0.8333333333333334,
+      "iou_rate": 0.8333333333333334,
+      "mean_corner_error": 0.0020235338089763773,
+      "p95_corner_error": 0.014090496735697946,
+      "wrong_accept_rate": 0.0,
+      "wrong_accept_count": 0,
+      "false_retake_rate": 0.05,
+      "passes": false
+    },
+    "back": {
+      "count": 1,
+      "found_rate": 0.0,
+      "iou_rate": 0.0,
+      "mean_corner_error": null,
+      "p95_corner_error": null,
+      "wrong_accept_rate": 0.0,
+      "wrong_accept_count": 0,
+      "false_retake_rate": 0.0,
+      "passes": false
+    },
+    "full-art": {
+      "count": 0,
+      "found_rate": 0.0,
+      "iou_rate": 0.0,
+      "mean_corner_error": null,
+      "p95_corner_error": null,
+      "wrong_accept_rate": 0.0,
+      "wrong_accept_count": 0,
+      "false_retake_rate": 0.0,
+      "passes": false
+    }
+  }
+}

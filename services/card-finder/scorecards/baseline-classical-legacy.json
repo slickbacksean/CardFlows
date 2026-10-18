@@ -1,0 +1,39 @@
+{
+  "detector": "classical-legacy",
+  "manifest": "services/card-finder/baseline/manifest.jsonl",
+  "cards": {
+    "all": {
+      "count": 24,
+      "found_rate": 1.0,
+      "iou_rate": 0.5,
+      "mean_corner_error": 0.04791217703422409,
+      "p95_corner_error": 0.21686625259104925,
+      "wrong_accept_rate": 0.08333333333333333,
+      "wrong_accept_count": 2,
+      "false_retake_rate": 0.23529411764705882,
+      "passes": false
+    },
+    "back": {
+      "count": 1,
+      "found_rate": 1.0,
+      "iou_rate": 1.0,
+      "mean_corner_error": 0.00749977884883015,
+      "p95_corner_error": 0.00749977884883015,
+      "wrong_accept_rate": 0.0,
+      "wrong_accept_count": 0,
+      "false_retake_rate": 0.0,
+      "passes": true
+    },
+    "full-art": {
+      "count": 0,
+      "found_rate": 0.0,
+      "iou_rate": 0.0,
+      "mean_corner_error": null,
+      "p95_corner_error": null,
+      "wrong_accept_rate": 0.0,
+      "wrong_accept_count": 0,
+      "false_retake_rate": 0.0,
+      "passes": false
+    }
+  }
+}
