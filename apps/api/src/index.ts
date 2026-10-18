@@ -6,6 +6,7 @@ import { createCatalogFromEnv } from "./catalog-env";
 import { createPricingFromEnv, createPokecollectorAccountsFromEnv } from "./pokecollector-env";
 import { createRecognitionFromEnv } from "./recognition-env";
 import { cardSightAdapterFromEnv } from "./cardsight-adapter";
+import { cardMagicFromEnv } from "./cardmagic-adapter";
 import { consumeCardSightBudget } from "./cardsight-budget";
 import { cardSightMonthlyBudgetFromEnv, cardSightUserCapsFromEnv } from "./grade-quota-env";
 import { createGradeEstimateFromEnv, gradeEngineProbeFromEnv } from "./grade-estimate-env";
@@ -53,6 +54,10 @@ const cardSightBudget = cardSightMonthlyBudgetFromEnv();
 const cardSight = cardSightAdapterFromEnv(process.env, {
   consumeBudget: () => consumeCardSightBudget({ consume: store.consumeVendorQuota, cap: cardSightBudget, now: new Date() }),
 });
+const cardMagic = cardMagicFromEnv(process.env, {
+  // Same global monthly budget as identify (one CardSight plan).
+  // Per-call takeUse is applied in the grade detect route.
+});
 const liveVideoYoloHolder: { detector: ObbDetector | null } = { detector: null };
 const app = createApp(store, {
   devAutoSession: resolveDevAutoSession(),
@@ -61,6 +66,7 @@ const app = createApp(store, {
   pokecollectorAccounts,
   recognition,
   cardSight,
+  cardMagic,
   cardSightUserCaps: cardSightUserCapsFromEnv(),
   grading,
   cardgrading,

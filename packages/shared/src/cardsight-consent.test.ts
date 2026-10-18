@@ -25,10 +25,10 @@ const unquote = (chunk: string) => chunk.slice(1, -1).replace(/\\'/g, "'").repla
 describe("CardSight disclosure (Policy Reviewer, Oct 16)", () => {
   it("uses the approved wording exactly, with a bumped version", () => {
     expect(CARDSIGHT_CONSENT_COPY.body).toBe(
-      "CardFlow can use CardSight, our card-recognition provider, to identify cards from your photos. If you allow it, your card photos are sent to CardSight. CardSight's terms let it keep these images and use them to train its AI models. Turning this off later stops new uploads but doesn't remove photos CardSight already has. If you don't allow it, CardFlow matches cards on its own servers, or you can search manually. You can change this anytime in Settings.",
+      "CardFlow can use CardSight, our card-recognition provider, to identify cards from your photos and to crop and straighten grade photos. If you allow it, your card photos are sent to CardSight. CardSight's terms let it keep these images and use them to train its AI models. Turning this off later stops new uploads but doesn't remove photos CardSight already has. If you don't allow it, CardFlow matches and crops cards on its own servers, or you can search manually. You can change this anytime in Settings.",
     );
     expect(CARDSIGHT_CONSENT_COPY.settingsHelp).toBe(
-      "When on, card photos are also sent to CardSight, our card-recognition provider. CardSight's terms let it keep these images and use them to train its AI models. Turning this off stops new uploads but doesn't remove photos CardSight already has. When off, CardFlow matches cards on its own servers only.",
+      "When on, card photos are also sent to CardSight, our card-recognition provider, to identify cards and to crop and straighten grade photos. CardSight's terms let it keep these images and use them to train its AI models. Turning this off stops new uploads but doesn't remove photos CardSight already has. When off, CardFlow matches and crops cards on its own servers only.",
     );
     expect(CARDSIGHT_CONSENT_VERSION).not.toBe("2026-10-17");
     expect(CARDSIGHT_AI_DISCLOSURES).toEqual([CARDSIGHT_CONSENT_COPY.body, CARDSIGHT_CONSENT_COPY.settingsHelp]);
@@ -36,7 +36,7 @@ describe("CardSight disclosure (Policy Reviewer, Oct 16)", () => {
 
   it("camera permission strings are exact in app.json", () => {
     const expected =
-      "CardFlow uses the camera to photograph your Pokémon cards. Photos are uploaded to CardFlow, and to our card-recognition provider if you allow it, to identify your cards.";
+      "CardFlow uses the camera to photograph your Pokémon cards. Photos are uploaded to CardFlow, and to our card-recognition provider if you allow it, to identify your cards and prepare grade photos.";
     expect(CAMERA_USAGE_DESCRIPTION).toBe(expected);
     const app = JSON.parse(readFileSync(path.join(REPO, "apps/mobile/app.json"), "utf8")) as {
       expo: { ios: { infoPlist: Record<string, string> }; plugins: Array<string | [string, Record<string, unknown>]> };
@@ -83,5 +83,16 @@ describe("CardSight disclosure (Policy Reviewer, Oct 16)", () => {
     expect(ask).toBeGreaterThan(-1);
     expect(ask).toBeLessThan(capture.indexOf("await createScan("));
     expect(capture).toMatch(/!isGuestSession\(\) && \(await ensureAccountAgeConfirmed\(\)\)\) \{\s*await askCardSightConsentOnce\(\)/);
+  });
+
+  it("the grade flow asks accounts before the first grade photo upload", () => {
+    const grade = readFileSync(path.join(REPO, "apps/mobile/components/ui/photo-grade-flow.tsx"), "utf8");
+    const ask = grade.indexOf("await askCardSightConsentOnce()");
+    const detect = grade.indexOf("await detectGradePhoto(") >= 0
+      ? grade.indexOf("await detectGradePhoto(")
+      : grade.indexOf("detectGradePhoto(");
+    expect(ask).toBeGreaterThan(-1);
+    expect(detect).toBeGreaterThan(-1);
+    expect(ask).toBeLessThan(detect);
   });
 });

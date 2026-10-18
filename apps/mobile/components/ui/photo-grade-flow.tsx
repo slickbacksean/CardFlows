@@ -29,6 +29,9 @@ import { GradeCardFinder } from "@/components/ui/grade-card-finder";
 import { GradeExtraShots } from "@/components/ui/grade-extra-shots";
 import { PrimaryButton } from "@/components/ui/primary-button";
 import { detectGradePhoto, getGradeQuota, grantGradeCredits, requestPhotoPregrade } from "@/lib/api";
+import { askCardSightConsentOnce } from "@/lib/cardsight-consent";
+import { ensureAccountAgeConfirmed } from "@/lib/age-confirmation";
+import { isGuestSession } from "@/lib/identity";
 import { gradeFlowSession } from "@/lib/grade-flow-session";
 import {
   CARD_ASPECT_RATIO,
@@ -53,6 +56,7 @@ interface PhotoGradeFlowProps {
 
 const GUIDELINES = [
   "Lay the card flat and keep all four corners in the frame.",
+  "Take the card out of any slab or toploader before grading.",
   "Use even light. No sleeve, glare, or fingers on the card.",
   "Take the front, then the back. Catalog art is not a grade photo.",
   "Hold the phone flat over the card. A tilted angle means a retake.",
@@ -169,6 +173,10 @@ export function PhotoGradeFlow({ onOpenPipeline }: PhotoGradeFlowProps) {
   }
 
   async function ingestStill(nextSide: Side, picked: PickedGradeStill, fromFinder: boolean) {
+    // Same CardSight prompt as Capture: grade photos may go to CardMagic when allowed.
+    if (!isGuestSession() && (await ensureAccountAgeConfirmed())) {
+      await askCardSightConsentOnce();
+    }
     const prepared =
       picked.mimeType === "image/jpeg" && !fromFinder
         ? { still: picked }

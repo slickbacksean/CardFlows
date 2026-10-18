@@ -241,6 +241,8 @@ const GRADE_DETECT_FORM_SCHEMA = z
     photo: z.unknown().optional(),
     side: z.enum(["front", "back"]).optional(),
     captureMeta: captureMetaSchema,
+    /** Full-grade session: CardMagic corner close-ups are stored as extras under this id. */
+    sessionId: z.string().min(8).max(64).regex(/^[a-zA-Z0-9_-]+$/).optional(),
   })
   .strict();
 
@@ -248,6 +250,7 @@ export interface ParsedGradeDetectRequest {
   still: ParsedGradeStill;
   side: "front" | "back";
   captureMeta?: string | null;
+  sessionId?: string;
 }
 
 /** One still for card location. Not a grade. `photo` is the GitHub field name. */
@@ -271,7 +274,12 @@ export async function parseGradeDetectRequest(
     return { error: "Image must be jpeg, png, or webp", status: 400 };
   }
   if ("error" in still) return still;
-  return { still, side: parsed.data.side ?? "front", captureMeta: parsed.data.captureMeta ?? null };
+  return {
+    still,
+    side: parsed.data.side ?? "front",
+    captureMeta: parsed.data.captureMeta ?? null,
+    sessionId: parsed.data.sessionId,
+  };
 }
 
 const GRADE_EXTRA_FORM_SCHEMA = z

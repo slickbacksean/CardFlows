@@ -11,7 +11,7 @@
       "supportsTablet": false,
       "bundleIdentifier": "app.cardflow.mobile",
       "infoPlist": {
-        "NSCameraUsageDescription": "CardFlow uses the camera to photograph your Pok\u00e9mon cards. Photos are uploaded to CardFlow, and to our card-recognition provider if you allow it, to identify your cards.",
+        "NSCameraUsageDescription": "CardFlow uses the camera to photograph your Pok\u00e9mon cards. Photos are uploaded to CardFlow, and to our card-recognition provider if you allow it, to identify your cards and prepare grade photos.",
         "NSMotionUsageDescription": "CardFlow uses motion to help you hold your phone level over a card."
       },
       "buildNumber": "1",
@@ -46,7 +46,7 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "CardFlow uses the camera to photograph your Pok\u00e9mon cards. Photos are uploaded to CardFlow, and to our card-recognition provider if you allow it, to identify your cards.",
+          "cameraPermission": "CardFlow uses the camera to photograph your Pok\u00e9mon cards. Photos are uploaded to CardFlow, and to our card-recognition provider if you allow it, to identify your cards and prepare grade photos.",
           "microphonePermission": false,
           "recordAudioAndroid": false
         }
