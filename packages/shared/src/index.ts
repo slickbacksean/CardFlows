@@ -617,6 +617,7 @@ export {
   PREGRADE_LABEL,
   PREGRADE_SURFACE_NULL_REASON,
   PREGRADE_UNAVAILABLE_MESSAGE,
+  isScoredEstimate,
 } from "./photo-pregrade";
 export type {
   DetectCropResult,

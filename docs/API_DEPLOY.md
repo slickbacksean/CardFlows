@@ -63,3 +63,18 @@ The API also **refuses to start** in production without `CARD_FLOW_SERVER_PEPPER
 ## Open sign-up env
 - `CARD_FLOW_GUEST_BROWSE=true` turns on **browse-only** guest sessions (24-hour sessions in `crm_sessions`; off by default). Guests get 403 `signup_required` on every scan, grade, livestream, save, purchase, watchlist, inventory and CardSight route (`guestRouteBlockReason` in `packages/shared/src/guest-access.ts`); browse reads stay open, and `POST /v1/account/delete` deletes their session data. `CARD_FLOW_GUEST_SCANS` was removed (Sean, Oct 17: no guest scans); if it's still set, the API logs a warning and ignores it.
 - `CARD_FLOW_INVITE_ALEX` / `CARD_FLOW_INVITE_JORDAN` are tester invite codes. **There are no defaults;** unset means invite sign-in is off for that tester.
+
+## Launch checklist §2 — Railway SQLite failure modes (Oct 18 audit)
+
+Blockers specific to launching the API on Railway with SQLite + Litestream. Full plan: agent doc `railway-sqlite-deploy-plan.md` (box) / PR #100.
+
+| Failure mode | Why it blocks ~150 users | Mitigation |
+|---|---|---|
+| Dockerfile `RUN --mount=type=cache,id=pnpm,…` | Railway only accepts cache mount ids shaped `s/<service>-…`; first production build likely fails. | Remove the pnpm cache mount from `apps/api/Dockerfile` before deploy. |
+| Migrations in Railway **pre-deploy** | Pre-deploy runs in a separate container **without the volume**, so migrations never touch the real DB. | Run migrations in the container **entrypoint** under `flock` on `/data` before Node listens. |
+| `migrate.ts` turns `foreign_keys` OFF then ON with no `try/finally` | A failed migration can leave FKs off for the process lifetime. | Wrap in `try/finally`; also set `busy_timeout=5000`, `journal_mode=WAL`, `synchronous=NORMAL` at startup. |
+| Missing Litestream / R2 (or Railway Buckets) | Volume loss or bad deploy can wipe user data with no restore path. | Continuous Litestream to object storage + one restore drill before submission. Railway **Daily-only** volume backups (not Weekly/Monthly — longer retention fights the ~2-week deletion promise). |
+| Photos only on the volume | If photo nightly mirror is deferred, photos depend solely on Railway volume backups. | Keep Daily volume backups on; add photo object-storage mirror before relying on multi-week retention claims. |
+| `replicas > 1` with a volume | Railway forbids replicas on volume services; in-memory grade jobs / rate limits also require one writer. | Force **1 replica**; move to Postgres when a second instance is needed. |
+| Release mobile build without `EXPO_PUBLIC_API_URL` | Falls back to localhost; every call fails in TestFlight. | Fail the EAS build when the URL is missing, not `https://`, or is a private/LAN host (also PR #96). |
+

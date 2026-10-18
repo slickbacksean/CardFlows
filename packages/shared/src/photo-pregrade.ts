@@ -13,6 +13,12 @@ export const PREGRADE_SURFACE_NULL_REASON = PREGRADE_COPY.surfaceNotAssessed;
 export const PREGRADE_UNAVAILABLE_MESSAGE = "Photo scoring is unavailable." as const;
 export const PREGRADE_DETECT_UNAVAILABLE_MESSAGE = "Card detection is not available." as const;
 
+/** Pre-grade numbers are 1.0–10.0. 0 (or anything outside that) is a retake, never a score. */
+export function isScoredEstimate(estimate: number): boolean {
+  return Number.isFinite(estimate) && estimate >= 1 && estimate <= 10;
+}
+
+
 export type PhotoPregradeSide = "front" | "back";
 
 export interface PhotoPregradeSubgrade {

@@ -267,10 +267,10 @@ describe("P4: Sentry scaffold", () => {
     expect(sentry).toContain("...sentryRelease()");
   });
 
-  it("Policy: Send crash reports is on by default, gates init and stops sending when turned off", () => {
-    expect(CRASH_REPORTS_DEFAULT_ON).toBe(true);
-    expect(crashReportsEnabledFrom(null)).toBe(true);
-    expect(crashReportsEnabledFrom(undefined)).toBe(true);
+  it("Policy: Send crash reports is off by default (opt-in), gates init and stops sending when turned off", () => {
+    expect(CRASH_REPORTS_DEFAULT_ON).toBe(false);
+    expect(crashReportsEnabledFrom(null)).toBe(false);
+    expect(crashReportsEnabledFrom(undefined)).toBe(false);
     expect(crashReportsEnabledFrom("1")).toBe(true);
     expect(crashReportsEnabledFrom("0")).toBe(false);
     expect(CRASH_REPORTS_COPY.label).toBe("Send crash reports");
@@ -291,7 +291,8 @@ describe("P4: Sentry scaffold", () => {
   it("keeps the existing rule: crash reports don't depend on the analytics opt-in (documented)", () => {
     expect(sentry).not.toMatch(/isAnalyticsEnabled|loadAnalyticsPreference/);
     expect(read("docs/SENTRY.md")).toMatch(/not\*\* tied to the in-app analytics opt-in/);
-    expect(read("packages/shared/src/crash-reports.ts")).toContain("Sean may still decide crash reports should be opt-in");
+    expect(read("packages/shared/src/crash-reports.ts")).toContain("independent of the analytics opt-in");
+    expect(read("packages/shared/src/crash-reports.ts")).toContain("Off by default (opt-in)");
   });
 
   it("scrubs bearer tokens, secret query params and local photo URIs", () => {
@@ -516,13 +517,14 @@ describe("P4: account deletion end to end", () => {
 });
 
 describe("P4: docs from the Policy and Dev Ops reviews", () => {
-  it("privacy draft: PokéCollector, anonymous totals, backups [30] days, Sentry as a provider", () => {
+  it("privacy draft: PokéCollector, anonymous totals, backups 90 days, Sentry as a provider", () => {
     const draft = read("docs/USER_CONSENT_DRAFT.md");
     expect(draft).toContain(POKECOLLECTOR_DELETION_LINE);
     expect(draft).toContain(ANONYMOUS_LEDGER_LINE);
-    expect(draft).toContain("Deleted data is removed from backups within [30] days.");
+    expect(draft).toContain("Deleted data is removed from backups within 90 days.");
     expect(draft).toContain("**Sentry** (Functional Software, Inc.)");
     expect(draft).toContain("Settings > Send crash reports");
+    expect(draft).toContain("Crash reports are off by default");
   });
 
   it("store labels: Apple Crash Data and Play Crash logs", () => {

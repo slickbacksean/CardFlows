@@ -46,14 +46,15 @@ export const SETTINGS_STACK_STATUS_CHECKING = "Checking…";
 export type SettingsStackLoad = "checking" | "ready" | "unavailable";
 
 /** Readable Settings values. Machine ids stay on `/health`. */
+
 const STACK_STATUS_LABELS: { [K in SettingsStackStatusId]: Record<CardFlowHealth[K], string> } = {
   catalog: {
-    mock: "Mock",
+    mock: "Demo data",
     tcgdex: "TCGdex",
     pokecollector: "PokéCollector",
   },
   recognition: {
-    mock: "Mock",
+    mock: "Demo data",
     obb_phash: "Photo match",
   },
   livestreamIdentify: {
@@ -71,13 +72,13 @@ const STACK_STATUS_LABELS: { [K in SettingsStackStatusId]: Record<CardFlowHealth
   },
   gradeEstimate: {
     off: "Off",
-    mock: "Mock",
+    mock: "Demo data",
     cardgrading: "Offline photo grader",
     cnn: "CNN",
   },
   slabPricing: {
     off: "Off",
-    mock: "Mock",
+    mock: "Demo data",
     poketrace: "Live comps",
   },
 };

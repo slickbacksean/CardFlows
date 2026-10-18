@@ -57,13 +57,13 @@ Repeat for `preview`, and for `development` if wanted. `apps/mobile/.env.example
 5. Decide who may run `eas update --channel production`, and roll back with `eas update:republish`.
 
 ## Sentry
-- **Off without a DSN:** `initMobileSentry()` returns before `require("@sentry/react-native")`. It also returns when Settings > **Send crash reports** is off (on by default; turning it off closes the client right away).
+- **Off without a DSN:** `initMobileSentry()` returns before `require("@sentry/react-native")`. It also returns when Settings > **Send crash reports** is off (off by default; opt-in; turning it off closes the client right away).
 - Dev builds never send (`enabled: !__DEV__`). Events carry `environment` (from `EXPO_PUBLIC_APP_ENV`), `release` (`app.cardflow.mobile@<version>`) and `dist` (build number).
 - **Scrubbing:** `sendDefaultPii: false`; no screenshots, view hierarchy, replay, tracing or failed-request capture. `beforeSend` runs `scrubSentryEvent`, which drops:
   - request bodies, cookies, and the `Authorization` and `X-CardFlow-App-Key` headers;
   - emails, IP addresses, bearer tokens, and JWT-like or long base64 blobs, including ones embedded in longer strings;
   - token/code/password/key query values, local photo URIs, and any key ending in `token`, `secret`, `password` or `apiKey`/`api_key`.
-- **Consent:** crash reports are **not** tied to the analytics opt-in (existing rule, PRIVACY_DATA_MAP §14). Sean may still choose opt-in instead; that's a one-line change (`CRASH_REPORTS_DEFAULT_ON` in `packages/shared/src/crash-reports.ts`) plus the privacy draft.
+- **Consent:** crash reports are **not** tied to the analytics opt-in (existing rule, PRIVACY_DATA_MAP §14). They are **opt-in** (`CRASH_REPORTS_DEFAULT_ON = false` in `packages/shared/src/crash-reports.ts`); Sentry is not initialized until the user turns them on.
 - **`SENTRY_DISABLE_AUTO_UPLOAD=true`** is set in the preview and production eas.json env, so EAS builds don't try to upload source maps without credentials and fail. Remove it once `SENTRY_AUTH_TOKEN` (plus `SENTRY_ORG` and `SENTRY_PROJECT`) is an EAS **secret**.
 
 ### Sentry dashboard (Sean, once per project: cardflow-api and cardflow-mobile)
@@ -88,7 +88,7 @@ Repeat for `preview`, and for `development` if wanted. `apps/mobile/.env.example
   - Grade history keys on the phone are found from an on-device list of item IDs the phone has seen (`cardflow-item-index.json`, IDs only), plus the server's list when it still answers, so a failed list can't leave history behind.
   - It deletes on the server first. Only after that succeeds (or the server answers `410`/`401`) does it wipe the phone: write queue, scan queue and its photos, grade-flow photo files, grade flow state, on-phone grade history, query cache, analytics install ID and session.
   - If a step fails, the screen says so and suggests reinstalling.
-- **Not covered:** photos CardSight already received (if the user allowed CardSight) are governed by CardSight's terms. PokéCollector's own pre-upgrade SQL dumps (`/app/backups`, `PRE_UPGRADE_BACKUP_KEEP`) keep deleted cards until they rotate out; set the keep count so that fits the backup window in the privacy policy.
+- **Not covered:** photos CardSight already received (if the user allowed CardSight) are governed by CardSight's terms. PokéCollector's own pre-upgrade SQL dumps (`/app/backups`, `PRE_UPGRADE_BACKUP_KEEP`) keep deleted cards until they rotate out; set the keep count so deleted cards rotate out within the 90-day backup window in the privacy policy.
 
 ## App Store Connect (once the Apple account exists)
 - **Age rating:** the **18+** rating is set in App Store Connect (App Information > Age Rating, override to the higher rating after answering the questionnaire truthfully). It isn't a build setting. See APP_REVIEW_NOTES.md.
@@ -231,7 +231,8 @@ Read from the pinned `ghcr.io/git-romer/pokecollector-backend:1.51.0` source (un
   logins a minute. Check whether `X-Forwarded-For` changes the key and that the limits match.
 - **Retention:** `DELETE /api/auth/users/{id}` deletes the user's rows, but PokéCollector keeps
   automatic pre-upgrade SQL dumps in `/app/backups` (newest `PRE_UPGRADE_BACKUP_KEEP`, default
-  10) and manual backups. Those keep frozen and deleted users' cards until they rotate out.
+  10) and manual backups. Those keep frozen and deleted users' cards until they rotate out;
+  size `PRE_UPGRADE_BACKUP_KEEP` so that fits the 90-day backup window in the privacy policy.
 - **`GET /api/collection/user/{user_id}` exposes other users:** yes, in the source any signed-in
   user can read any active user's (non-custom) collection by numeric ID. CardFlow never calls it
   and never gives users a PokéCollector token, but a leaked per-user token could enumerate others.

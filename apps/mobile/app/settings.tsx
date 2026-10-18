@@ -119,7 +119,7 @@ export default function SettingsScreen() {
 
         <JobRow label="Usage analytics" onPress={() => router.push("/analytics")} />
 
-        {/* Policy Reviewer (P4): on by default, gates Sentry; independent of Usage analytics. */}
+        {/* Policy Reviewer (P4): off by default (opt-in), gates Sentry; independent of Usage analytics. */}
         <JobRow label={CRASH_REPORTS_COPY.label} onPress={() => router.push("/crash-reports")} />
 
         {/* P4: in-app account deletion (Apple 5.1.1(v)). Guests can delete their guest data too. */}

@@ -597,6 +597,22 @@ export const pokecollectorPendingDeletions = sqliteTable("pokecollector_pending_
   lastResult: text("last_result"),
 });
 
+/**
+ * Deleted-account allowance tombstone: HMAC-SHA256(email, CARD_FLOW_SERVER_PEPPER) plus this
+ * month's used pre-grade estimates. Kept 90 days so a re-sign-up can't reset the free allowance.
+ * No plaintext email.
+ */
+export const allowanceTombstones = sqliteTable(
+  "allowance_tombstones",
+  {
+    emailHmac: text("email_hmac").primaryKey(),
+    periodKey: text("period_key").notNull(),
+    used: integer("used").notNull(),
+    deletedAt: text("deleted_at").notNull(),
+  },
+  (table) => [index("allowance_tombstones_deleted_at_idx").on(table.deletedAt)],
+);
+
 /** Backend review M3: persisted Idempotency-Key results for queued writes (24 h). */
 export const idempotencyKeys = sqliteTable(
   "idempotency_keys",
@@ -639,6 +655,7 @@ export const schema = {
   accountDeletionAudit,
   northStarWeeklyTotals,
   pokecollectorPendingDeletions,
+  allowanceTombstones,
   cardExternalIds,
   crmScans,
   crmConfirmations,
