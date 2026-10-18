@@ -13,6 +13,7 @@ export interface CardTileProps {
   targetMaxBuyDisplay?: string | null;
   hasDraft?: boolean;
   showDraftCta?: boolean;
+  detailsNeeded?: boolean;
   onPress?: () => void;
 }
 
@@ -27,6 +28,7 @@ export function CardTile({
   targetMaxBuyDisplay,
   hasDraft = false,
   showDraftCta = false,
+  detailsNeeded = false,
   onPress,
 }: CardTileProps) {
   if (placeholder) {
@@ -47,12 +49,21 @@ export function CardTile({
         : "Max buy"
       : allInAmount
         ? `$${allInAmount}`
-        : null;
+        : targetMaxBuyDisplay
+          ? `Max ${targetMaxBuyDisplay}`
+          : null;
   const showDraft = intent === "purchased" && (hasDraft || showDraftCta);
 
   return (
     <Pressable
-      accessibilityLabel={[name, numberLine, statusLabel, valueLabel, showDraft ? "Draft" : null]
+      accessibilityLabel={[
+        name,
+        numberLine,
+        statusLabel,
+        valueLabel,
+        detailsNeeded ? "Details needed" : null,
+        showDraft ? "Draft" : null,
+      ]
         .filter(Boolean)
         .join(", ")}
       accessibilityRole={onPress ? "button" : undefined}
@@ -86,6 +97,7 @@ export function CardTile({
         <Text numberOfLines={1} style={styles.price}>
           {valueLabel ?? numberLine}
         </Text>
+        {detailsNeeded ? <Text style={styles.detailsNeeded}>Details needed</Text> : null}
         {showDraft ? <Text style={styles.draft}>Draft</Text> : null}
       </View>
     </Pressable>
@@ -151,6 +163,10 @@ const styles = StyleSheet.create({
     ...type.price,
   },
   draft: {
+    color: colors.accent,
+    ...type.caption,
+  },
+  detailsNeeded: {
     color: colors.accent,
     ...type.caption,
   },

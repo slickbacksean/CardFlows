@@ -1,36 +1,47 @@
+import { AGE_GATE_VERSION, BATCH_GRADE_HEADER, EMAIL_UNVERIFIED_CODE, EMAIL_VERIFICATION_COPY, PREMIUM_REQUIRED_CODE, SIGNUP_REQUIRED_CODE, isPremiumFeature, OUT_OF_GRADES_CODE, pregradeFailureMessage, quotaExhaustedMessage, type PremiumFeature, type SignupReason } from "@cardflow/shared";
 import {
   CARD_FLOW_REQUEST_TIMEOUT_MS,
   cardFlowHttpErrorMessage,
   cardFlowUnreachableMessage,
   resolveClientApiUrl,
   emptySlabEstimate,
+  GRADE_QUOTA_COPY,
   PREGRADE_DETECT_UNAVAILABLE_MESSAGE,
   PREGRADE_UNAVAILABLE_MESSAGE,
   unavailableGradeEstimate,
+  pollGradeJob,
+  GradeJobCancelled,
+  GradeJobError,
+  GRADE_JOB_POLL_TIMEOUT_MS,
+  type GradeJobView,
   LOCKED_DISPLAY_CURRENCY,
   type CaptureMethod,
-  type CardFlowCanonicalCard,
   type CardFlowGradeEstimate,
-  type CardFlowHealth,
-  type CardFlowPortfolioSummary,
-  type CardFlowPriceEstimate,
-  type ClipboardExport,
-  type CostToAskSpread,
   type CardFlowSlabEstimate,
   type DetectCropResult,
   type PhotoPregradeResult,
-  type GradingReturnedCopy,
-  type GradingSubmittedCopy,
-  type InvitedIdentity,
-  type ListingDraft,
-  type LiveOverlayGuess,
-  type LiveVideoIdentityPlatform,
-  type LiveVideoIdentityResult,
-  type MaxBuyPreferences,
-  type RecognitionConfidence,
+  type GradeQuotaSnapshot,
   type RecognitionScenario,
+  apiContract,
+  buildPath,
+  buildQuery,
+  checkRequestBody,
+  checkResponse,
+  type ApiRoute,
+  type BodyOf,
+  type DraftView,
+  type InventoryItem,
+  type QueryOf,
+  type ResponseOf,
+  type ListingDraft,
+  type LiveVideoIdentityPlatform,
+  type MaxBuyPreferences,
+  type PortfolioHistoryRange,
+  type RecognitionConfidence,
+  type ScanImageMimeType,
 } from "@cardflow/shared";
 import { Platform } from "react-native";
+import { createRequestId, rememberRequestId } from "./request-id";
 import { isPhysicalRuntime } from "./runtime-host";
 import { peekSessionToken, waitForSessionRestore } from "./session-token";
 
@@ -50,8 +61,16 @@ export function apiUrl(): string {
   });
 }
 
-const SCAN_IMAGE_MIME_TYPES = ["image/jpeg", "image/png", "image/webp"] as const;
-export type ScanImageMimeType = (typeof SCAN_IMAGE_MIME_TYPES)[number];
+export type {
+  CatalogSearchResponse,
+  ConfirmationRecord,
+  DraftView,
+  InventoryItem,
+  PortfolioHistoryPoint,
+  PortfolioHistoryRange,
+  ScanImageMimeType,
+  ScanRecord,
+} from "@cardflow/shared";
 
 function normalizeScanImageMime(value: string | null | undefined): ScanImageMimeType | null {
   if (!value) return null;
@@ -77,14 +96,14 @@ function stillFileName(mimeType: ScanImageMimeType): string {
 }
 
 export function scanImageUri(scanId: string): string {
-  return `${apiUrl()}/v1/scans/${scanId}/image`;
+  return `${apiUrl()}${buildPath(apiContract.getScanImage.path, { scanId })}`;
 }
 
 export function gradePhotoUri(
   inventoryItemId: string,
   side: "front" | "back",
 ): string {
-  return `${apiUrl()}/v1/inventory/${inventoryItemId}/grade-photos/${side}`;
+  return `${apiUrl()}${buildPath(apiContract.getGradePhoto.path, { inventoryItemId, side })}`;
 }
 
 export function firstPartyStillSource(uri: string): { uri: string; headers?: Record<string, string> } {
@@ -101,106 +120,12 @@ function isLocalGradeStillUri(uri: string): boolean {
   return !/^https?:\/\//i.test(uri);
 }
 
-export interface ScanRecord {
-  scanId: string;
-  userId: string;
-  captureMethod: CaptureMethod;
-  scenario: RecognitionScenario;
-  preInventoryState: string;
-  cardflowCardId: string | null;
-  confirmationId: string | null;
-  inventoryItemId: string | null;
-  imageStorageRef: string | null;
-  imageMimeType: ScanImageMimeType | null;
-  recognition: {
-    ok: boolean;
-    detections: Array<{
-      name: string | null;
-      setName: string | null;
-      number: string | null;
-      confidence: string;
-      candidates: Array<{
-        name: string | null;
-        setName: string | null;
-        number: string | null;
-        vendorCardId: string | null;
-      }>;
-    }>;
-    error: { code: string; message: string; retryable: boolean } | null;
-  };
-  mapping: {
-    ok: boolean;
-    confidence: string;
-    status: string;
-    tcgdexId: string | null;
-    cardflowCardId: string | null;
-    matchedOn: string[];
-    canonicalCard: CardFlowCanonicalCard | null;
-    candidates: CardFlowCanonicalCard[];
-    userConfirmation: { recommendedUx: string };
-    error: { message: string } | null;
-  };
-}
-
-export interface ConfirmationRecord {
-  confirmationId: string;
-  scanId: string;
-  cardflowCardId: string;
-  tcgdexId: string;
-  selectedVariant: string | null;
-  matchMethod: string;
-}
-
-export interface InventoryItem {
-  inventoryItemId: string;
-  userId: string;
-  cardflowCardId: string;
-  scanId?: string | null;
-  imageStorageRef?: string | null;
-  gradePhotos?: { front: boolean; back: boolean } | null;
-  intent: "purchased" | "watchlist";
-  workflowState: string;
-  quantity: number | null;
-  tags: string[];
-  selectedVariant?: string | null;
-  condition?: string | null;
-  referencePriceAmount: string | null;
-  targetMaxBuyAmount: string | null;
-  purchase: {
-    costBasis: { allInTotal: string; purchasePrice: string };
-    maxBuy: { maxBuyAmount: string | null; display: string };
-  } | null;
-  card?: {
-    name: string;
-    setName: string;
-    localId: string;
-    tcgdexId: string;
-    language?: string;
-    imageUrl?: string | null;
-  } | null;
-  draft?: { draftId: string; status: string; title?: string | null } | null;
-  createdAt: string;
-  readOnly?: boolean;
-}
-
-export interface DraftView {
-  ok: true;
-  draft: ListingDraft;
-  costToAsk: CostToAskSpread | null;
-  allInTotal?: string | null;
-  readyForReview: {
-    required: string[];
-    missing: string[];
-    canMark: boolean;
-  };
-  keywordChips?: string[];
-  created?: boolean;
-}
-
 interface HttpResult {
   ok: boolean;
   status: number;
   text: () => Promise<string>;
+  /** Read for Retry-After (busy vs out of allowance). */
+  headers?: { get(name: string): string | null };
 }
 
 /**
@@ -239,6 +164,7 @@ function postNativeForm(
         ok: status >= 200 && status < 300,
         status,
         text: async () => xhr.responseText ?? "",
+        headers: { get: (name: string) => xhr.getResponseHeader(name) },
       });
     };
     xhr.onerror = () => {
@@ -263,7 +189,15 @@ function postNativeForm(
 
 function unreachableError(error: unknown): Error {
   const detail = error instanceof Error ? error.message.trim() : "";
-  return new Error(cardFlowUnreachableMessage(__DEV__ ? `${apiUrl()} ${detail}`.trim() : null));
+  const wrapped = new Error(cardFlowUnreachableMessage(__DEV__ ? `${apiUrl()} ${detail}`.trim() : null));
+  (wrapped as Error & { unreachable?: boolean }).unreachable = true;
+  return wrapped;
+}
+
+/** HTTP status of a failed CardFlow call, or null when the server was never reached. */
+export function apiErrorStatus(error: unknown): number | null {
+  const status = (error as { status?: unknown } | null)?.status;
+  return typeof status === "number" ? status : null;
 }
 
 /**
@@ -275,7 +209,7 @@ const GRADE_PREGRADE_TIMEOUT_MS = 150_000;
 
 async function request<T>(
   path: string,
-  init?: RequestInit & { timeoutMs?: number },
+  init?: RequestInit & { timeoutMs?: number; extraHeaders?: Record<string, string> },
 ): Promise<T> {
   await waitForSessionRestore();
   const isFormData =
@@ -285,6 +219,12 @@ async function request<T>(
   if (!isFormData) headers["Content-Type"] = "application/json";
   const token = peekSessionToken();
   if (token) headers.Authorization = `Bearer ${token}`;
+  const appKey = process.env.EXPO_PUBLIC_CARD_FLOW_APP_KEY?.trim();
+  if (appKey) headers["X-CardFlow-App-Key"] = appKey;
+  const requestId = createRequestId();
+  headers["x-request-id"] = requestId;
+  if (init?.extraHeaders) Object.assign(headers, init.extraHeaders);
+  rememberRequestId(requestId);
 
   const url = `${apiUrl()}${path}`;
   const controller = new AbortController();
@@ -326,9 +266,96 @@ async function request<T>(
     }
   }
   if (!response.ok) {
+    // Sean: pre-grade estimates need a verified email; the app opens the code screen.
+    if (response.status === 403 && data.error === EMAIL_UNVERIFIED_CODE) {
+      const unverified = new Error(EMAIL_VERIFICATION_COPY.required) as Error & { status?: number; emailUnverified?: boolean };
+      unverified.status = 403;
+      unverified.emailUnverified = true;
+      emailUnverifiedListener?.();
+      throw unverified;
+    }
     const error = new Error(cardFlowHttpErrorMessage(response.status, data.error));
-    (error as Error & { status?: number }).status = response.status;
-    throw error;
+    const extra = error as Error & {
+      status?: number;
+      quota?: GradeQuotaSnapshot;
+      code?: string;
+      userMessage?: string;
+      retryAfterSeconds?: number;
+    };
+    extra.status = response.status;
+    // P5 (Community + UX reviews): the screen copy keys off the server's code, never its text.
+    const body = data as { code?: unknown; error?: unknown; userFacing?: unknown };
+    if (typeof body.code === "string") extra.code = body.code;
+    else if (typeof body.error === "string" && /^[a-z][a-z0-9_]*$/.test(body.error)) extra.code = body.error;
+    // Only text the API explicitly marked as written for people is ever shown as-is.
+    if (body.userFacing === true && typeof body.error === "string" && body.error.trim()) {
+      extra.userMessage = body.error.trim();
+    }
+    const retryAfter = Number(response.headers?.get("retry-after") ?? "");
+    if (Number.isFinite(retryAfter) && retryAfter > 0) extra.retryAfterSeconds = retryAfter;
+    const quota = (data as { quota?: GradeQuotaSnapshot }).quota;
+    if (quota) extra.quota = quota;
+    // D14: premium-only feature.
+    const premium = data as { code?: unknown; feature?: unknown };
+    if (response.status === 403 && premium.code === PREMIUM_REQUIRED_CODE && isPremiumFeature(premium.feature)) {
+      (extra as Error & { premiumRequired?: PremiumFeature }).premiumRequired = premium.feature;
+    }
+    // Browse-only guests (Sean, Oct 17): any scan, grade or save needs sign-up.
+    const signup = data as { code?: unknown; reason?: unknown };
+    if (response.status === 403 && signup.code === SIGNUP_REQUIRED_CODE) {
+      const reason: SignupReason =
+        signup.reason === "scan" || signup.reason === "grade" || signup.reason === "cardsight" ? signup.reason : "save";
+      (extra as Error & { signupRequired?: SignupReason }).signupRequired = reason;
+      notifySignupRequired(reason);
+    }
+    throw extra;
+  }
+  return data;
+}
+
+type CallInput<R extends ApiRoute> = {
+  params?: Record<string, string>;
+  query?: QueryOf<R>;
+  body?: BodyOf<R>;
+  form?: FormData;
+  timeoutMs?: number;
+  signal?: AbortSignal;
+  /** P1-09: replays of a queued write reuse the same key so the server makes one row. */
+  idempotencyKey?: string;
+  /** Extra request headers (e.g. the batch marker). */
+  headers?: Record<string, string>;
+};
+
+/**
+ * The typed client (P1-01). Every CardFlow API call goes through here: the
+ * path, method and response type come from `apiContract` in @cardflow/shared.
+ * The response is checked against the contract in development; a mismatch is
+ * logged, never thrown, and the original data is returned unchanged.
+ */
+export async function callApi<R extends ApiRoute>(
+  route: R,
+  input: CallInput<R> = {},
+): Promise<ResponseOf<R>> {
+  const path = `${buildPath(route.path, input.params ?? {})}${buildQuery(
+    input.query as Record<string, unknown> | undefined,
+  )}`;
+  if (__DEV__ && input.body !== undefined) {
+    const checked = checkRequestBody(route, input.body);
+    if (!checked.ok) console.warn(`[contract] ${route.method} ${route.path} request: ${checked.issues}`);
+  }
+  const init: RequestInit & { timeoutMs?: number; extraHeaders?: Record<string, string> } = {
+    method: route.method,
+  };
+  if (input.headers) init.extraHeaders = { ...input.headers };
+  if (input.idempotencyKey) init.extraHeaders = { ...init.extraHeaders, "Idempotency-Key": input.idempotencyKey };
+  if (input.form) init.body = input.form;
+  else if (input.body !== undefined) init.body = JSON.stringify(input.body);
+  if (input.timeoutMs !== undefined) init.timeoutMs = input.timeoutMs;
+  if (input.signal) init.signal = input.signal;
+  const data = await request<ResponseOf<R>>(path, init);
+  if (__DEV__) {
+    const checked = checkResponse(route, 200, data);
+    if (!checked.ok) console.warn(`[contract] ${route.method} ${route.path} response: ${checked.issues}`);
   }
   return data;
 }
@@ -369,6 +396,8 @@ export async function createScan(input: {
   scenario?: RecognitionScenario;
   imageUri?: string | null;
   imageMimeType?: string | null;
+  /** P1-10: replayed offline scans reuse one key so the server makes one scan. */
+  idempotencyKey?: string;
 }) {
   if (input.imageUri) {
     const mime =
@@ -379,63 +408,33 @@ export async function createScan(input: {
     form.append("captureMethod", input.captureMethod);
     if (input.scenario) form.append("scenario", input.scenario);
     await appendScanStill(form, input.imageUri, mime);
-    return request<{ ok: true; scan: ScanRecord }>("/v1/scans", {
-      method: "POST",
-      body: form,
-    });
+    return callApi(apiContract.createScan, { form, idempotencyKey: input.idempotencyKey });
   }
-  return request<{ ok: true; scan: ScanRecord }>("/v1/scans", {
-    method: "POST",
-    body: JSON.stringify({
+  return callApi(apiContract.createScan, {
+    body: {
       captureMethod: input.captureMethod,
       ...(input.scenario ? { scenario: input.scenario } : {}),
-    }),
+    },
   });
 }
 
 export function getScan(scanId: string) {
-  return request<{ ok: true; scan: ScanRecord }>(`/v1/scans/${scanId}`);
+  return callApi(apiContract.getScan, { params: { scanId } });
 }
 
 export function rejectScan(scanId: string) {
-  return request<{ ok: true; scan: ScanRecord }>(`/v1/scans/${scanId}/reject`, {
-    method: "POST",
-  });
+  return callApi(apiContract.rejectScan, { params: { scanId } });
 }
 
 export function confirmScan(
   scanId: string,
-  input: { tcgdexId: string; selectedVariant?: string | null },
+  input: { tcgdexId: string; selectedVariant?: string | null; via?: "manual_search" },
 ) {
-  return request<{
-    ok: true;
-    scan: ScanRecord;
-    confirmation: ConfirmationRecord;
-    canonicalCard: CardFlowCanonicalCard;
-  }>(`/v1/scans/${scanId}/confirm`, {
-    method: "POST",
-    body: JSON.stringify(input),
-  });
+  return callApi(apiContract.confirmScan, { params: { scanId }, body: input });
 }
 
 export function getCard(cardflowCardId: string) {
-  return request<{ ok: true; canonicalCard: CardFlowCanonicalCard }>(
-    `/v1/cards/${cardflowCardId}`,
-  );
-}
-
-export interface CatalogSearchResponse {
-  ok: boolean;
-  provider: "tcgdex" | "mock" | "pokecollector";
-  language: "en";
-  query: { set: string | null; number: string | null; name: string | null };
-  userConfirmationRequired: true;
-  autoConfirm: false;
-  nameOnly: boolean;
-  cards: CardFlowCanonicalCard[];
-  cached: boolean;
-  notice: string | null;
-  error: { code: string; message: string; retryable: boolean } | null;
+  return callApi(apiContract.getCard, { params: { cardflowCardId } });
 }
 
 export function searchCatalog(input: {
@@ -443,37 +442,48 @@ export function searchCatalog(input: {
   number?: string;
   name?: string;
 }) {
-  const params = new URLSearchParams();
-  if (input.set?.trim()) params.set("set", input.set.trim());
-  if (input.number?.trim()) params.set("number", input.number.trim());
-  if (input.name?.trim()) params.set("name", input.name.trim());
-  return request<CatalogSearchResponse>(`/v1/catalog/search?${params.toString()}`);
+  return callApi(apiContract.searchCatalog, {
+    query: {
+      set: input.set?.trim() || undefined,
+      number: input.number?.trim() || undefined,
+      name: input.name?.trim() || undefined,
+    },
+  });
 }
 
 export function getPriceEstimate(tcgdexId: string, variant?: string) {
-  const params = new URLSearchParams();
-  if (variant?.trim()) params.set("variant", variant.trim());
-  const query = params.toString();
-  return request<{
-    ok: true;
-    provider: "off" | "pokecollector";
-    estimate: CardFlowPriceEstimate;
-  }>(`/v1/pricing/cards/${encodeURIComponent(tcgdexId)}${query ? `?${query}` : ""}`);
+  return callApi(apiContract.getPriceEstimate, {
+    params: { tcgdexId },
+    query: { variant: variant?.trim() || undefined },
+  });
+}
+
+/** P1-12: your own reference prices for one card. */
+export function listUserPriceSnapshots(tcgdexId: string, variant?: string | null) {
+  return callApi(apiContract.listUserPriceSnapshots, {
+    params: { tcgdexId },
+    query: { variant: variant?.trim() || undefined },
+  });
+}
+
+export function saveUserPriceSnapshot(tcgdexId: string, amount: string, variant?: string | null) {
+  return callApi(apiContract.saveUserPriceSnapshot, {
+    params: { tcgdexId },
+    body: { amount, variant: variant ?? null },
+  });
 }
 
 export function getLiveOverlayGuess(
   tcgdexId: string,
   confidence?: RecognitionConfidence | null,
 ) {
-  const params = new URLSearchParams();
-  if (confidence) params.set("confidence", confidence);
-  const query = params.toString();
-  return request<{ ok: true; guess: LiveOverlayGuess }>(
-    `/v1/livestream/guesses/${encodeURIComponent(tcgdexId)}${query ? `?${query}` : ""}`,
-  );
+  return callApi(apiContract.getLiveOverlayGuess, {
+    params: { tcgdexId },
+    query: { confidence: confidence || undefined },
+  });
 }
 
-/** Live-video metadata only. Never a page jpeg, never Capture `/v1/scans`. */
+/** Live-video metadata only. Never a page jpeg, never the Capture scan upload. */
 export function identifyLivestreamFrame(input: {
   source: "live_video";
   platform: LiveVideoIdentityPlatform;
@@ -481,54 +491,128 @@ export function identifyLivestreamFrame(input: {
   classifiedTcgdexId?: string | null;
   identityHash?: string | null;
   identityCropJpeg?: string | null;
+  identityCropQuad?: number[] | null;
   videoFrameJpeg?: string | null;
 }) {
-  return request<{ ok: true; identity: LiveVideoIdentityResult }>("/v1/livestream/identify", {
-    method: "POST",
-    body: JSON.stringify({
+  return callApi(apiContract.identifyLivestreamFrame, {
+    body: {
       source: "live_video",
       platform: input.platform,
       cardDetected: input.cardDetected,
       classifiedTcgdexId: input.classifiedTcgdexId ?? null,
       identityHash: input.identityHash ?? null,
       identityCropJpeg: input.identityCropJpeg ?? null,
+      identityCropQuad: input.identityCropQuad ?? null,
       videoFrameJpeg: input.videoFrameJpeg ?? null,
-    }),
+    },
   });
 }
 
 export function listInventory() {
-  return request<{ ok: true; items: InventoryItem[] }>("/v1/inventory");
+  return callApi(apiContract.listInventory);
 }
 
 export function getPortfolio() {
-  return request<{
-    ok: true;
-    currency: "USD";
-    portfolio: CardFlowPortfolioSummary;
-  }>("/v1/portfolio");
-}
-
-export type PortfolioHistoryRange = "7d" | "30d" | "90d" | "all";
-
-/** One recorded day of the collection estimate. Real snapshots only, never backfilled. */
-export interface PortfolioHistoryPoint {
-  date: string;
-  amountCents: number;
-  amount: string;
-  pricedCopies: number;
-  totalCopies: number;
-  recordedAt: string;
+  return callApi(apiContract.getPortfolio);
 }
 
 export function getPortfolioHistory(range: PortfolioHistoryRange = "all") {
-  return request<{
-    ok: true;
-    currency: "USD";
-    range: PortfolioHistoryRange;
-    today: string;
-    points: PortfolioHistoryPoint[];
-  }>(`/v1/portfolio/history?range=${range}`);
+  return callApi(apiContract.getPortfolioHistory, { query: { range } });
+}
+
+/** P1-07: async pre-grade jobs when `EXPO_PUBLIC_CARD_FLOW_GRADE_JOBS=1` (off by default). */
+export function gradeJobsEnabled(): boolean {
+  return process.env.EXPO_PUBLIC_CARD_FLOW_GRADE_JOBS === "1";
+}
+
+export function getGradeJob(jobId: string) {
+  return callApi(apiContract.getGradeJob, { params: { jobId } });
+}
+
+export interface GradeEstimateRunOptions {
+  /** Wait card updates (queued/running/waiting/done/failed). */
+  onJobUpdate?: (job: GradeJobView) => void;
+  /** Consecutive failed polls (offline row after 2). */
+  onPollError?: (consecutiveFailures: number) => void;
+  /** Cancel: stops polling; the server job expires on its own. */
+  signal?: AbortSignal;
+  /** Batch screen: the API refuses this for free accounts (403 premium_required). */
+  batch?: boolean;
+}
+
+const BUSY_STATUSES = new Set([429, 503]);
+const DEFAULT_BUSY_WAIT_S = 10;
+
+function retryAfterOf(error: unknown): number | null {
+  const raw = (error as { retryAfterSeconds?: unknown; retryAfter?: unknown } | null) ?? null;
+  const value = Number(raw?.retryAfterSeconds ?? raw?.retryAfter);
+  return Number.isFinite(value) && value > 0 ? value : null;
+}
+
+function abortableSleep(ms: number, signal?: AbortSignal) {
+  return new Promise<void>((resolve) => {
+    const t = setTimeout(resolve, ms);
+    signal?.addEventListener("abort", () => {
+      clearTimeout(t);
+      resolve();
+    });
+  });
+}
+
+/**
+ * Runs `attempt`; a 429/503 (rate limit or queue full) becomes the wait state with the server's
+ * Retry-After, then retries until the poll timeout. Never "unavailable" just because it's busy.
+ */
+async function withBusyWait<T>(attempt: () => Promise<T>, options: GradeEstimateRunOptions): Promise<T> {
+  const deadline = Date.now() + GRADE_JOB_POLL_TIMEOUT_MS;
+  for (;;) {
+    if (options.signal?.aborted) throw new GradeJobCancelled();
+    try {
+      return await attempt();
+    } catch (error) {
+      const status = apiErrorStatus(error);
+      if (status === null || !BUSY_STATUSES.has(status) || Date.now() >= deadline) throw error;
+      const wait = retryAfterOf(error) ?? DEFAULT_BUSY_WAIT_S;
+      options.onJobUpdate?.({ jobId: "", status: "waiting", retryAfterSeconds: wait, estimate: null, error: null, requestId: null });
+      await abortableSleep(wait * 1000, options.signal);
+    }
+  }
+}
+
+/** Polls with backoff; survives backgrounding because the job lives on the server. */
+async function runGradeJob(
+  create: () => Promise<{ job: { jobId: string } }>,
+  options: GradeEstimateRunOptions,
+): Promise<CardFlowGradeEstimate | "jobs_off"> {
+  for (let lost = 0; ; lost += 1) {
+    let created: { job: { jobId: string } };
+    try {
+      created = await withBusyWait(create, options);
+    } catch (error) {
+      if (apiErrorStatus(error) === 404) return "jobs_off"; // Server flag off: use the sync route.
+      throw error;
+    }
+    options.onJobUpdate?.(created.job as unknown as GradeJobView);
+    const outcome = await pollGradeJob(
+      async () => (await getGradeJob(created.job.jobId)).job as unknown as GradeJobView,
+      {
+        onUpdate: options.onJobUpdate,
+        onPollError: options.onPollError,
+        isNotFound: (error) => apiErrorStatus(error) === 404,
+        signal: options.signal,
+      },
+    );
+    if (outcome.kind === "aborted") throw new GradeJobCancelled();
+    if (outcome.kind === "timeout") throw new GradeJobError("timeout");
+    // 404 mid-poll: job expired or the API restarted. Retry the grade once, fast.
+    if (outcome.kind === "not_found") {
+      if (lost >= 1) throw new GradeJobError("not_found");
+      continue;
+    }
+    const job = outcome.job;
+    if (job.status === "done" && job.estimate) return job.estimate;
+    throw new GradeJobError("failed", job.retryAfterSeconds);
+  }
 }
 
 export async function requestGradeEstimate(
@@ -540,12 +624,14 @@ export async function requestGradeEstimate(
     backMimeType?: string | null;
     reestimate?: boolean;
   },
+  options: GradeEstimateRunOptions = {},
 ): Promise<CardFlowGradeEstimate> {
   try {
     const frontUri = isLocalGradeStillUri(input?.frontUri ?? "") ? input?.frontUri : null;
     const backUri = isLocalGradeStillUri(input?.backUri ?? "") ? input?.backUri : null;
+    let form: FormData | null = null;
     if (frontUri || backUri) {
-      const form = new FormData();
+      form = new FormData();
       if (input?.reestimate) form.append("reestimate", "true");
       if (frontUri) {
         const mime =
@@ -561,26 +647,30 @@ export async function requestGradeEstimate(
           "image/jpeg";
         await appendGradeStill(form, "back", backUri, mime);
       }
-      const data = await request<{
-        ok: true;
-        estimate: CardFlowGradeEstimate;
-      }>(`/v1/inventory/${inventoryItemId}/grade-estimate`, {
-        method: "POST",
-        body: form,
-        timeoutMs: GRADE_PREGRADE_TIMEOUT_MS,
-      });
-      return data.estimate;
     }
-    const data = await request<{
-      ok: true;
-      estimate: CardFlowGradeEstimate;
-    }>(`/v1/inventory/${inventoryItemId}/grade-estimate`, {
-      method: "POST",
-      body: JSON.stringify(input?.reestimate ? { reestimate: true } : {}),
-      timeoutMs: GRADE_PREGRADE_TIMEOUT_MS,
-    });
+    const body = input?.reestimate ? { reestimate: true } : {};
+    const headers = options.batch ? { [BATCH_GRADE_HEADER]: "1" } : undefined;
+    if (gradeJobsEnabled()) {
+      const viaJob = await runGradeJob(
+        () =>
+          form
+            ? callApi(apiContract.createGradeJob, { params: { inventoryItemId }, form, headers })
+            : callApi(apiContract.createGradeJob, { params: { inventoryItemId }, body, headers }),
+        options,
+      );
+      if (viaJob !== "jobs_off") return viaJob;
+    }
+    const data = await withBusyWait(
+      () =>
+        form
+          ? callApi(apiContract.requestGradeEstimate, { params: { inventoryItemId }, form, headers, timeoutMs: GRADE_PREGRADE_TIMEOUT_MS })
+          : callApi(apiContract.requestGradeEstimate, { params: { inventoryItemId }, body, headers, timeoutMs: GRADE_PREGRADE_TIMEOUT_MS }),
+      options,
+    );
     return data.estimate;
-  } catch {
+  } catch (error) {
+    // Retryable job errors and Cancel go to the wait card; they are not "unavailable".
+    if (error instanceof GradeJobError || error instanceof GradeJobCancelled) throw error;
     // Network error or timeout: say so. Never a silent "no estimate".
     return unavailableGradeEstimate();
   }
@@ -601,9 +691,8 @@ export async function detectGradePhoto(
   await appendGradeStill(form, "image", uri, mime);
   form.append("side", side);
   try {
-    return await request<DetectCropResult>("/v1/grade/detect", {
-      method: "POST",
-      body: form,
+    return await callApi(apiContract.detectGradePhoto, {
+      form,
       timeoutMs: GRADE_DETECT_TIMEOUT_MS,
     });
   } catch (error) {
@@ -624,20 +713,23 @@ export async function detectGradePhoto(
 export async function requestPhotoPregrade(input: {
   frontUri: string;
   frontMimeType: string | null;
+  frontUploadId?: string | null;
   backUri: string;
   backMimeType: string | null;
+  backUploadId?: string | null;
 }): Promise<PhotoPregradeResult> {
   const form = new FormData();
   const frontMime =
     normalizeScanImageMime(input.frontMimeType) ?? mimeFromUri(input.frontUri) ?? "image/jpeg";
   const backMime =
     normalizeScanImageMime(input.backMimeType) ?? mimeFromUri(input.backUri) ?? "image/jpeg";
-  await appendGradeStill(form, "front", input.frontUri, frontMime);
-  await appendGradeStill(form, "back", input.backUri, backMime);
+  if (input.frontUploadId) form.append("frontUploadId", input.frontUploadId);
+  else await appendGradeStill(form, "front", input.frontUri, frontMime);
+  if (input.backUploadId) form.append("backUploadId", input.backUploadId);
+  else await appendGradeStill(form, "back", input.backUri, backMime);
   try {
-    const data = await request<PhotoPregradeResult>("/v1/grade/pregrade", {
-      method: "POST",
-      body: form,
+    const data = await callApi(apiContract.requestPhotoPregrade, {
+      form,
       timeoutMs: GRADE_PREGRADE_TIMEOUT_MS,
     });
     // 0.0 is grade_card's "nothing measurable", not a grade: never show it.
@@ -646,21 +738,42 @@ export async function requestPhotoPregrade(input: {
     }
     return data;
   } catch (error) {
+    const extra = error as Error & { status?: number; quota?: GradeQuotaSnapshot; code?: string };
+    if (extra.status === 429 && (extra.code === OUT_OF_GRADES_CODE || extra.message === GRADE_QUOTA_COPY.outOfGrades)) {
+      return {
+        ok: false,
+        status: "out_of_grades",
+        code: "OUT_OF_GRADES",
+        message: quotaExhaustedMessage(extra.quota),
+        quota: extra.quota,
+      };
+    }
     return {
       ok: false,
       status: "unavailable",
       code: "UNAVAILABLE",
-      message: error instanceof Error && error.message ? error.message : PREGRADE_UNAVAILABLE_MESSAGE,
+      // UX review P0-3: 404 has fixed copy; nothing raw reaches the screen.
+      message: pregradeFailureMessage(extra, PREGRADE_UNAVAILABLE_MESSAGE),
     };
   }
 }
 
+export function getGradeQuota() {
+  return callApi(apiContract.getGradeQuota);
+}
+
+export function consumeGradeCredits(count = 1) {
+  return callApi(apiContract.consumeGradeCredits, { body: { count } });
+}
+
+/** IAP stub. Real StoreKit is not wired; the server returns a plain "not available" unless the stub flag is on. */
+export function grantGradeCredits(input: { credits?: number; plan?: "free" | "premium" }) {
+  return callApi(apiContract.grantGradeCredits, { body: input });
+}
+
 export async function getSlabEstimates(tcgdexId: string): Promise<CardFlowSlabEstimate> {
   try {
-    const data = await request<{
-      ok: true;
-      estimate: CardFlowSlabEstimate;
-    }>(`/v1/cards/${encodeURIComponent(tcgdexId)}/slab-estimates`);
+    const data = await callApi(apiContract.getSlabEstimates, { params: { tcgdexId } });
     return data.estimate;
   } catch {
     return emptySlabEstimate(tcgdexId);
@@ -668,11 +781,7 @@ export async function getSlabEstimates(tcgdexId: string): Promise<CardFlowSlabEs
 }
 
 export function listGrading() {
-  return request<{
-    ok: true;
-    submitted: GradingSubmittedCopy[];
-    returned: GradingReturnedCopy[];
-  }>("/v1/grading");
+  return callApi(apiContract.listGrading);
 }
 
 export function submitGradingCopy(input: {
@@ -687,23 +796,14 @@ export function submitGradingCopy(input: {
   maxBuyAmount?: string | null;
   estimateJson?: string | null;
 }) {
-  return request<{ ok: true; submitted: GradingSubmittedCopy[] }>("/v1/grading/submitted", {
-    method: "POST",
-    body: JSON.stringify(input),
-  });
+  return callApi(apiContract.submitGradingCopy, { body: input });
 }
 
 export function patchGradingSubmitted(
   inventoryItemId: string,
   patch: { orderNumber?: string; company?: string; status?: "sent" | "at_grader" },
 ) {
-  return request<{ ok: true; submitted: GradingSubmittedCopy[] }>(
-    `/v1/grading/submitted/${encodeURIComponent(inventoryItemId)}`,
-    {
-      method: "PATCH",
-      body: JSON.stringify(patch),
-    },
-  );
+  return callApi(apiContract.patchGradingSubmitted, { params: { inventoryItemId }, body: patch });
 }
 
 export function markGradingReturned(input: {
@@ -711,27 +811,14 @@ export function markGradingReturned(input: {
   certNumber?: string;
   returnedGrade?: string;
 }) {
-  return request<{
-    ok: true;
-    submitted: GradingSubmittedCopy[];
-    returned: GradingReturnedCopy[];
-  }>("/v1/grading/returned", {
-    method: "POST",
-    body: JSON.stringify(input),
-  });
+  return callApi(apiContract.markGradingReturned, { body: input });
 }
 
 export function patchGradingReturned(
   inventoryItemId: string,
   patch: { certNumber?: string; returnedGrade?: string },
 ) {
-  return request<{ ok: true; returned: GradingReturnedCopy[] }>(
-    `/v1/grading/returned/${encodeURIComponent(inventoryItemId)}`,
-    {
-      method: "PATCH",
-      body: JSON.stringify(patch),
-    },
-  );
+  return callApi(apiContract.patchGradingReturned, { params: { inventoryItemId }, body: patch });
 }
 
 export function savePurchased(input: {
@@ -746,40 +833,72 @@ export function savePurchased(input: {
   condition?: string | null;
   selectedVariant?: string | null;
   referencePriceAmount?: string | null;
-}) {
-  return request<{ ok: true; item: InventoryItem }>("/v1/inventory/purchased", {
-    method: "POST",
-    body: JSON.stringify({ ...input, currency: LOCKED_DISPLAY_CURRENCY }),
+}, idempotencyKey?: string) {
+  return callApi(apiContract.savePurchased, {
+    body: { ...input, currency: LOCKED_DISPLAY_CURRENCY },
+    idempotencyKey,
   });
 }
 
-/** Livestream buy: confirm the on-screen guess, then store the cost lines the buyer typed. */
+/** Livestream Purchased tap: identity + local stream context, no cost form. */
 export async function saveLivestreamPurchase(input: {
   tcgdexId: string;
-  purchasePrice: string;
-  purchasedAt: string;
-  shipping?: string;
-  tax?: string;
-  fees?: string;
-  supplies?: string;
-  condition?: string | null;
+  platform?: string | null;
+  streamUrl?: string | null;
   selectedVariant?: string | null;
-}) {
+}, idempotencyKey?: string) {
   const created = await createScan({ captureMethod: "manual_scan" });
   const confirmed = await confirmScan(created.scan.scanId, {
     tcgdexId: input.tcgdexId,
     selectedVariant: input.selectedVariant,
   });
-  return savePurchased({
-    confirmationId: confirmed.confirmation.confirmationId,
-    purchasePrice: input.purchasePrice,
-    purchasedAt: input.purchasedAt,
-    shipping: input.shipping,
-    tax: input.tax,
-    fees: input.fees,
-    supplies: input.supplies,
-    condition: input.condition,
-    selectedVariant: input.selectedVariant,
+  return callApi(apiContract.savePurchased, {
+    body: {
+      confirmationId: confirmed.confirmation.confirmationId,
+      detailsNeeded: true,
+      platform: input.platform,
+      streamUrl: input.streamUrl,
+      selectedVariant: input.selectedVariant,
+    },
+    idempotencyKey,
+  });
+}
+
+/** Reverses a details-needed Purchased write (livestream HUD or Watchlist). */
+export function undoPurchased(inventoryItemId: string) {
+  return callApi(apiContract.deleteInventoryItem, { params: { inventoryItemId } });
+}
+
+/** Reverses a livestream details-needed Purchased write. Leaves no Purchased row. */
+export function undoLivestreamPurchase(inventoryItemId: string) {
+  return undoPurchased(inventoryItemId);
+}
+
+/** One-tap Watchlist → Purchased. Carries identity and Max Buy; price stays optional. */
+export function convertWatchlistToPurchased(inventoryItemId: string, idempotencyKey?: string) {
+  return callApi(apiContract.convertWatchlistToPurchased, { params: { inventoryItemId }, idempotencyKey });
+}
+
+export function completePurchasedDetails(
+  inventoryItemId: string,
+  input: {
+    purchasePrice: string;
+    purchasedAt: string;
+    currency?: string;
+    shipping?: string;
+    tax?: string;
+    fees?: string;
+    supplies?: string;
+    condition?: string | null;
+    selectedVariant?: string | null;
+    referencePriceAmount?: string | null;
+  },
+  idempotencyKey?: string,
+) {
+  return callApi(apiContract.completePurchasedDetails, {
+    params: { inventoryItemId },
+    idempotencyKey,
+    body: { ...input, currency: LOCKED_DISPLAY_CURRENCY },
   });
 }
 
@@ -789,11 +908,8 @@ export function saveWatchlist(input: {
   referencePriceAmount?: string | null;
   targetMaxBuyAmount?: string | null;
   condition?: string | null;
-}) {
-  return request<{ ok: true; item: InventoryItem }>("/v1/inventory/watchlist", {
-    method: "POST",
-    body: JSON.stringify(input),
-  });
+}, idempotencyKey?: string) {
+  return callApi(apiContract.saveWatchlist, { body: input, idempotencyKey });
 }
 
 export const WATCHLIST_DRAFT_PATH = "/draft/watchlist" as const;
@@ -803,14 +919,12 @@ export function isWatchlistDraftBlockedError(error: unknown): boolean {
   return /Purchased only|Save as Purchased first/i.test(message);
 }
 
-export function openOrCreateDraft(inventoryItemId: string) {
-  return request<DraftView>(`/v1/inventory/${inventoryItemId}/drafts`, {
-    method: "POST",
-  });
+export function openOrCreateDraft(inventoryItemId: string): Promise<DraftView> {
+  return callApi(apiContract.openOrCreateDraft, { params: { inventoryItemId } });
 }
 
-export function getDraft(draftId: string) {
-  return request<DraftView>(`/v1/drafts/${draftId}`);
+export function getDraft(draftId: string): Promise<DraftView> {
+  return callApi(apiContract.getDraft, { params: { draftId } });
 }
 
 export function patchDraft(
@@ -824,54 +938,167 @@ export function patchDraft(
     notes: string;
     titleTemplateId: ListingDraft["titleTemplateId"];
   }>,
-) {
-  return request<DraftView>(`/v1/drafts/${draftId}`, {
-    method: "PATCH",
-    body: JSON.stringify(patch),
-  });
+): Promise<DraftView> {
+  return callApi(apiContract.patchDraft, { params: { draftId }, body: patch });
 }
 
-export function markDraftReady(draftId: string) {
-  return request<DraftView>(`/v1/drafts/${draftId}/ready`, { method: "POST" });
+export function markDraftReady(draftId: string): Promise<DraftView> {
+  return callApi(apiContract.markDraftReady, { params: { draftId } });
 }
 
 export function getDraftClipboard(draftId: string) {
-  return request<{ ok: true; clipboard: ClipboardExport }>(
-    `/v1/drafts/${draftId}/clipboard`,
-  );
+  return callApi(apiContract.getDraftClipboard, { params: { draftId } });
+}
+
+/** P1-21 status banners. */
+export function getStatus() {
+  return callApi(apiContract.getStatus);
 }
 
 export function getHealth() {
-  return request<CardFlowHealth>("/health");
+  return callApi(apiContract.getHealth);
 }
 
 export function getIdentity() {
-  return request<{
-    ok: true;
-    identity: InvitedIdentity | null;
-    invitedUsers: InvitedIdentity[];
-  }>("/v1/identity");
+  return callApi(apiContract.getIdentity);
+}
+
+type SignupListener = (reason: SignupReason) => void;
+let signupListener: SignupListener | null = null;
+
+/** D9: the root layout shows the sign-up prompt. Returns an unsubscribe. */
+export function onSignupRequired(listener: SignupListener): () => void {
+  signupListener = listener;
+  return () => {
+    if (signupListener === listener) signupListener = null;
+  };
+}
+
+function notifySignupRequired(reason: SignupReason) {
+  signupListener?.(reason);
+}
+
+/** Sean: CardSight consent (stored on the server with its version). */
+export function getCardSightConsent() {
+  return callApi(apiContract.getCardSightConsent);
+}
+
+export function setCardSightConsent(granted: boolean, version: string) {
+  return callApi(apiContract.setCardSightConsent, { body: granted ? { granted, version } : { granted } });
+}
+
+let emailUnverifiedListener: (() => void) | null = null;
+
+/** The root layout opens the verify-email screen when a pre-grade estimate is refused. */
+export function onEmailUnverified(listener: () => void): () => void {
+  emailUnverifiedListener = listener;
+  return () => {
+    if (emailUnverifiedListener === listener) emailUnverifiedListener = null;
+  };
+}
+
+export function isEmailUnverifiedError(error: unknown): boolean {
+  return Boolean(error && typeof error === "object" && (error as { emailUnverified?: unknown }).emailUnverified === true);
+}
+
+/** Sends a new 6-digit code (one a minute). */
+export function requestEmailVerification() {
+  return callApi(apiContract.requestEmailVerification);
+}
+
+export function confirmEmailVerification(code: string) {
+  return callApi(apiContract.confirmEmailVerification, { body: { code } });
+}
+
+/** Sean (Oct 17): sign-up sends the required 18+ checkbox (never a birth date). */
+export function createAccount(email: string, password: string, ageConfirmed18Plus: boolean) {
+  return callApi(apiContract.createAccount, {
+    body: ageConfirmed18Plus ? { email, password, ageConfirmed18Plus: true, ageGateVersion: AGE_GATE_VERSION } : { email, password },
+  });
+}
+
+/** Whether this account attested 18+ (needed before any CardSight call). */
+export function getAgeConfirmation() {
+  return callApi(apiContract.getAgeConfirmation);
+}
+
+/** Testers and existing accounts: the in-app "I confirm I'm 18 or older." */
+export function confirmAgeOnServer() {
+  return callApi(apiContract.confirmAge, { body: { ageConfirmed18Plus: true, version: AGE_GATE_VERSION } });
+}
+
+/** Forgot password: the answer is the same whether or not the email has an account. */
+export function requestPasswordReset(email: string) {
+  return callApi(apiContract.requestPasswordReset, { body: { email } });
+}
+
+export function confirmPasswordReset(token: string, password: string) {
+  return callApi(apiContract.confirmPasswordReset, { body: { token, password } });
+}
+
+export function signInWithPassword(email: string, password: string) {
+  return callApi(apiContract.signInWithPassword, { body: { email, password } });
+}
+
+export function createGuestSession() {
+  return callApi(apiContract.createGuestSession, {});
 }
 
 export function createSession(inviteCode: string) {
-  return request<{
-    ok: true;
-    token: string;
-    identity: InvitedIdentity;
-    invitedUsers: InvitedIdentity[];
-  }>("/v1/sessions", {
-    method: "POST",
-    body: JSON.stringify({ inviteCode }),
-  });
+  return callApi(apiContract.createSession, { body: { inviteCode } });
+}
+
+/** P2-03 sale records (server, per user). */
+export function listSales() {
+  return callApi(apiContract.listSales);
+}
+
+export function saveSaleRemote(
+  inventoryItemId: string,
+  body: { price: string; fees?: string | null; soldAt?: string; onlyIfMissing?: boolean },
+  idempotencyKey?: string,
+) {
+  return callApi(apiContract.saveSale, { params: { inventoryItemId }, body, idempotencyKey });
+}
+
+export function deleteSaleRemote(inventoryItemId: string, idempotencyKey?: string) {
+  return callApi(apiContract.deleteSale, { params: { inventoryItemId }, idempotencyKey });
+}
+
+/** P2-07 pre-grade estimate history (server records each fresh estimate). */
+/** D14: true when the error is the API's premium_required for that feature. */
+export function isPremiumRequired(error: unknown, feature: PremiumFeature): boolean {
+  return (error as { premiumRequired?: unknown } | null)?.premiumRequired === feature;
+}
+
+/** D14: premium-only gate before a batch pre-grade run. */
+export function startGradeBatch() {
+  return callApi(apiContract.startGradeBatch, {});
+}
+
+export function getGradeHistory(inventoryItemId: string, before?: string) {
+  return callApi(apiContract.getGradeHistory, { params: { inventoryItemId }, ...(before ? { query: { before } } : {}) });
+}
+
+export function importGradeHistory(
+  inventoryItemId: string,
+  entries: Array<{ at: string; overall: number; confidence?: string | null }>,
+  idempotencyKey?: string,
+) {
+  return callApi(apiContract.importGradeHistory, { params: { inventoryItemId }, body: { entries }, idempotencyKey });
 }
 
 export function getPreferences() {
-  return request<{ ok: true; preferences: MaxBuyPreferences }>("/v1/preferences");
+  return callApi(apiContract.getPreferences);
 }
 
 export function patchPreferences(preferences: MaxBuyPreferences) {
-  return request<{ ok: true; preferences: MaxBuyPreferences }>("/v1/preferences", {
-    method: "PATCH",
-    body: JSON.stringify(preferences),
-  });
+  return callApi(apiContract.patchPreferences, { body: preferences });
+}
+
+/** Typed list of every inventory item, for screens that hold one. */
+export type InventoryList = InventoryItem[];
+/** P1-18: sampled on-device timings (no images). */
+export function postPerfTelemetry(batch: import("@cardflow/shared").PerfBatch) {
+  return callApi(apiContract.postPerfTelemetry, { body: batch });
 }

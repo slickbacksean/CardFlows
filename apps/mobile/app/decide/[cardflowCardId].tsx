@@ -1,31 +1,84 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
+import { trackEvent } from "@/lib/product-events";
+import { runQueueableWrite } from "@/lib/write-queue";
 import {
+  MAKE_LISTING_LABEL,
   computeMaxBuy,
   CONDITION_LABELS,
+  CONFIDENCE_SCREEN_LABEL,
+  CONFIRM_TIPS,
+  HOW_THIS_WORKS_OPEN_LABEL,
+  MAX_BUY_ENTER_REFERENCE_COPY,
+  MAX_BUY_YOUR_RULE_LABEL,
+  PREGRADE_COPY,
+  PRICE_CHECKING_COPY,
+  PRICE_REFRESHING_COPY,
+  PRICE_UNAVAILABLE_ENTER_OWN_COPY,
+  WATCHLIST_SAVED_MAX_BUY_META,
+  YOUR_PRICE_INPUT_LABEL,
+  SAVE_YOUR_PRICE_LABEL,
+  priceSnapshotOptions,
+  selectMaxBuyReference,
+  userPriceLabel,
+  priceDisplayState,
+  PRICE_ESTIMATE_SCREEN_LABEL,
+  PRICE_ESTIMATE_UNAVAILABLE_COPY,
+  confidenceWord,
+  formatMaxBuyEstimateMeta,
+  formatPriceEstimateMeta,
   parseDollarsToCents,
+  priceSourceLabel,
+  purchasedFailureMessage,
+  resolvePriceSourceKind,
   type CardFlowCanonicalCard,
   type CardFlowPriceEstimate,
   type MaxBuyPreferences,
 } from "@cardflow/shared";
 import { Image } from "expo-image";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { HowThisWorksSheet } from "@/components/ui/how-this-works-sheet";
+import { playPurchasedSuccessHaptic } from "@/components/ui/hud-bubble";
+import { LabeledFigure } from "@/components/ui/labeled-figure";
+import { MaxBuyBreakdownToggle } from "@/components/ui/max-buy-breakdown";
 import { PrimaryButton } from "@/components/ui/primary-button";
 import { WatchlistSheet } from "@/components/ui/watchlist-sheet";
-import { getCard, getPriceEstimate, savePurchased, saveWatchlist } from "@/lib/api";
+import {
+  getCard,
+  listUserPriceSnapshots,
+  openOrCreateDraft,
+  saveUserPriceSnapshot,
+} from "@/lib/api";
+import { priceQueryOptions } from "@/lib/price-queries";
 import { loadMaxBuyPreferences, peekMaxBuyPreferences } from "@/lib/preferences";
 import { colors, space } from "@/lib/theme";
 import { defaultVariantId, variantOptions } from "@/lib/variants";
 
 export default function DecideScreen() {
   const router = useRouter();
-  const { cardflowCardId, confirmationId, intent, referencePriceAmount } = useLocalSearchParams<{
+  const {
+    cardflowCardId,
+    confirmationId,
+    intent,
+    inventoryItemId,
+    referencePriceAmount,
+    confidence,
+    selectedVariant: routeVariant,
+    targetMaxBuyAmount,
+    condition: routeCondition,
+  } = useLocalSearchParams<{
     cardflowCardId: string;
     confirmationId: string;
     intent?: string | string[];
+    inventoryItemId?: string | string[];
     referencePriceAmount?: string | string[];
+    confidence?: string | string[];
+    selectedVariant?: string | string[];
+    targetMaxBuyAmount?: string | string[];
+    condition?: string | string[];
   }>();
   const [card, setCard] = useState<CardFlowCanonicalCard | null>(null);
   const [selectedVariant, setSelectedVariant] = useState("normal");
@@ -34,16 +87,22 @@ export default function DecideScreen() {
   );
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const purchaseInFlightRef = useRef(false);
   const [watchlistOpen, setWatchlistOpen] = useState(false);
-  const [marketEstimate, setMarketEstimate] = useState<CardFlowPriceEstimate | null>(null);
-  const [marketState, setMarketState] = useState<"loading" | "ready">("loading");
+  const [howThisWorksOpen, setHowThisWorksOpen] = useState(false);
+  const [referenceFetchedAt, setReferenceFetchedAt] = useState<string | null>(
+    () => (firstSearchParam(referencePriceAmount) ? new Date().toISOString() : null),
+  );
   const [preferences, setPreferences] = useState<MaxBuyPreferences>(
     peekMaxBuyPreferences,
   );
-  const [condition, setCondition] = useState<(typeof CONDITION_LABELS)[number]>("NM");
+  const [condition, setCondition] = useState<(typeof CONDITION_LABELS)[number]>(
+    () => conditionFromParam(routeCondition),
+  );
   const confirmationIdValue = Array.isArray(confirmationId)
     ? confirmationId[0]
     : confirmationId;
+  const watchlistItemId = firstSearchParam(inventoryItemId);
   const savedIntentRaw = Array.isArray(intent) ? intent[0] : intent;
   const savedIntent =
     savedIntentRaw === "watchlist" || savedIntentRaw === "purchased"
@@ -56,14 +115,32 @@ export default function DecideScreen() {
   if (referenceSeedSeen !== referenceSeed) {
     setReferenceSeedSeen(referenceSeed);
     setReference(routeReference);
+    setReferenceFetchedAt(routeReference ? new Date().toISOString() : null);
   }
-  const marketKey = `${canCommitInventory ? (card?.tcgdexId ?? "") : ""}:${selectedVariant}`;
-  const [marketKeySeen, setMarketKeySeen] = useState(marketKey);
-  if (marketKeySeen !== marketKey) {
-    setMarketKeySeen(marketKey);
-    setMarketEstimate(null);
-    setMarketState("loading");
-  }
+  const priceQuery = useQuery({
+    ...priceQueryOptions(card?.tcgdexId ?? "", selectedVariant),
+    enabled: Boolean(card?.tcgdexId) && canCommitInventory,
+  });
+  const marketEstimate: CardFlowPriceEstimate | null = priceQuery.data?.estimate ?? null;
+  const queryClient = useQueryClient();
+  const yourPricesKey = ["cardflow", "userPriceSnapshots", { tcgdexId: card?.tcgdexId ?? "", variant: selectedVariant }] as const;
+  const yourPricesQuery = useQuery({
+    queryKey: yourPricesKey,
+    queryFn: () => listUserPriceSnapshots(card?.tcgdexId ?? "", selectedVariant),
+    enabled: Boolean(card?.tcgdexId) && canCommitInventory,
+  });
+  const [pickedPriceKey, setPickedPriceKey] = useState<string | null>(null);
+  const [isSavingPrice, setIsSavingPrice] = useState(false);
+  const priceProvider = priceQuery.data?.provider ?? null;
+  const priceFetchedAt = priceQuery.data
+    ? (marketEstimate?.fetchedAt ?? new Date(priceQuery.dataUpdatedAt).toISOString())
+    : null;
+  const priceDisplay = priceDisplayState({
+    estimate: marketEstimate,
+    isPending: priceQuery.isPending,
+    isFetching: priceQuery.isFetching,
+    isError: priceQuery.isError,
+  });
 
   useEffect(() => {
     let cancelled = false;
@@ -77,7 +154,10 @@ export default function DecideScreen() {
         if (cancelled) return;
         setCard(result.canonicalCard);
         setSelectedVariant(
-          defaultVariantId(result.canonicalCard.variants, result.canonicalCard.selectedVariant),
+          defaultVariantId(
+            result.canonicalCard.variants,
+            firstSearchParam(routeVariant) ?? result.canonicalCard.selectedVariant,
+          ),
         );
         setError(null);
       } catch (caught) {
@@ -90,26 +170,7 @@ export default function DecideScreen() {
     return () => {
       cancelled = true;
     };
-  }, [cardflowCardId]);
-
-  useEffect(() => {
-    if (!card?.tcgdexId || !canCommitInventory) return;
-    let cancelled = false;
-    void getPriceEstimate(card.tcgdexId, selectedVariant)
-      .then((result) => {
-        if (cancelled) return;
-        setMarketEstimate(result.estimate);
-        setMarketState("ready");
-      })
-      .catch(() => {
-        if (cancelled) return;
-        setMarketEstimate(null);
-        setMarketState("ready");
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [canCommitInventory, card?.tcgdexId, selectedVariant]);
+  }, [cardflowCardId, routeVariant]);
 
   useFocusEffect(
     useCallback(() => {
@@ -128,16 +189,43 @@ export default function DecideScreen() {
     }, []),
   );
 
-  const maxBuy = useMemo(
-    () =>
-      computeMaxBuy({
-        referencePriceAmount: parsedReference(reference),
-        condition,
-        preferences,
-      }),
-    [condition, preferences, reference],
+  const typedReference = parsedReference(reference);
+  const vendorSourceLabel = priceSourceLabel(
+    resolvePriceSourceKind({
+      provider: priceProvider,
+      source: marketEstimate?.source,
+      referenceSource: marketEstimate?.referenceSource,
+    }),
   );
+  // P1-12: your saved prices sit next to the vendor price; Max Buy uses the one you pick (newest by default).
+  const priceOptions = priceSnapshotOptions({
+    userSnapshots: yourPricesQuery.data?.snapshots ?? [],
+    vendor: { amount: marketEstimate?.amount, at: priceFetchedAt, sourceLabel: vendorSourceLabel },
+  });
+  const pickedReference = selectMaxBuyReference(priceOptions, pickedPriceKey);
+  const maxBuyReference = typedReference ?? pickedReference?.amount ?? null;
+  const maxBuy = computeMaxBuy({
+    referencePriceAmount: maxBuyReference,
+    condition,
+    preferences,
+  });
   const hasReference = maxBuy.referencePriceCents !== null;
+  const matchConfidence = confidenceWord(firstSearchParam(confidence));
+  const vendorSourceKind = resolvePriceSourceKind({
+    provider: priceProvider,
+    source: marketEstimate?.source,
+    referenceSource: marketEstimate?.referenceSource,
+  });
+  const maxBuySourceKind =
+    typedReference || pickedReference?.kind === "you" ? "your_price" : vendorSourceKind;
+  const vendorPriceMeta = formatPriceEstimateMeta({
+    sourceLabel: priceSourceLabel(vendorSourceKind),
+    fetchedAt: priceFetchedAt,
+  });
+  const maxBuyMeta = formatMaxBuyEstimateMeta({
+    sourceLabel: priceSourceLabel(maxBuySourceKind),
+    fetchedAt: typedReference ? referenceFetchedAt : (pickedReference?.at ?? priceFetchedAt),
+  });
 
   const variants = card ? variantOptions(card.variants) : [];
   const title = card ? `${card.name} #${card.localId}` : "";
@@ -157,30 +245,83 @@ export default function DecideScreen() {
     );
   }
 
-  async function onAddCard() {
+  async function onAddCard(then: "collection" | "listing" = "collection") {
     if (!confirmationIdValue) return;
-    const marketPrice = marketEstimate?.amount;
+    // Community review 4: duplicate guard (a double tap saves once).
+    if (purchaseInFlightRef.current) return;
+    // Prices never block: your own typed price stands in when the estimate is unavailable.
+    const marketPrice = marketEstimate?.amount ?? typedReference ?? pickedReference?.amount ?? null;
     if (!marketPrice) {
-      setError("No market price for this card yet.");
+      setError(PRICE_ESTIMATE_UNAVAILABLE_COPY);
       return;
     }
+    purchaseInFlightRef.current = true;
     setIsSaving(true);
     setError(null);
     try {
-      await savePurchased({
+      trackEvent("purchased", { source: "candidate" });
+      const outcome = await runQueueableWrite("save_purchased", {
         confirmationId: confirmationIdValue,
         purchasePrice: marketPrice,
         purchasedAt: new Date().toISOString(),
         condition,
         selectedVariant,
       });
+      if (then === "listing" && !outcome.queued) {
+        // P2-02: straight into a draft built from the confirmed card. Offline: saved to Collection only.
+        const draft = await openOrCreateDraft(outcome.result.item.inventoryItemId);
+        router.replace(`/draft/${draft.draft.draftId}`);
+        return;
+      }
       router.replace({
         pathname: "/(tabs)/collection",
         params: { segment: "purchased" },
       });
     } catch (caught) {
+      setError(purchasedFailureMessage(caught));
+    } finally {
+      purchaseInFlightRef.current = false;
+      setIsSaving(false);
+    }
+  }
+
+  async function onSaveYourPrice() {
+    if (!card?.tcgdexId || !typedReference) return;
+    setIsSavingPrice(true);
+    setError(null);
+    try {
+      const saved = await saveUserPriceSnapshot(card.tcgdexId, typedReference, selectedVariant);
+      await queryClient.invalidateQueries({ queryKey: yourPricesKey });
+      setPickedPriceKey(`you:${saved.snapshot.snapshotId}`);
+      setReference("");
+    } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Save failed");
     } finally {
+      setIsSavingPrice(false);
+    }
+  }
+
+  async function onWatchlistPurchased() {
+    if (!watchlistItemId || purchaseInFlightRef.current) return;
+    purchaseInFlightRef.current = true;
+    setIsSaving(true);
+    setError(null);
+    try {
+      const saved = await runQueueableWrite("watchlist_to_purchased", {
+        inventoryItemId: watchlistItemId,
+      });
+      await playPurchasedSuccessHaptic();
+      router.replace({
+        pathname: "/(tabs)/collection",
+        params: {
+          segment: "purchased",
+          purchasedUndoId: saved.queued ? saved.queuedId : saved.result.item.inventoryItemId,
+        },
+      });
+    } catch (caught) {
+      setError(purchasedFailureMessage(caught));
+    } finally {
+      purchaseInFlightRef.current = false;
       setIsSaving(false);
     }
   }
@@ -190,7 +331,7 @@ export default function DecideScreen() {
     setIsSaving(true);
     setError(null);
     try {
-      await saveWatchlist({
+      await runQueueableWrite("save_watchlist", {
         confirmationId: confirmationIdValue,
         selectedVariant: variantId,
         referencePriceAmount: parsedReference(reference),
@@ -224,7 +365,15 @@ export default function DecideScreen() {
         <Text numberOfLines={1} style={styles.topTitle}>
           {title}
         </Text>
-        <View style={styles.iconButton} />
+        <Pressable
+          accessibilityLabel={HOW_THIS_WORKS_OPEN_LABEL}
+          accessibilityRole="button"
+          hitSlop={12}
+          onPress={() => setHowThisWorksOpen(true)}
+          style={styles.iconButton}
+        >
+          <Ionicons color={colors.text} name="help-circle-outline" size={26} />
+        </Pressable>
       </View>
 
       <ScrollView
@@ -275,19 +424,97 @@ export default function DecideScreen() {
             <Text style={styles.caption}>Catalog art — not your listing pic</Text>
 
             {canCommitInventory ? (
-              <View style={styles.missing}>
-                <Text style={styles.label}>Market price</Text>
-                {marketState === "loading" ? (
-                  <Text style={styles.body}>Checking current price…</Text>
-                ) : marketEstimate?.amount ? (
+              <>
+                <LabeledFigure label={PRICE_ESTIMATE_SCREEN_LABEL} tip={CONFIRM_TIPS.priceSource}>
+                  {priceDisplay.kind === "checking" ? (
+                    <Text style={styles.body}>{PRICE_CHECKING_COPY}</Text>
+                  ) : priceDisplay.kind === "price" && marketEstimate?.amount ? (
+                    <>
+                      <Text style={styles.marketPrice}>${marketEstimate.amount}</Text>
+                      <Text style={styles.body}>{vendorPriceMeta}</Text>
+                      {priceDisplay.refreshing ? (
+                        <Text accessibilityLiveRegion="polite" style={styles.caption}>
+                          {PRICE_REFRESHING_COPY}
+                        </Text>
+                      ) : null}
+                      <Text style={styles.body}>{marketEstimate.disclaimer}</Text>
+                    </>
+                  ) : (
+                    <Text style={styles.body}>{PRICE_UNAVAILABLE_ENTER_OWN_COPY}</Text>
+                  )}
+                  {priceOptions.length > 0 ? (
+                    <View style={styles.pills}>
+                      {priceOptions.map((option) => {
+                        const selected = !typedReference && pickedReference?.key === option.key;
+                        const label =
+                          option.kind === "you"
+                            ? `${userPriceLabel(option.at)} · $${option.amount}`
+                            : `${option.sourceLabel} · $${option.amount}`;
+                        return (
+                          <Pressable
+                            accessibilityLabel={`Use ${label} for Max Buy`}
+                            accessibilityRole="button"
+                            accessibilityState={{ selected }}
+                            key={option.key}
+                            onPress={() => {
+                              setPickedPriceKey(option.key);
+                              setReference("");
+                            }}
+                            style={[styles.pill, styles.pillTap, selected && styles.pillSelected]}
+                          >
+                            <Text style={[styles.pillLabel, selected && styles.pillLabelSelected]}>
+                              {selected ? "✓ " : ""}{label}
+                            </Text>
+                          </Pressable>
+                        );
+                      })}
+                    </View>
+                  ) : null}
                   <>
-                    <Text style={styles.marketPrice}>${marketEstimate.amount}</Text>
-                    <Text style={styles.body}>{marketEstimate.disclaimer}</Text>
+                      <TextInput
+                        accessibilityLabel={YOUR_PRICE_INPUT_LABEL}
+                        inputMode="decimal"
+                        keyboardType="decimal-pad"
+                        onChangeText={(value) => {
+                          setReference(value);
+                          setReferenceFetchedAt(new Date().toISOString());
+                        }}
+                        placeholder={YOUR_PRICE_INPUT_LABEL}
+                        placeholderTextColor={colors.muted}
+                        style={styles.priceInput}
+                        value={reference}
+                      />
+                      {typedReference ? (
+                        <PrimaryButton
+                          disabled={isSavingPrice}
+                          label={SAVE_YOUR_PRICE_LABEL}
+                          onPress={() => void onSaveYourPrice()}
+                        />
+                      ) : null}
                   </>
-                ) : (
-                  <Text style={styles.body}>No market price for this card yet.</Text>
-                )}
-              </View>
+                </LabeledFigure>
+                <LabeledFigure label={MAX_BUY_YOUR_RULE_LABEL} tip={CONFIRM_TIPS.maxBuy}>
+                  {hasReference && maxBuy.maxBuyAmount ? (
+                    <>
+                      <Text style={styles.marketPrice}>${maxBuy.maxBuyAmount}</Text>
+                      <Text style={styles.body}>{maxBuyMeta}</Text>
+                      <Text style={styles.body}>{maxBuy.disclaimer}</Text>
+                      <MaxBuyBreakdownToggle
+                        computation={maxBuy}
+                        onEditRule={() => router.push("/max-buy-rules")}
+                      />
+                    </>
+                  ) : (
+                    <Text style={styles.body}>{MAX_BUY_ENTER_REFERENCE_COPY}</Text>
+                  )}
+                </LabeledFigure>
+                <LabeledFigure label={CONFIDENCE_SCREEN_LABEL} tip={CONFIRM_TIPS.confidence}>
+                  <Text style={styles.body}>{matchConfidence ?? "—"}</Text>
+                </LabeledFigure>
+                <LabeledFigure label={PREGRADE_COPY.title} tip={CONFIRM_TIPS.estimate}>
+                  <Text style={styles.body}>{PREGRADE_COPY.disclaimer}</Text>
+                </LabeledFigure>
+              </>
             ) : null}
 
             {error && !watchlistOpen ? <Text style={styles.error}>{error}</Text> : null}
@@ -306,9 +533,15 @@ export default function DecideScreen() {
                   ))}
                 </View>
                 <PrimaryButton
-                  disabled={isSaving || marketState === "loading" || !marketEstimate?.amount}
+                  disabled={isSaving || (!marketEstimate?.amount && !typedReference)}
                   label={isSaving ? "Adding…" : "Add card"}
                   onPress={() => void onAddCard()}
+                />
+                <PrimaryButton
+                  disabled={isSaving || (!marketEstimate?.amount && !typedReference)}
+                  label={MAKE_LISTING_LABEL}
+                  onPress={() => void onAddCard("listing")}
+                  tone="muted"
                 />
                 <PrimaryButton
                   disabled={isSaving}
@@ -323,9 +556,36 @@ export default function DecideScreen() {
             ) : savedIntent === "watchlist" ? (
               <View style={styles.missing}>
                 <Text style={styles.body}>Watching. Cannot create a listing draft.</Text>
-                <Text style={styles.body}>Save as Purchased first to draft.</Text>
+                <LabeledFigure label={MAX_BUY_YOUR_RULE_LABEL} tip={CONFIRM_TIPS.maxBuy}>
+                  {maxBuy.maxBuyAmount ? (
+                    <>
+                      <Text style={styles.marketPrice}>${maxBuy.maxBuyAmount}</Text>
+                      <Text style={styles.body}>{maxBuyMeta}</Text>
+                    </>
+                  ) : firstSearchParam(targetMaxBuyAmount) ? (
+                    <>
+                      <Text style={styles.marketPrice}>${firstSearchParam(targetMaxBuyAmount)}</Text>
+                      <Text style={styles.body}>{WATCHLIST_SAVED_MAX_BUY_META}</Text>
+                    </>
+                  ) : (
+                    <Text style={styles.body}>No Max Buy snapshot on this Watchlist item.</Text>
+                  )}
+                </LabeledFigure>
+                <Text style={styles.body}>
+                  Purchased keeps this card and Max Buy. Price is optional until Collection →
+                  Purchased.
+                </Text>
+                <PrimaryButton
+                  disabled={isSaving || !watchlistItemId}
+                  label={isSaving ? "Saving…" : "Purchased"}
+                  onPress={() => void onWatchlistPurchased()}
+                />
               </View>
             ) : null}
+            <GhostButton
+              label={HOW_THIS_WORKS_OPEN_LABEL}
+              onPress={() => setHowThisWorksOpen(true)}
+            />
             <GhostButton
               label="Edit Max Buy rules"
               onPress={() => router.push("/max-buy-rules")}
@@ -339,11 +599,15 @@ export default function DecideScreen() {
           error={watchlistOpen ? error : null}
           isSaving={isSaving}
           disclaimer={maxBuy.disclaimer}
+          estimateMeta={hasReference ? maxBuyMeta : null}
           hasReference={hasReference}
           localId={card.localId}
           maxBuyAmount={maxBuy.maxBuyAmount}
           name={card.name}
-          onChangeReference={setReference}
+          onChangeReference={(value) => {
+            setReference(value);
+            setReferenceFetchedAt(new Date().toISOString());
+          }}
           onClose={() => {
             if (!isSaving) setWatchlistOpen(false);
           }}
@@ -358,6 +622,7 @@ export default function DecideScreen() {
           visible={watchlistOpen}
         />
       ) : null}
+      <HowThisWorksSheet onClose={() => setHowThisWorksOpen(false)} visible={howThisWorksOpen} />
     </SafeAreaView>
   );
 }
@@ -366,6 +631,14 @@ function parsedReference(value: string): string | null {
   const cents = parseDollarsToCents(value);
   if (cents === null) return null;
   return (cents / 100).toFixed(2);
+}
+
+function conditionFromParam(
+  value: string | string[] | undefined,
+): (typeof CONDITION_LABELS)[number] {
+  const raw = firstSearchParam(value);
+  const match = CONDITION_LABELS.find((label) => label === raw);
+  return match ?? CONDITION_LABELS[0];
 }
 
 function firstSearchParam(value: string | string[] | undefined): string | undefined {
@@ -453,6 +726,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 6,
   },
+  pillTap: { minHeight: 44, justifyContent: "center" },
   pillSelected: { borderColor: colors.accent, backgroundColor: colors.accentSoft },
   pillLabel: { color: colors.muted, fontSize: 13, fontWeight: "700" },
   pillLabelSelected: { color: colors.accent },
@@ -465,6 +739,16 @@ const styles = StyleSheet.create({
   missing: { gap: 8 },
   label: { color: colors.text, fontWeight: "700" },
   marketPrice: { color: colors.text, fontSize: 28, fontWeight: "800" },
+  priceInput: {
+    backgroundColor: colors.bg,
+    borderColor: colors.cardBorder,
+    borderWidth: 1,
+    borderRadius: 12,
+    color: colors.text,
+    paddingHorizontal: space.md,
+    paddingVertical: 12,
+    fontSize: 18,
+  },
   body: { color: colors.muted, fontSize: 15, lineHeight: 22 },
   error: { color: colors.danger, fontSize: 14 },
   ghost: {

@@ -6,9 +6,10 @@ import {
   type EbayListingExportRow,
   type TcgTraderExportRow,
 } from "@cardflow/shared";
+import { StatusBanner } from "@/components/ui/status-banner";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import * as Clipboard from "expo-clipboard";
-import { useFocusEffect } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
 import { useCallback, useMemo, useState } from "react";
 import { ActivityIndicator, Pressable, ScrollView, Share, StyleSheet, Text, View } from "react-native";
 import { getDraft, listInventory, type InventoryItem } from "@/lib/api";
@@ -98,7 +99,7 @@ export default function ExportScreen() {
       setItems(result.items);
       setError(null);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not load the collection");
+      setError(caught instanceof Error ? caught.message : "Couldn't load MyDEX");
     } finally {
       setIsLoading(false);
     }
@@ -142,7 +143,7 @@ export default function ExportScreen() {
           : `Shared ${copies.length} cards. Upload the file yourself. CardFlow did not list them.${priceNote}`,
       );
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not export");
+      setError(caught instanceof Error ? caught.message : "Couldn't export");
     } finally {
       setBusy(null);
     }
@@ -151,12 +152,13 @@ export default function ExportScreen() {
   return (
     <ScrollView contentContainerStyle={styles.content} style={styles.flex}>
       <Text style={styles.title}>Export</Text>
+      <StatusBanner />
       <Text style={styles.constraint}>
         Share purchased cards as a spreadsheet. You upload it. CardFlow does not list them.
       </Text>
 
       {isLoading ? (
-        <ActivityIndicator accessibilityLabel="Loading collection" color={colors.accent} />
+        <ActivityIndicator accessibilityLabel="Loading MyDEX" color={colors.accent} />
       ) : (
         <View style={styles.list}>
           <DestinationCard
@@ -177,6 +179,15 @@ export default function ExportScreen() {
           />
         </View>
       )}
+
+      <DestinationCard
+        busy={false}
+        countLabel={countLabel}
+        detail="All-in cost, sales, and net. Realized and estimated kept apart."
+        disabled={busy !== null}
+        label="P&L"
+        onPress={() => router.push("/pnl")}
+      />
 
       {purchased.length === 0 && !isLoading ? (
         <Text style={styles.constraint}>No purchased cards yet. Watchlist cards stay in the app.</Text>

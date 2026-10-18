@@ -54,8 +54,11 @@ describe("MVP CRM schema", () => {
     sqlite.close();
 
     expect(tables.map((row) => row.name)).toEqual([
+      "age_confirmations",
       "card_external_ids",
       "cardflow_cards",
+      "cardsight_user_usage",
+      "consent_events",
       "crm_confirmations",
       "crm_grading_returned",
       "crm_grading_submitted",
@@ -65,9 +68,24 @@ describe("MVP CRM schema", () => {
       "crm_purchases",
       "crm_scans",
       "crm_sessions",
+      "email_send_counts",
+      "email_verification_codes",
+      "grade_accounts",
       "grade_estimate_cache",
+      "grade_estimate_history",
+      "grade_photo_objects",
+      "grade_quota_usage",
+      "idempotency_keys",
+      "password_reset_tokens",
       "portfolio_value_snapshots",
+      "provider_consents",
+      "purchase_events",
+      "scan_confirm_events",
+      "user_accounts",
+      "user_card_sales",
       "user_preferences",
+      "user_price_snapshots",
+      "vendor_quota_usage",
     ]);
   });
 
@@ -113,7 +131,8 @@ describe("MVP CRM schema", () => {
     expect(readFileSync(path.join(apiRoot, "drizzle/0003_grading_copies.sql"), "utf8")).not.toMatch(
       /`listed`|`sold`|psa_http|cert_lookup/i,
     );
-    expect(migrationSql).toContain("`purchase_price` integer");
+    expect(migrationSql).toContain("`purchase_price` integer NOT NULL");
+    expect(migrationSql).toContain("`all_in_total` integer NOT NULL");
     expect(migrationSql).toContain("`asking_price` integer");
     expect(migrationSql).toContain("in ('user_entered', 'none')");
     expect(migrationSql).not.toContain("tcgdex_pricing");
@@ -123,5 +142,26 @@ describe("MVP CRM schema", () => {
     expect(migrationSql).not.toContain("crm_storage_locations");
     expect(migrationSql).not.toContain("crm_price_snapshots");
     expect(migrationSql).not.toContain("crm_audit_events");
+    expect(readFileSync(path.join(apiRoot, "drizzle/0006_details_needed_workflow.sql"), "utf8")).toContain(
+      "details_needed",
+    );
+    expect(readFileSync(path.join(apiRoot, "drizzle/0007_nullable_purchase_price.sql"), "utf8")).toContain(
+      "`purchase_price` integer",
+    );
+    expect(readFileSync(path.join(apiRoot, "drizzle/0007_nullable_purchase_price.sql"), "utf8")).not.toContain(
+      "`purchase_price` integer NOT NULL",
+    );
+    expect(readFileSync(path.join(apiRoot, "drizzle/0009_grade_photo_objects.sql"), "utf8")).toContain(
+      "grade_photo_objects",
+    );
+    expect(readFileSync(path.join(apiRoot, "drizzle/0009_grade_photo_objects.sql"), "utf8")).toContain(
+      "`created_at` text NOT NULL",
+    );
+    expect(readFileSync(path.join(apiRoot, "drizzle/0008_grade_quotas.sql"), "utf8")).toContain(
+      "`extra_credits`",
+    );
+    expect(readFileSync(path.join(apiRoot, "drizzle/0008_grade_quotas.sql"), "utf8")).toContain(
+      "grade_quota_usage",
+    );
   });
 });

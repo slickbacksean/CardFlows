@@ -14,7 +14,7 @@ Public GitHub product docs were **not found** (404). Official eBay User Agreemen
 
 1. Entity that will publish the iOS and Android apps; whether an individual developer may submit given Apple 5.1.1(ix) themes for regulated/financial-adjacent claims.
 2. Target countries and required privacy notices (US state laws, GDPR/UK GDPR, PIPEDA, etc.).
-3. Age minimum; COPPA / GDPR-K / CardSight’s “no under-18 Personal Information” term; Pokémon-card audience is often under 18.
+3. Age minimum; COPPA / GDPR-K / CardSight’s “no under-18 Personal Information” term; Pokémon-card audience is often under 18. **Decided (Sean, Oct 16): 18+ only**, stated at sign-up (Sean, Oct 17: a required "I confirm I'm 18 or older." checkbox; the month/year screen was dropped; guests never get CardSight). Counsel: ask CardSight in writing whether self-attestation is acceptable, confirm it's enough, review the Age and Eligibility drafts (`USER_CONSENT_DRAFT.md` section 8, `TERMS_DRAFT.md`), and check the Utah/Texas app-store age laws before launch.
 4. Full **Privacy Policy** and **Terms of Use** (this package only has drafts of consent + estimate disclaimer).
 5. Pass-through **End User terms at least as protective as CardSight’s** (CardSight ToS §3(d) theme, fetched 2026-08-26).
 6. App Store Review Guidelines 5.1 / 3.1.2 / 5.2.2 (privacy, subscriptions, third-party service permission).

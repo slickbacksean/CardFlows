@@ -1,8 +1,21 @@
+import {
+  AGE_GATE_COPY,
+  CAMERA_ALLOW_LABEL,
+  CAMERA_DENIED_BODY,
+  CAMERA_DENIED_TITLE,
+  CAMERA_PREPROMPT_BODY,
+  CAMERA_PREPROMPT_TITLE,
+  PHOTO_PICKER_UNAVAILABLE_COPY,
+  actionErrorMessage,
+  classifyLoadError,
+  SCAN_SESSION_ENDED_COPY,
+} from "@cardflow/shared";
+import { isOfflineScanError, queueOfflineScan } from "@/lib/scan-queue";
+import { trackScanStarted } from "@/lib/product-events";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { CameraView, useCameraPermissions } from "expo-camera";
-import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
-import { useEffect, useRef, useState, type RefObject } from "react";
+import { useRef, useState, type RefObject } from "react";
 import {
   ActivityIndicator,
   Linking,
@@ -15,17 +28,25 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { DevScenarioPanel } from "@/components/ui/dev-scenario-panel";
-import { PrimaryButton } from "@/components/ui/primary-button";
+import { PermissionGate } from "@/components/ui/permission-gate";
+import { InlineError } from "@/components/ui/screen-state";
 import { createScan } from "@/lib/api";
+import { ensureAccountAgeConfirmed } from "@/lib/age-confirmation";
+import { askCardSightConsentOnce } from "@/lib/cardsight-consent";
+import { isGuestSession } from "@/lib/identity";
+import { requireAccount, useAccountOrLeave } from "@/lib/signup-prompt";
 import { getMockScenario } from "@/lib/mock-scenario";
-import { rememberScanCapture } from "@/lib/scan-capture";
+import { prepareScanStill, rememberScanCapture } from "@/lib/scan-capture";
+import { launchSystemImagePicker } from "@/lib/system-photo-picker";
 import { colors, space } from "@/lib/theme";
 
 const IS_NATIVE = Platform.OS === "ios" || Platform.OS === "android";
-const STILL_PHOTO = { quality: 0.8, imageType: "jpg" as const };
+const STILL_PHOTO = { quality: 1, imageType: "jpg" as const };
 
 export default function CaptureScreen() {
   const router = useRouter();
+  // Browse-only guests (Sean, Oct 17): no camera for a guest; the sign-up prompt instead.
+  useAccountOrLeave();
   const cameraRef = useRef<CameraView>(null);
   const [permission, requestPermission] = useCameraPermissions();
   const [devForceDenied, setDevForceDenied] = useState(false);
@@ -35,17 +56,15 @@ export default function CaptureScreen() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [flashlightOn, setFlashlightOn] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
+  const [showCameraPreprompt, setShowCameraPreprompt] = useState(false);
 
   const isDenied =
     devForceDenied || (IS_NATIVE && permission?.status === "denied");
-  const permissionPending =
-    IS_NATIVE &&
-    !devForceDenied &&
-    (permission == null || permission.status === "undetermined");
+  const permissionLoading = IS_NATIVE && !devForceDenied && permission == null;
   const showLivePreview =
     IS_NATIVE && !isDenied && permission?.granted === true && !cameraMountFailed;
   const waitingForCamera = showLivePreview && !cameraReady;
-  const shutterDisabled = isSubmitting || permissionPending || waitingForCamera;
+  const shutterDisabled = isSubmitting || permissionLoading || waitingForCamera;
   const cameraLive = showLivePreview;
   const [cameraLiveSeen, setCameraLiveSeen] = useState(cameraLive);
   if (cameraLiveSeen !== cameraLive) {
@@ -55,13 +74,6 @@ export default function CaptureScreen() {
       setCameraMountFailed(false);
     }
   }
-
-  useEffect(() => {
-    if (!IS_NATIVE || devForceDenied) return;
-    if (permission && !permission.granted && permission.canAskAgain) {
-      void requestPermission();
-    }
-  }, [devForceDenied, permission, requestPermission]);
 
   function leaveCapture() {
     if (router.canGoBack()) {
@@ -75,19 +87,71 @@ export default function CaptureScreen() {
     captureMethod: "camera_photo" | "manual_scan",
     imageUri: string | null,
     imageMimeType?: string | null,
+    size?: { width?: number; height?: number },
   ) {
-    const result = await createScan({
-      captureMethod,
-      scenario: imageUri || !__DEV__ ? undefined : getMockScenario(),
-      imageUri,
-      imageMimeType,
-    });
-    if (imageUri) rememberScanCapture(result.scan.scanId, imageUri);
+    // Browse-only guests (Sean, Oct 17): sign up before any scan.
+    if (!requireAccount()) return;
+    // Sean: the one-time CardSight disclosure comes before the first photo is uploaded.
+    // Policy Reviewer (Oct 17): guests never see it (they never get CardSight), and accounts
+    // confirm 18+ first (testers and existing accounts once; new accounts did at sign-up).
+    if (imageUri && !isGuestSession() && (await ensureAccountAgeConfirmed())) {
+      await askCardSightConsentOnce();
+    }
+    const startedAt = Date.now();
+    let uploadUri = imageUri;
+    let uploadMime = imageMimeType ?? null;
+    if (imageUri) {
+      const prepared = await prepareScanStill(imageUri, imageMimeType, size);
+      if ("error" in prepared) throw new Error(prepared.error);
+      uploadUri = prepared.still.uri;
+      uploadMime = prepared.still.mimeType;
+    }
+    let result: Awaited<ReturnType<typeof createScan>>;
+    try {
+      result = await createScan({
+        captureMethod,
+        scenario: uploadUri || !__DEV__ ? undefined : getMockScenario(),
+        imageUri: uploadUri,
+        imageMimeType: uploadMime,
+      });
+    } catch (caught) {
+      // P1-10: offline → keep the still and match it when the phone is back online.
+      if (
+        uploadUri &&
+        isOfflineScanError(caught) &&
+        queueOfflineScan({ imageUri: uploadUri, mimeType: uploadMime ?? "image/jpeg", captureMethod })
+      ) {
+        router.replace("/(tabs)/collection");
+        return;
+      }
+      throw caught;
+    }
+    if (uploadUri) rememberScanCapture(result.scan.scanId, uploadUri);
+    trackScanStarted(result.scan.scanId, captureMethod, startedAt);
     router.push(`/scan/${result.scan.scanId}`);
+  }
+
+  async function confirmCameraPreprompt() {
+    setShowCameraPreprompt(false);
+    setError(null);
+    const result = await requestPermission();
+    if (!result.granted) return;
+  }
+
+  function onSearchByName() {
+    if (isSubmitting) return;
+    router.replace("/(tabs)/shop");
   }
 
   async function onShutter() {
     if (shutterDisabled) return;
+    if (IS_NATIVE && !devForceDenied && permission && !permission.granted) {
+      if (permission.canAskAgain) {
+        setShowCameraPreprompt(true);
+        return;
+      }
+      return;
+    }
     setIsSubmitting(true);
     setError(null);
     try {
@@ -95,18 +159,18 @@ export default function CaptureScreen() {
         try {
           const imageUri = await takeStillPhoto(cameraRef.current);
           if (!imageUri) {
-            setError("Could not take a photo. Try again.");
+            setError("Couldn't take a photo. Try again.");
             return;
           }
           await postScan("camera_photo", imageUri, "image/jpeg");
           return;
         } catch (caught) {
-          setError(scanFailureMessage(caught, "Could not take a photo. Try again."));
+          setError(scanFailureMessage(caught, "Couldn't take a photo. Try again."));
           return;
         }
       }
       if (IS_NATIVE && permission?.granted === true && !cameraMountFailed) {
-        setError("Could not take a photo. Try again.");
+        setError("Couldn't take a photo. Try again.");
         return;
       }
       if (Platform.OS === "web") {
@@ -124,34 +188,23 @@ export default function CaptureScreen() {
   async function onChooseFromLibrary() {
     if (isSubmitting) return;
     setHelpOpen(false);
+    setShowCameraPreprompt(false);
     setError(null);
     try {
-      if (IS_NATIVE) {
-        const media = await ImagePicker.requestMediaLibraryPermissionsAsync();
-        if (!media.granted) {
-          setError(
-            "Photo library access is off. Enable it in system Settings, or take a still photo.",
-          );
-          return;
-        }
-      }
-      const picked = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ["images"],
-        allowsEditing: false,
-        allowsMultipleSelection: false,
-        quality: 0.8,
-      });
-      if (picked.canceled) return;
-      const asset = picked.assets[0];
-      const uri = asset?.uri ?? null;
+      const asset = await launchSystemImagePicker({ quality: 1 });
+      if (!asset) return;
+      const uri = asset.uri ?? null;
       if (!uri) {
-        setError("Could not read that photo. Try another.");
+        setError("Couldn't read that photo. Try another.");
         return;
       }
       setIsSubmitting(true);
-      await postScan("manual_scan", uri, asset?.mimeType ?? null);
+      await postScan("manual_scan", uri, asset.mimeType ?? null, {
+        width: asset.width,
+        height: asset.height,
+      });
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not open the photo library.");
+      setError(actionErrorMessage(caught, PHOTO_PICKER_UNAVAILABLE_COPY));
     } finally {
       setIsSubmitting(false);
     }
@@ -165,7 +218,7 @@ export default function CaptureScreen() {
     }
   }
 
-  const title = isDenied ? "Capture" : null;
+  const title = isDenied || showCameraPreprompt ? "Capture" : null;
 
   return (
     <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
@@ -186,7 +239,7 @@ export default function CaptureScreen() {
         ) : (
           <View style={styles.topTitleSpacer} />
         )}
-        {!isDenied ? (
+        {!isDenied && !showCameraPreprompt ? (
           <Pressable
             accessibilityLabel="Flashlight"
             accessibilityRole="button"
@@ -207,10 +260,23 @@ export default function CaptureScreen() {
       </View>
 
       {isDenied ? (
-        <PermissionDeniedSurface
+        <PermissionGate
+          body={CAMERA_DENIED_BODY}
           disabled={isSubmitting}
           onChoosePhoto={() => void onChooseFromLibrary()}
           onOpenSettings={() => void openSystemSettings()}
+          onSearchByName={onSearchByName}
+          title={CAMERA_DENIED_TITLE}
+        />
+      ) : showCameraPreprompt ? (
+        <PermissionGate
+          body={CAMERA_PREPROMPT_BODY}
+          continueLabel={CAMERA_ALLOW_LABEL}
+          disabled={isSubmitting}
+          onChoosePhoto={() => void onChooseFromLibrary()}
+          onContinue={() => void confirmCameraPreprompt()}
+          onSearchByName={onSearchByName}
+          title={CAMERA_PREPROMPT_TITLE}
         />
       ) : (
         <CameraSurface
@@ -222,7 +288,11 @@ export default function CaptureScreen() {
         />
       )}
 
-      {error ? <Text style={styles.error}>{error}</Text> : null}
+      {error ? (
+        <View style={styles.errorWrap}>
+          <InlineError message={error} />
+        </View>
+      ) : null}
 
       {helpOpen ? (
         <View style={styles.helpCard}>
@@ -238,9 +308,11 @@ export default function CaptureScreen() {
         <View style={styles.devPanel}>
           <DevScenarioPanel />
           <Pressable
+            accessibilityLabel={devForceDenied ? "Developer: back to camera" : "Developer: preview camera access off"}
             accessibilityRole="button"
             onPress={() => {
               setDevForceDenied((current) => !current);
+              setShowCameraPreprompt(false);
               setHelpOpen(false);
               setError(null);
               setFlashlightOn(false);
@@ -254,7 +326,7 @@ export default function CaptureScreen() {
         </View>
       ) : null}
 
-      {!isDenied ? (
+      {!isDenied && !showCameraPreprompt ? (
         <View style={styles.toolbar}>
           <Pressable
             accessibilityLabel="Choose photo"
@@ -299,11 +371,12 @@ export default function CaptureScreen() {
 }
 
 function scanFailureMessage(caught: unknown, fallback: string): string {
-  const message = caught instanceof Error ? caught.message : fallback;
-  if (message === "Unauthorized") {
-    return "Invite session expired. Open Settings, enter your invite code, then take the photo again.";
+  // UX review P1-4: accounts, not invite codes, now.
+  if (classifyLoadError(caught) === "auth" || (caught instanceof Error && caught.message === "Unauthorized")) {
+    return SCAN_SESSION_ENDED_COPY;
   }
-  return message;
+  // P5: shared offline / can't-reach / server wording.
+  return actionErrorMessage(caught, fallback);
 }
 
 async function takeStillPhoto(camera: CameraView | null): Promise<string | null> {
@@ -382,34 +455,7 @@ function CameraSurface({
       <Text style={styles.copy}>
         Take a still photo of one English raw single to identify it.
       </Text>
-    </View>
-  );
-}
-
-interface PermissionDeniedSurfaceProps {
-  disabled: boolean;
-  onOpenSettings: () => void;
-  onChoosePhoto: () => void;
-}
-
-function PermissionDeniedSurface({
-  disabled,
-  onOpenSettings,
-  onChoosePhoto,
-}: PermissionDeniedSurfaceProps) {
-  return (
-    <View style={styles.panelBody}>
-      <Text style={styles.title}>Camera access is off.</Text>
-      <Text style={styles.body}>
-        Enable it in system Settings, or pick a photo from the library.
-      </Text>
-      <PrimaryButton
-        disabled={disabled}
-        label="Open system Settings"
-        onPress={onOpenSettings}
-        tone="muted"
-      />
-      <PrimaryButton disabled={disabled} label="Choose photo" onPress={onChoosePhoto} />
+      <Text style={styles.copy}>{AGE_GATE_COPY.captureTip}</Text>
     </View>
   );
 }
@@ -471,14 +517,7 @@ const styles = StyleSheet.create({
     paddingVertical: space.md,
     backgroundColor: DIM,
   },
-  panelBody: {
-    flex: 1,
-    paddingHorizontal: space.lg,
-    paddingTop: space.lg,
-    gap: space.md,
-  },
-  title: { color: colors.text, fontSize: 22, fontWeight: "800" },
-  body: { color: colors.muted, fontSize: 15, lineHeight: 22 },
+  errorWrap: { paddingHorizontal: space.lg, paddingBottom: space.sm },
   error: {
     color: colors.danger,
     fontSize: 14,

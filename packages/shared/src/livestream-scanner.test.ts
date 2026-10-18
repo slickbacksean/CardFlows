@@ -95,4 +95,32 @@ describe("Livestream in-house browser + scanner control", () => {
     expect(collection).toContain('router.push("/capture")');
     expect(liveIdentify).toContain("Do not snapshot the live page");
   });
+
+  it("straightens with 4 corners before matching and matches once per tracked card", () => {
+    const liveIdentify = readRepoFile("apps/mobile/lib/live-identify.ts");
+    const overlay = readRepoFile("apps/mobile/components/ui/screener-overlay.tsx");
+    const scanTab = readRepoFile("apps/mobile/app/(tabs)/scan-tab.tsx");
+    const api = readRepoFile("apps/api/src/app.ts");
+    const serve = readRepoFile("services/live-identity-openclip/serve.py");
+    const tracker = readRepoFile("packages/shared/src/live-card-track.ts");
+    const warp = readRepoFile("services/live-identity-openclip/warp.py");
+
+    expect(warp).toContain("def warp_card");
+    expect(serve.indexOf("warp_card")).toBeGreaterThan(-1);
+    expect(serve.indexOf("warp_card")).toBeLessThan(serve.indexOf("_embed(image)"));
+    expect(api).toContain("quad: identityCropQuad");
+    expect(api).not.toContain("cropFromServerYolo ? null");
+    expect(liveIdentify).toContain("createLiveCardTracker");
+    expect(liveIdentify).toContain("identityCropQuad");
+    expect(liveIdentify).toContain("one vendor/model match per tracked card");
+    expect(liveIdentify).not.toContain("if (!yoloFrame && frame)");
+    expect(tracker).toContain("same_crop");
+    expect(tracker).toContain("already_matched");
+    expect(tracker).not.toContain("reconfirmMs");
+    expect(overlay).toContain("HudBubble");
+    expect(overlay).toContain("Purchased");
+    expect(overlay).toContain("shouldAcceptLiveHudPurchaseTap");
+    expect(scanTab).toMatch(/saveLivestreamPurchase\(|runQueueableWrite\("livestream_purchase"/);
+    expect(scanTab).not.toContain("PurchaseSheet");
+  });
 });

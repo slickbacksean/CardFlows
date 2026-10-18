@@ -43,6 +43,111 @@
       "when": 1789990000000,
       "tag": "0005_portfolio_value_snapshots",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1790100000000,
+      "tag": "0006_details_needed_workflow",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1790200000000,
+      "tag": "0007_nullable_purchase_price",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1790300000000,
+      "tag": "0008_grade_quotas",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1790400000000,
+      "tag": "0009_grade_photo_objects",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1790486400000,
+      "tag": "0010_scan_confirm_events",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "6",
+      "when": 1790572800000,
+      "tag": "0011_user_price_snapshots",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1790659200000,
+      "tag": "0012_user_card_sales",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "6",
+      "when": 1790745600000,
+      "tag": "0013_grade_estimate_history",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "6",
+      "when": 1790832000000,
+      "tag": "0014_accounts_guest_sessions",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "6",
+      "when": 1790918400000,
+      "tag": "0015_purchase_events_idempotency",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "6",
+      "when": 1791004800000,
+      "tag": "0016_quota_anchor_credits_period",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "6",
+      "when": 1791091200000,
+      "tag": "0017_email_verification",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "6",
+      "when": 1791177600000,
+      "tag": "0018_provider_consents",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "6",
+      "when": 1791264000000,
+      "tag": "0019_age_confirmations",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "6",
+      "when": 1791350400000,
+      "tag": "0020_age_attested_at",
+      "breakpoints": true
     }
   ]
 }

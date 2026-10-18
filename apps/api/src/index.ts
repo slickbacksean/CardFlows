@@ -1,19 +1,37 @@
 import { serve } from "@hono/node-server";
 import { loadLocalApiEnv } from "./local-env";
+import { captureApiException, initApiSentry } from "./sentry";
 import { createApp } from "./app";
 import { createCatalogFromEnv } from "./catalog-env";
 import { createPricingFromEnv, createPokecollectorAccountsFromEnv } from "./pokecollector-env";
 import { createRecognitionFromEnv } from "./recognition-env";
+import { cardSightAdapterFromEnv } from "./cardsight-adapter";
+import { consumeCardSightBudget } from "./cardsight-budget";
+import { cardSightMonthlyBudgetFromEnv, cardSightUserCapsFromEnv } from "./grade-quota-env";
 import { createGradeEstimateFromEnv, gradeEngineProbeFromEnv } from "./grade-estimate-env";
 import { createSlabPricingFromEnv } from "./poketrace-env";
 import { resolveDevAutoSession } from "./session";
+import { installUnmappedSetNameLogger } from "./tcgdex-catalog";
+import { startPhotoRetentionJob } from "./photo-retention";
 import { createStoreFromEnv } from "./store-env";
 import { loadOptionalPhashIndex } from "./obb-phash-provider";
 import { resolveLiveIdentityOpenclipFromEnv } from "./live-identity-openclip";
 import { resolveLiveVideoObbDetector } from "./live-video-obb";
 import type { ObbDetector } from "@cardflow/shared";
+import { opsMetrics, webhookAlertSink } from "./ops-metrics";
+import { assertProductionConfig } from "./production-config";
+
+installUnmappedSetNameLogger();
 
 loadLocalApiEnv();
+assertProductionConfig();
+initApiSentry();
+
+// P1-17 alerts: always logged; sent to Sentry when SENTRY_DSN is set and to a webhook when configured.
+opsMetrics.addSink((alert) => console.warn(JSON.stringify({ event: "ops_alert", ...alert })));
+opsMetrics.addSink((alert) => captureApiException(new Error(`[ops_alert] ${alert.message}`)));
+const alertWebhook = process.env.CARD_FLOW_ALERT_WEBHOOK_URL?.trim();
+if (alertWebhook) opsMetrics.addSink(webhookAlertSink(alertWebhook));
 
 const parsedPort = Number(process.env.PORT);
 const port = Number.isFinite(parsedPort) && parsedPort > 0 ? parsedPort : 3001;
@@ -28,6 +46,12 @@ const gradeEngineProbe = gradeEngineProbeFromEnv(cardgrading);
 const { slabPricing, selection: slabPricingSelection } = createSlabPricingFromEnv();
 const { client: liveIdentityOpenclip, reason: openclipReason } =
   resolveLiveIdentityOpenclipFromEnv();
+// Sean: CardSight only with CARD_FLOW_CARDSIGHT_ADAPTER=on + CARDSIGHT_API_KEY, and the app calls
+// it only for users who allowed it (current consent version); everyone else gets the local matcher.
+const cardSightBudget = cardSightMonthlyBudgetFromEnv();
+const cardSight = cardSightAdapterFromEnv(process.env, {
+  consumeBudget: () => consumeCardSightBudget({ consume: store.consumeVendorQuota, cap: cardSightBudget, now: new Date() }),
+});
 const liveVideoYoloHolder: { detector: ObbDetector | null } = { detector: null };
 const app = createApp(store, {
   devAutoSession: resolveDevAutoSession(),
@@ -35,6 +59,8 @@ const app = createApp(store, {
   pricing,
   pokecollectorAccounts,
   recognition,
+  cardSight,
+  cardSightUserCaps: cardSightUserCapsFromEnv(),
   grading,
   cardgrading,
   gradeEngineProbe,
@@ -46,6 +72,15 @@ const app = createApp(store, {
   liveVideoObb: () => liveVideoYoloHolder.detector,
   liveIdentifyEnabled: recognitionSelection.identifyEnabled,
 });
+startPhotoRetentionJob({
+  purge: (now) => store.purgeExpiredGradePhotos(now),
+  onPurge: (result) => {
+    if (result.deleted > 0) {
+      console.log(`Photo retention: deleted ${result.deleted} graded photo(s) older than 30 days`);
+    }
+  },
+});
+
 void resolveLiveVideoObbDetector().then((detector) => {
   liveVideoYoloHolder.detector = detector;
   console.log(

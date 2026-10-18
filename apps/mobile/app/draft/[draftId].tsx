@@ -1,4 +1,8 @@
 import {
+  ESTIMATED_SPREAD_LABEL,
+  ESTIMATED_SPREAD_NOTE,
+  estimatedSpreadLine,
+  listingReadiness,
   CONDITION_LABELS,
   DISCLOSURE_ITEMS,
   appendSnippet,
@@ -10,6 +14,7 @@ import {
   type DisclosureAnswers,
   type ListingDraft,
 } from "@cardflow/shared";
+import { trackEvent } from "@/lib/product-events";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import * as Clipboard from "expo-clipboard";
 import { Image } from "expo-image";
@@ -132,6 +137,12 @@ export default function DraftScreen() {
   }, [blocked, draftId, routeBlocked]);
 
   const catalog = draft?.catalogDisplay;
+  const readiness = listingReadiness({ title, condition, askingPrice, disclosure });
+  const estimatedSpread = estimatedSpreadLine({
+    askingPrice: askingPrice.trim() || null,
+    allInTotal,
+    at: draft?.updatedAt ?? null,
+  });
   const liveSpread = useMemo(
     () =>
       computeCostToAskSpread({
@@ -219,7 +230,7 @@ export default function DraftScreen() {
         result.allInTotal ?? result.costToAsk?.allInTotal ?? null,
       );
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not mark ready");
+      setError(caught instanceof Error ? caught.message : "Couldn't mark ready");
     } finally {
       setIsSaving(false);
     }
@@ -239,6 +250,7 @@ export default function DraftScreen() {
       });
       const result = await getDraftClipboard(draftId);
       await Clipboard.setStringAsync(result.clipboard.plainText);
+      trackEvent("draft_copied");
       setHasCopied(true);
       setCopyNotice(
         "Copied title, description, condition, and asking price. Private notes omitted.",
@@ -305,6 +317,19 @@ export default function DraftScreen() {
                 </View>
                 <Text style={styles.caption}>Catalog art — not a listing photo</Text>
 
+                <View
+                  accessibilityLabel={`Listing readiness: ${readiness.label}`}
+                  accessible
+                  style={styles.guidance}
+                >
+                  <Text style={styles.guidanceLabel}>{readiness.label}</Text>
+                  {readiness.steps.map((step) => (
+                    <Text key={step.id} style={styles.body}>
+                      {step.done ? "✓" : "○"} {step.label}
+                    </Text>
+                  ))}
+                </View>
+
                 <Text style={styles.label}>Title</Text>
                 <View style={styles.chips}>
                   <Chip
@@ -354,14 +379,15 @@ export default function DraftScreen() {
                 ) : null}
                 <View style={styles.guidance}>
                   <View style={styles.guidanceRow}>
-                    <Text style={styles.guidanceLabel}>Spread vs all-in</Text>
+                    <Text style={styles.guidanceLabel}>{ESTIMATED_SPREAD_LABEL}</Text>
                     <Text style={styles.guidanceValue}>
-                      {liveSpread ? `$${liveSpread.spread}` : "—"}
+                      {liveSpread ? (estimatedSpread?.amount ?? `$${liveSpread.spread}`) : "—"}
                     </Text>
                   </View>
                   <Text style={styles.body}>
-                    Spread / cost-to-ask — never labeled profit.
+                    {estimatedSpread ? estimatedSpread.line : allInTotal ? "Enter an asking price." : "Cost missing. Add your cost in MyDEX."}
                   </Text>
+                  <Text style={styles.body}>{ESTIMATED_SPREAD_NOTE}</Text>
                 </View>
 
                 <Text style={styles.label}>Description</Text>

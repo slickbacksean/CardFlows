@@ -40,6 +40,16 @@ You can skip saving the photo after the scan if you only want a one-time check. 
 
 ## 2. Sending the selected image to CardSight
 
+**Decided (Sean, Oct 17):** a one-time prompt before the first photo is uploaded, with a Settings toggle to withdraw. The shipped text is `CARDSIGHT_CONSENT_COPY` in `packages/shared/src/cardsight-consent.ts`, version `CARDSIGHT_CONSENT_VERSION` (bumped to `2026-10-17.2` for the Policy Reviewer wording, so earlier answers are asked again). This disclosure is the only place CardFlow copy may say "AI"; estimate copy never does. It is stored on the server with its version and timestamps (`provider_consents`: granted, declined or withdrawn). A "Don't allow" is recorded as a decline, never as a grant. Every grant, decline and withdrawal is also appended to `consent_events`, a history that is never edited; it's deleted with the account. **Only for accounts that confirmed 18+ (Policy Reviewer, Oct 17): guests never get CardSight, never see this prompt or the Settings toggle (Settings shows "Sign up to use CardSight card recognition."), and no guest answer carries over at sign-up. Guests can't scan at all (browse only, Sean, Oct 17); only photos taken after an account consents go to CardSight.** Each account also has a monthly CardSight cap (50 by default; guests 0). Past it, that user's photos stay on CardFlow's own matcher until the next month. The server checks consent right before calling CardSight. Without consent, CardFlow's own matcher or manual search is used. Changing the wording or CardSight's terms means bumping the version, and everyone is asked again.
+
+> **Card recognition.** CardFlow can use CardSight, our card-recognition provider, to identify cards from your photos. If you have an account, have confirmed you're 18 or older, and allow it, your card photos are sent to CardSight. Guests can't upload photos. CardSight's terms let it keep these images and use them to train its AI models. Turning this off later stops new uploads but doesn't remove photos CardSight already has. If you don't allow it, CardFlow matches cards on its own servers, or you can search manually. You can change this anytime in Settings.
+>
+> **Settings > Card recognition** (toggle help): When on, card photos are also sent to CardSight, our card-recognition provider. CardSight's terms let it keep these images and use them to train its AI models. Turning this off stops new uploads but doesn't remove photos CardSight already has. When off, CardFlow matches cards on its own servers only.
+>
+> Buttons: **Allow CardSight** · **Don't allow**
+
+The earlier per-photo draft below is kept for counsel's reference.
+
 **Screen title (draft):** Send this photo for a card suggestion?
 
 **Body (draft):**
@@ -126,18 +136,39 @@ Marketplace apps have their own rules. Using overlays, bots, or scrapers can vio
 
 ## 6. Analytics
 
-**Draft if analytics remain off:**
+**In-app note (exact, `PRODUCT_ANALYTICS_NOTE`):**
 
-CardFlow does not use a third-party analytics SDK in this version. We keep limited technical logs (app version, error codes) to fix crashes. Those logs should not include your photos or passwords.
+> Counts and timings only (for example, how long a scan takes to confirm), sent to PostHog, our analytics provider. Never photos, card details, prices or anything you type. Off by default, and you can turn it off anytime.
 
-**Draft if analytics are later approved:**
+[ ] Share usage analytics (off by default)
 
-Help improve CardFlow by sharing anonymous usage events (which screens you open, whether a scan failed). This does **not** include your card photos or account password.
+**Privacy policy draft: card-recognition provider (CardSight)**
 
-[ ] Share usage analytics  
-[ ] Do not share usage analytics
+CardFlow can use **CardSight**, our card-recognition provider, to identify cards from your photos. If you allow it, your card photos are sent to CardSight. CardSight's terms let it keep these images and use them to train its AI models. Turning this off later (Settings > Card recognition) stops new uploads but doesn't remove photos CardSight already has, and deleting a scan or your account in CardFlow doesn't delete CardSight's copies. If you don't allow it, CardFlow matches cards on its own servers, or you can search manually. We send CardSight the photo and the fields its API needs, not your email. We record when you allowed or turned this off, and which version of this notice you saw.
 
-**Open:** vendor name, ATT (App Tracking Transparency) if the SDK tracks across apps, Play Data safety answers.
+**Privacy policy draft: email service provider (Resend)**
+
+We use **Resend** (Resend, Inc.), an email service provider that processes data on our behalf, to send account emails: your sign-up verification code and password reset codes. Resend receives your email address and the message we send, including the code. It does not receive your photos, cards, prices or anything else in your account. We don't use Resend for marketing email.
+
+**Privacy policy draft: email verification and unverified accounts**
+
+When you create an account, we email you a 6-digit code to confirm your address. You need to confirm it before you can get pre-grade estimates. We send at most 10 verification codes to an account, and at most 10 emails (codes and password resets) to one address per day. **If you don't confirm your email within 7 days of signing up, we delete the account and everything in it** (scans, photos, inventory and estimates), the same as if you had deleted it yourself. To limit repeat emails, we keep a count of the emails sent to each address for about a day, then delete it.
+
+**Privacy policy draft: analytics service provider**
+
+If you turn on usage analytics, CardFlow sends counts and timings to **PostHog Inc.**, a service provider that processes this data on our behalf and stores it in the **United States**. PostHog briefly receives your device's IP address when events arrive, but we have turned off its location lookup (GeoIP), so no location is derived or stored, and events are not linked to a person profile. We never send photos, card details, prices or anything you type. You can turn analytics off at any time in Settings; events not yet sent are deleted from your phone.
+
+**Performance timings:** when analytics is on, a small sample of scan-step timings, a coarse device class, OS and phone model are also sent to CardFlow's own servers (not to PostHog) to keep scanning fast. The same switch controls this; with it off nothing is sent. Our servers keep only aggregate timings by step and device class; the phone model and OS are not stored.
+
+---
+
+## 6a. Guests (browse only)
+
+**Decided (Sean, Oct 17, 8:36 PM PT):** guests can look around the app but must sign up before any scan, grade or saving. The free account is the entry tier. This replaces the 3 free guest scans (D9).
+
+**Privacy policy draft:** You can look around CardFlow as a guest without an account. Guests can't scan, grade or save cards, so we don't receive card photos from guests. A guest session lasts 24 hours and holds only a random guest ID and session token. You can delete it anytime (Settings > Delete account), and we delete it within 24 hours after the session ends. To scan, grade or save cards, create a free account.
+
+**Accounts (open sign-up):** to create an account we collect your email address and a password. We store only a salted, one-way hash of the password (scrypt), never the password itself. Your email is used to sign you in. Deleting your account (Settings) removes your email, password hash, sessions and every record keyed to your account, in one step.
 
 ---
 
@@ -146,7 +177,7 @@ Help improve CardFlow by sharing anonymous usage events (which screens you open,
 Draft list for Settings:
 
 - Manual photo scans: always user-started
-- Send selected photo to CardSight: ask each time / ask once and remember [counsel to pick]
+- Use CardSight for card recognition: On / Off (decided: ask once, then this toggle; off = CardFlow's matcher only)
 - Save scan photos: On / Off
 - Usage analytics: On / Off (hidden if no SDK)
 - Live visual analysis: Off (unavailable in MVP)
@@ -155,11 +186,25 @@ Draft list for Settings:
 
 ---
 
-## 8. Age gate (draft placeholder)
+## 8. Age (18+ accounts)
 
-CardSight’s public terms say their software is not intended for personal information of anyone under 18.
+**Decided (Sean, Oct 17, 2026, 8:25 AM PT):** this replaces the birth month/year screen. All accounts must be 18+, stated at sign-up. There's no birth-date screen and no under-18 lockout.
 
-**Draft:** CardFlow is for users 18 or older. [**Open:** counsel must set the real age, parental-consent, and Pokémon-audience risk.]
+**How it works (`packages/shared/src/age-gate.ts`):**
+- **Sign-up:** a required checkbox, unchecked by default: "I confirm I'm 18 or older." The screen keeps the line "By creating an account, you confirm you're 18 or older and agree to the Terms and Privacy Policy." The server refuses `POST /v1/accounts` without `ageConfirmed18Plus` and stores only `age_attested_at` and the wording version (`age_confirmations`).
+- **Testers and existing accounts:** they confirm once in the app ("I confirm I'm 18 or older.") before any CardSight call. Until then, CardFlow's own matcher is used.
+- **CardSight:** called only for an account that has an 18+ confirmation AND current consent.
+- **Guests:** they make no age statement, so they never get CardSight, even if a consent is sent. They can't scan or upload photos (browse only).
+- **Under-18 reports:** an ops-only path (`POST /ops/under-18-report`, ops token) turns CardSight off and deletes the account and its data.
+
+**Privacy policy draft: Age**
+
+> CardFlow is intended for people 18 and older. Creating an account requires confirming you're 18 or older. Guests can look around without an account but can't scan, grade or save cards. We don't knowingly collect personal information from anyone under 18. If you believe someone under 18 has given us information, contact us at [contact email] and we'll delete it.
+
+**Counsel notes:**
+- Ask CardSight in writing whether self-attestation (a sign-up checkbox) is acceptable under their under-18 term.
+- Check the Utah and Texas app-store age-verification laws before launch.
+- Replace [contact email].
 
 ---
 

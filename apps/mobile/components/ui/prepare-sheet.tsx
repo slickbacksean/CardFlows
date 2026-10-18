@@ -1,7 +1,14 @@
 import {
+  GradeJobCancelled,
+  GradeJobError,
   CONDITION_LABELS,
-  GRADE_ESTIMATE_DISCLAIMER,
   GRADE_ESTIMATE_EMPTY_COPY,
+  GRADE_HISTORY_NOTE,
+  gradeHistoryLockedLine,
+  GRADE_HISTORY_SHOW_OLDER,
+  GRADE_HISTORY_TITLE,
+  gradeHistoryLines,
+  type GradeHistoryEntry,
   GRADE_ESTIMATE_UNAVAILABLE_COPY,
   GRADE_PHOTOS_HINT,
   GRADE_SIDES,
@@ -24,8 +31,10 @@ import {
   type CardFlowGradeEstimate,
   type CardFlowSlabEstimate,
 } from "@cardflow/shared";
+import { trackEvent } from "@/lib/product-events";
 import { Image } from "expo-image";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { GradeJobErrorCard, GradeWaitCard, useGradeWaitClock } from "./grade-wait-card";
 import {
   KeyboardAvoidingView,
   Modal,
@@ -51,6 +60,14 @@ import {
   type PickedGradeStill,
 } from "@/lib/grade-photos";
 import { getConfirmPictureUri } from "@/lib/scan-capture";
+import {
+  gradeHistoryHasOlder,
+  gradeHistoryLockedCount,
+  loadGradeHistory,
+  loadOlderGradeHistory,
+  recordGradeHistory,
+} from "@/lib/grade-history";
+import { PremiumPrompt } from "@/components/ui/premium-prompt";
 import { PrimaryButton } from "./primary-button";
 
 export interface PrepareMovePayload {
@@ -128,6 +145,9 @@ function PrepareSheetForm({
   const hasFront = Boolean(frontUri);
 
   const photoKey = `${pickedFront?.uri ?? ""}|${pickedBack?.uri ?? ""}|${captureFrontUri ?? ""}`;
+  const [gradeHistory, setGradeHistory] = useState<GradeHistoryEntry[]>([]);
+  const [historyLocked, setHistoryLocked] = useState(0);
+  const [historyHasOlder, setHistoryHasOlder] = useState(false);
   const [photoKeySeen, setPhotoKeySeen] = useState(photoKey);
   if (photoKeySeen !== photoKey) {
     setPhotoKeySeen(photoKey);
@@ -137,25 +157,91 @@ function PrepareSheetForm({
     setSlabEstimate(null);
   }
 
+  // P1-07: wait card state for async grade jobs.
+  const wait = useGradeWaitClock();
+  const [jobError, setJobError] = useState<GradeJobError | null>(null);
+  const [estimating, setEstimating] = useState(false);
+  const runRef = useRef<AbortController | null>(null);
+
+  function runEstimate(reestimate: boolean) {
+    if (!itemId) return;
+    runRef.current?.abort();
+    const controller = new AbortController();
+    runRef.current = controller;
+    wait.reset();
+    setJobError(null);
+    setEstimating(true);
+    const gradeStartedAt = Date.now();
+    trackEvent(reestimate ? "grade_retake" : "grade_started");
+    void requestGradeEstimate(
+      itemId,
+      {
+        frontUri: pickedFront?.uri ?? (imageStorageRef ? null : captureFrontUri),
+        frontMimeType: pickedFront?.mimeType,
+        backUri: pickedBack?.uri,
+        backMimeType: pickedBack?.mimeType,
+        ...(reestimate ? { reestimate: true } : {}),
+      },
+      {
+        signal: controller.signal,
+        onJobUpdate: (job) => {
+          if (!controller.signal.aborted) wait.onJobUpdate(job);
+        },
+        onPollError: (n) => {
+          if (!controller.signal.aborted) wait.onPollError(n);
+        },
+      },
+    )
+      .then((result) => {
+        if (controller.signal.aborted) return;
+        trackEvent("grade_shown", { ms_since_scan: Date.now() - gradeStartedAt });
+        setFetchedEstimate(result);
+        void recordGradeHistory(itemId, result).then((next) => {
+          if (!controller.signal.aborted) setGradeHistory(next);
+        });
+      })
+      .catch((error: unknown) => {
+        if (controller.signal.aborted || error instanceof GradeJobCancelled) return;
+        if (error instanceof GradeJobError) setJobError(error);
+        else setFetchedEstimate(unavailableGradeEstimate());
+      })
+      .finally(() => {
+        if (runRef.current === controller) setEstimating(false);
+      });
+  }
+
+  function cancelEstimate() {
+    // Photos are kept; the server job expires on its own (TTL). A late result is dropped.
+    runRef.current?.abort();
+    runRef.current = null;
+    setEstimating(false);
+    wait.reset();
+  }
+
   useEffect(() => {
     if (!visible || !itemId || estimate || !hasFront) return;
+    // Next tick so the effect itself doesn't set state synchronously.
+    const start = setTimeout(() => runEstimate(false), 0);
+    return () => {
+      clearTimeout(start);
+      runRef.current?.abort();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [captureFrontUri, estimate, hasFront, imageStorageRef, itemId, pickedBack, pickedFront, visible]);
+
+  useEffect(() => {
+    if (!visible || !itemId) return;
     let cancelled = false;
-    void requestGradeEstimate(itemId, {
-      frontUri: pickedFront?.uri ?? (imageStorageRef ? null : captureFrontUri),
-      frontMimeType: pickedFront?.mimeType,
-      backUri: pickedBack?.uri,
-      backMimeType: pickedBack?.mimeType,
-    })
-      .then((result) => {
-        if (!cancelled) setFetchedEstimate(result);
-      })
-      .catch(() => {
-        if (!cancelled) setFetchedEstimate(unavailableGradeEstimate());
-      });
+    void loadGradeHistory(itemId).then((history) => {
+      if (cancelled) return;
+      setGradeHistory(history);
+      setHistoryLocked(gradeHistoryLockedCount());
+      setHistoryHasOlder(gradeHistoryHasOlder());
+    });
     return () => {
       cancelled = true;
     };
-  }, [captureFrontUri, estimate, hasFront, imageStorageRef, itemId, pickedBack, pickedFront, visible]);
+  }, [itemId, visible]);
 
   useEffect(() => {
     if (!visible || !tcgdexId) return;
@@ -191,15 +277,7 @@ function PrepareSheetForm({
   function reestimate() {
     if (!itemId || !hasFront) return;
     setFetchedEstimate(null);
-    void requestGradeEstimate(itemId, {
-      frontUri: pickedFront?.uri ?? (imageStorageRef ? null : captureFrontUri),
-      frontMimeType: pickedFront?.mimeType,
-      backUri: pickedBack?.uri,
-      backMimeType: pickedBack?.mimeType,
-      reestimate: true,
-    })
-      .then((result) => setFetchedEstimate(result))
-      .catch(() => setFetchedEstimate(unavailableGradeEstimate()));
+    runEstimate(true);
   }
 
   async function onPickStill(side: "front" | "back", source: "library" | "camera") {
@@ -214,7 +292,7 @@ function PrepareSheetForm({
       if (side === "front") setPickedFront(result.still);
       else setPickedBack(result.still);
     } catch (caught) {
-      setPhotoError(caught instanceof Error ? caught.message : "Could not add that photo.");
+      setPhotoError(caught instanceof Error ? caught.message : "Couldn't add that photo.");
     }
   }
 
@@ -279,9 +357,39 @@ function PrepareSheetForm({
               {photoError ? <Text style={styles.error}>{photoError}</Text> : null}
 
               <View style={styles.guidance}>
-                <Text style={styles.section}>Pre-grade estimate</Text>
+                <Text style={styles.section}>{PREGRADE_LABEL}</Text>
                 <Text style={styles.caption}>{gradeEstimate.disclaimer}</Text>
-                {gradeEstimate.overall == null ? (
+                {gradeHistory.length > 0 ? (
+                  <View accessibilityLabel={GRADE_HISTORY_TITLE} accessible>
+                    <Text style={styles.body}>{GRADE_HISTORY_TITLE}</Text>
+                    {gradeHistoryLines(gradeHistory).map((line, index) => (
+                      <Text key={`${index}-${line}`} style={styles.caption}>
+                        {line}
+                      </Text>
+                    ))}
+                    <Text style={styles.caption}>{GRADE_HISTORY_NOTE}</Text>
+                    {historyLocked > 0 ? <Text style={styles.caption}>{gradeHistoryLockedLine(historyLocked)}</Text> : null}
+                    {historyHasOlder && itemId ? (
+                      <Pressable
+                        accessibilityRole="button"
+                        onPress={() =>
+                          void loadOlderGradeHistory(itemId, gradeHistory).then((all) => {
+                            setGradeHistory(all);
+                            setHistoryHasOlder(gradeHistoryHasOlder());
+                          })
+                        }
+                      >
+                        <Text style={styles.caption}>{GRADE_HISTORY_SHOW_OLDER}</Text>
+                      </Pressable>
+                    ) : null}
+                  </View>
+                ) : null}
+                {historyLocked > 0 ? <PremiumPrompt feature="grade_history" /> : null}
+                {estimating && !fetchedEstimate ? (
+                  <GradeWaitCard clock={wait.clock} onCancel={cancelEstimate} />
+                ) : jobError && !fetchedEstimate ? (
+                  <GradeJobErrorCard onRetry={() => runEstimate(false)} retryAfterSeconds={jobError.retryAfterSeconds} />
+                ) : gradeEstimate.overall == null ? (
                   <Text style={styles.body}>
                     {gradeEstimate.display === GRADE_ESTIMATE_UNAVAILABLE_COPY
                       ? GRADE_ESTIMATE_UNAVAILABLE_COPY
@@ -291,7 +399,12 @@ function PrepareSheetForm({
                   </Text>
                 ) : (
                   <>
-                    <Text style={styles.estimateOverall}>{gradeEstimate.display}</Text>
+                    <Text
+                      accessibilityLabel={`${PREGRADE_LABEL}, ${gradeEstimate.overall}`}
+                      style={styles.estimateOverall}
+                    >
+                      {gradeEstimate.display}
+                    </Text>
                     {confidence ? <Text style={styles.rowMeta}>{confidence}</Text> : null}
                     {GRADE_SIDES.map((side) => (
                       <View key={side} style={styles.pillar}>

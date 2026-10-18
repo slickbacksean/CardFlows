@@ -193,7 +193,7 @@ export function PrintBrowser({
       ) : null}
       {status === "error" ? (
         <View style={styles.center}>
-          <Text style={styles.message}>Could not load these cards.</Text>
+          <Text style={styles.message}>{"Couldn't load these cards."}</Text>
           <Pressable accessibilityRole="button" onPress={onRetry} style={styles.retry}>
             <Text style={styles.retryLabel}>Try again</Text>
           </Pressable>
@@ -208,7 +208,7 @@ export function PrintBrowser({
           keyboardDismissMode="on-drag"
           ListEmptyComponent={
             <Text style={styles.message}>
-              {ownershipOn ? "None of these cards are in your collection." : "No cards match."}
+              {ownershipOn ? "None of these cards are in MyDEX." : "No cards match."}
             </Text>
           }
           numColumns={3}

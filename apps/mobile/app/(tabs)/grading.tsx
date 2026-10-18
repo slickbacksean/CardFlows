@@ -11,15 +11,21 @@ import {
   updateSubmittedCopy,
   type GradingReturnedCopy,
   type GradingSubmittedCopy,
+  actionErrorMessage,
+  SCREEN_EMPTY_COPY,
+  SCREEN_ERROR_WHAT,
+  SCREEN_LOADING_LABELS,
+  screenDataState,
 } from "@cardflow/shared";
+import { InlineError, ScreenEmpty, ScreenError, ScreenLoading, StaleBanner } from "@/components/ui/screen-state";
+import { StatusBanner } from "@/components/ui/status-banner";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { Image } from "expo-image";
-import { useFocusEffect } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
 import { useCallback, useMemo, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { PhotoGradeFlow } from "@/components/ui/photo-grade-flow";
 import { PrepareSheet, type PrepareMovePayload } from "@/components/ui/prepare-sheet";
-import { PrimaryButton } from "@/components/ui/primary-button";
 import { ReturnedSheet, type ReturnedSheetPayload } from "@/components/ui/returned-sheet";
 import { SubmittedSheet, type SubmittedSheetSavePayload } from "@/components/ui/submitted-sheet";
 import {
@@ -31,7 +37,8 @@ import {
   submitGradingCopy,
   type InventoryItem,
 } from "@/lib/api";
-import { loadActiveIdentity, peekActiveUserId } from "@/lib/identity";
+import { isGuestSession, loadActiveIdentity, peekActiveUserId } from "@/lib/identity";
+import { requireAccount } from "@/lib/signup-prompt";
 import { colors, radii, space } from "@/lib/theme";
 
 function inventoryMaxBuyAmount(item: InventoryItem): string | null {
@@ -39,9 +46,7 @@ function inventoryMaxBuyAmount(item: InventoryItem): string | null {
 }
 
 function saveErrorMessage(caught: unknown): string {
-  return caught instanceof Error && caught.message
-    ? caught.message
-    : "Could not save that change.";
+  return actionErrorMessage(caught, "Couldn't save that change. Try again.");
 }
 
 type LoadState = "loading" | "ready" | "error";
@@ -60,11 +65,20 @@ function matchesSearch(item: InventoryItem, query: string): boolean {
 }
 
 export default function GradingScreen() {
-  const [pane, setPane] = useState<"photo" | "pipeline">("photo");
+  // Browse-only guests (Sean, Oct 17) open on the (empty) pipeline; the photo pre-grade needs sign-up.
+  const [pane, setPane] = useState<"photo" | "pipeline">(() => (isGuestSession() ? "pipeline" : "photo"));
   const [segment, setSegment] = useState<Segment>("prepare");
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [activeUserId, setActiveUserId] = useState(peekActiveUserId);
   const [loadState, setLoadState] = useState<LoadState>("loading");
+  const [loadError, setLoadError] = useState<unknown>(null);
+  // UX review P0-1/P0-2: inventory (Prepare) and grading (Submitted/Returned) load and fail
+  // separately, and a failure after a good load keeps the data with a banner.
+  const [loadedAt, setLoadedAt] = useState<number | null>(null);
+  const [gradingState, setGradingState] = useState<LoadState>("loading");
+  const [gradingError, setGradingError] = useState<unknown>(null);
+  const [gradingLoadedAt, setGradingLoadedAt] = useState<number | null>(null);
+  const [retrying, setRetrying] = useState(false);
   const [query, setQuery] = useState("");
   const [preparingItem, setPreparingItem] = useState<InventoryItem | null>(null);
   const [submitted, setSubmitted] = useState<GradingSubmittedCopy[]>([]);
@@ -74,30 +88,56 @@ export default function GradingScreen() {
   const [actionError, setActionError] = useState<string | null>(null);
 
   const refreshInventory = useCallback(async () => {
-    try {
-      const [identity, result, grading] = await Promise.all([
-        loadActiveIdentity(),
-        listInventory(),
-        listGrading().catch(() => ({ submitted: [], returned: [] })),
-      ]);
-      const userId = identity?.userId ?? peekActiveUserId();
+    const [identityResult, inventoryResult, gradingResult] = await Promise.allSettled([
+      loadActiveIdentity(),
+      listInventory(),
+      listGrading(),
+    ]);
+    const identity = identityResult.status === "fulfilled" ? identityResult.value : null;
+    const userId = identity?.userId ?? peekActiveUserId();
+    setActiveUserId(userId);
+    if (inventoryResult.status === "fulfilled") {
+      const result = inventoryResult.value;
       const itemIds = new Set(result.items.map((item) => item.inventoryItemId));
-      setActiveUserId(userId);
       setItems(result.items);
-      setSubmitted(grading.submitted);
-      setReturned(grading.returned);
       setPreparingItem((current) =>
         current && itemIds.has(current.inventoryItemId) ? current : null,
       );
-      setEditingCopy((current) => (current && current.userId === userId ? current : null));
-      setReturnedTarget((current) =>
-        current && current.copy.userId === userId ? current : null,
-      );
       setLoadState("ready");
-    } catch {
+      setLoadError(null);
+      setLoadedAt(Date.now());
+    } else {
+      setLoadError(inventoryResult.reason);
       setLoadState("error");
     }
+    if (gradingResult.status === "fulfilled") {
+      setSubmitted(gradingResult.value.submitted);
+      setReturned(gradingResult.value.returned);
+      setGradingState("ready");
+      setGradingError(null);
+      setGradingLoadedAt(Date.now());
+    } else {
+      // Keep the copies already on screen; never swap them for an empty list.
+      setGradingError(gradingResult.reason);
+      setGradingState("error");
+    }
+    setEditingCopy((current) => (current && current.userId === userId ? current : null));
+    setReturnedTarget((current) =>
+      current && current.copy.userId === userId ? current : null,
+    );
   }, []);
+
+  async function retryLoad() {
+    if (retrying) return;
+    setRetrying(true);
+    if (loadedAt == null) setLoadState("loading");
+    if (gradingLoadedAt == null) setGradingState("loading");
+    try {
+      await refreshInventory();
+    } finally {
+      setRetrying(false);
+    }
+  }
 
   useFocusEffect(
     useCallback(() => {
@@ -259,6 +299,14 @@ export default function GradingScreen() {
     if (copy) setReturnedTarget({ mode: "mark", copy });
   }
 
+  // Prepare reads inventory; Submitted and Returned read their own grading data.
+  const onPrepare = segment === "prepare";
+  const segmentLoadedAt = onPrepare ? loadedAt : gradingLoadedAt;
+  const segmentError = onPrepare ? loadError : gradingError;
+  const segmentData = screenDataState({ status: onPrepare ? loadState : gradingState, loadedAt: segmentLoadedAt });
+
+  // The photo pre-grade pane never depends on the inventory load, so a load error can't
+  // unmount it or drop its photos (UX review P0-2).
   if (pane === "photo") {
     return <PhotoGradeFlow onOpenPipeline={() => setPane("pipeline")} />;
   }
@@ -266,7 +314,14 @@ export default function GradingScreen() {
   return (
     <View style={styles.flex}>
       <View style={styles.toolbar}>
-        <Pressable accessibilityRole="button" onPress={() => setPane("photo")}>
+        <Pressable
+          accessibilityLabel="Photo grade"
+          accessibilityRole="button"
+          hitSlop={10}
+          onPress={() => {
+            if (requireAccount()) setPane("photo");
+          }}
+        >
           <Text style={styles.photoLink}>Photo grade</Text>
         </Pressable>
         <View style={styles.titleRow}>
@@ -288,6 +343,7 @@ export default function GradingScreen() {
             </View>
           ) : null}
         </View>
+        <StatusBanner />
         <Text style={styles.constraint}>{GRADING_TAB_CONSTRAINT}</Text>
         <View accessibilityRole="tablist" style={styles.segments}>
           <SegmentButton
@@ -308,67 +364,73 @@ export default function GradingScreen() {
         </View>
       </View>
 
-      {segment === "prepare" && loadState === "error" ? (
-        <View style={styles.bodyPad}>
-          <Text style={styles.emptyTitle}>Could not load inventory.</Text>
-          <PrimaryButton
-            label="Try again"
-            onPress={() => {
-              setLoadState("loading");
-              void refreshInventory();
-            }}
+      <ScrollView
+        contentContainerStyle={styles.content}
+        keyboardShouldPersistTaps="handled"
+        style={styles.flex}
+      >
+        <InlineError message={actionError} />
+        {segmentData === "stale" && segmentLoadedAt != null ? (
+          <StaleBanner loadedAt={segmentLoadedAt} onRetry={() => void retryLoad()} retrying={retrying} />
+        ) : null}
+        {segment === "prepare" ? (
+          <Pressable accessibilityLabel="Batch pre-grade" accessibilityRole="button" onPress={() => {
+            if (requireAccount()) router.push("/grade-batch");
+          }}>
+            <Text style={styles.batchLink}>Batch pre-grade</Text>
+          </Pressable>
+        ) : null}
+        {segmentData === "error" ? (
+          <ScreenError
+            error={segmentError}
+            onRetry={() => void retryLoad()}
+            retrying={retrying}
+            what={SCREEN_ERROR_WHAT.grade}
           />
-        </View>
-      ) : (
-        <ScrollView
-          contentContainerStyle={styles.content}
-          keyboardShouldPersistTaps="handled"
-          style={styles.flex}
-        >
-          {actionError ? <Text style={styles.error}>{actionError}</Text> : null}
-          {segment === "prepare" ? (
-            loadState === "loading" && purchasedItems.length === 0 ? null : visiblePurchased.length ===
-              0 ? (
-              <EmptyState
-                hasQuery={Boolean(normalizedQuery)}
-                hasPurchased={purchasedItems.length > 0}
-                hasPrepareRemaining={prepareItems.length > 0}
-                segment="prepare"
-              />
-            ) : (
-              visiblePurchased.map((item) => (
-                <PrepareRow
-                  item={item}
-                  key={item.inventoryItemId}
-                  onPrepare={() => openPrepare(item)}
-                />
-              ))
-            )
-          ) : segment === "submitted" ? (
-            visibleSubmitted.length === 0 ? (
-              <EmptyState segment="submitted" />
-            ) : (
-              visibleSubmitted.map((copy) => (
-                <SubmittedRow
-                  copy={copy}
-                  key={copy.inventoryItemId}
-                  onPress={() => setEditingCopy(copy)}
-                />
-              ))
-            )
-          ) : visibleReturned.length === 0 ? (
-            <EmptyState segment="returned" />
+        ) : segmentData === "loading" ? (
+          <ScreenLoading label={SCREEN_LOADING_LABELS.grade} rows={4} />
+        ) : segment === "prepare" ? (
+          visiblePurchased.length === 0 ? (
+            <EmptyState
+              onOpenCollection={() => router.push("/(tabs)/collection")}
+              hasQuery={Boolean(normalizedQuery)}
+              hasPurchased={purchasedItems.length > 0}
+              hasPrepareRemaining={prepareItems.length > 0}
+              segment="prepare"
+            />
           ) : (
-            visibleReturned.map((copy) => (
-              <ReturnedRow
-                copy={copy}
-                key={copy.inventoryItemId}
-                onPress={() => setReturnedTarget({ mode: "edit", copy })}
+            visiblePurchased.map((item) => (
+              <PrepareRow
+                item={item}
+                key={item.inventoryItemId}
+                onPrepare={() => openPrepare(item)}
               />
             ))
-          )}
-        </ScrollView>
-      )}
+          )
+        ) : segment === "submitted" ? (
+          visibleSubmitted.length === 0 ? (
+            <EmptyState segment="submitted" />
+          ) : (
+            visibleSubmitted.map((copy) => (
+              <SubmittedRow
+                copy={copy}
+                key={copy.inventoryItemId}
+                onPress={() => setEditingCopy(copy)}
+              />
+            ))
+          )
+        ) : visibleReturned.length === 0 ? (
+          <EmptyState segment="returned" />
+        ) : (
+          visibleReturned.map((copy) => (
+            <ReturnedRow
+              copy={copy}
+              key={copy.inventoryItemId}
+              onPress={() => setReturnedTarget({ mode: "edit", copy })}
+            />
+          ))
+        )}
+      </ScrollView>
 
       <PrepareSheet
         canSubmit={
@@ -425,12 +487,13 @@ interface SegmentButtonProps {
 function SegmentButton({ label, selected, onPress }: SegmentButtonProps) {
   return (
     <Pressable
+      accessibilityLabel={label}
       accessibilityRole="tab"
       accessibilityState={{ selected }}
       onPress={onPress}
       style={[styles.segment, selected && styles.segmentSelected]}
     >
-      <Text numberOfLines={1} style={[styles.segmentLabel, selected && styles.segmentLabelSelected]}>
+      <Text style={[styles.segmentLabel, selected && styles.segmentLabelSelected]}>
         {label}
       </Text>
     </Pressable>
@@ -442,6 +505,7 @@ interface EmptyStateProps {
   hasQuery?: boolean;
   hasPurchased?: boolean;
   hasPrepareRemaining?: boolean;
+  onOpenCollection?: () => void;
 }
 
 function EmptyState({
@@ -449,44 +513,27 @@ function EmptyState({
   hasQuery = false,
   hasPurchased = false,
   hasPrepareRemaining = false,
+  onOpenCollection,
 }: EmptyStateProps) {
+  const c = SCREEN_EMPTY_COPY;
   if (segment === "submitted") {
-    return (
-      <View style={styles.empty}>
-        <Text style={styles.emptyTitle}>Nothing submitted.</Text>
-        <Text style={styles.body}>Prepare a purchased copy first.</Text>
-      </View>
-    );
+    return <ScreenEmpty body={c.gradeSubmitted.body} icon="paper-plane-outline" title={c.gradeSubmitted.title} />;
   }
-
   if (segment === "returned") {
-    return (
-      <View style={styles.empty}>
-        <Text style={styles.emptyTitle}>Nothing returned.</Text>
-      </View>
-    );
+    return <ScreenEmpty body={c.gradeReturned.body} icon="return-down-back-outline" title={c.gradeReturned.title} />;
   }
-
   if (hasQuery && hasPrepareRemaining) {
-    return <Text style={styles.body}>No matching cards.</Text>;
+    return <ScreenEmpty body={c.noMatches.body} icon="search-outline" title={c.noMatches.title} />;
   }
-
   if (hasPurchased && !hasPrepareRemaining) {
-    return (
-      <View style={styles.empty}>
-        <Text style={styles.emptyTitle}>No copies left to prepare.</Text>
-        <Text style={styles.body}>Moved copies are on Submitted or Returned.</Text>
-      </View>
-    );
+    return <ScreenEmpty body={c.gradePrepareDone.body} icon="checkmark-done-outline" title={c.gradePrepareDone.title} />;
   }
-
   return (
-    <View style={styles.empty}>
-      <Text style={styles.emptyTitle}>No purchased copies.</Text>
-      <Text style={styles.body}>
-        Scan does not create inventory. Confirm, then Purchased.
-      </Text>
-    </View>
+    <ScreenEmpty
+      action={onOpenCollection ? { label: c.gradePrepare.action, onPress: onOpenCollection } : undefined}
+      body={c.gradePrepare.body}
+      title={c.gradePrepare.title}
+    />
   );
 }
 
@@ -636,13 +683,13 @@ function ReturnedRow({ copy, onPress }: ReturnedRowProps) {
 }
 
 const styles = StyleSheet.create({
+  batchLink: { color: colors.accent, fontWeight: "700", fontSize: 15 },
   flex: { flex: 1, backgroundColor: colors.bg },
   toolbar: {
     paddingHorizontal: space.lg,
     paddingTop: space.lg,
     gap: space.md,
   },
-  bodyPad: { padding: space.lg, gap: space.md },
   content: { padding: space.lg, gap: space.md, paddingBottom: 48 },
   error: { color: colors.danger, fontSize: 14 },
   titleRow: {
@@ -680,6 +727,8 @@ const styles = StyleSheet.create({
   segment: {
     flex: 1,
     alignItems: "center",
+    justifyContent: "center",
+    minHeight: 44,
     borderRadius: radii.pill,
     paddingVertical: 8,
   },

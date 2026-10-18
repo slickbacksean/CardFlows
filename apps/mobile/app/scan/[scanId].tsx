@@ -1,10 +1,16 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
+import { msSinceScan, trackEvent } from "@/lib/product-events";
 import {
   CATALOG_SEARCH_HINT,
+  CONFIDENCE_SCREEN_LABEL,
   CONFIRM_AMBIGUOUS_TITLE,
   CONFIRM_COULD_NOT_CONFIRM_MESSAGE,
   CONFIRM_SEARCH_FRAMES,
+  CONFIRM_NOT_THIS_CARD_LABEL,
   CONFIRM_SEARCH_MANUALLY_LABEL,
+  CONFIRM_TIPS,
+  HOW_THIS_WORKS_OPEN_LABEL,
+  confidenceWord,
   confirmFailSoftBody,
   confirmFailSoftTitle,
   confirmFrameFromScan,
@@ -12,12 +18,17 @@ import {
   type ConfirmFrame,
 } from "@cardflow/shared";
 import { Image } from "expo-image";
+import { useQueryClient } from "@tanstack/react-query";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { HowThisWorksSheet } from "@/components/ui/how-this-works-sheet";
+import { LabeledFigure } from "@/components/ui/labeled-figure";
 import { PrimaryButton } from "@/components/ui/primary-button";
-import { confirmScan, getScan, rejectScan, searchCatalog, type ScanRecord } from "@/lib/api";
+import { confirmScan, getScan, rejectScan, type ScanRecord } from "@/lib/api";
+import { rememberCatalogCards, searchCatalogWithSnapshot } from "@/lib/catalog-snapshot";
+import { prefetchCandidatePrices } from "@/lib/price-queries";
 import { getConfirmPictureUri } from "@/lib/scan-capture";
 import { colors, space } from "@/lib/theme";
 
@@ -25,6 +36,7 @@ const MANUAL_SEARCH_FRAMES = new Set<ConfirmFrame>(CONFIRM_SEARCH_FRAMES);
 
 export default function ScanScreen() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const { scanId: scanIdParam } = useLocalSearchParams<{ scanId: string }>();
   const scanId = Array.isArray(scanIdParam) ? scanIdParam[0] : scanIdParam;
   const [scan, setScan] = useState<ScanRecord | null>(null);
@@ -34,10 +46,13 @@ export default function ScanScreen() {
   const [rejected, setRejected] = useState(false);
   const [searchSet, setSearchSet] = useState("");
   const [searchNumber, setSearchNumber] = useState("");
+  const [searchName, setSearchName] = useState("");
+  const [searchOpen, setSearchOpen] = useState(false);
   const [searchCards, setSearchCards] = useState<CardFlowCanonicalCard[]>([]);
   const [searchCached, setSearchCached] = useState(false);
   const [searchNotice, setSearchNotice] = useState<string | null>(null);
   const [isSearching, setIsSearching] = useState(false);
+  const [howThisWorksOpen, setHowThisWorksOpen] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -50,6 +65,19 @@ export default function ScanScreen() {
         const data = await getScan(scanId);
         if (cancelled) return;
         setScan(data.scan);
+        trackEvent("candidates_shown", {
+          candidate_count: data.scan.mapping.candidates.length,
+          ms_since_scan: msSinceScan(data.scan.scanId),
+        });
+        void rememberCatalogCards(
+          data.scan.mapping.canonicalCard
+            ? [data.scan.mapping.canonicalCard, ...data.scan.mapping.candidates]
+            : data.scan.mapping.candidates,
+        );
+        prefetchCandidatePrices(queryClient, [
+          ...(data.scan.mapping.canonicalCard ? [data.scan.mapping.canonicalCard] : []),
+          ...data.scan.mapping.candidates,
+        ]);
         setSelectedTcgdexId(
           data.scan.mapping.canonicalCard?.tcgdexId ??
             data.scan.mapping.candidates[0]?.tcgdexId ??
@@ -64,7 +92,7 @@ export default function ScanScreen() {
         setError(null);
       } catch (caught) {
         if (!cancelled) {
-          setError(caught instanceof Error ? caught.message : "Could not load scan");
+          setError(caught instanceof Error ? caught.message : "Couldn't load scan");
         }
       }
     }
@@ -72,7 +100,7 @@ export default function ScanScreen() {
     return () => {
       cancelled = true;
     };
-  }, [scanId]);
+  }, [queryClient, scanId]);
 
   const options = useMemo(() => {
     if (!scan) return searchCards;
@@ -100,13 +128,17 @@ export default function ScanScreen() {
         })
       : null;
   const captureUri = getConfirmPictureUri(scanId, scan?.imageStorageRef);
-  const showManualSearch = frame ? MANUAL_SEARCH_FRAMES.has(frame) : false;
+  const showManualSearch = searchOpen || (frame ? MANUAL_SEARCH_FRAMES.has(frame) : false);
 
   async function onSearch() {
     setIsSearching(true);
     setError(null);
     try {
-      const result = await searchCatalog({ set: searchSet, number: searchNumber });
+      const result = await searchCatalogWithSnapshot({
+        set: searchSet,
+        number: searchNumber,
+        name: searchName,
+      });
       setSearchCards(result.cards);
       setSearchCached(result.cached);
       setSearchNotice(
@@ -121,7 +153,7 @@ export default function ScanScreen() {
         setSelectedTcgdexId(null);
       }
       if (result.cards.length === 0 && !result.notice && !result.error) {
-        setSearchNotice("No English catalog row for that set and number.");
+        setSearchNotice("No English catalog card matches that search.");
       }
     } catch (caught) {
       setSearchCards([]);
@@ -149,7 +181,19 @@ export default function ScanScreen() {
     setIsConfirming(true);
     setError(null);
     try {
-      const result = await confirmScan(scan.scanId, { tcgdexId: selectedTcgdexId });
+      const pickedFromSearch =
+        searchCards.some((card) => card.tcgdexId === selectedTcgdexId) &&
+        scan.mapping.canonicalCard?.tcgdexId !== selectedTcgdexId &&
+        !scan.mapping.candidates.some((card) => card.tcgdexId === selectedTcgdexId);
+      const result = await confirmScan(scan.scanId, {
+        tcgdexId: selectedTcgdexId,
+        ...(pickedFromSearch ? { via: "manual_search" as const } : {}),
+      });
+      trackEvent("confirm", {
+        time_to_confirm_ms: msSinceScan(scan.scanId),
+        source: pickedFromSearch ? "manual_search" : "candidate",
+      });
+      if (pickedFromSearch) trackEvent("manual_search_used");
       const cardflowCardId = result.canonicalCard.cardflowCardId;
       router.push({
         pathname: "/decide/[cardflowCardId]",
@@ -157,6 +201,7 @@ export default function ScanScreen() {
           cardflowCardId: cardflowCardId as string,
           confirmationId: result.confirmation.confirmationId,
           scanId: result.scan.scanId,
+          confidence: scan.mapping.confidence,
         },
       });
     } catch (caught) {
@@ -174,8 +219,9 @@ export default function ScanScreen() {
       const result = await rejectScan(scan.scanId);
       setScan(result.scan);
       setRejected(true);
+      trackEvent("reject", { ms_since_scan: msSinceScan(scan.scanId) });
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not reject that scan");
+      setError(caught instanceof Error ? caught.message : "Couldn't reject that scan");
     } finally {
       setIsConfirming(false);
     }
@@ -187,6 +233,8 @@ export default function ScanScreen() {
       cards={searchCards}
       isSearching={isSearching}
       notice={searchNotice}
+      name={searchName}
+      onNameChange={setSearchName}
       number={searchNumber}
       onNumberChange={setSearchNumber}
       onSearch={() => void onSearch()}
@@ -198,7 +246,7 @@ export default function ScanScreen() {
   ) : null;
 
   const failureConfirm =
-    showManualSearch && frame !== "ambiguous" && selected ? (
+    showManualSearch && (searchOpen || frame !== "ambiguous") && selected ? (
       <View style={styles.stack}>
         <IdentityCopy card={selected} />
         {error ? <Text style={styles.error}>{error}</Text> : null}
@@ -223,14 +271,22 @@ export default function ScanScreen() {
           <Ionicons color={colors.text} name="close" size={28} />
         </Pressable>
         <Text style={styles.topTitle}>Confirm card</Text>
-        <View style={styles.iconButton} />
+        <Pressable
+          accessibilityLabel={HOW_THIS_WORKS_OPEN_LABEL}
+          accessibilityRole="button"
+          hitSlop={12}
+          onPress={() => setHowThisWorksOpen(true)}
+          style={styles.iconButton}
+        >
+          <Ionicons color={colors.text} name="help-circle-outline" size={26} />
+        </Pressable>
       </View>
 
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         {!scan && !error ? <Text style={styles.body}>Loading scan…</Text> : null}
         {!scan && error ? (
           <FailureBody
-            title="Could not load scan"
+            title="Couldn't load scan"
             body={error}
             actionLabel="Retake"
             onAction={goToCapture}
@@ -241,6 +297,7 @@ export default function ScanScreen() {
           <HighConfirm
             captureUri={captureUri}
             card={selected}
+            confidence={scan.mapping.confidence}
             error={error}
             isConfirming={isConfirming}
             onConfirm={() => void onConfirm()}
@@ -252,6 +309,7 @@ export default function ScanScreen() {
           <AmbiguousConfirm
             captureUri={captureUri}
             cards={scan.mapping.candidates}
+            confidence={scan.mapping.confidence}
             error={error}
             isConfirming={isConfirming}
             onConfirm={() => void onConfirm()}
@@ -259,6 +317,24 @@ export default function ScanScreen() {
             onSelect={setSelectedTcgdexId}
             selectedTcgdexId={selectedTcgdexId}
           />
+        ) : null}
+
+        {scan && (frame === "high" || frame === "ambiguous") ? (
+          searchOpen ? (
+            <View style={styles.stack}>
+              {manualSearch}
+              {failureConfirm}
+            </View>
+          ) : (
+            <Pressable
+              accessibilityLabel={CONFIRM_NOT_THIS_CARD_LABEL}
+              accessibilityRole="button"
+              hitSlop={8}
+              onPress={() => setSearchOpen(true)}
+            >
+              <Text style={styles.link}>{CONFIRM_NOT_THIS_CARD_LABEL}</Text>
+            </Pressable>
+          )
         ) : null}
 
         {scan && frame === "no-card" ? (
@@ -319,14 +395,22 @@ export default function ScanScreen() {
         {scan && frame === "rejected" ? (
           <FailureBody
             title="Not this card"
-            body="This scan stays out of Collection. No card is added."
+            body="This scan stays out of MyDEX. No card is added."
             actionLabel="Retake photo"
             onAction={goToCapture}
             secondaryLabel="Back"
             onSecondary={leaveFlow}
           />
         ) : null}
+
+        {scan ? (
+          <GhostButton
+            label={HOW_THIS_WORKS_OPEN_LABEL}
+            onPress={() => setHowThisWorksOpen(true)}
+          />
+        ) : null}
       </ScrollView>
+      <HowThisWorksSheet onClose={() => setHowThisWorksOpen(false)} visible={howThisWorksOpen} />
     </SafeAreaView>
   );
 }
@@ -343,6 +427,7 @@ function variantLabel(card: CardFlowCanonicalCard): string {
 interface HighConfirmProps {
   captureUri: string | null;
   card: CardFlowCanonicalCard;
+  confidence: string;
   error: string | null;
   isConfirming: boolean;
   onConfirm: () => void;
@@ -352,6 +437,7 @@ interface HighConfirmProps {
 function HighConfirm({
   captureUri,
   card,
+  confidence,
   error,
   isConfirming,
   onConfirm,
@@ -370,6 +456,7 @@ function HighConfirm({
         </View>
       </View>
       <IdentityCopy card={card} />
+      <ConfidenceFigure value={confidence} />
       <Text style={styles.body}>Nothing is added until Confirm.</Text>
       {error ? <Text style={styles.error}>{error}</Text> : null}
       <PrimaryButton
@@ -385,6 +472,7 @@ function HighConfirm({
 interface AmbiguousConfirmProps {
   captureUri: string | null;
   cards: CardFlowCanonicalCard[];
+  confidence: string;
   selectedTcgdexId: string | null;
   isConfirming: boolean;
   error: string | null;
@@ -396,6 +484,7 @@ interface AmbiguousConfirmProps {
 function AmbiguousConfirm({
   captureUri,
   cards,
+  confidence,
   selectedTcgdexId,
   isConfirming,
   error,
@@ -423,6 +512,7 @@ function AmbiguousConfirm({
         ))}
       </ScrollView>
       {picked ? <IdentityCopy card={picked} /> : null}
+      <ConfidenceFigure value={confidence} />
       <Text style={styles.body}>{CONFIRM_COULD_NOT_CONFIRM_MESSAGE}</Text>
       {error ? <Text style={styles.error}>{error}</Text> : null}
       <PrimaryButton
@@ -471,6 +561,8 @@ function FailureBody({
 }
 
 interface ManualCatalogSearchProps {
+  name: string;
+  onNameChange: (value: string) => void;
   setName: string;
   number: string;
   onSetNameChange: (value: string) => void;
@@ -485,6 +577,8 @@ interface ManualCatalogSearchProps {
 }
 
 function ManualCatalogSearch({
+  name,
+  onNameChange,
   setName,
   number,
   onSetNameChange,
@@ -501,6 +595,17 @@ function ManualCatalogSearch({
     <View style={styles.stack}>
       <Text style={styles.kicker}>{CONFIRM_SEARCH_MANUALLY_LABEL}</Text>
       <Text style={styles.body}>{CATALOG_SEARCH_HINT}</Text>
+      <TextInput
+        accessibilityLabel="Card name"
+        autoCorrect={false}
+        onChangeText={onNameChange}
+        placeholder="Name (e.g. Charizard)"
+        placeholderTextColor={colors.muted}
+        returnKeyType="search"
+        onSubmitEditing={onSearch}
+        style={styles.input}
+        value={name}
+      />
       <TextInput
         accessibilityLabel="English set name or id"
         autoCapitalize="none"
@@ -522,7 +627,7 @@ function ManualCatalogSearch({
         value={number}
       />
       <PrimaryButton
-        disabled={isSearching || !setName.trim() || !number.trim()}
+        disabled={isSearching || (!name.trim() && !setName.trim() && !number.trim())}
         label={isSearching ? "Searching…" : "Search catalog"}
         onPress={onSearch}
         tone="muted"
@@ -547,6 +652,15 @@ function ManualCatalogSearch({
         </ScrollView>
       ) : null}
     </View>
+  );
+}
+
+function ConfidenceFigure({ value }: { value: string }) {
+  const word = confidenceWord(value);
+  return (
+    <LabeledFigure label={CONFIDENCE_SCREEN_LABEL} tip={CONFIRM_TIPS.confidence}>
+      <Text style={styles.metaLine}>{word ?? "—"}</Text>
+    </LabeledFigure>
   );
 }
 
@@ -632,8 +746,11 @@ interface GhostButtonProps {
 function GhostButton({ label, onPress, disabled }: GhostButtonProps) {
   return (
     <Pressable
+      accessibilityLabel={label}
       accessibilityRole="button"
+      accessibilityState={{ disabled: Boolean(disabled) }}
       disabled={disabled}
+      hitSlop={8}
       onPress={onPress}
       style={[styles.ghost, disabled && styles.disabled]}
     >
@@ -643,6 +760,7 @@ function GhostButton({ label, onPress, disabled }: GhostButtonProps) {
 }
 
 const styles = StyleSheet.create({
+  link: { color: colors.accent, fontSize: 16, fontWeight: "600", paddingVertical: space.sm },
   safe: { flex: 1, backgroundColor: colors.bg },
   topBar: {
     paddingHorizontal: space.md,

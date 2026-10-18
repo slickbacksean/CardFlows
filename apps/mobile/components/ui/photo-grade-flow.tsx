@@ -1,25 +1,45 @@
 import {
+  GRADE_FLOW_RETAKE_HEADING,
+  PHONE_CHECK_COPY,
+  GRADE_FLOW_RETRY_LABEL,
+  GRADE_FLOW_UNAVAILABLE_BODY,
+  actionErrorMessage,
+  GRADE_ESTIMATE_NOT_FOUND_COPY,
+  quotaExhaustedMessage,
+  SCREEN_STATE_COPY,
+  GRADE_QUOTA_COPY,
   PREGRADE_DISCLAIMER,
   PREGRADE_LABEL,
+  remainingGradesCaption,
+  retakeSideCopy,
+  type GradeQuotaSnapshot,
   type PhotoPregradeSubgrade,
-  type PhotoPregradeSuccess,
 } from "@cardflow/shared";
 import { Image } from "expo-image";
-import { useRef, useState } from "react";
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { useFocusEffect } from "expo-router";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { checkGradeStillOnPhone } from "@/lib/phone-photo-check";
+import Ionicons from "@expo/vector-icons/Ionicons";
+import { AccessibilityInfo, ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { GradeCardFinder } from "@/components/ui/grade-card-finder";
 import { PrimaryButton } from "@/components/ui/primary-button";
-import { detectGradePhoto, requestPhotoPregrade } from "@/lib/api";
-import { CARD_ASPECT_RATIO, pickGradeStill, type PickedGradeStill } from "@/lib/grade-photos";
+import { detectGradePhoto, getGradeQuota, grantGradeCredits, requestPhotoPregrade } from "@/lib/api";
+import { gradeFlowSession } from "@/lib/grade-flow-session";
+import {
+  CARD_ASPECT_RATIO,
+  pickGradeStill,
+  prepareGradeStill,
+  type PickedGradeStill,
+} from "@/lib/grade-photos";
 import { colors, space } from "@/lib/theme";
 
-type Step = "guidelines" | "finder" | "capture" | "crop" | "scoring" | "result";
 type Side = "front" | "back";
 
 interface SideStill {
   uri: string;
   mimeType: string | null;
   cropUri: string | null;
+  uploadId: string | null;
 }
 
 interface PhotoGradeFlowProps {
@@ -31,7 +51,7 @@ const GUIDELINES = [
   "Use even light. No sleeve, glare, or fingers on the card.",
   "Take the front, then the back. Catalog art is not a grade photo.",
   "Hold the phone flat over the card. A tilted angle means a retake.",
-  "The result is a pre-grade estimate. Estimate only. Not an official grade.",
+  `The result is a ${PREGRADE_LABEL.toLowerCase()}. ${PREGRADE_DISCLAIMER}`,
 ];
 
 const PILLARS = ["centering", "corners", "edges", "surface"] as const;
@@ -52,185 +72,281 @@ function subgradeLine(id: (typeof PILLARS)[number], row: PhotoPregradeSubgrade):
 }
 
 export function PhotoGradeFlow({ onOpenPipeline }: PhotoGradeFlowProps) {
-  const [step, setStep] = useState<Step>("guidelines");
-  const [side, setSide] = useState<Side>("front");
-  const [front, setFront] = useState<SideStill | null>(null);
-  const [back, setBack] = useState<SideStill | null>(null);
-  const [detected, setDetected] = useState(false);
-  const [notice, setNotice] = useState<string | null>(null);
-  const [warnings, setWarnings] = useState<string[]>([]);
-  const [result, setResult] = useState<PhotoPregradeSuccess | null>(null);
-  const [resultKind, setResultKind] = useState<"score" | "unavailable">("unavailable");
-  const [unavailableMessage, setUnavailableMessage] = useState<string | null>(null);
-  const [checking, setChecking] = useState(false);
-  const [freezeUri, setFreezeUri] = useState<string | null>(null);
+  const [state, setState] = useState(() => gradeFlowSession.getState());
   const requestId = useRef(0);
+
+  useEffect(() => gradeFlowSession.subscribe(setState), []);
+  useEffect(() => () => {
+    gradeFlowSession.persistOnLeave();
+  }, []);
+
+  const {
+    step,
+    side,
+    front,
+    back,
+    detected,
+    notice,
+    warnings,
+    retakeReasons,
+    result,
+    resultKind,
+    unavailableMessage,
+    scoring,
+    checking,
+    freezeUri,
+  } = state;
+  const [quota, setQuota] = useState<GradeQuotaSnapshot | null>(null);
+  /** P1-16: a photo the phone flagged; "Check anyway" sends it to the server. */
+  const [phoneFlag, setPhoneFlag] = useState<{ side: Side; still: SideStill } | null>(null);
+  const [quotaNotice, setQuotaNotice] = useState<string | null>(null);
+
+  const refreshQuota = useCallback(() => {
+    void getGradeQuota()
+      .then((body) => setQuota(body.quota))
+      .catch(() => setQuota(null));
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      refreshQuota();
+    }, [refreshQuota]),
+  );
 
   const current = side === "front" ? front : back;
 
-  function reset() {
-    requestId.current += 1;
-    setStep("guidelines");
-    setSide("front");
-    setFront(null);
-    setBack(null);
-    setDetected(false);
-    setNotice(null);
-    setWarnings([]);
-    setResult(null);
-    setResultKind("unavailable");
-    setUnavailableMessage(null);
-    setChecking(false);
-    setFreezeUri(null);
+  function patch(next: Partial<typeof state>) {
+    gradeFlowSession.replace({ ...gradeFlowSession.getState(), ...next });
   }
 
+  function reset() {
+    requestId.current += 1;
+    gradeFlowSession.reset();
+    setQuotaNotice(null);
+    refreshQuota();
+  }
+
+  const isOutOfGrades = (quota?.remainingGrades ?? 1) <= 0;
+
   function openFinder(nextSide: Side) {
-    setSide(nextSide);
-    setNotice(null);
-    setDetected(false);
-    setFreezeUri(null);
-    setStep("finder");
+    patch({
+      side: nextSide,
+      notice: null,
+      detected: false,
+      freezeUri: null,
+      step: "finder",
+    });
   }
 
   function handleFinderBack() {
-    if (checking) return;
-    if (side === "back" && front?.cropUri) {
-      setSide("front");
-      setDetected(true);
-      setStep("crop");
+    if (checking || scoring) return;
+    const latest = gradeFlowSession.getState();
+    if (latest.side === "back" && latest.front?.cropUri) {
+      patch({ side: "front", detected: true, step: "crop" });
       return;
     }
-    setStep("guidelines");
+    patch({ step: "guidelines" });
   }
 
   async function ingestStill(nextSide: Side, picked: PickedGradeStill, fromFinder: boolean) {
-    const still: SideStill = {
-      uri: picked.uri,
-      mimeType: picked.mimeType,
-      cropUri: null,
-    };
-    if (nextSide === "front") setFront(still);
-    else setBack(still);
-    setSide(nextSide);
-    setDetected(false);
-    if (fromFinder) setFreezeUri(picked.uri);
-    else setStep("crop");
-    await runDetect(nextSide, still);
-    if (fromFinder) {
-      setFreezeUri(null);
-      setStep("crop");
+    const prepared =
+      picked.mimeType === "image/jpeg" && !fromFinder
+        ? { still: picked }
+        : await prepareGradeStill(picked);
+    if ("error" in prepared) {
+      patch({
+        side: nextSide,
+        notice: prepared.error,
+        retakeReasons: [],
+        step: fromFinder ? gradeFlowSession.getState().step : "capture",
+      });
+      return;
     }
+    const still: SideStill = {
+      uri: prepared.still.uri,
+      mimeType: prepared.still.mimeType,
+      cropUri: null,
+      uploadId: null,
+    };
+    patch({
+      side: nextSide,
+      front: nextSide === "front" ? still : gradeFlowSession.getState().front,
+      back: nextSide === "back" ? still : gradeFlowSession.getState().back,
+      detected: false,
+      retakeReasons: [],
+      notice: null,
+      freezeUri: fromFinder ? still.uri : gradeFlowSession.getState().freezeUri,
+      step: fromFinder ? gradeFlowSession.getState().step : "crop",
+    });
+    await runDetect(nextSide, still, { fromGuide: fromFinder });
+    if (fromFinder) patch({ freezeUri: null, step: "crop" });
   }
 
   async function takePhoto(nextSide: Side, source: "camera" | "library") {
+    if (scoring) return;
     if (source === "camera") {
       openFinder(nextSide);
       return;
     }
-    setNotice(null);
+    patch({ notice: null, retakeReasons: [] });
     let picked: { still: PickedGradeStill } | { error: string } | null;
     try {
       picked = await pickGradeStill(source);
     } catch (caught) {
-      setSide(nextSide);
-      setStep("capture");
-      setNotice(caught instanceof Error ? caught.message : "Could not open the camera.");
+      patch({
+        side: nextSide,
+        step: "capture",
+        notice: actionErrorMessage(caught, "Couldn't open the camera."),
+      });
       return;
     }
     if (!picked) {
-      if (step === "finder") return;
-      const kept = nextSide === "front" ? front : back;
-      setSide(nextSide);
-      if (kept) setStep("crop");
-      else setStep(nextSide === "front" ? "guidelines" : "capture");
+      if (gradeFlowSession.getState().step === "finder") return;
+      const kept = nextSide === "front" ? gradeFlowSession.getState().front : gradeFlowSession.getState().back;
+      patch({
+        side: nextSide,
+        step: kept ? "crop" : nextSide === "front" ? "guidelines" : "capture",
+      });
       return;
     }
     if ("error" in picked) {
-      setSide(nextSide);
-      setNotice(picked.error);
-      if (step !== "finder") setStep("capture");
+      patch({
+        side: nextSide,
+        notice: picked.error,
+        step: gradeFlowSession.getState().step === "finder" ? "finder" : "capture",
+      });
       return;
     }
     await ingestStill(nextSide, picked.still, false);
   }
 
-  async function runDetect(nextSide: Side, still: SideStill) {
+  async function runDetect(
+    nextSide: Side,
+    still: SideStill,
+    phone: { fromGuide: boolean; skip?: boolean } = { fromGuide: false },
+  ) {
     const id = ++requestId.current;
-    setNotice(null);
-    setWarnings([]);
-    setDetected(false);
-    setChecking(true);
+    setPhoneFlag(null);
+    patch({
+      notice: null,
+      warnings: [],
+      detected: false,
+      checking: true,
+      retakeReasons: [],
+    });
+    if (!phone.skip) {
+      // P1-16: catch clearly bad photos before upload. The server still decides.
+      const local = await checkGradeStillOnPhone(still.uri, { fromGuide: phone.fromGuide });
+      if (id !== requestId.current) return;
+      if (local && !local.ok) {
+        setPhoneFlag({ side: nextSide, still });
+        patch({ detected: false, checking: false, retakeReasons: local.reasons, notice: null });
+        return;
+      }
+    }
     try {
       const found = await detectGradePhoto(still.uri, still.mimeType, nextSide);
       if (id !== requestId.current) return;
       if (!found.ok) {
-        setDetected(false);
-        setNotice(
-          found.status === "retake"
-            ? `Retake the photo: ${found.reasons.join(", ")}.`
-            : `Couldn't check this photo. ${found.message}`,
-        );
+        const reasons = found.status === "retake" ? found.reasons : [];
+        patch({
+          detected: false,
+          checking: false,
+          retakeReasons: reasons,
+          notice:
+            found.status === "retake"
+              ? null
+              : `Couldn't check this photo. ${found.message}`,
+        });
         return;
       }
       const cropUri = `data:${found.crop.mimeType};base64,${found.crop.base64}`;
-      const next = { ...still, cropUri };
-      if (nextSide === "front") setFront(next);
-      else setBack(next);
-      setDetected(true);
-      setWarnings(found.warnings);
-      setNotice(null);
+      const next = { ...still, cropUri, uploadId: found.uploadId ?? null };
+      const latest = gradeFlowSession.getState();
+      patch({
+        front: nextSide === "front" ? next : latest.front,
+        back: nextSide === "back" ? next : latest.back,
+        detected: true,
+        warnings: found.warnings,
+        notice: null,
+        retakeReasons: [],
+        checking: false,
+      });
     } catch {
       if (id !== requestId.current) return;
-      setDetected(false);
-      setNotice("Couldn't check this photo. Retake.");
-    } finally {
-      if (id === requestId.current) setChecking(false);
+      patch({
+        detected: false,
+        checking: false,
+        notice: "Couldn't check this photo. Retake.",
+      });
     }
   }
 
   function confirmCrop() {
-    if (!detected || !current?.cropUri) return;
-    if (side === "front") {
+    const latest = gradeFlowSession.getState();
+    if (latest.scoring || latest.checking) return;
+    if (!latest.detected) return;
+    const still = latest.side === "front" ? latest.front : latest.back;
+    if (!still?.cropUri) return;
+    if (latest.side === "front") {
       openFinder("back");
       return;
     }
     void scorePhotos();
   }
 
-  async function scorePhotos() {
-    if (!front || !back) return;
-    const id = ++requestId.current;
-    setStep("scoring");
-    setNotice(null);
+  async function runScoreRequest() {
+    const latest = gradeFlowSession.getState();
+    if (!latest.front || !latest.back || !latest.scoring) return;
     const graded = await requestPhotoPregrade({
-      frontUri: front.uri,
-      frontMimeType: front.mimeType,
-      backUri: back.uri,
-      backMimeType: back.mimeType,
+      frontUri: latest.front.uri,
+      frontMimeType: latest.front.mimeType,
+      frontUploadId: latest.front.uploadId,
+      backUri: latest.back.uri,
+      backMimeType: latest.back.mimeType,
+      backUploadId: latest.back.uploadId,
     });
-    if (id !== requestId.current) return;
+    if (!gradeFlowSession.isSubmitLocked()) return;
+    if (graded.quota) setQuota(graded.quota);
     if (!graded.ok && graded.status === "retake") {
-      const missed = graded.side === "back" ? "back" : "front";
-      setSide(missed);
-      setDetected(false);
-      setWarnings([]);
-      if (missed === "front") setFront((value) => (value ? { ...value, cropUri: null } : value));
-      else setBack((value) => (value ? { ...value, cropUri: null } : value));
-      setResult(null);
-      openFinder(missed);
-      setNotice(`Retake the ${missed} photo: ${graded.reasons.join(", ")}.`);
+      gradeFlowSession.applyRetake(graded.side === "back" ? "back" : "front", graded.reasons);
+      return;
+    }
+    if (!graded.ok && graded.status === "out_of_grades") {
+      if (graded.quota) setQuota(graded.quota);
+      gradeFlowSession.applyUnavailable(graded.message);
+      patch({ resultKind: "out_of_grades" });
       return;
     }
     if (!graded.ok) {
-      setResult(null);
-      setResultKind("unavailable");
-      setUnavailableMessage(graded.message);
-      setStep("result");
+      gradeFlowSession.applyUnavailable(graded.message);
       return;
     }
-    setResult(graded);
-    setResultKind("score");
-    setStep("result");
+    gradeFlowSession.applyScore(graded);
+  }
+
+  function scorePhotos() {
+    if (!gradeFlowSession.beginSubmit()) return;
+    void runScoreRequest();
+  }
+
+  function handleRetry() {
+    if (!gradeFlowSession.retryUnavailable()) return;
+    void runScoreRequest();
+  }
+
+  async function handleGetExtra() {
+    setQuotaNotice(null);
+    try {
+      const result = await grantGradeCredits({ credits: 5 });
+      setQuota(result.quota);
+    } catch (caught) {
+      setQuotaNotice(
+        caught instanceof Error && caught.message
+          ? caught.message
+          : GRADE_QUOTA_COPY.iapUnavailable,
+      );
+    }
   }
 
   const sideLabel = side === "front" ? "Front" : "Back";
@@ -240,7 +356,7 @@ export function PhotoGradeFlow({ onOpenPipeline }: PhotoGradeFlowProps) {
       <GradeCardFinder
         detecting={checking}
         freezeUri={freezeUri}
-        notice={notice}
+        notice={notice ?? (retakeReasons.length > 0 ? retakeSideCopy(side, retakeReasons) : null)}
         onBack={handleFinderBack}
         onCaptured={(still) => void ingestStill(side, still, true)}
         onLibrary={() => void takePhoto(side, "library")}
@@ -256,18 +372,46 @@ export function PhotoGradeFlow({ onOpenPipeline }: PhotoGradeFlowProps) {
       {step === "guidelines" ? (
         <View style={styles.block}>
           <Text style={styles.section}>Photo guidelines</Text>
-          {GUIDELINES.map((line) => (
-            <Text key={line} style={styles.body}>
-              {line}
-            </Text>
-          ))}
-          <PrimaryButton label="Take front photo" onPress={() => openFinder("front")} />
-          <PrimaryButton
-            label="Choose a photo"
-            onPress={() => void takePhoto("front", "library")}
-            tone="muted"
-          />
-          <PipelineLink onPress={onOpenPipeline} />
+          {quota ? (
+            isOutOfGrades ? (
+              <ErrorText text={remainingGradesCaption(quota)} />
+            ) : (
+              <Text accessibilityRole="text" style={styles.body}>
+                {remainingGradesCaption(quota)}
+              </Text>
+            )
+          ) : null}
+          {isOutOfGrades ? (
+            <View style={styles.block}>
+              <Text style={styles.section}>{SCREEN_STATE_COPY.quotaTitle}</Text>
+              {/* Community review 1: "You've used all N … resets on [date]." Not "busy". */}
+              <Text style={styles.body}>{quotaExhaustedMessage(quota)}</Text>
+              <Text style={styles.caption}>{GRADE_QUOTA_COPY.outOfGradesHint}</Text>
+              {quotaNotice ? <ErrorText text={quotaNotice} /> : null}
+              <PrimaryButton
+                label={GRADE_QUOTA_COPY.getExtra}
+                onPress={() => void handleGetExtra()}
+                tone="muted"
+              />
+              <PipelineLink onPress={onOpenPipeline} />
+            </View>
+          ) : (
+            <>
+              {GUIDELINES.map((line) => (
+                <Text key={line} style={styles.body}>
+                  {line}
+                </Text>
+              ))}
+              <PrimaryButton disabled={scoring} label="Take front photo" onPress={() => openFinder("front")} />
+              <PrimaryButton
+                disabled={scoring}
+                label="Choose a photo"
+                onPress={() => void takePhoto("front", "library")}
+                tone="muted"
+              />
+              <PipelineLink onPress={onOpenPipeline} />
+            </>
+          )}
         </View>
       ) : null}
 
@@ -279,16 +423,30 @@ export function PhotoGradeFlow({ onOpenPipeline }: PhotoGradeFlowProps) {
               ? "Front crop saved. Take the back the same way."
               : "Keep the whole card in frame."}
           </Text>
-          {notice ? <Text style={styles.error}>{notice}</Text> : null}
+          <RetakeReasons reasons={retakeReasons} side={side} />
+          {notice ? <ErrorText text={notice} /> : null}
           <PrimaryButton
+            disabled={scoring}
             label={`Take ${sideLabel.toLowerCase()} photo`}
             onPress={() => openFinder(side)}
           />
           <PrimaryButton
+            disabled={scoring}
             label="Choose a photo"
             onPress={() => void takePhoto(side, "library")}
             tone="muted"
           />
+          {phoneFlag && phoneFlag.side === side && retakeReasons.length > 0 ? (
+            <>
+              <Text style={styles.caption}>{PHONE_CHECK_COPY.phoneFlagNote}</Text>
+              <PrimaryButton
+                disabled={scoring}
+                label={PHONE_CHECK_COPY.checkAnyway}
+                onPress={() => void runDetect(phoneFlag.side, phoneFlag.still, { fromGuide: false, skip: true })}
+                tone="muted"
+              />
+            </>
+          ) : null}
         </View>
       ) : null}
 
@@ -325,22 +483,36 @@ export function PhotoGradeFlow({ onOpenPipeline }: PhotoGradeFlowProps) {
           {!checking && detected ? <Text style={styles.body}>Card found. Use this crop?</Text> : null}
           {!checking && detected && warnings.length > 0 ? (
             <Text style={styles.warning}>
-              {`Still gradable, but: ${warnings.join(", ")}. A retake may score more reliably.`}
+              {`Still usable, but: ${warnings.join(", ")}. A retake may make the estimate more accurate.`}
             </Text>
           ) : null}
-          {!checking && notice ? <Text style={styles.error}>{notice}</Text> : null}
+          <RetakeReasons reasons={retakeReasons} side={side} />
+          {!checking && notice ? <ErrorText text={notice} /> : null}
           {!checking && detected ? (
-            <PrimaryButton label="Use this crop" onPress={confirmCrop} />
+            <PrimaryButton disabled={scoring} label="Use this crop" onPress={confirmCrop} />
           ) : null}
           {!checking ? (
             <PrimaryButton
+              disabled={scoring}
               label="Retake"
               onPress={() => openFinder(side)}
               tone={detected ? "muted" : "cta"}
             />
           ) : null}
+          {phoneFlag && phoneFlag.side === side && retakeReasons.length > 0 ? (
+            <>
+              <Text style={styles.caption}>{PHONE_CHECK_COPY.phoneFlagNote}</Text>
+              <PrimaryButton
+                disabled={scoring}
+                label={PHONE_CHECK_COPY.checkAnyway}
+                onPress={() => void runDetect(phoneFlag.side, phoneFlag.still, { fromGuide: false, skip: true })}
+                tone="muted"
+              />
+            </>
+          ) : null}
           {!checking && !detected && notice ? (
             <PrimaryButton
+              disabled={scoring}
               label="Choose a photo"
               onPress={() => void takePhoto(side, "library")}
               tone="muted"
@@ -352,8 +524,8 @@ export function PhotoGradeFlow({ onOpenPipeline }: PhotoGradeFlowProps) {
       {step === "scoring" ? (
         <View style={styles.block}>
           <ActivityIndicator color={colors.accent} />
-          <Text style={styles.body}>Grading both photos on your CardFlow server…</Text>
-          <Text style={styles.caption}>This can take 10–30 seconds.</Text>
+          <Text style={styles.body}>Estimating your card…</Text>
+          <Text style={styles.caption}>This usually takes a few seconds.</Text>
         </View>
       ) : null}
 
@@ -362,8 +534,14 @@ export function PhotoGradeFlow({ onOpenPipeline }: PhotoGradeFlowProps) {
           <Text style={styles.section}>{PREGRADE_LABEL}</Text>
           {resultKind === "score" && result ? (
             <>
-              <Text style={styles.score}>{formatPregrade(result.estimate)}</Text>
+              <Text
+                accessibilityLabel={`${PREGRADE_LABEL}, ${formatPregrade(result.estimate)}`}
+                style={styles.score}
+              >
+                {formatPregrade(result.estimate)}
+              </Text>
               <Text style={styles.body}>{PREGRADE_DISCLAIMER}</Text>
+              {quota ? <Text style={styles.caption}>{remainingGradesCaption(quota)}</Text> : null}
               {result.warning ? <Text style={styles.warning}>{result.warning}</Text> : null}
               <View style={styles.pillar}>
                 {PILLARS.map((id) => (
@@ -373,14 +551,45 @@ export function PhotoGradeFlow({ onOpenPipeline }: PhotoGradeFlowProps) {
                 ))}
               </View>
               {result.note ? <Text style={styles.caption}>{`Note: ${result.note}.`}</Text> : null}
+              <PrimaryButton disabled={scoring} label="Grade another card" onPress={reset} />
+            </>
+          ) : resultKind === "out_of_grades" ? (
+            <>
+              <Text style={styles.section}>{SCREEN_STATE_COPY.quotaTitle}</Text>
+              <Text style={styles.body}>{unavailableMessage ?? quotaExhaustedMessage(quota)}</Text>
+              <Text style={styles.caption}>{GRADE_QUOTA_COPY.outOfGradesHint}</Text>
+              {quotaNotice ? <ErrorText text={quotaNotice} /> : null}
+              <PrimaryButton
+                label={GRADE_QUOTA_COPY.getExtra}
+                onPress={() => void handleGetExtra()}
+                tone="muted"
+              />
+              <PrimaryButton label="Grade another card" onPress={reset} tone="muted" />
             </>
           ) : (
             <>
-              <Text style={styles.body}>The grader is unavailable. No score.</Text>
-              {unavailableMessage ? <Text style={styles.caption}>{unavailableMessage}</Text> : null}
+              {unavailableMessage === GRADE_ESTIMATE_NOT_FOUND_COPY ? (
+                // UX review P0-3: a 404 shows exactly this, with no score.
+                <Text style={styles.body}>{GRADE_ESTIMATE_NOT_FOUND_COPY}</Text>
+              ) : (
+                <>
+                  <Text style={styles.body}>{GRADE_FLOW_UNAVAILABLE_BODY}</Text>
+                  {unavailableMessage ? <Text style={styles.caption}>{unavailableMessage}</Text> : null}
+                </>
+              )}
+              <PrimaryButton
+                disabled={scoring}
+                label={GRADE_FLOW_RETRY_LABEL}
+                onPress={handleRetry}
+              />
+              <PrimaryButton
+                disabled={scoring}
+                label="Grade another card"
+                onPress={reset}
+                tone="muted"
+              />
             </>
           )}
-          <PrimaryButton label="Grade another card" onPress={reset} />
           <PipelineLink onPress={onOpenPipeline} />
         </View>
       ) : null}
@@ -388,9 +597,50 @@ export function PhotoGradeFlow({ onOpenPipeline }: PhotoGradeFlowProps) {
   );
 }
 
+/** Spec §2: one reason at a time, in a card with an icon (never color alone), announced on appear. */
+function RetakeReasons({ reasons, side }: { reasons: string[]; side: Side }) {
+  const first = reasons[0] ?? null;
+  const sideText = side === "back" ? "Back photo" : "Front photo";
+  useEffect(() => {
+    if (first && Platform.OS === "ios") AccessibilityInfo.announceForAccessibility(`${GRADE_FLOW_RETAKE_HEADING}. ${first}`);
+  }, [first]);
+  if (!first) return null;
+  return (
+    <View
+      accessibilityLabel={`${GRADE_FLOW_RETAKE_HEADING}. ${sideText}. ${first}`}
+      accessibilityLiveRegion="polite"
+      accessible
+      style={styles.retakeBox}
+    >
+      <View style={styles.iconRow}>
+        <Ionicons color={colors.danger} name="alert-circle" size={20} style={styles.rowIcon} />
+        <Text style={styles.retakeHeading}>{GRADE_FLOW_RETAKE_HEADING}</Text>
+      </View>
+      <Text style={styles.retakeSide}>{sideText}</Text>
+      <Text style={styles.retakeReason}>{first}</Text>
+    </View>
+  );
+}
+
+/** Red text always carries an icon so the error isn't color-only. */
+function ErrorText({ text }: { text: string }) {
+  return (
+    <View accessibilityLabel={`Error: ${text}`} accessible style={styles.iconRow}>
+      <Ionicons color={colors.danger} name="alert-circle" size={18} style={styles.rowIcon} />
+      <Text style={styles.error}>{text}</Text>
+    </View>
+  );
+}
+
 function PipelineLink({ onPress }: { onPress: () => void }) {
   return (
-    <Pressable accessibilityRole="button" onPress={onPress} style={styles.linkHit}>
+    <Pressable
+      accessibilityLabel="Prepare, Submitted, Returned"
+      accessibilityRole="button"
+      hitSlop={8}
+      onPress={onPress}
+      style={styles.linkHit}
+    >
       <Text style={styles.link}>Prepare, Submitted, Returned</Text>
     </Pressable>
   );
@@ -402,12 +652,24 @@ const styles = StyleSheet.create({
   block: { gap: space.md },
   title: { color: colors.text, fontSize: 22, fontWeight: "800" },
   section: { color: colors.text, fontSize: 18, fontWeight: "800" },
-  body: { color: colors.muted, fontSize: 15, lineHeight: 22 },
-  caption: { color: colors.muted, fontSize: 13, lineHeight: 18 },
-  label: { color: colors.text, fontSize: 15, fontWeight: "700" },
-  error: { color: colors.danger, fontSize: 15, lineHeight: 22 },
-  warning: { color: colors.text, fontSize: 14, lineHeight: 20 },
+  body: { color: colors.muted, fontSize: 15 },
+  caption: { color: colors.muted, fontSize: 13 },
+  error: { color: colors.danger, fontSize: 15, flexShrink: 1 },
+  warning: { color: colors.text, fontSize: 14 },
   score: { color: colors.text, fontSize: 40, fontWeight: "800" },
+  retakeBox: {
+    gap: space.xs,
+    padding: space.md,
+    borderRadius: 12,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.danger,
+  },
+  iconRow: { flexDirection: "row", alignItems: "flex-start", gap: space.xs },
+  rowIcon: { marginTop: 2 },
+  retakeReason: { color: colors.text, fontSize: 15, flexShrink: 1 },
+  retakeHeading: { color: colors.text, fontSize: 16, fontWeight: "800" },
+  retakeSide: { color: colors.muted, fontSize: 13 },
   frame: {
     backgroundColor: colors.card,
     borderColor: colors.cardBorder,

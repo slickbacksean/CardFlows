@@ -60,7 +60,7 @@
 - [ ] Prefer scan id + status + latency.
 - [ ] Production log retention limit (**proposal:** 30 days).
 - [ ] No analytics SDK until founder approval + privacy disclosure (**Open:** vendor).
-- [ ] Crash reporters scrub Authorization headers and file payloads.
+- [x] Crash reporter is Sentry (founder-approved). Scrubs Authorization headers, emails, photos, and image payloads. Session replay off. See [SENTRY.md](./SENTRY.md).
 
 ## CardSight-specific engineering (public ToS themes, not a license grant)
 

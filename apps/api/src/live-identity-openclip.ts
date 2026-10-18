@@ -8,6 +8,22 @@ export interface LiveIdentityOpenclipMatch {
   similarity: number | null;
   accepted: boolean;
   pipeline: "openclip_hnsw";
+  /** Sidecar straightened the crop from the 4 corners before embedding. */
+  warped?: boolean;
+  /** Sidecar stage timings in ms (decode, warp, embed, search, orb, total). */
+  timings?: Partial<Record<"decodeMs" | "warpMs" | "embedMs" | "searchMs" | "orbMs" | "totalMs", number>>;
+}
+
+/** 4 card corners in the crop's pixel space (TL, TR, BR, BL), 8 numbers. */
+export function normalizeIdentityCropQuad(raw: unknown): number[] | null {
+  if (!Array.isArray(raw) || raw.length !== 8) return null;
+  const out: number[] = [];
+  for (const value of raw) {
+    if (typeof value !== "number" || !Number.isFinite(value)) return null;
+    if (value < -2000 || value > 10000) return null;
+    out.push(Math.round(value * 100) / 100);
+  }
+  return out;
 }
 
 export interface LiveIdentityOpenclipOptions {
@@ -34,7 +50,7 @@ export function createLiveIdentityOpenclipClient(options: LiveIdentityOpenclipOp
     async matchCropJpeg(
       bytes: Uint8Array,
       mimeType = "image/jpeg",
-      options?: { name?: string; names?: string[] },
+      options?: { name?: string; names?: string[]; quad?: number[] | null },
     ): Promise<LiveIdentityOpenclipMatch | null> {
       if (!baseUrl || bytes.byteLength < 32 || bytes.byteLength > 8_000_000) return null;
       const controller = new AbortController();
@@ -54,6 +70,7 @@ export function createLiveIdentityOpenclipClient(options: LiveIdentityOpenclipOp
         if (names.length > 1) form.append("names", names.join("\n"));
         else if (names.length === 1) form.append("name", names[0]);
         else if (name) form.append("name", name);
+        if (options?.quad && options.quad.length === 8) form.append("quad", JSON.stringify(options.quad));
         const headers: Record<string, string> = {};
         if (token) headers["X-CardFlow-Token"] = token;
         const response = await fetchImpl(joinUrl(baseUrl, "/v1/match"), {
@@ -68,7 +85,21 @@ export function createLiveIdentityOpenclipClient(options: LiveIdentityOpenclipOp
           tcgdexId?: unknown;
           similarity?: unknown;
           pipeline?: unknown;
+          warped?: unknown;
+          timings?: unknown;
         };
+        const timings: NonNullable<LiveIdentityOpenclipMatch["timings"]> = {};
+        if (body.timings && typeof body.timings === "object") {
+          for (const [key, value] of Object.entries(body.timings as Record<string, unknown>)) {
+            if (
+              typeof value === "number" &&
+              Number.isFinite(value) &&
+              ["decodeMs", "warpMs", "embedMs", "searchMs", "orbMs", "totalMs"].includes(key)
+            ) {
+              timings[key as keyof typeof timings] = value;
+            }
+          }
+        }
         const tcgdexId =
           typeof body.tcgdexId === "string" && body.tcgdexId.trim() ? body.tcgdexId.trim() : null;
         return {
@@ -76,6 +107,8 @@ export function createLiveIdentityOpenclipClient(options: LiveIdentityOpenclipOp
           accepted: body.accepted === true && Boolean(tcgdexId),
           tcgdexId: body.accepted === true ? tcgdexId : null,
           similarity: typeof body.similarity === "number" ? body.similarity : null,
+          ...(typeof body.warped === "boolean" ? { warped: body.warped } : {}),
+          ...(Object.keys(timings).length ? { timings } : {}),
         };
       } catch {
         return null;

@@ -1,8 +1,12 @@
 import { Image } from "expo-image";
-import { useEffect, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { useEffect, useRef, useState } from "react";
+import { AccessibilityInfo, Pressable, StyleSheet, Text, View } from "react-native";
 import { WebView } from "react-native-webview";
-import { HudBubble } from "@/components/ui/hud-bubble";
+import {
+  HudBubble,
+  playPurchasedSuccessHaptic,
+  PurchasedUndoToast,
+} from "@/components/ui/hud-bubble";
 import { livestreamHudPageUrl, publishLivestreamHud } from "@/lib/huds";
 import { getLiveOverlayGuess } from "@/lib/api";
 import { overlayDollarLabel } from "@/lib/livestream";
@@ -10,10 +14,13 @@ import { colors, space } from "@/lib/theme";
 import {
   emptyLiveOverlayGuess,
   isStableLiveIdentity,
+  LIVESTREAM_SCANNER_UNAVAILABLE_DETAIL,
   LIVESTREAM_SCANNER_UNAVAILABLE_MESSAGE,
   livestreamHudOriginWhitelist,
   livestreamOverlayKind,
   livestreamOverlayUsesHud,
+  PURCHASED_UNDO_TOAST_MS,
+  shouldAcceptLiveHudPurchaseTap,
   type LiveOverlayGuess,
   type LiveVideoIdentityResult,
 } from "@cardflow/shared";
@@ -23,7 +30,10 @@ export interface ScreenerOverlayProps {
   tabFocused?: boolean;
   unavailable?: boolean;
   liveIdentity?: LiveVideoIdentityResult | null;
-  onBuy?: (guess: LiveOverlayGuess) => void;
+  onPurchased?: (
+    guess: LiveOverlayGuess,
+  ) => void | Promise<void | { inventoryItemId: string }>;
+  onUndoPurchased?: (inventoryItemId: string) => void | Promise<void>;
 }
 
 export function ScreenerOverlay({
@@ -31,10 +41,19 @@ export function ScreenerOverlay({
   tabFocused = false,
   unavailable = false,
   liveIdentity = null,
-  onBuy,
+  onPurchased,
+  onUndoPurchased,
 }: ScreenerOverlayProps) {
   const [hudReady, setHudReady] = useState(false);
   const [liveGuess, setLiveGuess] = useState<LiveOverlayGuess | null>(null);
+  const [savingKey, setSavingKey] = useState("");
+  const [savedKeys, setSavedKeys] = useState<string[]>([]);
+  const [toast, setToast] = useState<{ inventoryItemId: string; matchKey: string } | null>(
+    null,
+  );
+  const [undoing, setUndoing] = useState(false);
+  const savingKeyRef = useRef("");
+  const savedKeysRef = useRef<string[]>([]);
   const guessKey =
     unavailable || !scannerOn || !isStableLiveIdentity(liveIdentity)
       ? ""
@@ -92,6 +111,13 @@ export function ScreenerOverlay({
   }, [guessKey, liveIdentity]);
 
   useEffect(() => {
+    if (!toast) return;
+    AccessibilityInfo.announceForAccessibility("Marked Purchased. Undo is available.");
+    const timer = setTimeout(() => setToast(null), PURCHASED_UNDO_TOAST_MS);
+    return () => clearTimeout(timer);
+  }, [toast]);
+
+  useEffect(() => {
     if (unavailable || !hudReady || !liveIdentity) return;
     void publishLivestreamHud({
       scannerOn,
@@ -107,9 +133,72 @@ export function ScreenerOverlay({
   });
 
   const buyGuess = liveGuess?.tcgdexId ? liveGuess : null;
+  const matchKey = buyGuess?.tcgdexId ?? "";
   const readingCard =
     scannerOn && !buyGuess && liveIdentity?.reason === "unidentified";
   const bubble = overlayBubbleCopy(overlayKind, liveGuess, readingCard);
+
+  async function savePurchase() {
+    if (!buyGuess?.tcgdexId || !onPurchased) return;
+    if (
+      !shouldAcceptLiveHudPurchaseTap({
+        matchKey,
+        inFlightKey: savingKeyRef.current,
+        savedKeys: savedKeysRef.current,
+      })
+    ) {
+      return;
+    }
+    savingKeyRef.current = matchKey;
+    setSavingKey(matchKey);
+    try {
+      const result = await onPurchased(buyGuess);
+      await playPurchasedSuccessHaptic();
+      const inventoryItemId =
+        result && typeof result === "object" ? result.inventoryItemId : undefined;
+      if (!inventoryItemId) return;
+      if (!savedKeysRef.current.includes(matchKey)) {
+        savedKeysRef.current = [...savedKeysRef.current, matchKey];
+        setSavedKeys(savedKeysRef.current);
+      }
+      setToast({ inventoryItemId, matchKey });
+    } catch {
+      // The Livestream tab shows the failure under its header.
+    } finally {
+      savingKeyRef.current = "";
+      setSavingKey("");
+    }
+  }
+
+  async function undoPurchase() {
+    if (!toast || !onUndoPurchased || undoing) return;
+    const pending = toast;
+    setUndoing(true);
+    try {
+      await onUndoPurchased(pending.inventoryItemId);
+      savedKeysRef.current = savedKeysRef.current.filter((key) => key !== pending.matchKey);
+      setSavedKeys(savedKeysRef.current);
+      setToast(null);
+      AccessibilityInfo.announceForAccessibility("Purchased undone");
+    } catch {
+      // Shown by the Livestream tab. The toast stays so Undo can be retried.
+    } finally {
+      setUndoing(false);
+    }
+  }
+
+  const purchasedControl =
+    buyGuess && onPurchased ? (
+      <PurchasedButton
+        disabled={savingKey === matchKey || savedKeys.includes(matchKey)}
+        onPress={() => void savePurchase()}
+        saving={savingKey === matchKey}
+      />
+    ) : null;
+  const confirmation =
+    toast ? (
+      <PurchasedUndoToast onUndo={() => void undoPurchase()} undoing={undoing} />
+    ) : null;
 
   if (overlayKind === "unavailable") {
     return (
@@ -142,7 +231,8 @@ export function ScreenerOverlay({
             style={styles.hudWebView}
           />
         </View>
-        {buyGuess && onBuy ? <BuyButton onPress={() => onBuy(buyGuess)} /> : null}
+        {purchasedControl}
+        {confirmation}
       </HudBubble>
     );
   }
@@ -150,7 +240,8 @@ export function ScreenerOverlay({
   return (
     <HudBubble live={bubble.live} subtitle={bubble.subtitle} title={bubble.title}>
       <NativeOverlay liveGuess={liveGuess} readingCard={readingCard} scannerOn={scannerOn} />
-      {buyGuess && onBuy ? <BuyButton onPress={() => onBuy(buyGuess)} /> : null}
+      {purchasedControl}
+      {confirmation}
     </HudBubble>
   );
 }
@@ -184,10 +275,25 @@ function overlayBubbleCopy(
   return { title: "Scanner off", subtitle: "Tap for guidance", live: false };
 }
 
-function BuyButton({ onPress }: { onPress: () => void }) {
+function PurchasedButton({
+  onPress,
+  saving,
+  disabled,
+}: {
+  onPress: () => void;
+  saving: boolean;
+  disabled: boolean;
+}) {
   return (
-    <Pressable accessibilityRole="button" onPress={onPress} style={styles.buyButton}>
-      <Text style={styles.buyLabel}>I bought this</Text>
+    <Pressable
+      accessibilityHint="Saves this card as purchased. Cost details can be added later. Does not read the live page."
+      accessibilityLabel="Purchased"
+      accessibilityRole="button"
+      disabled={disabled}
+      onPress={onPress}
+      style={[styles.buyButton, disabled && styles.buyButtonDisabled]}
+    >
+      <Text style={styles.buyLabel}>{saving ? "Saving…" : "Purchased"}</Text>
     </Pressable>
   );
 }
@@ -218,7 +324,7 @@ function NativeOverlay({
           <View accessibilityLabel="No catalog art" style={styles.thumb} />
           <View style={styles.copy}>
             <Text style={styles.name}>{LIVESTREAM_SCANNER_UNAVAILABLE_MESSAGE}</Text>
-            <Text style={styles.body}>Live-video identify is native iOS and Android only.</Text>
+            <Text style={styles.body}>{LIVESTREAM_SCANNER_UNAVAILABLE_DETAIL}</Text>
           </View>
         </View>
       </View>
@@ -377,6 +483,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     alignItems: "center",
   },
+  buyButtonDisabled: { opacity: 0.5 },
   buyLabel: { color: colors.bg, fontSize: 16, fontWeight: "800" },
   figureValue: { color: colors.text, fontSize: 16, fontWeight: "800" },
   figureMeta: { color: colors.muted, fontSize: 12, lineHeight: 16 },

@@ -11,11 +11,13 @@
     "typecheck": "tsc --noEmit",
     "db:generate": "drizzle-kit generate --name mvp_crm_schema",
     "db:migrate": "tsx src/db/apply-migration.ts",
+    "report:mapping": "tsx scripts/mapping-report.ts",
     "build:phash-index": "tsx scripts/build-english-phash-index.ts"
   },
   "dependencies": {
     "@cardflow/shared": "workspace:*",
     "@hono/node-server": "^1.19.0",
+    "@sentry/node": "^11.7.0",
     "@tcgdex/sdk": "^2.9.0",
     "better-sqlite3": "^13.0.3",
     "drizzle-orm": "^0.45.2",

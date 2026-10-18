@@ -17,6 +17,10 @@ import { defaultVariantId, variantOptions } from "@/lib/variants";
 import { colors, space } from "@/lib/theme";
 import { PrimaryButton } from "./primary-button";
 
+// Collection cost-details only. Livestream HUD one-tap Purchased never opens this
+// sheet; Watchlist one-tap Purchased also skips it. purchase_price stays optional
+// until Collection → Purchased. No confirm dialog.
+
 const PURCHASE_CONDITIONS = ["NM", "LP", "MP"] as const;
 
 export interface PurchaseSavePayload {
@@ -38,6 +42,7 @@ export interface PurchaseSheetProps {
   localId: string;
   variants: TcgdexVariants;
   selectedVariant?: string | null;
+  initialPurchasePrice?: string;
   isSaving: boolean;
   error: string | null;
   onClose: () => void;
@@ -48,7 +53,7 @@ export function PurchaseSheet(props: PurchaseSheetProps) {
   const variantKey = props.selectedVariant ?? defaultVariantId(props.variants, props.selectedVariant);
   return (
     <PurchaseSheetForm
-      key={props.visible ? `open:${variantKey}` : "closed"}
+      key={props.visible ? `open:${variantKey}:${props.initialPurchasePrice ?? ""}` : "closed"}
       {...props}
     />
   );
@@ -61,13 +66,14 @@ function PurchaseSheetForm({
   localId,
   variants,
   selectedVariant,
+  initialPurchasePrice,
   isSaving,
   error,
   onClose,
   onSave,
 }: PurchaseSheetProps) {
   const options = variantOptions(variants);
-  const [purchasePrice, setPurchasePrice] = useState("");
+  const [purchasePrice, setPurchasePrice] = useState(initialPurchasePrice ?? "");
   const [shipping, setShipping] = useState("0.00");
   const [tax, setTax] = useState("0.00");
   const [fees, setFees] = useState("0.00");
@@ -288,8 +294,10 @@ interface ChipProps {
 function Chip({ label, selected, onPress }: ChipProps) {
   return (
     <Pressable
+      accessibilityLabel={label}
       accessibilityRole="button"
       accessibilityState={{ selected }}
+      hitSlop={6}
       onPress={onPress}
       style={[styles.chip, selected && styles.chipSelected]}
     >

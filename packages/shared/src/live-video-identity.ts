@@ -4,7 +4,10 @@ import type { RecognitionConfidence } from "./types";
 export const LIVESTREAM_IDENTIFY_PIPELINE = "yolo_identity" as const;
 
 export const LIVESTREAM_SCANNER_UNAVAILABLE_MESSAGE =
-  "Livestream works in the iOS and Android app." as const;
+  "Live card scanning needs a development build." as const;
+
+export const LIVESTREAM_SCANNER_UNAVAILABLE_DETAIL =
+  "Native livestream frame capture is off. The live page still loads." as const;
 
 export type LiveVideoIdentityPlatform = "ios" | "android" | "web";
 
@@ -46,6 +49,15 @@ export interface LiveVideoFrame {
    * Never a full page screenshot. Optional; pHash remains the fallback.
    */
   identityCropJpeg?: string | null;
+  /**
+   * Card corners (TL, TR, BR, BL) in `identityCropJpeg` pixel space, 8 numbers.
+   * iOS Vision only; the server straightens the crop to 63:88 with these.
+   */
+  identityCropQuad?: number[] | null;
+  /** Detector box, normalized [0, 1], top-left origin. Used for IoU tracking. */
+  cardBox?: { x: number; y: number; width: number; height: number } | null;
+  /** Native detect time for this frame, ms (debug timing). */
+  detectMs?: number | null;
   /**
    * Downscaled JPEG of the live-video frame for the API YOLO detector.
    * Sent only while `/health` reports `liveVideoYolo`. Never a page still.

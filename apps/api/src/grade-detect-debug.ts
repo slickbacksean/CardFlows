@@ -88,7 +88,7 @@ export function saveGradeDetectDebug(input: {
         `${error ? `error=${error.slice(0, 200)}` : `failed=[${failed}] status=${String((mappedNoCrop as { status?: unknown } | undefined)?.status ?? "-")}`} saved=${base}${ext}`,
     );
   } catch (err) {
-    console.warn(`[grade-detect-debug] could not save: ${errorText(err)}`);
+    console.warn(`[grade-detect-debug] couldn't save: ${errorText(err)}`);
   }
 }
 
@@ -135,6 +135,6 @@ export function saveGradePregradeDebug(input: {
         `${error ? `error=${error.slice(0, 200)}` : `result=${String(mapped?.status ?? "-")} estimate=${String(mapped?.estimate ?? "-")}`} saved=${base}.json`,
     );
   } catch (err) {
-    console.warn(`[grade-pregrade-debug] could not save: ${errorText(err)}`);
+    console.warn(`[grade-pregrade-debug] couldn't save: ${errorText(err)}`);
   }
 }

@@ -14,6 +14,7 @@ Env:
   LIVE_IDENTITY_TOPK    Default 5
   LIVE_IDENTITY_ACCEPT  Cosine similarity accept threshold (default 0.86)
   LIVE_IDENTITY_MARGIN  Min top-1 minus top-2 similarity to accept (default 0.02)
+  LIVE_IDENTITY_WARP    1 (default) straightens the crop when the phone sends corners; 0 = old crop only
   LIVE_IDENTITY_LIVE_FLOOR  Lower similarity allowed when the winner is clearly ahead (default 0.80)
   LIVE_IDENTITY_LIVE_FLOOR_MARGIN  Margin required to use the floor (default 0.045)
 
@@ -38,6 +39,7 @@ from fastapi.responses import JSONResponse
 from PIL import Image
 
 from orb_rerank import rerank_near_tie
+from warp import warp_card
 
 INDEX_DIR = Path(os.environ.get("LIVE_IDENTITY_INDEX", "")).expanduser()
 TOKEN = os.environ.get("LIVE_IDENTITY_TOKEN", "").strip()
@@ -53,6 +55,7 @@ LIVE_FLOOR_MARGIN = float(os.environ.get("LIVE_IDENTITY_LIVE_FLOOR_MARGIN", "0.0
 # Capture stills of a physical card sit below the livestream gate. A printed name
 # limits the search to that Pokémon's prints, where 0.74 + the same margin separates them.
 NAME_ACCEPT = float(os.environ.get("LIVE_IDENTITY_NAME_ACCEPT", "0.74"))
+WARP = os.environ.get("LIVE_IDENTITY_WARP", "1").strip() != "0"
 EMBED_MODEL = "ViT-B-32"
 EMBED_PRETRAINED = "openai"
 
@@ -173,6 +176,7 @@ def health() -> JSONResponse:
     "liveFloor": LIVE_FLOOR,
     "liveFloorMargin": LIVE_FLOOR_MARGIN,
     "orb": "fail_soft",
+    "warp": WARP,
     "matchSamples": len(_match_ms),
     "matchP50Ms": _percentile_ms(50),
     "matchP95Ms": _percentile_ms(95),
@@ -295,6 +299,7 @@ def _name_hints(name: str | None, names: str | None) -> list[str]:
 async def match(
   crop: UploadFile = File(...),
   name: str | None = Form(default=None),
+  quad: str | None = Form(default=None),
   names: str | None = Form(default=None),
   authorization: str | None = Header(default=None),
   x_cardflow_token: str | None = Header(default=None, alias="X-CardFlow-Token"),
@@ -303,6 +308,7 @@ async def match(
   if _ready_error or _index is None or _model is None:
     raise HTTPException(status_code=503, detail=_ready_error or "not ready")
 
+  received = time.perf_counter()
   raw = await crop.read()
   if not raw or len(raw) > 8_000_000:
     raise HTTPException(status_code=400, detail="crop too large or empty")
@@ -312,8 +318,16 @@ async def match(
   except Exception as exc:  # noqa: BLE001
     raise HTTPException(status_code=400, detail=f"invalid image: {exc}") from exc
 
+  decoded = time.perf_counter()
+  warped = False
+  if WARP and quad:
+    straightened = warp_card(image, quad)
+    if straightened is not None:
+      image = straightened
+      warped = True
   started = time.perf_counter()
   query = _embed(image)
+  embedded = time.perf_counter()
   hints = _name_hints(name, names)
   if hints:
     candidates = []
@@ -335,6 +349,7 @@ async def match(
     ]
     candidates = _candidates_from_pairs(pairs)
     accept_at = ACCEPT
+  searched = time.perf_counter()
 
   candidates, orb_mode = _maybe_rerank(image, candidates, accept_at)
   top = candidates[0] if candidates else None
@@ -342,7 +357,20 @@ async def match(
   margin = round(float(top["similarity"]) - runner_up, 4) if top else None
   reason = _match_reason(candidates, accept_at, margin, orb_mode)
   accepted = reason == "accepted"
-  _note_match_ms((time.perf_counter() - started) * 1000)
+  finished = time.perf_counter()
+  _note_match_ms((finished - started) * 1000)
+
+  def ms(a: float, b: float) -> float:
+    return round((b - a) * 1000, 2)
+
+  timings = {
+    "decodeMs": ms(received, decoded),
+    "warpMs": ms(decoded, started),
+    "embedMs": ms(started, embedded),
+    "searchMs": ms(embedded, searched),
+    "orbMs": ms(searched, finished),
+    "totalMs": ms(received, finished),
+  }
   return JSONResponse(
     {
       "ok": True,
@@ -353,6 +381,8 @@ async def match(
       "tcgdexId": top["tcgdexId"] if accepted else None,
       "similarity": top["similarity"] if top else None,
       "margin": margin,
+      "warped": warped,
+      "timings": timings,
       "candidates": candidates[:TOPK],
     }
   )

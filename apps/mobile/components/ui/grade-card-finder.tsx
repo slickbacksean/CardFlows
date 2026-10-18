@@ -1,7 +1,22 @@
+import {
+  CAMERA_ALLOW_LABEL,
+  CAMERA_DENIED_TITLE,
+  CHOOSE_A_PHOTO_LABEL,
+  GRADE_CAMERA_PREPROMPT_BODY,
+  GRADE_CAMERA_PREPROMPT_TITLE,
+  OPEN_SETTINGS_LABEL,
+  GRADE_GUIDE_COPY,
+  GRADE_LEVEL_NEAR_DEG,
+  GRADE_LEVEL_OK_DEG,
+  gradeCaptureReadiness,
+  GRADE_AUTO_CAPTURE_COPY,
+  type GradeCaptureReadiness,
+} from "@cardflow/shared";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { Image } from "expo-image";
-import { useEffect, useRef, useState, type RefObject } from "react";
+import * as Haptics from "expo-haptics";
+import { useRef, useState, type RefObject } from "react";
 import {
   ActivityIndicator,
   Linking,
@@ -11,19 +26,28 @@ import {
   Text,
   useWindowDimensions,
   View,
+  AccessibilityInfo,
 } from "react-native";
 import { PrimaryButton } from "@/components/ui/primary-button";
 import {
   CARD_ASPECT_RATIO,
-  GRADE_STILL_QUALITY,
   largestPictureSize,
   stillFromCameraCapture,
   type PickedGradeStill,
 } from "@/lib/grade-photos";
 import { TAB_CURVE_RADIUS } from "@/components/ui/tab-bar-metrics";
+import { useDeviceLevel, type DeviceLevel } from "@/lib/device-level";
+import { useGradeAutoCapture } from "@/lib/use-grade-auto-capture";
 import { colors, space } from "@/lib/theme";
 
 const DIM = "rgba(0,0,0,0.55)";
+/** Guide colors by level: green within 2°, amber up to 6°, red beyond. */
+const GUIDE_COLORS = {
+  good: "#5BD178",
+  warn: "#F2B33D",
+  bad: "#F06A5B",
+  neutral: colors.accent,
+} as const;
 const IS_NATIVE = Platform.OS === "ios" || Platform.OS === "android";
 
 interface GradeCardFinderProps {
@@ -63,21 +87,47 @@ export function GradeCardFinder({
   const waitingForCamera = showLivePreview && (!cameraReady || !pictureSizeResolved);
   const shutterDisabled = detecting || waitingForCamera || capturing;
   const banner = error ?? notice ?? null;
+  // Tilt guide: feature-detected DeviceMotion; falls back to the static frame.
+  const level = useDeviceLevel(showLivePreview && !freezeUri);
+  const readiness = gradeCaptureReadiness({
+    sensorAvailable: level.available,
+    level: level.level,
+    steady: level.steady,
+    cardInFrame: null,
+  });
+  const guideColor = GUIDE_COLORS[readiness.tone];
+  // P1-15: auto-capture once level (≤ 2°) and still for 0.5 s. The shutter always works too.
+  const autoEnabled = showLivePreview && !freezeUri && !detecting && level.available;
+  const { holdProgress } = useGradeAutoCapture({
+    tick: level,
+    autoCaptureReady: readiness.autoCaptureReady,
+    enabled: autoEnabled,
+    busy: shutterDisabled,
+    onFire: () => void onShutter("auto"),
+  });
+  const holding = holdProgress > 0 && readiness.autoCaptureReady;
+  const statusPhrase = capturing
+    ? GRADE_AUTO_CAPTURE_COPY.capturing
+    : holding
+      ? GRADE_AUTO_CAPTURE_COPY.holding
+      : statusLine(readiness);
+  const tiltNote = capturing || holding ? null : tiltDetail(readiness, level);
 
-  useEffect(() => {
-    if (IS_NATIVE && !permission?.granted && permission?.canAskAgain) {
-      void requestPermission();
-    }
-  }, [permission, requestPermission]);
 
-  async function onShutter() {
+  async function onShutter(via: "auto" | "manual" = "manual") {
     if (busyRef.current || shutterDisabled || !showLivePreview) return;
     busyRef.current = true;
     setCapturing(true);
+    // Announce once per capture (iOS); Android reads the chip's live region.
+    if (Platform.OS === "ios") AccessibilityInfo.announceForAccessibility(GRADE_AUTO_CAPTURE_COPY.capturing);
     setError(null);
     try {
+      // Light haptic on capture (expo-haptics works in Expo Go).
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+      if (__DEV__) console.info(`[grade-finder] ${side} capture via ${via}`);
       const photo = await cameraRef.current?.takePictureAsync({
-        quality: GRADE_STILL_QUALITY,
+        // Full pixels; Photo grade prep writes JPEG q=0.8 once.
+        quality: 1,
         imageType: "jpg",
         skipProcessing: false,
       });
@@ -96,7 +146,7 @@ export function GradeCardFinder({
       }
       onCaptured(picked.still);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not take a photo. Try again.");
+      setError(caught instanceof Error ? caught.message : "Couldn't take a photo. Try again.");
     } finally {
       busyRef.current = false;
       setCapturing(false);
@@ -142,31 +192,40 @@ export function GradeCardFinder({
     const blocked = !IS_NATIVE
       ? "The live camera runs in the iOS and Android app. Choose a photo instead."
       : cameraMountFailed
-      ? "Camera could not start. Choose a library photo, or try again."
+      ? "Camera couldn't start. Choose a library photo, or try again."
       : permission.canAskAgain
-        ? "CardFlow takes a still of the card in a 63×88 frame, then finds the crop. You can also choose a library photo."
+        ? GRADE_CAMERA_PREPROMPT_BODY
         : "Enable camera in system Settings, or pick a photo from the library.";
+    const canPrompt = IS_NATIVE && (permission.canAskAgain || cameraMountFailed);
     return (
       <View style={styles.flex}>
         <FinderHeader onBack={onBack} title={`${sideLabel} photo`} />
         <View style={styles.panel}>
           <Text style={styles.title}>
-            {!IS_NATIVE || cameraMountFailed ? "Camera unavailable" : "Allow camera"}
+            {!IS_NATIVE || cameraMountFailed
+              ? "Camera unavailable"
+              : permission.canAskAgain
+                ? GRADE_CAMERA_PREPROMPT_TITLE
+                : CAMERA_DENIED_TITLE}
           </Text>
           <Text style={styles.body}>{blocked}</Text>
           {banner ? <Text style={styles.error}>{banner}</Text> : null}
-          {!IS_NATIVE ? null : !permission.canAskAgain && !cameraMountFailed ? (
-            <PrimaryButton label="Open system Settings" onPress={() => void openSettings()} tone="muted" />
-          ) : (
+          {canPrompt ? (
             <PrimaryButton
-              label="Allow camera"
+              label={CAMERA_ALLOW_LABEL}
               onPress={() => {
                 setCameraMountFailed(false);
                 void requestPermission();
               }}
             />
-          )}
-          <PrimaryButton label="Choose a photo" onPress={onLibrary} tone="muted" />
+          ) : IS_NATIVE ? (
+            <PrimaryButton
+              label={OPEN_SETTINGS_LABEL}
+              onPress={() => void openSettings()}
+              tone="muted"
+            />
+          ) : null}
+          <PrimaryButton label={CHOOSE_A_PHOTO_LABEL} onPress={onLibrary} tone="muted" />
         </View>
       </View>
     );
@@ -175,12 +234,32 @@ export function GradeCardFinder({
   return (
     <View style={styles.flex}>
       <FinderHeader onBack={detecting ? undefined : onBack} title={`${sideLabel} photo`} />
-      <Text style={styles.hint}>Fill the frame with the whole card. Keep the camera straight above.</Text>
+      <View style={styles.helper}>
+        <Text style={styles.helperMain}>{GRADE_GUIDE_COPY.lineUp}</Text>
+        {/* Dark hint chip: icon + phrase, color only on the icon. The live region carries the
+            phrase only (no %, no degrees), so it speaks when the phrase changes, not every tick. */}
+        <View style={styles.hintChip}>
+          <Ionicons color={guideColor} name={TONE_ICONS[readiness.tone]} size={18} />
+          <Text accessibilityLiveRegion="polite" style={styles.hintChipText}>
+            {statusPhrase}
+          </Text>
+          {tiltNote ? (
+            <Text accessibilityElementsHidden importantForAccessibility="no" style={styles.hintChipText}>
+              {tiltNote}
+            </Text>
+          ) : null}
+        </View>
+        {level.available && statusPhrase === statusLine(readiness) && !holding ? (
+          <Text style={styles.helperMain}>{GRADE_AUTO_CAPTURE_COPY.manualHint}</Text>
+        ) : null}
+      </View>
       <CardFinderStage
         cameraRef={cameraRef}
         enableLivePreview={showLivePreview}
         freezeUri={freezeUri}
         detecting={detecting}
+        guideColor={guideColor}
+        level={level}
         pictureSize={pictureSize}
         onCameraReady={() => void onCameraReady()}
         onMountError={() => setCameraMountFailed(true)}
@@ -199,10 +278,9 @@ export function GradeCardFinder({
         <Pressable
           accessibilityLabel="Take photo"
           accessibilityRole="button"
-          accessibilityState={{ disabled: shutterDisabled }}
-          disabled={shutterDisabled}
-          onPress={() => void onShutter()}
-          style={[styles.shutterOuter, shutterDisabled && styles.disabled]}
+          accessibilityState={{ busy: shutterDisabled }}
+          onPress={() => void onShutter("manual")}
+          style={[styles.shutterOuter, { borderColor: guideColor }]}
         >
           {detecting || waitingForCamera ? (
             <ActivityIndicator color={colors.ctaText} />
@@ -215,6 +293,23 @@ export function GradeCardFinder({
     </View>
   );
 }
+
+function statusLine(readiness: GradeCaptureReadiness): string {
+  return readiness.status;
+}
+
+/** Visible-only tilt detail; never in the live region. */
+function tiltDetail(readiness: GradeCaptureReadiness, level: DeviceLevel): string | null {
+  if (!level.available || level.tiltDeg == null) return null;
+  return readiness.status === GRADE_GUIDE_COPY.holdFlat ? `${level.tiltDeg.toFixed(1)}° off` : null;
+}
+
+const TONE_ICONS = {
+  good: "checkmark-circle",
+  warn: "alert-circle",
+  bad: "close-circle",
+  neutral: "scan-outline",
+} as const;
 
 function FinderHeader({ onBack, title }: { onBack?: () => void; title: string }) {
   return (
@@ -232,7 +327,7 @@ function FinderHeader({ onBack, title }: { onBack?: () => void; title: string })
       ) : (
         <View style={styles.iconButton} />
       )}
-      <Text numberOfLines={1} style={styles.topTitle}>
+      <Text style={styles.topTitle}>
         {title}
       </Text>
       <View style={styles.iconButton} />
@@ -245,6 +340,8 @@ interface CardFinderStageProps {
   enableLivePreview: boolean;
   freezeUri: string | null;
   detecting: boolean;
+  guideColor: string;
+  level: DeviceLevel;
   pictureSize?: string;
   onCameraReady: () => void;
   onMountError: () => void;
@@ -255,6 +352,8 @@ function CardFinderStage({
   enableLivePreview,
   freezeUri,
   detecting,
+  guideColor,
+  level,
   pictureSize,
   onCameraReady,
   onMountError,
@@ -291,11 +390,33 @@ function CardFinderStage({
           <View style={styles.dimBand} />
           <View style={styles.frameRow}>
             <View style={styles.dimBand} />
-            <View style={[styles.frame, { width: frameWidth, height: frameHeight }]} />
+            <View style={{ width: frameWidth, height: frameHeight }}>
+              <View style={[styles.frame, { borderColor: guideColor }]} />
+              {(["tl", "tr", "bl", "br"] as const).map((corner) => (
+                <View
+                  key={corner}
+                  style={[
+                    styles.bracket,
+                    {
+                      borderColor: guideColor,
+                      top: corner[0] === "t" ? -BRACKET_THICKNESS / 2 : undefined,
+                      bottom: corner[0] === "b" ? -BRACKET_THICKNESS / 2 : undefined,
+                      left: corner[1] === "l" ? -BRACKET_THICKNESS / 2 : undefined,
+                      right: corner[1] === "r" ? -BRACKET_THICKNESS / 2 : undefined,
+                      borderTopWidth: corner[0] === "t" ? BRACKET_THICKNESS : 0,
+                      borderBottomWidth: corner[0] === "b" ? BRACKET_THICKNESS : 0,
+                      borderLeftWidth: corner[1] === "l" ? BRACKET_THICKNESS : 0,
+                      borderRightWidth: corner[1] === "r" ? BRACKET_THICKNESS : 0,
+                    },
+                  ]}
+                />
+              ))}
+            </View>
             <View style={styles.dimBand} />
           </View>
           <View style={styles.dimBand} />
         </View>
+        {!freezeUri && !detecting ? <LevelBubble color={guideColor} level={level} /> : null}
         {detecting ? (
           <View style={styles.detectScrim}>
             <ActivityIndicator color={colors.accent} />
@@ -303,6 +424,45 @@ function CardFinderStage({
           </View>
         ) : null}
       </View>
+    </View>
+  );
+}
+
+const BRACKET = 32;
+const BRACKET_THICKNESS = 5;
+const BUBBLE_RADIUS = 34;
+const DOT_RADIUS = 7;
+/** Pixels per degree: the outer ring is GRADE_LEVEL_NEAR_DEG + 2. */
+const PX_PER_DEG = (BUBBLE_RADIUS - DOT_RADIUS) / (GRADE_LEVEL_NEAR_DEG + 2);
+
+function LevelBubble({ level, color }: { level: DeviceLevel; color: string }) {
+  if (!level.available || level.pitchDeg == null || level.rollDeg == null) return null;
+  let dx = level.rollDeg * PX_PER_DEG;
+  let dy = -level.pitchDeg * PX_PER_DEG;
+  const max = BUBBLE_RADIUS - DOT_RADIUS;
+  const dist = Math.hypot(dx, dy);
+  if (dist > max) {
+    dx = (dx / dist) * max;
+    dy = (dy / dist) * max;
+  }
+  const target = Math.max(DOT_RADIUS + 2, GRADE_LEVEL_OK_DEG * PX_PER_DEG + DOT_RADIUS);
+  return (
+    <View
+      accessibilityLabel="Level indicator"
+      accessibilityValue={{ text: level.tiltDeg != null && level.tiltDeg <= GRADE_LEVEL_OK_DEG ? "Level" : "Tilted" }}
+      pointerEvents="none"
+      style={styles.bubble}
+    >
+      <View style={[styles.bubbleRing, { borderColor: color }]} />
+      <View
+        style={[
+          styles.bubbleTarget,
+          { width: target * 2, height: target * 2, borderRadius: target, marginLeft: -target, marginTop: -target },
+        ]}
+      />
+      <View
+        style={[styles.bubbleDot, { backgroundColor: color, transform: [{ translateX: dx }, { translateY: dy }] }]}
+      />
     </View>
   );
 }
@@ -323,14 +483,6 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     textAlign: "center",
   },
-  hint: {
-    color: colors.muted,
-    fontSize: 14,
-    lineHeight: 20,
-    textAlign: "center",
-    paddingHorizontal: space.lg,
-    paddingBottom: space.sm,
-  },
   panel: {
     flex: 1,
     paddingHorizontal: space.lg,
@@ -338,7 +490,7 @@ const styles = StyleSheet.create({
     gap: space.md,
   },
   title: { color: colors.text, fontSize: 22, fontWeight: "800" },
-  body: { color: colors.muted, fontSize: 15, lineHeight: 22 },
+  body: { color: colors.muted, fontSize: 15 },
   error: {
     color: colors.danger,
     fontSize: 14,
@@ -365,11 +517,49 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   frame: {
+    ...StyleSheet.absoluteFill,
     borderRadius: 14,
     borderWidth: 2,
-    borderColor: colors.accent,
     backgroundColor: "transparent",
   },
+  bracket: { position: "absolute", width: BRACKET, height: BRACKET },
+  bubble: {
+    position: "absolute",
+    top: space.sm,
+    right: space.sm,
+    width: BUBBLE_RADIUS * 2,
+    height: BUBBLE_RADIUS * 2,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  bubbleRing: {
+    ...StyleSheet.absoluteFill,
+    borderRadius: BUBBLE_RADIUS,
+    borderWidth: 2,
+    backgroundColor: "rgba(0,0,0,0.35)",
+  },
+  bubbleTarget: {
+    position: "absolute",
+    left: "50%",
+    top: "50%",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.7)",
+  },
+  bubbleDot: { width: DOT_RADIUS * 2, height: DOT_RADIUS * 2, borderRadius: DOT_RADIUS },
+  helper: { alignItems: "center", gap: 2, paddingHorizontal: space.lg, paddingBottom: space.sm },
+  helperMain: { color: colors.text, fontSize: 15, fontWeight: "700", textAlign: "center" },
+  hintChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "wrap",
+    justifyContent: "center",
+    gap: space.xs,
+    backgroundColor: "rgba(0,0,0,0.7)",
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  hintChipText: { color: "#FFFFFF", fontSize: 14, fontWeight: "700", textAlign: "center", flexShrink: 1 },
   detectScrim: {
     ...StyleSheet.absoluteFill,
     backgroundColor: "rgba(7, 9, 11, 0.55)",

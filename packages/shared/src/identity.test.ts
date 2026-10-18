@@ -28,6 +28,7 @@ import {
   requireInvitedIdentity,
   shouldConfirmAccountSwitch,
 } from "./identity";
+import { readApiSource, readApiClientSource } from "./repo-sources";
 
 const repoRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 const MOCK_UUID =
@@ -124,7 +125,7 @@ describe("Private-beta identity model", () => {
 
   it("lets the mock API select and report the active invited user", () => {
     const store = readRepoFile("apps/api/src/store.ts");
-    const api = readRepoFile("apps/api/src/app.ts");
+    const api = readApiSource();
     const settings = readRepoFile("apps/mobile/app/settings.tsx");
 
     expect(store).not.toContain("DEV_USER_ID");
@@ -199,12 +200,12 @@ describe("Account switching", () => {
   it("lets Settings switch invited testers without minting inventory", () => {
     const settings = readRepoFile("apps/mobile/app/settings.tsx");
     const identity = readRepoFile("apps/mobile/lib/identity.ts");
-    const apiClient = readRepoFile("apps/mobile/lib/api.ts");
+    const apiClient = readApiClientSource();
     const store = readRepoFile("apps/api/src/store.ts");
-    const api = readRepoFile("apps/api/src/app.ts");
+    const api = readApiSource();
     const collection = readRepoFile("apps/mobile/app/(tabs)/collection.tsx");
 
-    expect(settings).toContain("This tester");
+    expect(settings).toContain(">Account<");
     expect(settings).toContain("switch-tester");
     expect(settings).not.toContain("invitedUsers.map");
     expect(identity).toContain("createSession(inviteCode)");
@@ -214,7 +215,7 @@ describe("Account switching", () => {
     expect(identity).toContain("listInventory()");
     expect(identity).not.toContain("patchIdentity");
     expect(apiClient).toContain('"/v1/sessions"');
-    expect(apiClient).toContain("JSON.stringify({ inviteCode })");
+    expect(apiClient).toContain("body: { inviteCode }");
     expect(apiClient).not.toContain("patchIdentity");
 
     expect(store).toContain("export function createSession(");
@@ -255,7 +256,7 @@ describe("CRM rows per invited user", () => {
     expect(crmValueForUser(null, "a")).toBeNull();
 
     const store = readRepoFile("apps/api/src/store.ts");
-    const api = readRepoFile("apps/api/src/app.ts");
+    const api = readApiSource();
     const collection = readRepoFile("apps/mobile/app/(tabs)/collection.tsx");
     const exportScreen = readRepoFile("apps/mobile/app/(tabs)/export.tsx");
     const grading = readRepoFile("apps/mobile/app/(tabs)/grading.tsx");
@@ -315,7 +316,7 @@ describe("No sign-up wall", () => {
     expect(forbiddenSignUpWall("Create an account")).toBe("sign_up_to_continue");
 
     const store = readRepoFile("apps/api/src/store.ts");
-    const api = readRepoFile("apps/api/src/app.ts");
+    const api = readApiSource();
     const mobileIdentity = readRepoFile("apps/mobile/lib/identity.ts");
     const rootLayout = readRepoFile("apps/mobile/app/_layout.tsx");
     const tabsLayout = readRepoFile("apps/mobile/app/(tabs)/_layout.tsx");
@@ -339,7 +340,8 @@ describe("No sign-up wall", () => {
     expect(existsSync(path.join(repoRoot, "apps/mobile/app/login.tsx"))).toBe(false);
     expect(existsSync(path.join(repoRoot, "apps/mobile/app/signup.tsx"))).toBe(false);
     expect(existsSync(path.join(repoRoot, "apps/mobile/app/sign-in.tsx"))).toBe(false);
-    expect(existsSync(path.join(repoRoot, "apps/mobile/app/sign-up.tsx"))).toBe(false);
+    // Open sign-up (Sean): the screen exists but is only opened from the guest prompt / Settings, never on launch.
+    expect(rootLayout).not.toMatch(/Redirect[^\n]*sign-up/);
     expect(existsSync(path.join(repoRoot, "apps/mobile/app/auth.tsx"))).toBe(false);
 
     expect(forbiddenSignUpWall(rootLayout)).toBeNull();
@@ -358,7 +360,7 @@ describe("No sign-up wall", () => {
     const scan = readRepoFile("apps/mobile/app/scan/[scanId].tsx");
     const decide = readRepoFile("apps/mobile/app/decide/[cardflowCardId].tsx");
     const draft = readRepoFile("apps/mobile/app/draft/[draftId].tsx");
-    const api = readRepoFile("apps/api/src/app.ts");
+    const api = readApiSource();
     const rootLayout = readRepoFile("apps/mobile/app/_layout.tsx");
 
     expect(mobileIdentity).not.toContain("restoreDefaultInvitedIdentity");
@@ -367,7 +369,7 @@ describe("No sign-up wall", () => {
       false,
     );
     expect(rootLayout).not.toContain("InviteGate");
-    expect(settings).toContain("This tester");
+    expect(settings).toContain(">Account<");
     expect(settings).toContain("switch-tester");
     expect(settings).not.toMatch(/Sign in with Apple|Sign in with Google/i);
 
@@ -391,7 +393,7 @@ describe("Mobile session restore", () => {
   it("persists the invite token on native and restores it on cold start", () => {
     const sessionToken = readRepoFile("apps/mobile/lib/session-token.ts");
     const identity = readRepoFile("apps/mobile/lib/identity.ts");
-    const apiClient = readRepoFile("apps/mobile/lib/api.ts");
+    const apiClient = readApiClientSource();
     const rootLayout = readRepoFile("apps/mobile/app/_layout.tsx");
     const settings = readRepoFile("apps/mobile/app/settings.tsx");
     const switchTester = readRepoFile("apps/mobile/app/switch-tester.tsx");
@@ -426,7 +428,7 @@ describe("Mobile session restore", () => {
     expect(forbiddenSignUpWall(rootLayout)).toBeNull();
 
     expect(settings).toContain("settingsKickerForIdentity(session.identity)");
-    expect(settings).toContain("This tester");
+    expect(settings).toContain(">Account<");
     expect(switchTester).toContain("shouldConfirmAccountSwitch");
     expect(settings).not.toMatch(/ImagePicker|launchImageLibrary|avatar photo/i);
 
@@ -453,12 +455,12 @@ describe("Session loop check", () => {
     const identity = readRepoFile("apps/mobile/lib/identity.ts");
     const capture = readRepoFile("apps/mobile/app/capture.tsx");
     const collection = readRepoFile("apps/mobile/app/(tabs)/collection.tsx");
-    const api = readRepoFile("apps/api/src/app.ts");
+    const api = readApiSource();
 
     expect(switchTester).toContain("shouldConfirmAccountSwitch");
     expect(switchTester).toContain("Alert.alert");
     expect(switchTester).toContain("switchActiveIdentity");
-    expect(settings).toContain("This tester");
+    expect(settings).toContain(">Account<");
     expect(identity).toContain("persistSessionToken(result.token)");
     expect(identity).not.toContain("inviteCodeForUserId");
     expect(identity).not.toContain("patchIdentity");

@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import Database from "better-sqlite3";
 import { drizzle, type BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import { migrate } from "drizzle-orm/better-sqlite3/migrator";
+import { backfillQuotaAnchors } from "./quota-anchor-backfill";
 import { schema } from "./schema";
 
 export function mvpMigrationsFolder(): string {
@@ -29,6 +30,8 @@ export function applyMvpMigrations(sqlitePath: string): {
   sqlite.pragma("foreign_keys = OFF");
   const db = drizzle(sqlite, { schema });
   migrate(db, { migrationsFolder: mvpMigrationsFolder() });
+  // 0016 adds `anchor_at`; existing accounts get their creation/activity date (see the module).
+  backfillQuotaAnchors(sqlite);
   sqlite.pragma("foreign_keys = ON");
   return { sqlite, db };
 }

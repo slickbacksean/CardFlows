@@ -1,4 +1,31 @@
-import { createHash } from "node:crypto";
+import { createHash, randomBytes, randomInt, timingSafeEqual } from "node:crypto";
+import { emailSenderFromEnv, type EmailSender } from "./email-sender";
+import { cardSightMonthKey, consentState, hasActiveConsent } from "./consent-store";
+import { AGE_CONFIRMATION_REQUIRED_CODE, AGE_GATE_COPY, AGE_GATE_VERSION } from "@cardflow/shared";
+import { ageConfirmationState, hasAgeConfirmation } from "./age-store";
+import { ageGateEnabledFromEnv, CARDSIGHT_GUEST_MONTHLY_CAP, CARDSIGHT_USER_MONTHLY_CAP_DEFAULT } from "./grade-quota-env";
+import { createRecognitionWithFallback } from "./cardsight-adapter";
+import { normalizeEmail } from "./account-store";
+import { routePath } from "hono/route";
+import { CARDSIGHT_CONSENT_VERSION, INVITED_USERS, EMAIL_CODE_LIFETIME_SENDS, EMAIL_SENDS_PER_ADDRESS_PER_DAY, UNVERIFIED_ACCOUNT_TTL_DAYS, EMAIL_CODE_LENGTH, EMAIL_RESEND_COOLDOWN_MS, EMAIL_UNVERIFIED_CODE, EMAIL_VERIFICATION_COPY, EMAIL_VERIFICATION_TTL_MS, isEmailCode, passwordResetEmailText, verificationEmailText, quotaAnchor, quotaPeriodFor, ACCOUNT_AUTH_COPY, PASSWORD_RESET_TTL_MS, GUEST_MINT_WINDOW_MS, GUEST_SESSION_TTL_MS, isValidEmail, passwordProblem, GUEST_USER_PREFIX, SIGNUP_REQUIRED_CODE, guestIdentity, guestRouteBlockReason, isGuestUserId, isHot, parsePerfBatch, signupMessage, type SignupReason } from "@cardflow/shared";
+import { NORTH_STAR_NAME, SCANS_PER_WAR_NAME, northStarWeekly } from "@cardflow/shared";
+import { opsMetrics, type OpsMetrics } from "./ops-metrics";
+import { parseUserPriceAmount } from "@cardflow/shared";
+import {
+  cachedPricingProvider,
+  createRecognitionCache,
+  serverCacheEnabledFromEnv,
+} from "./server-cache";
+import {
+  computeMappingMetrics,
+  confirmEventFor,
+  mappingMetricsMarkdown,
+  weeklyWindow,
+  rerankItemsByConfirms,
+  scanCorrectionFor,
+  suggestVariants,
+  type ScanCorrection,
+} from "@cardflow/shared";
 import {
   canMarkReadyForReview,
   CatalogProviderError,
@@ -9,10 +36,19 @@ import {
   canonicalCardFromTcgdex,
   computeAllInCost,
   computeMaxBuy,
+  DETAILS_NEEDED_WORKFLOW_STATE,
+  detailsNeededCostBasis,
+  isClosedWatchlist,
+  isDetailsNeededPurchase,
+  isOpenWatchlist,
+  isRecentDetailsNeededDuplicate,
+  livestreamContextTags,
+  WATCHLIST_CLOSED_WORKFLOW_STATE,
+  watchlistConversionTags,
+  watchlistSourceIdFromTags,
   keywordChips,
   LOCKED_DISPLAY_CURRENCY,
   mapRecognitionToCatalog,
-  maxBuyPreferencesRangeError,
   parseDollarsToCents,
   INVALID_DOLLAR_AMOUNT,
   mockCardRecognitionProvider,
@@ -35,7 +71,9 @@ import {
   pricingProviderHealth,
   recognitionHealth,
   catalogHealth,
+  GRADE_ENGINE_STILL_RUNNING,
   healthMockProviders,
+  healthOk,
   emptyGradeEstimate,
   unavailableGradeEstimate,
   parseStoredGradeEstimate,
@@ -45,7 +83,7 @@ import {
   isGradeImageMime,
   mockCardGradingProvider,
   NOT_SUBMITTED_CANNOT_RETURN_MESSAGE,
-  requireInvitedIdentity,
+  invitedIdentityByUserId,
   searchCatalog,
   slabPricingHealth,
   updateReturnedCopy,
@@ -67,11 +105,19 @@ import {
   type HealthLivestreamIdentify,
   type LiveVideoIdentityPlatform,
   type ObbDetector,
-  type MaxBuyPreferences,
   type PhashIndex,
   type RecognitionConfidence,
   type TcgdexCard,
   type TitleTemplateId,
+  createLiveScanTimingLog,
+  type LiveScanSample,
+  GRADE_QUOTA_COPY,
+  calendarMonthKey,
+  gradeQuotaSnapshot,
+  monthlyLimitForPlan,
+  type GradePlan,
+  type GradeQuotaSnapshot,
+  BATCH_GRADE_HEADER,
 } from "@cardflow/shared";
 import { Hono, type Context as HonoContext } from "hono";
 import { cors } from "hono/cors";
@@ -87,13 +133,30 @@ import {
   trustProxyHopsFromEnv,
   type RateLimitConfig,
 } from "./rate-limit";
+import { APP_API_KEY_HEADER, appApiKeyFromEnv } from "./app-api-key";
+import {
+  gradeIapFromEnv,
+  gradeQuotaEnabledFromEnv,
+  premiumUserIdsFromEnv,
+} from "./grade-quota-env";
 import type { CardgradingEngineStatus, ConcurrencyGate } from "./cardgrading-run";
+import type { AppEnv } from "./app-env";
+import { contractMiddleware } from "./contract-middleware";
 import { corsOriginsFromEnv } from "./cors-env";
+import { registerGradeQuotaRoutes } from "./routes/grade-quota";
+import { registerPreferenceRoutes } from "./routes/preferences";
+import { registerGradeJobRoutes } from "./routes/grade-jobs";
+import { registerStatusRoutes } from "./routes/status";
+import { registerSalesRoutes } from "./routes/sales";
+import { premiumRequiredBody, recordGradeEstimate, registerGradeHistoryRoutes } from "./routes/grade-history";
+import { REQUEST_ID_HEADER, resolveRequestId } from "./request-id";
+import { captureApiException } from "./sentry";
 import {
   JSON_BODY_MAX_BYTES,
   LIVESTREAM_IDENTIFY_BODY_MAX_BYTES,
   GRADE_ROUTE_BODY_MAX_BYTES,
 } from "./request-limits";
+import { unmappedSetNameCounts } from "./tcgdex-catalog";
 import { createMemoryStore, type InventoryItemRecord, type StorePort } from "./store";
 import {
   offPokecollectorAccounts,
@@ -101,7 +164,11 @@ import {
   type PokecollectorCollectionCopy,
 } from "./pokecollector-accounts";
 import { SCAN_IMAGE_MAX_BYTES, type ScanImageMimeType } from "./scan-image";
-import { isGradePhotoSide } from "./grade-image";
+import {
+  gradeUploadCache as defaultGradeUploadCache,
+  isGradePhotoSide,
+  type GradeUploadCache,
+} from "./grade-image";
 import {
   decideScanIdentify,
   skippedStillIdentifyResult,
@@ -118,13 +185,20 @@ import {
   draftView,
 } from "./listing";
 import { identityForInviteCode } from "./invited-testers";
+import { createIdempotencyRegistry, hashRequestBody, IDEMPOTENCY_TTL_MS } from "./idempotency";
+import { hashPassword, verifyAgainstDummy, verifyPassword } from "./password";
 import {
+  hashSessionToken,
+  isSessionExpired,
+  mintSessionToken,
+  sessionExpiryIso,
   defaultAutoSessionIdentity,
   parseBearerToken,
   resolveDevAutoSession,
 } from "./session";
 import {
   decodeIdentityCropJpeg,
+  normalizeIdentityCropQuad,
   type LiveIdentityOpenclipClient,
 } from "./live-identity-openclip";
 import { locateLiveVideoCard } from "./live-video-obb";
@@ -136,12 +210,6 @@ import {
   portfolioRangeStartDate,
 } from "./portfolio-history";
 
-type AppEnv = {
-  Variables: {
-    userId: string;
-    identity: InvitedIdentity;
-  };
-};
 
 /** /health never waits more than 3 s on the OpenCV probe (which itself times out at 5 s). */
 async function boundedProbe(
@@ -155,7 +223,7 @@ async function boundedProbe(
           ok: false,
           opencv: null,
           numpy: null,
-          error: "grader check still running",
+          error: GRADE_ENGINE_STILL_RUNNING,
           checkedAt: new Date().toISOString(),
         }),
       3_000,
@@ -168,8 +236,28 @@ async function boundedProbe(
   }
 }
 
+/** Pre-grade estimate routes that need a verified email (POST only). */
+export function requiresVerifiedEmail(pathName: string): boolean {
+  return (
+    pathName === "/v1/grade/detect" ||
+    pathName === "/v1/grade/pregrade" ||
+    pathName === "/v1/grading/batch" ||
+    /^\/v1\/inventory\/[^/]+\/(grade-jobs|grade-estimate)$/.test(pathName)
+  );
+}
+
 function isPublicV1Path(method: string, pathName: string): boolean {
-  return method === "POST" && pathName === "/v1/sessions";
+  return (
+    method === "POST" &&
+    [
+      "/v1/sessions",
+      "/v1/sessions/guest",
+      "/v1/sessions/password",
+      "/v1/accounts",
+      "/v1/password-resets",
+      "/v1/password-resets/confirm",
+    ].includes(pathName)
+  );
 }
 
 /** Live catalog GET refreshes cache. Outage/flag-off falls back to last mapping snapshot. */
@@ -245,12 +333,62 @@ function gradePhotoHash(
 export interface CreateAppOptions {
   /** When true, a missing Authorization header acts as the default invited user. */
   devAutoSession?: boolean;
+  /**
+   * Browse-only guest sessions (Sean, Oct 17): guests look around; every scan, grade, livestream,
+   * save and CardSight route answers 403 signup_required. Default from CARD_FLOW_GUEST_BROWSE=true
+   * (off otherwise). CARD_FLOW_GUEST_SCANS is gone: there are no guest scans any more.
+   */
+  guestMode?: boolean;
+  /** D9: how often ended-guest data is purged (default hourly; always within 24 h). */
+  guestCleanupIntervalMs?: number;
+  /** D9 tests: receives the cleanup function so a test can run it on demand. */
+  onGuestCleanup?: (run: () => { guestsPurged: number; scansDeleted: number }) => void;
+  /** Open sign-up limits (per IP / per email). */
+  authLimits?: { signupPerIp?: number; signInPerIp?: number; perEmail?: number; invitePerIp?: number };
+  /** Forgot password delivery override (tests). Default: the email sender. */
+  deliverPasswordReset?: (email: string, token: string) => void;
+  /** Verification and reset emails. Default from CARD_FLOW_EMAIL_SENDER (dev logger when unset). */
+  emailSender?: EmailSender;
+  /** Hourly purge of accounts unverified after 7 days. 0 turns the timer off (tests). */
+  unverifiedPurgeIntervalMs?: number;
+  /**
+   * Sean (Oct 17): sign-up must state 18+ (`ageConfirmed18Plus`). Always on outside tests (see
+   * ageGateEnabledFromEnv).
+   */
+  ageGate?: boolean;
+  /** Tests: receives the purge so it can run on demand. */
+  onUnverifiedPurge?: (run: () => { accountsPurged: number }) => void;
+  /** D9: guest sessions minted per client IP per hour (default 10). */
+  guestMintsPerHour?: number;
   /** Catalog provider. Tests default to mock; local/staging may inject live TCGdex or PokéCollector. */
   catalog?: CardCatalogProvider;
   /** Pricing provider. Tests default to off; local stack may inject PokéCollector. */
   pricing?: CardPricingProvider;
   /** Recognition provider. Tests default to mock; live Capture uses `obb_phash`. */
   recognition?: CardRecognitionProvider;
+  /**
+   * Sean: CardSight adapter (null/undefined = not configured). Called only for users whose
+   * current-version consent is on; everyone else gets the local matcher.
+   */
+  cardSight?: CardRecognitionProvider | null;
+  /**
+   * Backend review M5: CardSight calls per account per calendar month (default 50; see
+   * cardSightUserCapsFromEnv). Past the cap, scans use the local matcher. Guests: always 0.
+   */
+  cardSightUserCaps?: { signedIn: number };
+  /** P1-07: async grade jobs. Defaults to CARD_FLOW_GRADE_JOBS=on (off). */
+  gradeJobs?: boolean;
+  gradeJobLimits?: { ttlMs?: number; maxActiveJobs?: number; maxActiveJobsPerUser?: number; sweepMs?: number; maxStoredJobs?: number };
+  /** P1-21: /v1/status cache window (ms). Default 30 s. */
+  statusCacheMs?: number;
+  /** P1-17: defaults to the process-wide metrics. */
+  opsMetrics?: OpsMetrics;
+  /** P1-17: bearer token for GET /ops/metrics; defaults to CARD_FLOW_OPS_TOKEN. */
+  opsToken?: string | null;
+  /** P1-06: manual-search corrections land here (and in the log) for P1-26. */
+  scanCorrections?: ScanCorrection[];
+  /** P1-03 server caches (pricing + recognition). Defaults to CARD_FLOW_SERVER_CACHE (on). */
+  serverCache?: boolean;
   /**
    * When true, identify reads persisted stills (`image_storage_ref`).
    * JSON-only DEV chips stay on mock. Missing/oversize stills never run the model.
@@ -273,6 +411,11 @@ export interface CreateAppOptions {
    * `identityCropJpeg` is present; pHash remains the fallback. Never Gemini.
    */
   liveIdentityOpenclip?: LiveIdentityOpenclipClient | null;
+  /**
+   * Debug-only per-stage livestream timing (log lines + GET /v1/livestream/timing).
+   * Defaults to `CARD_FLOW_LIVESTREAM_TIMING=1`; off unless set, including production.
+   */
+  livestreamTiming?: boolean;
   /** YOLO on livestream frames. Empty until the AGPL flag and weights file are both set. */
   liveVideoObb?: () => ObbDetector | null;
   /** Prepare photo-estimate provider. Tests default to mock; flag off injects unavailable. */
@@ -282,7 +425,7 @@ export interface CreateAppOptions {
    * for the Grade tab. Null/omitted → the photo routes answer "unavailable".
    */
   cardgrading?: CardgradingRunner | null;
-  /** Real OpenCV import check for /health (cached). Omitted → `gradeEngine: null`. */
+  /** Real OpenCV import check for /health. Failed probes are re-run. Omitted → `gradeEngine: null`. */
   gradeEngineProbe?: (() => Promise<CardgradingEngineStatus>) | null;
   /** Grading route rate limit. Defaults to env (`CARD_FLOW_GRADE_RATE_*`); off in tests. */
   gradeRateLimit?: RateLimitConfig | null;
@@ -290,6 +433,24 @@ export interface CreateAppOptions {
   detectRateLimit?: RateLimitConfig | null;
   /** Whole-instance grades per day. Defaults to `CARD_FLOW_GRADE_DAILY_CAP`; off in tests. */
   gradeDailyCap?: number | null;
+  /**
+   * Per-account monthly pre-grade quota. Defaults to env (`CARD_FLOW_GRADE_QUOTA`);
+   * off in tests unless set. Replaces a daily per-account cap.
+   */
+  gradeQuota?: boolean | null;
+  /** In-app purchase flag + stub grant. Defaults to `CARD_FLOW_IAP_*`. */
+  gradeIap?: { enabled: boolean; stub: boolean };
+  /** Contract checks fail loudly (500) instead of logging. Defaults to on under Vitest. */
+  contractStrict?: boolean;
+  /** Overlay: these user ids are treated as premium even if the row says free. */
+  premiumUserIds?: string[];
+  /** Global CardSight identify budget. Defaults to `CARD_FLOW_CARDSIGHT_MONTHLY_BUDGET`; off in tests. */
+  cardSightMonthlyBudget?: number | null;
+  /**
+   * Speed-bump app key (`X-CardFlow-App-Key`). Defaults to `CARD_FLOW_APP_API_KEY`.
+   * Null/empty skips the check (tests and local unless configured).
+   */
+  appApiKey?: string | null;
   /** Grader slot gate; when full, grading routes answer 503 + Retry-After. */
   gradeGate?: Pick<ConcurrencyGate, "isFull"> | null;
   /** Trusted reverse-proxy hops for X-Forwarded-For. Defaults to `CARD_FLOW_TRUST_PROXY_HOPS` (0). */
@@ -302,6 +463,8 @@ export interface CreateAppOptions {
   corsOrigins?: string[];
   /** Clock for portfolio snapshots. Tests inject fixed days. */
   now?: () => Date;
+  /** Detect stills reused by pre-grade so each photo is uploaded once. */
+  gradeUploads?: GradeUploadCache;
 }
 
 /** Routes write through StorePort. Tests default to memory; local `pnpm dev:api` injects SQLite. */
@@ -310,6 +473,14 @@ export function createApp(
   options: CreateAppOptions = {},
 ) {
   const {
+    saveConfirmEvent,
+    listConfirmEvents,
+    confirmCounts,
+    variantCounts,
+    deleteUserConfirmEvents,
+    saveUserPriceSnapshot,
+    listUserPriceSnapshots,
+    deleteUserPriceSnapshots,
     confirmScan,
     createSession,
     findCachedCanonicals,
@@ -320,8 +491,10 @@ export function createApp(
     getInventoryItem,
     getPreferences,
     getScan,
+    listScans,
     getScanImage,
     getGradeImage,
+    deleteUserPhotos,
     getGradeEstimateCache,
     saveGradeEstimateCache,
     getSessionByToken,
@@ -331,6 +504,7 @@ export function createApp(
     listInventory,
     saveDraft,
     saveInventoryItem,
+    deleteInventoryItem,
     saveScan,
     rejectScan,
     saveScanImage,
@@ -345,11 +519,93 @@ export function createApp(
     moveGradingSubmittedToReturned,
     savePortfolioSnapshot,
     listPortfolioSnapshots,
+    getGradeAccount,
+    setGradePlan,
+    addGradeCredits,
+    getGradeQuotaUsage,
+    consumeGradeQuota,
   } = store;
   const now = options.now ?? (() => new Date());
+  const quotaEnabled =
+    options.gradeQuota === undefined ? gradeQuotaEnabledFromEnv() : Boolean(options.gradeQuota);
+  const gradeIap = options.gradeIap ?? gradeIapFromEnv();
+  const premiumUserIds = new Set(options.premiumUserIds ?? premiumUserIdsFromEnv());
+  const appApiKey = options.appApiKey === undefined ? appApiKeyFromEnv() : options.appApiKey;
   const devAutoSession = options.devAutoSession ?? resolveDevAutoSession();
+  // Guest mode is off with dev auto-session (that already signs everyone in).
+  const guestMode =
+    !devAutoSession &&
+    (options.guestMode ?? process.env.CARD_FLOW_GUEST_BROWSE?.trim().toLowerCase() === "true");
+  if (options.guestMode === undefined && process.env.CARD_FLOW_GUEST_SCANS?.trim()) {
+    console.warn("[guest] CARD_FLOW_GUEST_SCANS is ignored: guests are browse-only now. Use CARD_FLOW_GUEST_BROWSE=true for guest sessions.");
+  }
+  const guestMintsPerHour = options.guestMintsPerHour ?? 10;
+  /** Scan Idempotency-Key -> first scan ID (body hash, in-flight, 24 h). */
+  const scanIdempotency = createIdempotencyRegistry<string>(() => now().getTime());
+  /** Guest mints per client IP in the last hour. Pruned on every mint. */
+  const guestMints = new Map<string, { windowStart: number; count: number }>();
+  /**
+   * D9 retention: guest sessions live in crm_sessions (is_guest, 24-hour expiry), so a restart
+   * keeps valid guests. A guest who signs up has their scans moved to the new account. A guest
+   * who never signs up has every row deleted within 24 h after the session expires (hourly job).
+   */
+  const runGuestCleanup = () => {
+    const at = now().toISOString();
+    let guestsPurged = 0;
+    let scansDeleted = 0;
+    const ended = new Set(store.accounts.purgeExpiredGuestSessions(at));
+    for (const userId of store.listScanUserIds(GUEST_USER_PREFIX)) ended.add(userId);
+    for (const userId of ended) {
+      if (store.accounts.hasLiveSession(userId, at)) continue;
+      const scans = store.listScans(userId).length;
+      store.deleteUserPhotos(userId);
+      store.accounts.deleteAllUserRows(userId);
+      if (scans > 0) {
+        guestsPurged += 1;
+        scansDeleted += scans;
+      }
+    }
+    return { guestsPurged, scansDeleted };
+  };
+  /** Sign-up/sign-in from a guest bearer: move the guest's scans to the account (one transaction). */
+  const adoptGuestData = (authorization: string | undefined, toUserId: string) => {
+    const token = parseBearerToken(authorization);
+    if (!token) return null;
+    const session = getSessionByToken(token, now());
+    if (!session?.isGuest || session.userId === toUserId) return null;
+    return store.accounts.moveGuestData(session.userId, toUserId);
+  };
+  if (guestMode) {
+    options.onGuestCleanup?.(runGuestCleanup);
+    const timer = setInterval(() => {
+      try {
+        runGuestCleanup();
+      } catch {
+        // retried next tick
+      }
+    }, Math.min(options.guestCleanupIntervalMs ?? 60 * 60 * 1000, 24 * 60 * 60 * 1000));
+    timer.unref?.();
+  }
   const catalog = options.catalog ?? mockTcgdexCatalogProvider;
-  const pricing = options.pricing ?? offPricingProvider;
+  const scanCorrections = options.scanCorrections ?? [];
+  const variantSuggestionsFor = (mapping: {
+    canonicalCard: CardFlowCanonicalCard | null;
+    candidates: CardFlowCanonicalCard[];
+  }) => {
+    const card = mapping.canonicalCard ?? mapping.candidates[0] ?? null;
+    if (!card) return [];
+    return suggestVariants({ variants: card.variants, pickedVariantCounts: variantCounts(card.tcgdexId) });
+  };
+  const recordScanCorrection = (correction: ScanCorrection) => {
+    scanCorrections.push(correction);
+    if (scanCorrections.length > 1000) scanCorrections.shift();
+    if (!process.env.VITEST) console.info(JSON.stringify({ event: "scan_correction", ...correction }));
+  };
+  const serverCache = options.serverCache ?? serverCacheEnabledFromEnv();
+  const basePricing = options.pricing ?? offPricingProvider;
+  const pricing = serverCache ? cachedPricingProvider(basePricing) : basePricing;
+  const recognitionCache = serverCache ? createRecognitionCache() : null;
+  const cardSightUserCaps = options.cardSightUserCaps ?? { signedIn: CARDSIGHT_USER_MONTHLY_CAP_DEFAULT };
   const pokecollectorAccounts = options.pokecollectorAccounts ?? offPokecollectorAccounts;
   const recognitionProvider = options.recognition ?? mockCardRecognitionProvider;
   const gradingProvider = options.grading ?? mockCardGradingProvider;
@@ -367,6 +623,7 @@ export function createApp(
   };
   const rateKeys = (c: Context) => {
     const ip = clientIp(c, trustProxyHops, socketAddress);
+    // Per-account product cap is monthly (grade quota). Per-IP (and burst) stay here for abuse.
     return [`user:${String(c.get("userId") ?? "anon")}`, ip ? `ip:${ip}` : null];
   };
   const gradeRateLimit = rateLimitMiddleware(
@@ -402,7 +659,11 @@ export function createApp(
   );
   const livestreamIdentityIndex = options.livestreamIdentityIndex ?? null;
   const liveIdentityOpenclip = options.liveIdentityOpenclip ?? null;
+  const livestreamTiming =
+    options.livestreamTiming ?? process.env.CARD_FLOW_LIVESTREAM_TIMING?.trim() === "1";
+  const livestreamTimingLog = createLiveScanTimingLog(500);
   const liveVideoObb = options.liveVideoObb ?? (() => null);
+  const gradeUploads = options.gradeUploads ?? defaultGradeUploadCache;
 
   async function bindPokecollectorUser(identity: InvitedIdentity) {
     try {
@@ -415,7 +676,8 @@ export function createApp(
   }
 
   async function mappedPokecollectorUser(userId: string) {
-    const identity = requireInvitedIdentity(userId);
+    const identity = resolveIdentity(userId);
+    if (!identity) return undefined;
     return getPokecollectorUserMapping(userId) ?? (await bindPokecollectorUser(identity));
   }
 
@@ -556,7 +818,7 @@ export function createApp(
 
   const collectionUnavailable = {
     ok: false,
-    error: "Collection is temporarily unavailable. Confirm still works — try again in a moment.",
+    error: "MyDEX is temporarily unavailable. Confirm still works — try again in a moment.",
   };
 
   async function writePokecollectorCopy(
@@ -584,20 +846,87 @@ export function createApp(
     }
   }
 
+  const metrics = options.opsMetrics ?? opsMetrics;
+  const opsToken = options.opsToken === undefined ? process.env.CARD_FLOW_OPS_TOKEN : options.opsToken;
   const app = new Hono<AppEnv>();
+  /**
+   * Grade jobs replay grade-estimate in-process. The owner is attached to the Request object
+   * (unforgeable from the network) instead of re-sending the user's auth headers. Read here,
+   * first, because body-limit middleware may swap `c.req.raw`.
+   */
+  const internalJobRequests = new WeakMap<Request, { userId: string; identity: unknown }>();
+  app.use("*", async (c, next) => {
+    const internalOwner = internalJobRequests.get(c.req.raw);
+    if (internalOwner) {
+      internalJobRequests.delete(c.req.raw);
+      c.set("internalOwner", internalOwner);
+    }
+    const requestId = resolveRequestId(c.req.header(REQUEST_ID_HEADER));
+    c.set("requestId", requestId);
+    c.header(REQUEST_ID_HEADER, requestId);
+    const startedAt = performance.now();
+    await next();
+    if (c.req.path !== "/health") {
+      metrics.recordRequest(`${c.req.method} ${routePath(c, -1)}`, c.res.status, performance.now() - startedAt);
+    }
+    if (c.req.path !== "/health" && process.env.VITEST !== "true") {
+      console.log(`${c.req.method} ${c.req.path} ${c.res.status} ${requestId}`);
+    }
+  });
+  app.use("*", contractMiddleware(options.contractStrict === undefined ? {} : { strict: options.contractStrict }));
   app.onError((err, c) => {
+    const requestId = c.get("requestId") ?? resolveRequestId();
+    c.header(REQUEST_ID_HEADER, requestId);
     const message = err instanceof Error ? err.message : "";
     if (err instanceof SyntaxError || /JSON|Unexpected token|Malformed/i.test(message)) {
       return c.json({ ok: false, error: "Invalid request" }, 400);
     }
-    console.error(err);
+    captureApiException(err, { requestId });
+    console.error(`[${requestId}]`, err);
     return c.json({ ok: false, error: "Something went wrong" }, 500);
+  });
+  // P1-17: ops metrics, behind a bearer token. 404 when CARD_FLOW_OPS_TOKEN is unset.
+  app.get("/ops/metrics", (c) => {
+    const expected = opsToken?.trim();
+    const given = c.req.header("authorization")?.replace(/^Bearer\s+/i, "").trim();
+    if (!expected) return c.json({ ok: false, error: "Not found" }, 404);
+    if (!given || !timingSafeEqualString(given, expected)) {
+      return c.json({ ok: false, error: "Unauthorized" }, 401);
+    }
+    return c.json({ ok: true, ...metrics.snapshot() });
+  });
+  // D10 / P1-20: North Star, same token rule. Counts only (no user IDs leave the server).
+  app.get("/ops/north-star", (c) => {
+    const expected = opsToken?.trim();
+    const given = c.req.header("authorization")?.replace(/^Bearer\s+/i, "").trim();
+    if (!expected) return c.json({ ok: false, error: "Not found" }, 404);
+    if (!given || !timingSafeEqualString(given, expected)) {
+      return c.json({ ok: false, error: "Unauthorized" }, 401);
+    }
+    // Invited testers + signed-up accounts (#86) + ledger user IDs (#88), which include
+    // anonymized deleted accounts so past weeks don't shift. Guests are not counted.
+    const userIds = [
+      ...new Set([
+        ...store.listInvitedUsers().map((user) => user.userId),
+        ...store.accounts.listAccountUserIds(),
+        ...store.purchaseLedger.listUserIds(),
+      ]),
+    ];
+    const users = userIds.map((userId) => ({
+      userId,
+      scans: listScans(userId).map((scan) => scan.capturedAt),
+      // Data Engineer review: from the purchase ledger, excluding voided (undone) purchases.
+      purchases: store.purchaseLedger.activePurchaseTimes(userId),
+    }));
+    const weeks = northStarWeekly(users, { weeks: Number(c.req.query("weeks") ?? "8") || 8 });
+    return c.json({ ok: true, metric: NORTH_STAR_NAME, companionMetric: SCANS_PER_WAR_NAME, weeks });
   });
   const allowedOrigins = new Set(options.corsOrigins ?? corsOriginsFromEnv());
   app.use(
     "/*",
     cors({
       origin: (origin) => (allowedOrigins.has(origin) ? origin : undefined),
+      exposeHeaders: [REQUEST_ID_HEADER],
     }),
   );
 
@@ -611,6 +940,40 @@ export function createApp(
     maxSize: LIVESTREAM_IDENTIFY_BODY_MAX_BYTES,
     onError: rejectOversized,
   });
+  const signupRequired = (c: Context, reason: SignupReason) =>
+    c.json({ ok: false, code: SIGNUP_REQUIRED_CODE, reason, error: signupMessage(reason) }, 403);
+
+  app.post("/v1/sessions/guest", (c) => {
+    if (!guestMode) return c.json({ ok: false, error: "Not found" }, 404);
+    const ip = clientIp(c, trustProxyHops, socketAddress) ?? "unknown";
+    const nowMs = now().getTime();
+    for (const [key, entry] of guestMints) if (nowMs - entry.windowStart >= GUEST_MINT_WINDOW_MS) guestMints.delete(key);
+    const bucket = guestMints.get(ip);
+    if (bucket) {
+      if (bucket.count >= guestMintsPerHour) {
+        c.header("Retry-After", String(Math.ceil((bucket.windowStart + GUEST_MINT_WINDOW_MS - nowMs) / 1000)));
+        return c.json({ ok: false, error: "Too many requests" }, 429);
+      }
+      bucket.count += 1;
+    } else {
+      guestMints.set(ip, { windowStart: nowMs, count: 1 });
+    }
+    const userId = `${GUEST_USER_PREFIX}${crypto.randomUUID()}`;
+    const minted = store.accounts.mintSession(userId, {
+      guest: true,
+      at: now().toISOString(),
+      expiresAt: new Date(nowMs + GUEST_SESSION_TTL_MS).toISOString(),
+    });
+    return c.json({
+      ok: true as const,
+      token: minted.token,
+      identity: guestIdentity(userId),
+      guest: true as const,
+      browseOnly: true as const,
+      expiresAt: minted.expiresAt,
+    });
+  });
+
   app.use("/v1/*", async (c, next) => {
     if (c.req.method === "GET" || c.req.method === "HEAD") return next();
     const type = (c.req.header("content-type") ?? "").toLowerCase();
@@ -620,12 +983,110 @@ export function createApp(
   });
 
   app.use("/v1/*", async (c, next) => {
+    if (!appApiKey || c.get("internalOwner")) return next();
+    const presented = c.req.header(APP_API_KEY_HEADER) ?? "";
+    if (presented !== appApiKey) {
+      return c.json({ ok: false, error: "CardFlow couldn't authorize that request." }, 401);
+    }
+    return next();
+  });
+
+  /** Invited tester, open sign-up account, or null. */
+  function resolveIdentity(userId: string): InvitedIdentity | null {
+    const invited = invitedIdentityByUserId(userId);
+    if (invited) return invited;
+    const account = store.accounts.getAccount(userId);
+    return account ? { userId: account.userId, label: account.email } : null;
+  }
+
+  function resolveAccountPlan(userId: string, stored: GradePlan): GradePlan {
+    return premiumUserIds.has(userId) ? "premium" : stored;
+  }
+
+  /**
+   * Sean: the allowance resets on the billing date, else the account creation date, with no
+   * rollover. Bought credits are separate and never expire (Sean, Oct 16; Apple 3.1.1).
+   */
+  function quotaPeriodForUser(userId: string, at: Date) {
+    const account = store.ensureGradeAnchor(userId, at.toISOString());
+    const anchor = quotaAnchor({ billingAnchorAt: account.billingAnchorAt, createdAt: account.anchorAt ?? at.toISOString() });
+    return { account, period: quotaPeriodFor(anchor, at) };
+  }
+
+  function quotaSnapshotFor(userId: string): GradeQuotaSnapshot {
+    const at = now();
+    const { account, period } = quotaPeriodForUser(userId, at);
+    const plan = resolveAccountPlan(userId, account.plan);
+    return gradeQuotaSnapshot({
+      plan,
+      usedThisMonth: getGradeQuotaUsage(userId, period.key),
+      extraCredits: account.extraCredits,
+      iapEnabled: gradeIap.enabled,
+      now: at,
+      period,
+    });
+  }
+
+  function takeGradeAllowance(userId: string) {
+    if (!quotaEnabled) {
+      return { ok: true as const, quota: quotaSnapshotFor(userId) };
+    }
+    const at = now();
+    const { account, period } = quotaPeriodForUser(userId, at);
+    const plan = resolveAccountPlan(userId, account.plan);
+    const consumed = consumeGradeQuota(userId, {
+      monthKey: period.key,
+      monthlyLimit: monthlyLimitForPlan(plan),
+      at: at.toISOString(),
+    });
+    const quota = gradeQuotaSnapshot({
+      plan,
+      usedThisMonth: consumed.usedThisMonth,
+      extraCredits: consumed.extraCredits,
+      iapEnabled: gradeIap.enabled,
+      now: at,
+      period,
+    });
+    if (!consumed.ok) return { ok: false as const, quota };
+    return { ok: true as const, quota };
+  }
+
+  function outOfGradesResponse(c: Context, quota: GradeQuotaSnapshot) {
+    const retryAfterSeconds = Math.max(
+      1,
+      Math.ceil((Date.parse(quota.resetsAt) - now().getTime()) / 1000),
+    );
+    c.header("Retry-After", String(retryAfterSeconds));
+    return c.json(
+      // P5: `code` lets the app tell an empty allowance from a rate limit (both are 429).
+      { ok: false, code: "out_of_grades", error: GRADE_QUOTA_COPY.outOfGrades, quota },
+      429,
+    );
+  }
+
+  app.use("/v1/*", async (c, next) => {
     if (isPublicV1Path(c.req.method, c.req.path)) return next();
+    const internal = c.get("internalOwner");
+    if (internal) {
+      c.set("userId", internal.userId);
+      c.set("identity", internal.identity as never);
+      return next();
+    }
     const token = parseBearerToken(c.req.header("authorization"));
     if (token) {
-      const session = getSessionByToken(token);
+      const session = getSessionByToken(token, now());
       if (!session) return c.json({ ok: false, error: "Unauthorized" }, 401);
-      const identity = requireInvitedIdentity(session.userId);
+      if (session.isGuest) {
+        if (!guestMode) return c.json({ ok: false, error: "Unauthorized" }, 401);
+        c.set("userId", session.userId);
+        c.set("identity", guestIdentity(session.userId));
+        // Sean (Oct 17): browse-only. Scans, grades, livestream, saves and CardSight need sign-up.
+        const blocked = guestRouteBlockReason(c.req.method, c.req.path);
+        if (blocked) return signupRequired(c, blocked);
+        return next();
+      }
+      const identity = resolveIdentity(session.userId);
+      if (!identity) return c.json({ ok: false, error: "Unauthorized" }, 401);
       c.set("userId", identity.userId);
       c.set("identity", identity);
       return next();
@@ -639,6 +1100,28 @@ export function createApp(
     return c.json({ ok: false, error: "Unauthorized" }, 401);
   });
 
+  /**
+   * Backend review M3: verified means an account row with a confirmed email, or an invite tester
+   * (fixed roster IDs). No account row (guests, unknown IDs) is not verified.
+   */
+  const isUserEmailVerified = (userId: string) =>
+    INVITED_USERS.some((u) => u.userId === userId) || store.accounts.isEmailVerified(userId);
+
+  // Sean: email verification before pre-grade estimates. Signed-up accounts must confirm the
+  // emailed code first; invite testers (no account row) and pre-0017 accounts count as verified.
+  // Internal grade-job calls were checked when the job was created.
+  app.use("/v1/*", async (c, next) => {
+    if (c.req.method !== "POST" || !requiresVerifiedEmail(c.req.path) || c.get("internalOwner")) return next();
+    if (isUserEmailVerified(c.get("userId"))) return next();
+    return c.json({ ok: false, error: EMAIL_UNVERIFIED_CODE, message: EMAIL_VERIFICATION_COPY.required }, 403);
+  });
+
+  // Sean (Oct 17): accounts are 18+, stated at sign-up (no birth date). Guests state nothing,
+  // so they never get CardSight (see the scan route).
+  const ageGate = options.ageGate ?? ageGateEnabledFromEnv();
+  const ageRequired = (c: Context) =>
+    c.json({ ok: false, error: AGE_CONFIRMATION_REQUIRED_CODE, message: AGE_GATE_COPY.required }, 400);
+
   app.get("/health", async (c) => {
     const catalogStatus = catalogHealth(catalog.name);
     const recognitionStatus = recognitionHealth(recognitionProvider.name);
@@ -650,26 +1133,44 @@ export function createApp(
       gradeEstimate: gradeEstimateStatus,
       slabPricing: slabPricingStatus,
     });
-    return c.json({
-      ok: true,
-      service: "cardflow-api",
-      mock: mockProviders.length > 0,
-      mockProviders,
-      catalog: catalogStatus,
-      recognition: recognitionStatus,
-      pricingProvider: pricingProviderHealth(pricing.name),
-      livestreamIdentify,
-      liveVideoYolo: liveVideoObb() != null,
-      liveIdentityVisual: liveIdentityVisualHealth({
+    const gradeEngine = gradeEngineProbe ? await boundedProbe(gradeEngineProbe) : null;
+    const ok = healthOk(gradeEngine);
+    return c.json(
+      {
+        ok,
+        service: "cardflow-api",
+        mock: mockProviders.length > 0,
+        mockProviders,
+        catalog: catalogStatus,
+        recognition: recognitionStatus,
+        pricingProvider: pricingProviderHealth(pricing.name),
         livestreamIdentify,
-        openclipConfigured: liveIdentityOpenclip != null,
-        phashIndexLoaded: livestreamIdentityIndex != null,
-      }),
-      gradeEstimate: gradeEstimateStatus,
-      // Real `import cv2, numpy` in the grader Python (cached 5 min). null = no grader runner.
-      gradeEngine: gradeEngineProbe ? await boundedProbe(gradeEngineProbe) : null,
-      slabPricing: slabPricingStatus,
-    });
+        liveVideoYolo: liveVideoObb() != null,
+        liveIdentityVisual: liveIdentityVisualHealth({
+          livestreamIdentify,
+          openclipConfigured: liveIdentityOpenclip != null,
+          phashIndexLoaded: livestreamIdentityIndex != null,
+        }),
+        gradeEstimate: gradeEstimateStatus,
+        // Real `import cv2, numpy` in the grader Python. Failed probes are not cached.
+        gradeEngine,
+        slabPricing: slabPricingStatus,
+      },
+      ok ? 200 : 503,
+    );
+  });
+
+  registerStatusRoutes(app, {
+    cacheMs: options.statusCacheMs,
+    inputs: async () => {
+      const engine = gradeEngineProbe ? await boundedProbe(gradeEngineProbe) : null;
+      return {
+        pricingProvider: pricingProviderHealth(pricing.name),
+        gradeEstimate: gradeEstimateHealth(gradingProvider.name),
+        gradeEngineOk: engine ? healthOk(engine) : null,
+        opsMessage: process.env.CARD_FLOW_STATUS_MESSAGE ?? null,
+      };
+    },
   });
 
   app.get("/v1/catalog/search", async (c) => {
@@ -734,6 +1235,43 @@ export function createApp(
     }
   });
 
+  /** P1-12: your own reference prices. Works with pricing off. */
+  app.get("/v1/pricing/cards/:tcgdexId/yours", (c) => {
+    const tcgdexId = c.req.param("tcgdexId").trim();
+    if (!tcgdexId) return c.json({ ok: false, error: "tcgdexId is required" }, 400);
+    const variantRaw = c.req.query("variant");
+    const variant = variantRaw === undefined ? undefined : variantRaw.trim() || null;
+    return c.json({ ok: true, snapshots: listUserPriceSnapshots(c.get("userId"), tcgdexId, variant) });
+  });
+
+  app.post("/v1/pricing/cards/:tcgdexId/yours", async (c) => {
+    const tcgdexId = c.req.param("tcgdexId").trim();
+    if (!tcgdexId) return c.json({ ok: false, error: "tcgdexId is required" }, 400);
+    const body = await c.req.json<{ amount?: unknown; variant?: string | null }>().catch(() => ({}) as { amount?: unknown; variant?: string | null });
+    const amount = parseUserPriceAmount(body.amount);
+    if (!amount) return c.json({ ok: false, error: INVALID_DOLLAR_AMOUNT }, 400);
+    const snapshot = saveUserPriceSnapshot(c.get("userId"), {
+      snapshotId: crypto.randomUUID(),
+      tcgdexId,
+      variant: typeof body.variant === "string" && body.variant.trim() ? body.variant.trim() : null,
+      amount,
+      currency: "USD",
+      source: "you",
+      enteredAt: new Date().toISOString(),
+    });
+    return c.json({ ok: true, snapshot }, 201);
+  });
+
+  // P1-18: sampled on-device timings. Timings only; unknown fields are dropped.
+  app.post("/v1/telemetry/perf", async (c) => {
+    const batch = parsePerfBatch(await c.req.json().catch(() => null));
+    if (!batch) return c.json({ ok: false, error: "Invalid request" }, 400);
+    for (const sample of batch.samples) {
+      metrics.recordDeviceStage(sample.stage, batch.deviceClass, sample.ms, isHot(batch.thermal));
+    }
+    return c.json({ ok: true, accepted: batch.samples.length });
+  });
+
   app.get("/v1/pricing/cards/:tcgdexId", async (c) => {
     const tcgdexId = c.req.param("tcgdexId").trim();
     const estimate = await safePriceEstimate(
@@ -790,6 +1328,7 @@ export function createApp(
       classifiedTcgdexId?: unknown;
       identityHash?: unknown;
       identityCropJpeg?: unknown;
+      identityCropQuad?: unknown;
       videoFrameJpeg?: unknown;
       image?: unknown;
       screenshot?: unknown;
@@ -808,6 +1347,7 @@ export function createApp(
     );
     let identityCropJpeg =
       typeof body.identityCropJpeg === "string" ? body.identityCropJpeg : null;
+    let identityCropQuad = normalizeIdentityCropQuad(body.identityCropQuad);
     const yolo = liveVideoObb();
     if (yolo && typeof body.videoFrameJpeg === "string") {
       const located = await locateLiveVideoCard(yolo, body.videoFrameJpeg);
@@ -815,28 +1355,53 @@ export function createApp(
         cardDetected = false;
         identityHash = null;
         identityCropJpeg = null;
+        identityCropQuad = null;
       } else if (located?.found) {
         cardDetected = true;
-        identityHash = normalizeLiveVideoIdentityHash(located.identityHash);
-        identityCropJpeg = located.jpegBase64;
+        // Keep a phone crop that already has 4 corners so warp.py can straighten it.
+        // Android (no corners) and missed phone detects use the YOLO AABB + OBB quad.
+        if (!identityCropJpeg || !identityCropQuad) {
+          identityHash = normalizeLiveVideoIdentityHash(located.identityHash);
+          identityCropJpeg = located.jpegBase64;
+          identityCropQuad = normalizeIdentityCropQuad(located.identityCropQuad);
+        }
       }
     }
 
+    const startedAt = performance.now();
+    const stages: LiveScanSample["stages"] = {};
+    let warped = false;
     let openclipTcgdexId: string | null = null;
     if (livestreamIdentify === "yolo_identity" && liveIdentityOpenclip) {
+      const decodeStart = performance.now();
       const crop = decodeIdentityCropJpeg(identityCropJpeg);
+      stages.serverDecode = performance.now() - decodeStart;
       if (crop) {
-        const match = await liveIdentityOpenclip.matchCropJpeg(crop.bytes, crop.mimeType);
+        const sidecarStart = performance.now();
+        const match = await liveIdentityOpenclip.matchCropJpeg(crop.bytes, crop.mimeType, {
+          quad: identityCropQuad,
+        });
+        stages.sidecar = performance.now() - sidecarStart;
+        if (match?.timings) {
+          stages.serverDecode = (stages.serverDecode ?? 0) + (match.timings.decodeMs ?? 0);
+          stages.warp = match.timings.warpMs;
+          stages.embed = match.timings.embedMs;
+          stages.search = match.timings.searchMs;
+          stages.orb = match.timings.orbMs;
+        }
+        warped = match?.warped === true;
         if (match?.accepted && match.tcgdexId) {
           openclipTcgdexId = normalizeLiveVideoTcgdexId(match.tcgdexId);
         }
       }
     }
 
+    const phashStart = performance.now();
     const phashTcgdexId =
       livestreamIdentify === "yolo_identity" && identityHash && livestreamIdentityIndex
         ? (matchRgbPhash(identityHash, livestreamIdentityIndex)[0]?.tcgdexId ?? null)
         : null;
+    if (identityHash && livestreamIdentityIndex) stages.phash = performance.now() - phashStart;
 
     const classifiedTcgdexId =
       openclipTcgdexId ??
@@ -858,7 +1423,22 @@ export function createApp(
       },
       classifier: livestreamIdentify === "yolo_identity" ? "yolo_identity" : "none",
     });
-    return c.json({ ok: true, identity });
+    if (!livestreamTiming) return c.json({ ok: true, identity });
+    stages.server = performance.now() - startedAt;
+    const sample: LiveScanSample = {
+      stages,
+      outcome: identity.reason === "identified" ? "accepted" : "rejected",
+      warped,
+    };
+    livestreamTimingLog.add(sample);
+    console.info(`[livestream-timing] ${JSON.stringify({ ...sample, tcgdexId: identity.tcgdexId })}`);
+    return c.json({ ok: true, identity, timing: { stages, warped } });
+  });
+
+  /** Debug only: p50/p95 per stage of recent livestream matches. 404 unless timing is on. */
+  app.get("/v1/livestream/timing", (c) => {
+    if (!livestreamTiming) return c.json({ ok: false, error: "livestream timing is off" }, 404);
+    return c.json({ ok: true, summary: livestreamTimingLog.summary() });
   });
 
   app.get("/v1/cards/:tcgdexId/slab-estimates", async (c) => {
@@ -948,7 +1528,7 @@ export function createApp(
         status: body.status,
       });
       const saved = next.find((copy) => copy.inventoryItemId === body.inventoryItemId);
-      if (!saved) return c.json({ ok: false, error: "Could not submit copy" }, 400);
+      if (!saved) return c.json({ ok: false, error: "Couldn't submit copy" }, 400);
       saveGradingSubmitted(saved);
       return c.json({ ok: true, submitted: listGradingSubmitted(userId) });
     } catch (error) {
@@ -994,7 +1574,7 @@ export function createApp(
         },
       );
       const saved = moved.returned.find((copy) => copy.inventoryItemId === body.inventoryItemId);
-      if (!saved) return c.json({ ok: false, error: "Could not mark returned" }, 400);
+      if (!saved) return c.json({ ok: false, error: "Couldn't mark returned" }, 400);
       moveGradingSubmittedToReturned(saved);
       return c.json({
         ok: true,
@@ -1024,8 +1604,42 @@ export function createApp(
     return c.json({ ok: true, returned: listGradingReturned(userId) });
   });
 
+  /** Fixed-window limiter for auth routes. Keys are pruned as they expire. */
+  const authHits = new Map<string, { windowStart: number; count: number }>();
+  const overLimit = (key: string, limit: number, windowMs: number): boolean => {
+    const nowMs = now().getTime();
+    if (authHits.size > 10_000) {
+      for (const [k, v] of authHits) if (nowMs - v.windowStart >= 60 * 60 * 1000) authHits.delete(k);
+    }
+    const hit = authHits.get(key);
+    if (!hit || nowMs - hit.windowStart >= windowMs) {
+      authHits.set(key, { windowStart: nowMs, count: 1 });
+      return false;
+    }
+    hit.count += 1;
+    return hit.count > limit;
+  };
+  /** Peek without counting (H1: only failed sign-ins count). */
+  const isLimited = (key: string, limit: number, windowMs: number): boolean => {
+    const hit = authHits.get(key);
+    return Boolean(hit && now().getTime() - hit.windowStart < windowMs && hit.count >= limit);
+  };
+  const authLimits = {
+    signupPerIp: options.authLimits?.signupPerIp ?? 10,
+    signInPerIp: options.authLimits?.signInPerIp ?? 30,
+    perEmail: options.authLimits?.perEmail ?? 10,
+    invitePerIp: options.authLimits?.invitePerIp ?? 20,
+  };
+  const tooMany = (c: Context) => {
+    c.header("Retry-After", "900");
+    return c.json({ ok: false, error: ACCOUNT_AUTH_COPY.tooMany }, 429);
+  };
+
+  // Backend review M4: invite-code sign-in is rate-limited per IP (codes are guessable otherwise).
   app.post("/v1/sessions", async (c) => {
-    const body = await c.req.json<{ inviteCode?: unknown }>();
+    const inviteIp = clientIp(c, trustProxyHops, socketAddress) ?? "unknown";
+    if (overLimit(`invite-ip:${inviteIp}`, authLimits.invitePerIp, 15 * 60 * 1000)) return tooMany(c);
+    const body = await c.req.json<{ inviteCode?: unknown }>().catch(() => ({}) as { inviteCode?: unknown });
     if (typeof body.inviteCode !== "string" || body.inviteCode.trim() === "") {
       return c.json({ ok: false, error: "Unknown invite code" }, 400);
     }
@@ -1035,11 +1649,333 @@ export function createApp(
     }
     const created = createSession(identity.userId);
     await bindPokecollectorUser(created.identity);
+    // Signing in from a guest session keeps the guest's scans (moved in one transaction).
+    adoptGuestData(c.req.header("authorization"), identity.userId);
     return c.json({
       ok: true,
       token: created.token,
       identity: created.identity,
       invitedUsers: [created.identity],
+    });
+  });
+
+  const readCredentials = async (c: Context) => {
+    const body = await c.req.json<{ email?: unknown; password?: unknown }>().catch(() => ({}) as Record<string, unknown>);
+    const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
+    const password = typeof body.password === "string" ? body.password : "";
+    return { email, password };
+  };
+  const accountSession = (account: { userId: string; email: string }) => {
+    const minted = store.accounts.mintSession(account.userId, {
+      guest: false,
+      at: now().toISOString(),
+      expiresAt: sessionExpiryIso(now()),
+    });
+    const identity = { userId: account.userId, label: account.email };
+    return { token: minted.token, identity };
+  };
+
+  app.post("/v1/accounts", async (c) => {
+    const ip = clientIp(c, trustProxyHops, socketAddress) ?? "unknown";
+    if (overLimit(`signup-ip:${ip}`, authLimits.signupPerIp, 60 * 60 * 1000)) return tooMany(c);
+    const { email, password } = await readCredentials(c);
+    if (!isValidEmail(email)) return c.json({ ok: false, error: ACCOUNT_AUTH_COPY.badEmail }, 400);
+    if (overLimit(`email:${email}`, authLimits.perEmail, 15 * 60 * 1000)) return tooMany(c);
+    const problem = passwordProblem(password);
+    if (problem) return c.json({ ok: false, error: problem }, 400);
+    // Sean (Oct 17): sign-up states 18+ (required checkbox). Stored: confirmation, time, version.
+    const signUpBody = await c.req.json<Record<string, unknown>>().catch(() => ({}) as Record<string, unknown>);
+    const bodyConfirmed = signUpBody.ageConfirmed18Plus === true && signUpBody.ageGateVersion === AGE_GATE_VERSION;
+    if (ageGate && !bodyConfirmed) return ageRequired(c);
+    const passwordHash = await hashPassword(password);
+    const created = store.accounts.createAccount({ email, passwordHash, at: now().toISOString() });
+    let account = created;
+    if (!account) {
+      // Email already registered: the right password signs in; anything else gets one generic answer.
+      const existing = store.accounts.findByEmail(email);
+      if (!existing || !(await verifyPassword(password, existing.passwordHash))) {
+        return c.json({ ok: false, error: ACCOUNT_AUTH_COPY.signUpFailed }, 400);
+      }
+      account = existing;
+    }
+    if (created) sendVerificationCode(created);
+    const moved = adoptGuestData(c.req.header("authorization"), account.userId);
+    if (bodyConfirmed && !hasAgeConfirmation(store.ageConfirmations, account.userId)) {
+      store.ageConfirmations.confirm(account.userId, AGE_GATE_VERSION, now().toISOString());
+    }
+    const session = accountSession(account);
+    return c.json({
+      ok: true as const,
+      ...session,
+      invitedUsers: [session.identity],
+      movedScans: moved?.scans ?? 0,
+      emailVerified: isUserEmailVerified(account.userId),
+    });
+  });
+
+  app.post("/v1/sessions/password", async (c) => {
+    const ip = clientIp(c, trustProxyHops, socketAddress) ?? "unknown";
+    const { email, password } = await readCredentials(c);
+    // Backend review H1: only failed sign-ins count, keyed by email + IP (and per IP overall),
+    // so a stranger can't lock someone out of their account from another network.
+    const failKey = `signin-fail:${email}:${ip}`;
+    const ipFailKey = `signin-fail-ip:${ip}`;
+    const window = 15 * 60 * 1000;
+    if (isLimited(failKey, authLimits.perEmail, window) || isLimited(ipFailKey, authLimits.signInPerIp, window)) return tooMany(c);
+    const existing = email ? store.accounts.findByEmail(email) : null;
+    const ok = existing ? await verifyPassword(password, existing.passwordHash) : await verifyAgainstDummy(password);
+    if (!existing || !ok) {
+      overLimit(failKey, authLimits.perEmail, window);
+      overLimit(ipFailKey, authLimits.signInPerIp, window);
+      return c.json({ ok: false, error: ACCOUNT_AUTH_COPY.signInFailed }, 401);
+    }
+    const moved = adoptGuestData(c.req.header("authorization"), existing.userId);
+    const session = accountSession(existing);
+    return c.json({
+      ok: true as const,
+      ...session,
+      invitedUsers: [session.identity],
+      movedScans: moved?.scans ?? 0,
+      emailVerified: isUserEmailVerified(existing.userId),
+    });
+  });
+
+  /**
+   * Verification and reset codes go through one provider-agnostic sender (Resend when
+   * CARD_FLOW_EMAIL_SENDER=resend; otherwise the code is logged outside production only).
+   * Sending never blocks or changes the HTTP answer, so timing can't reveal which emails exist.
+   */
+  const emailSender = options.emailSender ?? emailSenderFromEnv();
+  const sendReset = options.deliverPasswordReset ?? ((email: string, token: string) => {
+    void emailSender.send({
+      kind: "password-reset",
+      to: email,
+      subject: EMAIL_VERIFICATION_COPY.resetSubject,
+      text: passwordResetEmailText(token),
+      code: token,
+    });
+  });
+  // Backend review M1: reset emails count toward the address's daily cap too (still a silent 202).
+  const deliverResetToken = (email: string, token: string) => {
+    if (store.accounts.takeEmailSendForAddress(email, now().toISOString().slice(0, 10), EMAIL_SENDS_PER_ADDRESS_PER_DAY)) {
+      sendReset(email, token);
+    }
+  };
+  const emailCodeHash = (userId: string, code: string) => hashSessionToken(`${userId}:${code.trim()}`);
+  const sendDay = () => now().toISOString().slice(0, 10);
+  /**
+   * A new 6-digit code (replaces any earlier one), emailed to the account. Backend review M1:
+   * at most EMAIL_CODE_LIFETIME_SENDS per account and EMAIL_SENDS_PER_ADDRESS_PER_DAY per address.
+   */
+  const sendVerificationCode = (account: { userId: string; email: string }): "sent" | "lifetime" | "daily" => {
+    if (!store.accounts.takeVerificationSend(account.userId, EMAIL_CODE_LIFETIME_SENDS)) return "lifetime";
+    if (!store.accounts.takeEmailSendForAddress(account.email, sendDay(), EMAIL_SENDS_PER_ADDRESS_PER_DAY)) return "daily";
+    const code = String(randomInt(0, 10 ** EMAIL_CODE_LENGTH)).padStart(EMAIL_CODE_LENGTH, "0");
+    const at = now();
+    store.accounts.createEmailVerification({
+      userId: account.userId,
+      codeHash: emailCodeHash(account.userId, code),
+      at: at.toISOString(),
+      expiresAt: new Date(at.getTime() + EMAIL_VERIFICATION_TTL_MS).toISOString(),
+    });
+    void emailSender.send({
+      kind: "verify-email",
+      to: account.email,
+      subject: EMAIL_VERIFICATION_COPY.emailSubject,
+      text: verificationEmailText(code),
+      code,
+    });
+    return "sent";
+  };
+
+  // Policy Reviewer (Oct 17): testers and existing accounts confirm 18+ once in the app before
+  // any CardSight call. Accounts only: guests are refused by the guest gate (signup_required).
+  app.get("/v1/age-confirmation", (c) => {
+    const userId = c.get("userId");
+    const record = isGuestUserId(userId) ? null : store.ageConfirmations.get(userId);
+    return c.json({ ok: true as const, age: ageConfirmationState(record) });
+  });
+  app.post("/v1/age-confirmation", async (c) => {
+    const userId = c.get("userId");
+    if (isGuestUserId(userId)) return signupRequired(c, "cardsight");
+    const body = await c.req.json<Record<string, unknown>>().catch(() => ({}) as Record<string, unknown>);
+    if (body.ageConfirmed18Plus !== true) return c.json({ ok: false, error: "ageConfirmed18Plus must be true" }, 400);
+    if (body.version !== AGE_GATE_VERSION) {
+      return c.json({ ok: false, error: "Reload and try again.", currentVersion: AGE_GATE_VERSION }, 409);
+    }
+    store.ageConfirmations.confirm(userId, AGE_GATE_VERSION, now().toISOString());
+    return c.json({ ok: true as const, age: ageConfirmationState(store.ageConfirmations.get(userId)) });
+  });
+
+  // Sean: CardSight disclosure + consent, stored with its version and timestamps.
+  app.get("/v1/consents/cardsight", (c) =>
+    c.json({ ok: true as const, consent: consentState(store.consents.get(c.get("userId"), "cardsight")) }),
+  );
+  app.post("/v1/consents/cardsight", async (c) => {
+    const userId = c.get("userId");
+    // Policy Reviewer (Oct 17): guests never get CardSight, so they can't give consent either.
+    if (isGuestUserId(userId)) return signupRequired(c, "cardsight");
+    const body = await c.req.json<{ granted?: unknown; version?: unknown }>().catch(() => ({}) as Record<string, unknown>);
+    if (typeof body.granted !== "boolean") return c.json({ ok: false, error: "granted must be true or false" }, 400);
+    const at = now().toISOString();
+    if (body.granted) {
+      // Agreeing counts only for the wording the user saw: the current version.
+      if (body.version !== CARDSIGHT_CONSENT_VERSION) {
+        return c.json({ ok: false, error: "Consent version is out of date. Reload and try again.", currentVersion: CARDSIGHT_CONSENT_VERSION }, 409);
+      }
+      store.consents.grant(userId, "cardsight", CARDSIGHT_CONSENT_VERSION, at);
+    } else if (hasActiveConsent(store.consents, userId)) {
+      store.consents.withdraw(userId, "cardsight", at);
+    } else if (consentState(store.consents.get(userId, "cardsight")).needsPrompt) {
+      // Backend review M4: a "No" to the prompt is a decline, never a grant that was withdrawn.
+      store.consents.decline(userId, "cardsight", CARDSIGHT_CONSENT_VERSION, at);
+    }
+    return c.json({ ok: true as const, consent: consentState(store.consents.get(userId, "cardsight")) });
+  });
+
+  app.post("/v1/email-verifications", (c) => {
+    const userId = c.get("userId");
+    const account = store.accounts.getAccount(userId);
+    if (!account || isUserEmailVerified(userId)) return c.json({ ok: true as const, emailVerified: true });
+    // One code per minute (the resend button) and at most 5 an hour per account.
+    if (isLimited(`verify-send-min:${userId}`, 1, EMAIL_RESEND_COOLDOWN_MS)) {
+      return c.json({ ok: false, error: EMAIL_VERIFICATION_COPY.tooSoon }, 429);
+    }
+    if (overLimit(`verify-send-hour:${userId}`, 5, 60 * 60 * 1000)) return tooMany(c);
+    overLimit(`verify-send-min:${userId}`, 1, EMAIL_RESEND_COOLDOWN_MS);
+    const sent = sendVerificationCode(account);
+    if (sent === "lifetime") return c.json({ ok: false, error: EMAIL_VERIFICATION_COPY.sendLimit }, 429);
+    if (sent === "daily") return c.json({ ok: false, error: EMAIL_VERIFICATION_COPY.dailyLimit }, 429);
+    return c.json(
+      { ok: true as const, emailVerified: false, message: EMAIL_VERIFICATION_COPY.sent, resendAfterMs: EMAIL_RESEND_COOLDOWN_MS },
+      202,
+    );
+  });
+
+  app.post("/v1/email-verifications/confirm", async (c) => {
+    const userId = c.get("userId");
+    if (!store.accounts.getAccount(userId) || isUserEmailVerified(userId)) {
+      return c.json({ ok: true as const, emailVerified: true as const });
+    }
+    // Per-code tries are capped in the store (5); this caps guessing across new codes too.
+    if (overLimit(`verify-confirm:${userId}`, 20, 60 * 60 * 1000)) return tooMany(c);
+    const body = await c.req.json<{ code?: unknown }>().catch(() => ({}) as Record<string, unknown>);
+    const code = typeof body.code === "string" ? body.code.trim() : "";
+    const result = isEmailCode(code)
+      ? store.accounts.confirmEmailVerification(userId, emailCodeHash(userId, code), now().toISOString())
+      : "invalid";
+    if (result !== "verified") return c.json({ ok: false, error: EMAIL_VERIFICATION_COPY.invalid }, 400);
+    return c.json({ ok: true as const, emailVerified: true as const, message: EMAIL_VERIFICATION_COPY.verified });
+  });
+
+  app.post("/v1/password-resets", async (c) => {
+    const ip = clientIp(c, trustProxyHops, socketAddress) ?? "unknown";
+    if (overLimit(`reset-ip:${ip}`, authLimits.signInPerIp, 15 * 60 * 1000)) return tooMany(c);
+    const body = await c.req.json<{ email?: unknown }>().catch(() => ({}) as Record<string, unknown>);
+    const email = typeof body.email === "string" ? normalizeEmail(body.email) : "";
+    const generic = { ok: true as const, message: ACCOUNT_AUTH_COPY.resetRequested };
+    if (!isValidEmail(email)) return c.json(generic, 202);
+    if (overLimit(`reset-email:${email}`, authLimits.perEmail, 60 * 60 * 1000)) return c.json(generic, 202);
+    const account = store.accounts.findByEmail(email);
+    if (account) {
+      const token = randomBytes(32).toString("base64url");
+      const at = now();
+      store.accounts.createPasswordReset({
+        userId: account.userId,
+        tokenHash: hashSessionToken(token),
+        at: at.toISOString(),
+        expiresAt: new Date(at.getTime() + PASSWORD_RESET_TTL_MS).toISOString(),
+      });
+      deliverResetToken(account.email, token);
+    }
+    return c.json(generic, 202);
+  });
+  app.post("/v1/password-resets/confirm", async (c) => {
+    const ip = clientIp(c, trustProxyHops, socketAddress) ?? "unknown";
+    if (overLimit(`reset-confirm-ip:${ip}`, authLimits.signInPerIp, 15 * 60 * 1000)) return tooMany(c);
+    const body = await c.req.json<{ token?: unknown; password?: unknown }>().catch(() => ({}) as Record<string, unknown>);
+    const token = typeof body.token === "string" ? body.token.trim() : "";
+    const password = typeof body.password === "string" ? body.password : "";
+    const problem = passwordProblem(password);
+    if (problem) return c.json({ ok: false, error: problem }, 400);
+    const userId = token ? store.accounts.consumePasswordReset(hashSessionToken(token), now().toISOString()) : null;
+    if (!userId) return c.json({ ok: false, error: ACCOUNT_AUTH_COPY.resetInvalid }, 400);
+    store.accounts.setPasswordHash(userId, await hashPassword(password));
+    // Every existing session (possibly an attacker's) is signed out.
+    store.accounts.deleteSessionsForUser(userId);
+    return c.json({ ok: true as const });
+  });
+
+  /** Everything for one user: rows (one transaction), then files, then staged uploads. */
+  const deleteUserEverything = (userId: string) => {
+    // Data Engineer review: every user_id row in one transaction first, then the files (whose
+    // locations were collected before the rows went). A crash in between leaves orphan files
+    // with no personal rows, which the photo retention sweep removes, never rows without files.
+    const removePhotos = store.prepareUserPhotoDeletion(userId);
+    // Data Engineer review: anonymize (not delete) the purchase ledger first, so past North Star
+    // weeks keep their counts (snapshots with prices are removed). deleteAllUserRows then finds
+    // no purchase_events rows under this user_id.
+    store.purchaseLedger.anonymizeUser(userId);
+    const rows = store.accounts.deleteAllUserRows(userId);
+    const photos = removePhotos();
+    const staged = gradeUploads.releaseUser(userId);
+    return { rows, photos, staged };
+  };
+
+  // Policy Reviewer (Oct 17): act on an under-18 report. Ops token only (404 when unset). Turns
+  // CardSight off first (recorded as a withdrawal), signs out every session, then deletes the
+  // account and all its data, same as Settings > Delete account. Body: { email } or { userId }.
+  app.post("/ops/under-18-report", async (c) => {
+    const expected = opsToken?.trim();
+    const given = c.req.header("authorization")?.replace(/^Bearer\s+/i, "").trim();
+    if (!expected) return c.json({ ok: false, error: "Not found" }, 404);
+    if (!given || !timingSafeEqualString(given, expected)) return c.json({ ok: false, error: "Unauthorized" }, 401);
+    const body = await c.req.json<{ email?: unknown; userId?: unknown }>().catch(() => ({}) as Record<string, unknown>);
+    const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
+    const userId = email ? store.accounts.findByEmail(email)?.userId : typeof body.userId === "string" ? body.userId.trim() : "";
+    if (!userId) return c.json({ ok: false, error: "No such account" }, 404);
+    const at = now().toISOString();
+    store.consents.withdraw(userId, "cardsight", at);
+    store.accounts.deleteSessionsForUser(userId);
+    const { rows, photos, staged } = deleteUserEverything(userId);
+    return c.json({
+      ok: true as const,
+      cardSightOff: !hasActiveConsent(store.consents, userId),
+      photosDeleted: photos.deleted + staged,
+      rowsDeleted: Object.values(rows).reduce((sum, n) => sum + n, 0),
+    });
+  });
+
+  /**
+   * Backend review M1: accounts still unverified UNVERIFIED_ACCOUNT_TTL_DAYS after sign-up are
+   * deleted (every row and photo, like an account delete). Runs hourly; tests get a handle.
+   */
+  const purgeUnverifiedAccounts = () => {
+    const cutoff = new Date(now().getTime() - UNVERIFIED_ACCOUNT_TTL_DAYS * 86_400_000).toISOString();
+    const ids = store.accounts.listUnverifiedAccountsBefore(cutoff);
+    for (const userId of ids) deleteUserEverything(userId);
+    return { accountsPurged: ids.length };
+  };
+  options.onUnverifiedPurge?.(purgeUnverifiedAccounts);
+  if (options.unverifiedPurgeIntervalMs !== 0) {
+    const purgeTimer = setInterval(() => {
+      try {
+        purgeUnverifiedAccounts();
+      } catch {
+        // retried next tick
+      }
+    }, options.unverifiedPurgeIntervalMs ?? 60 * 60 * 1000);
+    purgeTimer.unref?.();
+  }
+
+  app.post("/v1/account/delete", (c) => {
+    const { rows, photos, staged } = deleteUserEverything(c.get("userId"));
+    return c.json({
+      ok: true,
+      photosDeleted: photos.deleted + staged,
+      salesDeleted: rows.user_card_sales ?? 0,
+      gradeHistoryDeleted: rows.grade_estimate_history ?? 0,
+      rowsDeleted: Object.values(rows).reduce((sum, n) => sum + n, 0),
     });
   });
 
@@ -1049,11 +1985,15 @@ export function createApp(
       ok: true,
       identity: c.get("identity"),
       invitedUsers: [c.get("identity")],
+      emailVerified: isUserEmailVerified(c.get("userId")),
     });
   });
 
   app.patch("/v1/identity", async (c) => {
-    const body = await c.req.json<{ inviteCode?: unknown }>();
+    // Backend review: invite checks share POST /v1/sessions' per-IP limiter (codes are guessable).
+    const inviteIp = clientIp(c, trustProxyHops, socketAddress) ?? "unknown";
+    if (overLimit(`invite-ip:${inviteIp}`, authLimits.invitePerIp, 15 * 60 * 1000)) return tooMany(c);
+    const body = await c.req.json<{ inviteCode?: unknown }>().catch(() => ({}) as { inviteCode?: unknown });
     if (typeof body.inviteCode !== "string" || body.inviteCode.trim() === "") {
       return c.json({ ok: false, error: "Invite code is required" }, 400);
     }
@@ -1135,65 +2075,122 @@ export function createApp(
     });
   });
 
-  app.get("/v1/preferences", (c) =>
-    c.json({ ok: true, preferences: getPreferences(c.get("userId")) }),
-  );
-
-  app.patch("/v1/preferences", async (c) => {
-    const body = await c.req.json<Partial<MaxBuyPreferences>>();
-    const userId = c.get("userId");
-    const current = getPreferences(userId);
-    const next: MaxBuyPreferences = {
-      targetMarginPct:
-        body.targetMarginPct === undefined ? current.targetMarginPct : body.targetMarginPct,
-      feesBufferPct:
-        body.feesBufferPct === undefined ? current.feesBufferPct : body.feesBufferPct,
-      defaultCurrency: LOCKED_DISPLAY_CURRENCY,
-      conditionAdjustments:
-        body.conditionAdjustments === undefined
-          ? current.conditionAdjustments
-          : body.conditionAdjustments,
-    };
-    const rangeError = maxBuyPreferencesRangeError(next);
-    if (rangeError) {
-      return c.json({ ok: false, error: rangeError }, 400);
+  /**
+   * Mobile Tech Lead review: queued writes send an Idempotency-Key for every kind. Routes that
+   * do not mint their own deterministic row ID replay the first 2xx response for 24 h; the same
+   * key with a different body is a 422; concurrent duplicates wait for the first.
+   */
+  const writeIdempotency = createIdempotencyRegistry<{ status: number; body: string }>(() => now().getTime());
+  const replayableWrite = async (c: Context, next: () => Promise<void>) => {
+    const key = c.req.header("idempotency-key")?.trim();
+    if (!key) return next();
+    const userId = c.get("userId") as string;
+    const raw = new Uint8Array(await c.req.arrayBuffer().catch(() => new ArrayBuffer(0)));
+    const bodyHash = hashRequestBody([c.req.method, c.req.path, raw]);
+    const claim = writeIdempotency.claim(`${userId}\0${key}`);
+    if (claim.kind === "replay") {
+      const first = await claim.wait();
+      if (claim.entry.bodyHash && claim.entry.bodyHash !== bodyHash) {
+        return c.json({ ok: false, error: "That Idempotency-Key was already used with a different request." }, 422);
+      }
+      if (first) return c.body(first.body, first.status as 200, { "content-type": "application/json" });
+      // The first attempt failed: run this one normally (no key reserved).
+      return next();
     }
-    return c.json({ ok: true, preferences: setPreferences(userId, next) });
+    // M3: after a restart the in-memory registry is empty; the persisted answer still replays.
+    const persisted = store.idempotency.get(userId, key);
+    if (persisted && now().getTime() - Date.parse(persisted.createdAt) < IDEMPOTENCY_TTL_MS) {
+      claim.finish(persisted.bodyHash, { status: persisted.status, body: persisted.response });
+      if (persisted.bodyHash !== bodyHash) {
+        return c.json({ ok: false, error: "That Idempotency-Key was already used with a different request." }, 422);
+      }
+      return c.body(persisted.response, persisted.status as 200, { "content-type": "application/json" });
+    }
+    claim.setHash(bodyHash);
+    try {
+      await next();
+    } catch (error) {
+      claim.finish(bodyHash, undefined);
+      throw error;
+    }
+    const res = c.res;
+    if (res.status >= 200 && res.status < 300) {
+      const responseBody = await res.clone().text();
+      store.idempotency.prune(new Date(now().getTime() - IDEMPOTENCY_TTL_MS).toISOString());
+      store.idempotency.save(userId, key, { bodyHash, status: res.status, response: responseBody, createdAt: now().toISOString() });
+      claim.finish(bodyHash, { status: res.status, body: responseBody });
+    } else {
+      claim.finish(bodyHash, undefined);
+    }
+  };
+  app.use("/v1/inventory/:inventoryItemId/purchased", async (c, next) => (c.req.method === "POST" ? replayableWrite(c, next) : next()));
+  app.use("/v1/inventory/:inventoryItemId/purchase", async (c, next) => (c.req.method === "POST" ? replayableWrite(c, next) : next()));
+  app.use("/v1/sales/:inventoryItemId", async (c, next) => (c.req.method === "GET" ? next() : replayableWrite(c, next)));
+  app.use("/v1/inventory/:inventoryItemId/grade-history", async (c, next) => (c.req.method === "POST" ? replayableWrite(c, next) : next()));
+
+  registerPreferenceRoutes(app, { getPreferences, setPreferences });
+  registerSalesRoutes(app, {
+    sales: store.sales,
+    ownsInventoryItem: (userId, inventoryItemId) =>
+      getInventoryItem(userId, inventoryItemId)?.intent === "purchased",
   });
-
-  app.post("/v1/max-buy", async (c) => {
-    const body = await c.req.json<{
-      referencePriceAmount?: string | number | null;
-      condition?: string | null;
-    }>();
-    const maxBuyReference = body.referencePriceAmount ?? null;
-    if (
-      maxBuyReference !== null &&
-      maxBuyReference !== "" &&
-      parseDollarsToCents(maxBuyReference) === null
-    ) {
-      return c.json({ ok: false, error: INVALID_DOLLAR_AMOUNT }, 400);
-    }
-    const maxBuy = computeMaxBuy({
-      referencePriceAmount: maxBuyReference,
-      condition: body.condition,
-      preferences: getPreferences(c.get("userId")),
-    });
-    return c.json({ ok: true, maxBuy });
+  registerGradeHistoryRoutes(app, {
+    gradeHistory: store.gradeHistory,
+    ownsInventoryItem: (userId, inventoryItemId) =>
+      getInventoryItem(userId, inventoryItemId)?.intent === "purchased",
+    isPremium: (userId) => resolveAccountPlan(userId, getGradeAccount(userId).plan) === "premium",
   });
 
   app.post("/v1/scans", bodyLimit({
       maxSize: SCAN_IMAGE_MAX_BYTES,
       onError: (c) => c.json({ ok: false, error: "Image must be 20 MB or smaller" }, 413),
     }), async (c) => {
+      const userId = c.get("userId");
+      // P1-10 + backend review: the body hash must match (422 otherwise), concurrent same-key
+      // requests share one run, keys last 24 h. Guests never get here (signup_required).
+      const scanIdempotencyKey = c.req.header("idempotency-key")?.trim() || null;
+      const regKey = scanIdempotencyKey ? `${userId}\0${scanIdempotencyKey}` : null;
+      const claim = regKey ? scanIdempotency.claim(regKey) : null;
+      const persistedReplay =
+        claim?.kind === "new" && scanIdempotencyKey
+          ? getScan(userId, scanIdForIdempotency(userId, scanIdempotencyKey))
+          : undefined;
+      const freshPersisted =
+        persistedReplay && now().getTime() - Date.parse(persistedReplay.capturedAt) < IDEMPOTENCY_TTL_MS ? persistedReplay : undefined;
       const parsed = await parseScanCreateRequest(c);
       if ("error" in parsed) {
+        if (claim?.kind === "new") claim.finish("", undefined);
         return c.json({ ok: false, error: parsed.error }, parsed.status);
       }
       const captureMethod = parsed.captureMethod;
       const scenario = parsed.scenario;
-      const scanId = crypto.randomUUID();
-      const userId = c.get("userId");
+      const bodyHash = hashRequestBody([captureMethod, scenario ?? null, parsed.image?.mimeType ?? null, parsed.image?.bytes ?? null]);
+      if (claim?.kind === "replay") {
+        const first = await claim.wait();
+        if (claim.entry.bodyHash && claim.entry.bodyHash !== bodyHash) {
+          return c.json({ ok: false, error: "That Idempotency-Key was already used with a different request." }, 422);
+        }
+        const replayed = first ? getScan(userId, first) : undefined;
+        if (replayed) {
+          return c.json({ ok: true, scan: replayed, variantSuggestions: variantSuggestionsFor(replayed.mapping) }, 201);
+        }
+      }
+      if (freshPersisted && claim?.kind === "new") {
+        // After a restart the registry is empty; the deterministic scan ID still finds the first
+        // scan, and its stored body hash (M2) still catches a different body.
+        if (freshPersisted.idempotencyBodyHash && freshPersisted.idempotencyBodyHash !== bodyHash) {
+          claim.finish(freshPersisted.idempotencyBodyHash, freshPersisted.scanId);
+          return c.json({ ok: false, error: "That Idempotency-Key was already used with a different request." }, 422);
+        }
+        claim.finish(bodyHash, freshPersisted.scanId);
+        return c.json({ ok: true, scan: freshPersisted, variantSuggestions: variantSuggestionsFor(freshPersisted.mapping) }, 201);
+      }
+      const scanId =
+        scanIdempotencyKey && !persistedReplay
+          ? scanIdForIdempotency(userId, scanIdempotencyKey)
+          : crypto.randomUUID();
+      claim?.kind === "new" && claim.setHash(bodyHash);
+      try {
       let imageStorageRef: string | null = null;
       let imageMimeType: ScanImageMimeType | null = null;
       if (parsed.image) {
@@ -1221,13 +2218,46 @@ export function createApp(
           image: identify.image,
           mimeType: identify.mimeType,
         };
-        recognition = await identifyLiveCaptureStill({
-          image: identify.image,
-          mimeType: identify.mimeType,
-          fallback: recognitionProvider,
-          openclip: liveIdentityOpenclip,
-          catalog,
-        });
+        const runLocal = () =>
+          identifyLiveCaptureStill({
+            image: identify.image,
+            mimeType: identify.mimeType,
+            fallback: recognitionProvider,
+            openclip: liveIdentityOpenclip,
+            catalog,
+          });
+        // Policy Reviewer (Oct 17): CardSight only for an account that attested 18+ AND has
+        // current consent. Guests never (cap 0 too), whatever consent they send.
+        // Sean: the photo goes to CardSight only with this user's current consent, checked here,
+        // right before the adapter. Without it (or if CardSight misses) the local matcher runs.
+        // Backend review M5: also only while this user's monthly CardSight cap has room. A use is
+        // taken only when the adapter is actually called (not for cache hits).
+        const monthKey = cardSightMonthKey(now());
+        const userCap = isGuestUserId(userId) ? CARDSIGHT_GUEST_MONTHLY_CAP : cardSightUserCaps.signedIn;
+        const cardSight =
+          options.cardSight &&
+          !isGuestUserId(userId) &&
+          hasAgeConfirmation(store.ageConfirmations, userId) &&
+          userCap > 0 &&
+          hasActiveConsent(store.consents, userId) &&
+          store.consents.monthlyUse(userId, monthKey) < userCap
+            ? options.cardSight
+            : null;
+        const runLive = cardSight
+          ? () =>
+              store.consents.takeMonthlyUse(userId, monthKey, userCap)
+                ? createRecognitionWithFallback(cardSight, { name: recognitionProvider.name, identifyCard: () => runLocal() }).identifyCard(
+                    identifyRequest,
+                  )
+                : runLocal()
+          : runLocal;
+        recognition = recognitionCache
+          ? await recognitionCache.getOrIdentify(
+              { bytes: identify.image, mimeType: identify.mimeType },
+              cardSight ? `cardsight+${recognitionProvider.name}` : recognitionProvider.name,
+              runLive,
+            )
+          : await runLive();
       } else {
         const identifyRequest: IdentifyCardRequest = {
           image: identify.image,
@@ -1238,7 +2268,19 @@ export function createApp(
           liveIdentifyEnabled ? mockCardRecognitionProvider : recognitionProvider;
         recognition = await mockProvider.identifyCard(identifyRequest);
       }
-      const mapping = await mapRecognitionToCatalog(recognition, catalog);
+      const mapped = await mapRecognitionToCatalog(recognition, catalog);
+      // P1-26: cards users keep confirming move up the candidate list.
+      const mapping =
+        mapped.candidates.length > 1
+          ? {
+              ...mapped,
+              candidates: rerankItemsByConfirms(
+                mapped.candidates,
+                (card) => card.tcgdexId,
+                confirmCounts(mapped.candidates.map((card) => card.tcgdexId)),
+              ),
+            }
+          : mapped;
       const scan = saveScan({
         scanId,
         userId,
@@ -1251,10 +2293,16 @@ export function createApp(
         inventoryItemId: null,
         imageStorageRef,
         imageMimeType,
+        idempotencyBodyHash: scanIdempotencyKey ? bodyHash : null,
         recognition,
         mapping,
       });
-      return c.json({ ok: true, scan }, 201);
+      if (claim?.kind === "new") claim.finish(bodyHash, scan.scanId);
+      return c.json({ ok: true, scan, variantSuggestions: variantSuggestionsFor(scan.mapping) }, 201);
+      } catch (error) {
+        if (claim?.kind === "new") claim.finish(bodyHash, undefined);
+        throw error;
+      }
     },
   );
 
@@ -1276,7 +2324,7 @@ export function createApp(
   app.get("/v1/scans/:scanId", (c) => {
     const scan = getScan(c.get("userId"), c.req.param("scanId"));
     if (!scan) return c.json({ ok: false, error: "Scan not found" }, 404);
-    return c.json({ ok: true, scan });
+    return c.json({ ok: true, scan, variantSuggestions: variantSuggestionsFor(scan.mapping) });
   });
 
   app.post("/v1/scans/:scanId/confirm", async (c) => {
@@ -1285,6 +2333,7 @@ export function createApp(
     const body = await c.req.json<{
       tcgdexId?: string;
       selectedVariant?: string | null;
+      via?: string | null;
     }>();
     if (!body.tcgdexId) {
       return c.json({ ok: false, error: "tcgdexId is required" }, 400);
@@ -1322,6 +2371,30 @@ export function createApp(
         selectedVariant: body.selectedVariant,
         catalogCard,
       });
+      const correction = scanCorrectionFor({
+        scanId: scan.scanId,
+        userId: c.get("userId"),
+        via: body.via,
+        predictedTcgdexId: scan.mapping.tcgdexId ?? scan.mapping.canonicalCard?.tcgdexId ?? null,
+        candidateTcgdexIds: scan.mapping.candidates.map((card) => card.tcgdexId),
+        chosenTcgdexId: body.tcgdexId,
+        recognitionProvider: scan.mapping.provider,
+      });
+      if (correction) recordScanCorrection(correction);
+      const shown = scan.mapping.candidates.map((card) => card.tcgdexId);
+      const predicted = scan.mapping.tcgdexId ?? scan.mapping.canonicalCard?.tcgdexId ?? null;
+      saveConfirmEvent(
+        confirmEventFor({
+          scanId: scan.scanId,
+          userId: c.get("userId"),
+          via: body.via,
+          shownTcgdexIds: shown.length > 0 ? shown : predicted ? [predicted] : [],
+          chosenTcgdexId: body.tcgdexId,
+          selectedVariant: body.selectedVariant ?? null,
+          confidence: scan.mapping.confidence ?? null,
+          recognitionProvider: scan.mapping.provider,
+        }),
+      );
       return c.json({
         ok: true,
         scan: result.scan,
@@ -1337,6 +2410,22 @@ export function createApp(
         400,
       );
     }
+  });
+
+  /** P1-27: weekly mapping-quality report (aggregates only, no user ids). */
+  app.get("/v1/metrics/mapping", (c) => {
+    const daysRaw = Number(c.req.query("days") ?? 7);
+    const days = Number.isFinite(daysRaw) ? Math.min(Math.max(Math.floor(daysRaw), 1), 90) : 7;
+    const window = weeklyWindow(new Date(), days);
+    const report = computeMappingMetrics({
+      events: listConfirmEvents({ since: window.from }),
+      ...window,
+      unmappedSetNames: unmappedSetNameCounts(),
+    });
+    if (c.req.query("format") === "markdown") {
+      return c.text(mappingMetricsMarkdown(report), 200, { "content-type": "text/markdown; charset=utf-8" });
+    }
+    return c.json({ ok: true, report });
   });
 
   app.post("/v1/scans/:scanId/reject", (c) => {
@@ -1357,7 +2446,7 @@ export function createApp(
 
   app.get("/v1/inventory", async (c) => {
     const userId = c.get("userId");
-    const local = listInventory(userId);
+    const local = listInventory(userId).filter((item) => !isClosedWatchlist(item));
     if (pokecollectorAccounts.name === "off") {
       return c.json({
         ok: true,
@@ -1403,6 +2492,47 @@ export function createApp(
     });
   });
 
+  app.delete("/v1/inventory/:inventoryItemId", (c) => {
+    const userId = c.get("userId");
+    const inventoryItemId = c.req.param("inventoryItemId");
+    const item = getInventoryItem(userId, inventoryItemId);
+    if (!item) return c.json({ ok: false, error: "Inventory item not found" }, 404);
+    if (item.intent !== "purchased" || !isDetailsNeededPurchase(item)) {
+      return c.json(
+        { ok: false, error: "Only incomplete Purchased copies can be undone" },
+        409,
+      );
+    }
+    const sourceWatchlistId = watchlistSourceIdFromTags(item.tags);
+    if (!deleteInventoryItem(userId, inventoryItemId)) {
+      return c.json({ ok: false, error: "Inventory item not found" }, 404);
+    }
+    store.sales.delete(userId, inventoryItemId);
+    store.gradeHistory.deleteItem(userId, inventoryItemId);
+    if (sourceWatchlistId) {
+      const watchlist = getInventoryItem(userId, sourceWatchlistId);
+      if (watchlist && watchlist.intent === "watchlist") {
+        updateInventoryItem(userId, sourceWatchlistId, {
+          workflowState: "watching",
+          closedAt: null,
+        });
+      }
+    }
+    return c.json({ ok: true, deleted: true });
+  });
+
+
+  registerGradeQuotaRoutes(app, {
+    quotaSnapshotFor,
+    takeGradeAllowance,
+    outOfGradesResponse,
+    gradeIap,
+    setGradePlan,
+    // Bought credits never expire; the period is only recorded as when they were last bought.
+    addGradeCredits: (userId, credits, at) =>
+      addGradeCredits(userId, credits, at, quotaPeriodForUser(userId, new Date(at)).period.key),
+    now,
+  });
 
   app.post(
     "/v1/grade/detect",
@@ -1424,7 +2554,9 @@ export function createApp(
         captureMeta: parsed.captureMeta ?? null,
       });
       // Retake and unavailable are answers, not transport errors: 200 with ok:false.
-      return c.json(result);
+      if (!result.ok) return c.json(result);
+      const uploadId = gradeUploads.stage(c.get("userId"), parsed.side, parsed.still);
+      return c.json({ ...result, uploadId });
     },
   );
 
@@ -1438,13 +2570,18 @@ export function createApp(
       onError: gradeBodyTooLarge,
     }),
     async (c) => {
-      const parsed = await parseGradeEstimateRequest(c);
+      const parsed = await parseGradeEstimateRequest(c, {
+        userId: c.get("userId"),
+        stagedStill: (userId, id, side) => gradeUploads.get(userId, id, side),
+      });
       if ("error" in parsed) {
         return c.json({ ok: false, error: parsed.error }, parsed.status);
       }
       if (!parsed.frontImage || !parsed.backImage) {
         return c.json({ ok: false, error: "Front and back photos are required" }, 400);
       }
+      const taken = takeGradeAllowance(c.get("userId"));
+      if (!taken.ok) return outOfGradesResponse(c, taken.quota);
       const result = await pregradePhotoPair({
         runner: cardgrading,
         front: parsed.frontImage,
@@ -1452,9 +2589,32 @@ export function createApp(
         angledFront: parsed.angledFront ?? [],
         captureMeta: parsed.captureMeta ?? null,
       });
-      return c.json(result);
+      const userId = c.get("userId");
+      if (parsed.frontUploadId) gradeUploads.release(userId, parsed.frontUploadId);
+      if (parsed.backUploadId) gradeUploads.release(userId, parsed.backUploadId);
+      return c.json({ ...result, quota: taken.quota });
     },
   );
+
+  // Mobile Tech Lead review: batch is enforced on the server, not only by the pre-check route.
+  const batchGate = async (c: Context, next: () => Promise<void>) => {
+    if (c.req.method !== "POST" || c.req.header(BATCH_GRADE_HEADER) !== "1") return next();
+    const userId = c.get("userId") as string;
+    if (resolveAccountPlan(userId, getGradeAccount(userId).plan) === "premium") return next();
+    return c.json(premiumRequiredBody("batch_grading"), 403);
+  };
+  app.use("/v1/inventory/:inventoryItemId/grade-jobs", batchGate);
+  app.use("/v1/inventory/:inventoryItemId/grade-estimate", batchGate);
+
+  registerGradeJobRoutes(app, {
+    enabled: options.gradeJobs ?? process.env.CARD_FLOW_GRADE_JOBS?.trim().toLowerCase() === "on",
+    dispatch: (request, owner) => {
+      internalJobRequests.set(request, owner);
+      return Promise.resolve(app.fetch(request));
+    },
+    bodyLimit: bodyLimit({ maxSize: GRADE_ROUTE_BODY_MAX_BYTES, onError: gradeBodyTooLarge }),
+    ...options.gradeJobLimits,
+  });
 
   app.post(
     "/v1/inventory/:inventoryItemId/grade-estimate",
@@ -1473,16 +2633,26 @@ export function createApp(
         return c.json({ ok: false, error: WATCHLIST_CANNOT_SUBMIT_MESSAGE }, 400);
       }
 
-      const parsed = await parseGradeEstimateRequest(c);
+      const parsed = await parseGradeEstimateRequest(c, {
+        userId: c.get("userId"),
+        stagedStill: (userId, id, side) => gradeUploads.get(userId, id, side),
+      });
       if ("error" in parsed) {
         return c.json({ ok: false, error: parsed.error }, parsed.status);
       }
 
+      const createdAt = now().toISOString();
       if (parsed.frontImage) {
-        saveGradeImage(userId, item.inventoryItemId, "front", parsed.frontImage);
+        saveGradeImage(userId, item.inventoryItemId, "front", {
+          ...parsed.frontImage,
+          createdAt,
+        });
       }
       if (parsed.backImage) {
-        saveGradeImage(userId, item.inventoryItemId, "back", parsed.backImage);
+        saveGradeImage(userId, item.inventoryItemId, "back", {
+          ...parsed.backImage,
+          createdAt,
+        });
       }
 
       const frontImage =
@@ -1497,14 +2667,21 @@ export function createApp(
         const cached = getGradeEstimateCache(userId, item.inventoryItemId);
         const cachedEstimate =
           cached?.photoHash === photoHash ? parseStoredGradeEstimate(cached.estimateJson) : null;
-        if (cachedEstimate) {
+        // Never serve a cached 0 — that is a retake, not a pre-grade estimate.
+        if (cachedEstimate && cachedEstimate.overall != null && cachedEstimate.overall >= 1) {
+          if (parsed.frontUploadId) gradeUploads.release(userId, parsed.frontUploadId);
+          if (parsed.backUploadId) gradeUploads.release(userId, parsed.backUploadId);
           return c.json({
             ok: true,
             provider: gradeEstimateHealth(gradingProvider.name),
             estimate: cachedEstimate,
+            quota: quotaSnapshotFor(userId),
           });
         }
       }
+
+      const taken = takeGradeAllowance(userId);
+      if (!taken.ok) return outOfGradesResponse(c, taken.quota);
 
       let estimate = emptyGradeEstimate();
       try {
@@ -1517,18 +2694,23 @@ export function createApp(
         // A crashed or timed-out grader is "unavailable", never a silent empty estimate.
         estimate = unavailableGradeEstimate();
       }
-      // Cache only a real number. Retake / unavailable must re-run next time.
-      if (photoHash && estimate.overall != null) {
+      // Cache only a real 1.0–10.0 number. Retake / unavailable / 0 must re-run.
+      if (photoHash && estimate.overall != null && estimate.overall >= 1) {
         saveGradeEstimateCache(userId, item.inventoryItemId, {
           photoHash,
           estimateJson: JSON.stringify(estimate),
         });
       }
+      // P2-07: every fresh real estimate joins the card's history (cached repeats do not).
+      recordGradeEstimate(store.gradeHistory, userId, item.inventoryItemId, estimate, new Date().toISOString());
 
+      if (parsed.frontUploadId) gradeUploads.release(userId, parsed.frontUploadId);
+      if (parsed.backUploadId) gradeUploads.release(userId, parsed.backUploadId);
       return c.json({
         ok: true,
         provider: gradeEstimateHealth(gradingProvider.name),
         estimate,
+        quota: taken.quota,
       });
     },
   );
@@ -1569,14 +2751,29 @@ export function createApp(
       selectedVariant?: string | null;
       referencePriceAmount?: string | number | null;
       anotherCopy?: boolean;
+      detailsNeeded?: boolean;
+      platform?: string | null;
+      streamUrl?: string | null;
     }>();
 
+    const detailsNeeded = body.detailsNeeded === true;
     const purchasePrice =
       body.purchasePrice === undefined || body.purchasePrice === null
         ? ""
         : String(body.purchasePrice).trim();
 
-    if (!body.confirmationId || purchasePrice === "" || !body.purchasedAt) {
+    if (!body.confirmationId) {
+      return c.json(
+        {
+          ok: false,
+          error: detailsNeeded
+            ? "confirmationId is required"
+            : "confirmationId, purchasePrice, and purchasedAt are required",
+        },
+        400,
+      );
+    }
+    if (!detailsNeeded && (purchasePrice === "" || !body.purchasedAt)) {
       return c.json(
         {
           ok: false,
@@ -1587,15 +2784,15 @@ export function createApp(
     }
 
     const moneyError = firstInvalidDollar({
-      purchasePrice,
-      shipping: body.shipping,
-      tax: body.tax,
-      fees: body.fees,
-      supplies: body.supplies,
+      purchasePrice: detailsNeeded ? undefined : purchasePrice,
+      shipping: detailsNeeded ? undefined : body.shipping,
+      tax: detailsNeeded ? undefined : body.tax,
+      fees: detailsNeeded ? undefined : body.fees,
+      supplies: detailsNeeded ? undefined : body.supplies,
       referencePriceAmount: body.referencePriceAmount,
     });
     if (moneyError) return c.json({ ok: false, error: moneyError }, 400);
-    if (!isIsoDateTime(body.purchasedAt)) {
+    if (!detailsNeeded && !isIsoDateTime(body.purchasedAt ?? "")) {
       return c.json({ ok: false, error: "purchasedAt must be an ISO date-time" }, 400);
     }
 
@@ -1616,6 +2813,54 @@ export function createApp(
           );
     if (replay) return c.json({ ok: true, created: false, item: replay });
 
+    if (detailsNeeded) {
+      const recentSameCard = listInventory(userId).find(
+        (item) =>
+          item.intent === "purchased" &&
+          item.workflowState === DETAILS_NEEDED_WORKFLOW_STATE &&
+          isRecentDetailsNeededDuplicate({
+            existing: item,
+            cardflowCardId: confirmation.cardflowCardId,
+          }),
+      );
+      if (recentSameCard) return c.json({ ok: true, created: false, item: recentSameCard });
+
+      const createdAt = new Date().toISOString();
+      const item = saveInventoryItem({
+        inventoryItemId: idempotencyKey
+          ? inventoryIdForIdempotency(userId, "purchased", idempotencyKey)
+          : crypto.randomUUID(),
+        userId,
+        cardflowCardId: confirmation.cardflowCardId,
+        confirmationId: confirmation.confirmationId,
+        scanId: confirmation.scanId,
+        intent: "purchased",
+        grain: "physical_copy",
+        selectedVariant: body.selectedVariant ?? confirmation.selectedVariant,
+        condition: body.condition ?? null,
+        quantity: 1,
+        tags: livestreamContextTags({
+          platform: body.platform,
+          streamUrl: body.streamUrl,
+        }),
+        workflowState: DETAILS_NEEDED_WORKFLOW_STATE,
+        referencePriceAmount: null,
+        targetMaxBuyAmount: null,
+        createdAt,
+        purchase: {
+          purchaseId: crypto.randomUUID(),
+          purchasedAt: createdAt,
+          currency: LOCKED_DISPLAY_CURRENCY,
+          costBasis: detailsNeededCostBasis(),
+          maxBuy: computeMaxBuy({
+            referencePriceAmount: null,
+            preferences: getPreferences(userId),
+          }),
+        },
+      });
+      return c.json({ ok: true, item }, 201);
+    }
+
     const remoteWrite = await writePokecollectorCopy(userId, "purchased", {
       tcgdexId: confirmation.tcgdexId,
       selectedVariant: body.selectedVariant ?? confirmation.selectedVariant,
@@ -1624,6 +2869,7 @@ export function createApp(
     });
     if (!remoteWrite.ok) return c.json(remoteWrite, 503);
 
+    const purchasedAt = body.purchasedAt ?? "";
     const costBasis = computeAllInCost({
       purchasePrice,
       shipping: body.shipping,
@@ -1656,7 +2902,7 @@ export function createApp(
       createdAt: new Date().toISOString(),
       purchase: {
         purchaseId: crypto.randomUUID(),
-        purchasedAt: body.purchasedAt,
+        purchasedAt,
         currency: LOCKED_DISPLAY_CURRENCY,
         costBasis,
         maxBuy,
@@ -1746,15 +2992,172 @@ export function createApp(
     return c.json({ ok: true, item, maxBuy }, 201);
   });
 
+  app.post("/v1/inventory/:inventoryItemId/purchased", async (c) => {
+    const userId = c.get("userId");
+    const watchlistItemId = c.req.param("inventoryItemId");
+    const watchlist = getInventoryItem(userId, watchlistItemId);
+    if (!watchlist) return c.json({ ok: false, error: "Inventory item not found" }, 404);
+    if (watchlist.intent !== "watchlist") {
+      return c.json({ ok: false, error: "Only Watchlist items can convert to Purchased" }, 409);
+    }
+
+    const existing = listInventory(userId).find(
+      (row) =>
+        row.intent === "purchased" && watchlistSourceIdFromTags(row.tags) === watchlistItemId,
+    );
+    if (existing) {
+      if (isOpenWatchlist(watchlist)) {
+        updateInventoryItem(userId, watchlistItemId, {
+          workflowState: WATCHLIST_CLOSED_WORKFLOW_STATE,
+          closedAt: existing.createdAt,
+        });
+      }
+      return c.json({ ok: true, created: false, item: inventoryView(userId, existing) });
+    }
+    if (!isOpenWatchlist(watchlist)) {
+      return c.json({ ok: false, error: "This Watchlist item is already closed" }, 409);
+    }
+
+    const confirmation = getConfirmation(userId, watchlist.confirmationId);
+    if (!confirmation) {
+      return c.json({ ok: false, error: "Confirm the card before Purchased" }, 409);
+    }
+
+    const createdAt = new Date().toISOString();
+    const maxBuy = computeMaxBuy({
+      referencePriceAmount: watchlist.referencePriceAmount,
+      condition: watchlist.condition,
+      preferences: getPreferences(userId),
+    });
+    const item = saveInventoryItem({
+      inventoryItemId: crypto.randomUUID(),
+      userId,
+      cardflowCardId: confirmation.cardflowCardId,
+      confirmationId: confirmation.confirmationId,
+      scanId: confirmation.scanId,
+      intent: "purchased",
+      grain: "physical_copy",
+      selectedVariant: watchlist.selectedVariant ?? confirmation.selectedVariant,
+      condition: watchlist.condition,
+      quantity: 1,
+      tags: watchlistConversionTags(watchlistItemId),
+      workflowState: DETAILS_NEEDED_WORKFLOW_STATE,
+      referencePriceAmount: maxBuy.referencePriceAmount,
+      targetMaxBuyAmount: maxBuy.maxBuyAmount,
+      createdAt,
+      purchase: {
+        purchaseId: crypto.randomUUID(),
+        purchasedAt: createdAt,
+        currency: LOCKED_DISPLAY_CURRENCY,
+        costBasis: detailsNeededCostBasis(),
+        maxBuy,
+      },
+    });
+    updateInventoryItem(userId, watchlistItemId, {
+      workflowState: WATCHLIST_CLOSED_WORKFLOW_STATE,
+      closedAt: createdAt,
+    });
+    return c.json({ ok: true, created: true, item: inventoryView(userId, item) }, 201);
+  });
+
+  app.post("/v1/inventory/:inventoryItemId/purchase", async (c) => {
+    const userId = c.get("userId");
+    const item = getInventoryItem(userId, c.req.param("inventoryItemId"));
+    if (!item) return c.json({ ok: false, error: "Inventory item not found" }, 404);
+    if (item.intent !== "purchased") {
+      return c.json({ ok: false, error: "Only Purchased copies can store cost details" }, 409);
+    }
+    if (item.purchase && !isDetailsNeededPurchase(item)) {
+      return c.json({ ok: true, created: false, item: inventoryView(userId, item) });
+    }
+    if (!isDetailsNeededPurchase(item)) {
+      return c.json({ ok: false, error: "This copy is not waiting for purchase details" }, 409);
+    }
+
+    const body = await c.req.json<{
+      purchasePrice?: string | number;
+      purchasedAt?: string;
+      shipping?: string | number | null;
+      tax?: string | number | null;
+      fees?: string | number | null;
+      supplies?: string | number | null;
+      condition?: string | null;
+      selectedVariant?: string | null;
+      referencePriceAmount?: string | number | null;
+    }>();
+    const purchasePrice =
+      body.purchasePrice === undefined || body.purchasePrice === null
+        ? ""
+        : String(body.purchasePrice).trim();
+    if (purchasePrice === "" || !body.purchasedAt) {
+      return c.json(
+        { ok: false, error: "purchasePrice and purchasedAt are required" },
+        400,
+      );
+    }
+    const moneyError = firstInvalidDollar({
+      purchasePrice,
+      shipping: body.shipping,
+      tax: body.tax,
+      fees: body.fees,
+      supplies: body.supplies,
+      referencePriceAmount: body.referencePriceAmount,
+    });
+    if (moneyError) return c.json({ ok: false, error: moneyError }, 400);
+    if (!isIsoDateTime(body.purchasedAt)) {
+      return c.json({ ok: false, error: "purchasedAt must be an ISO date-time" }, 400);
+    }
+
+    const confirmation = getConfirmation(userId, item.confirmationId);
+    if (confirmation?.tcgdexId) {
+      const remoteWrite = await writePokecollectorCopy(userId, "purchased", {
+        tcgdexId: confirmation.tcgdexId,
+        selectedVariant: body.selectedVariant ?? item.selectedVariant,
+        condition: body.condition ?? item.condition,
+        purchasePrice,
+      });
+      if (!remoteWrite.ok) return c.json(remoteWrite, 503);
+    }
+
+    const costBasis = computeAllInCost({
+      purchasePrice,
+      shipping: body.shipping ?? "0",
+      tax: body.tax ?? "0",
+      fees: body.fees ?? "0",
+      supplies: body.supplies ?? "0",
+    });
+    const maxBuy = computeMaxBuy({
+      referencePriceAmount: body.referencePriceAmount ?? item.referencePriceAmount,
+      condition: body.condition ?? item.condition,
+      preferences: getPreferences(userId),
+    });
+    const updated = updateInventoryItem(userId, item.inventoryItemId, {
+      workflowState: "acquired",
+      condition: body.condition ?? item.condition,
+      selectedVariant: body.selectedVariant ?? item.selectedVariant,
+      referencePriceAmount: maxBuy.referencePriceAmount,
+      purchase: {
+        purchaseId: item.purchase?.purchaseId ?? crypto.randomUUID(),
+        purchasedAt: body.purchasedAt,
+        currency: LOCKED_DISPLAY_CURRENCY,
+        costBasis,
+        maxBuy,
+      },
+    });
+    return c.json({ ok: true, item: inventoryView(userId, updated ?? item) });
+  });
+
   app.post("/v1/inventory/:inventoryItemId/drafts", (c) => {
     const userId = c.get("userId");
     const item = getInventoryItem(userId, c.req.param("inventoryItemId"));
     if (!item) return c.json({ ok: false, error: "Inventory item not found" }, 404);
-    if (item.intent !== "purchased" || !item.purchase) {
+    if (isDetailsNeededPurchase(item) || item.intent !== "purchased" || !item.purchase) {
       return c.json(
         {
           ok: false,
-          error: "Listing drafts are Purchased only. Save as Purchased first.",
+          error: isDetailsNeededPurchase(item)
+            ? "Add purchase details before drafting. Cost basis is required."
+            : "Listing drafts are Purchased only. Save as Purchased first.",
         },
         409,
       );
@@ -1863,6 +3266,12 @@ export function createApp(
   return app;
 }
 
+/** UUID-shaped so scan paths and storage refs stay the same shape as random scan IDs. */
+function scanIdForIdempotency(userId: string, key: string): string {
+  const h = createHash("sha256").update(`${userId}\0scan\0${key}`).digest("hex");
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-4${h.slice(13, 16)}-a${h.slice(17, 20)}-${h.slice(20, 32)}`;
+}
+
 function inventoryIdForIdempotency(
   userId: string,
   intent: "purchased" | "watchlist",
@@ -1896,4 +3305,10 @@ function isIsoDateTime(value: string): boolean {
     );
   }
   return /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(value);
+}
+
+function timingSafeEqualString(a: string, b: string): boolean {
+  const left = Buffer.from(a);
+  const right = Buffer.from(b);
+  return left.length === right.length && timingSafeEqual(left, right);
 }

@@ -1,5 +1,7 @@
 import TCGdex, { Query } from "@tcgdex/sdk";
 import {
+  setUnmappedSetNameReporter,
+  type UnmappedSetNameReport,
   CATALOG_SEARCH_MANUALLY_MESSAGE,
   CatalogProviderError,
   MVP_TCGDEX_LANGUAGE,
@@ -227,4 +229,25 @@ export function createTcgdexCatalogProvider(
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+/** P1-04: set names the curated table missed, counted per name+source (in memory). */
+const unmappedSetNames = new Map<string, UnmappedSetNameReport & { count: number }>();
+
+export function unmappedSetNameCounts(): Array<UnmappedSetNameReport & { count: number }> {
+  return [...unmappedSetNames.values()].sort((a, b) => b.count - a.count);
+}
+
+/** Logs each unmapped vendor set name once (then counts repeats). Call at server start. */
+export function installUnmappedSetNameLogger(log: (line: string) => void = console.warn): void {
+  setUnmappedSetNameReporter((report) => {
+    const key = `${report.source}\0${report.setName.toLowerCase()}`;
+    const existing = unmappedSetNames.get(key);
+    if (existing) {
+      existing.count += 1;
+      return;
+    }
+    unmappedSetNames.set(key, { ...report, count: 1 });
+    log(JSON.stringify({ event: "unmapped_set_name", ...report }));
+  });
 }

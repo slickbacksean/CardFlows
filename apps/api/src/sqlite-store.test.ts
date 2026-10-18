@@ -303,10 +303,104 @@ describe("SQLite store adapter", () => {
         maxBuy,
       },
     });
+    const incomplete = store.saveInventoryItem({
+      inventoryItemId: crypto.randomUUID(),
+      userId,
+      cardflowCardId: canonicalCard.cardflowCardId as string,
+      confirmationId: confirmation.confirmationId,
+      scanId: confirmation.scanId,
+      intent: "purchased",
+      grain: "physical_copy",
+      selectedVariant: null,
+      condition: null,
+      quantity: 1,
+      tags: ["raw", "livestream", "livestream:whatnot"],
+      workflowState: "details_needed",
+      referencePriceAmount: null,
+      targetMaxBuyAmount: null,
+      createdAt: new Date().toISOString(),
+      purchase: {
+        purchaseId: crypto.randomUUID(),
+        purchasedAt: "2026-10-11T23:00:00.000Z",
+        currency: "USD",
+        costBasis: {
+          purchasePrice: null,
+          shipping: "0.00",
+          tax: "0.00",
+          fees: "0.00",
+          supplies: "0.00",
+          allInTotal: null,
+        },
+        maxBuy: computeMaxBuy({
+          referencePriceAmount: null,
+          preferences: store.getPreferences(userId),
+        }),
+      },
+    });
+    expect(store.getInventoryItem(userId, incomplete.inventoryItemId)?.workflowState).toBe(
+      "details_needed",
+    );
+    expect(
+      store.getInventoryItem(userId, incomplete.inventoryItemId)?.purchase?.costBasis.purchasePrice,
+    ).toBeNull();
+    expect(
+      store.getInventoryItem(userId, incomplete.inventoryItemId)?.purchase?.costBasis.allInTotal,
+    ).toBeNull();
+
     const loaded = store.getInventoryItem(userId, item.inventoryItemId);
     expect(loaded?.purchase?.costBasis.allInTotal).toBe("11.75");
     expect(loaded?.referencePriceAmount).toBe("20.00");
     expect(store.getCanonical(item.cardflowCardId)?.tcgdexId).toBe("base1-58");
+
+    expect(store.deleteInventoryItem(userId, incomplete.inventoryItemId)).toBe(true);
+    expect(store.getInventoryItem(userId, incomplete.inventoryItemId)).toBeUndefined();
+    expect(store.getInventoryItem(userId, item.inventoryItemId)?.purchase?.costBasis.allInTotal).toBe(
+      "11.75",
+    );
+    expect(store.deleteInventoryItem(userId, incomplete.inventoryItemId)).toBe(false);
+  });
+
+  it("persists a closed Watchlist row so convert-to-Purchased survives reopen", async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "cardflow-sqlite-"));
+    tempDirs.push(dir);
+    const sqlitePath = path.join(dir, "cardflow.sqlite");
+    const first = createSqliteStore({ sqlitePath });
+    const userId = DEFAULT_INVITED_USER_ID;
+    const { confirmation, canonicalCard } = first.confirmScan({
+      scan: first.saveScan(await makeScan(userId)),
+      selectedTcgdexId: "base1-58",
+    });
+    const watchlist = first.saveInventoryItem({
+      inventoryItemId: crypto.randomUUID(),
+      userId,
+      cardflowCardId: canonicalCard.cardflowCardId as string,
+      confirmationId: confirmation.confirmationId,
+      scanId: confirmation.scanId,
+      intent: "watchlist",
+      grain: "interest_not_physical_copy",
+      selectedVariant: "holo",
+      condition: "NM",
+      quantity: null,
+      tags: ["raw"],
+      workflowState: "watching",
+      referencePriceAmount: "8.00",
+      targetMaxBuyAmount: "5.57",
+      createdAt: new Date().toISOString(),
+      purchase: null,
+    });
+    first.updateInventoryItem(userId, watchlist.inventoryItemId, {
+      workflowState: "watchlist_closed",
+      closedAt: "2026-10-13T17:00:00.000Z",
+    });
+    first.close();
+
+    const second = createSqliteStore({ sqlitePath });
+    stores.push(second);
+    const loaded = second.getInventoryItem(userId, watchlist.inventoryItemId);
+    expect(loaded?.workflowState).toBe("watchlist_closed");
+    expect(loaded?.closedAt).toBe("2026-10-13T17:00:00.000Z");
+    expect(loaded?.selectedVariant).toBe("holo");
+    expect(loaded?.targetMaxBuyAmount).toBe("5.57");
   });
 
   it("persists hashed session tokens across reopen and never stores the raw token", () => {

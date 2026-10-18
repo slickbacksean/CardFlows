@@ -1,3 +1,4 @@
+import { reportUnmappedSetName, tcgdexSetIdForName } from "./set-name-map";
 import {
   CATALOG_SEARCH_MANUALLY_MESSAGE,
   catalogFeatureDisabledError,
@@ -122,7 +123,7 @@ async function mapPhashTcgdexIds(
       canonicalCardFromTcgdex(card, { cardflowCardId: null, cardsightCardId: null }),
     );
     return mappingResult(catalog, {
-      confidence: hits.length === 1 ? detection.confidence : "Medium",
+      confidence: hits.length === 1 ? (detection.confidence ?? "Low") : "Medium",
       status: "ambiguous",
       matchedOn: ["tcgdex_id"],
       cardflowCardId: null,
@@ -209,10 +210,18 @@ async function tryCompositeMap(
     return { resolvedSetId: null };
   }
 
-  const sets = await catalog.resolveSetByName(keys.setName, "en");
-  const needle = keys.setName.trim().toLowerCase();
-  const set =
-    sets.find((item) => item.name.toLowerCase() === needle) ?? sets[0] ?? null;
+  const curatedSetId = tcgdexSetIdForName(keys.setName);
+  let set: { id: string } | null = curatedSetId ? { id: curatedSetId } : null;
+  if (!set) {
+    const sets = await catalog.resolveSetByName(keys.setName, "en");
+    const needle = keys.setName.trim().toLowerCase();
+    set = sets.find((item) => item.name.toLowerCase() === needle) ?? sets[0] ?? null;
+    reportUnmappedSetName({
+      setName: keys.setName,
+      source: detectionSourceName(keys),
+      catalogSetId: set?.id ?? null,
+    });
+  }
   if (!set) {
     return { status: "no_match", resolvedSetId: null };
   }
@@ -558,4 +567,9 @@ async function mapRecognitionToCatalogUnchecked(
     },
     recommendedUx: CONFIRM_COULD_NOT_CONFIRM_MESSAGE,
   });
+}
+
+function detectionSourceName(keys: unknown): string {
+  const provider = (keys as { provider?: unknown }).provider;
+  return typeof provider === "string" ? provider : "recognition";
 }

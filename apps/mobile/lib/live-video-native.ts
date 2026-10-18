@@ -1,15 +1,21 @@
 /**
  * Optional native sample-buffer pump for in-stream live video.
  * Never the phone camera product, never a WebView screenshot.
+ *
+ * Expo Go (SDK 57) does not ship `cardflow-live-video`. Look the module up
+ * with `requireOptionalNativeModule` and treat a miss as "capture off" —
+ * never `requireNativeModule`, which throws at import / first call.
  */
 import { requireOptionalNativeModule } from "expo";
 import { NativeModules, Platform } from "react-native";
 import {
+  normalizeLiveCardBox,
   LIVE_VIDEO_IDENTITY_RGB_BYTES,
   LIVE_VIDEO_IDENTITY_RGB_SIZE,
   rgbPerceptualHash,
   type LiveVideoFrame,
 } from "@cardflow/shared";
+import { isExpoGoRuntime } from "./runtime-host";
 
 interface CardFlowLiveVideoNative {
   pullSampleBuffer?: () => Promise<unknown>;
@@ -18,15 +24,32 @@ interface CardFlowLiveVideoNative {
   setYoloDetect?: (active: boolean) => Promise<void>;
 }
 
+/** Custom native modules that are not compiled into Expo Go. */
+export const EXPO_GO_OPTIONAL_NATIVE_MODULES = ["CardFlowLiveVideo"] as const;
+
+function optionalNativeModule<T extends object>(name: string): T | null {
+  if (Platform.OS === "web") return null;
+  try {
+    const expoModule = requireOptionalNativeModule<T>(name);
+    if (expoModule) return expoModule;
+  } catch {
+    /* Expo Go and other hosts without this custom module */
+  }
+  try {
+    const modules = NativeModules as Record<string, T | undefined>;
+    return modules[name] ?? null;
+  } catch {
+    return null;
+  }
+}
+
 function nativeModule(): CardFlowLiveVideoNative | null {
-  const expoModule = requireOptionalNativeModule<CardFlowLiveVideoNative>("CardFlowLiveVideo");
-  if (expoModule?.pullSampleBuffer) return expoModule;
-  const modules = NativeModules as { CardFlowLiveVideo?: CardFlowLiveVideoNative };
-  return modules.CardFlowLiveVideo ?? null;
+  return optionalNativeModule<CardFlowLiveVideoNative>("CardFlowLiveVideo");
 }
 
 export function isLiveVideoNativeAvailable(): boolean {
   if (Platform.OS === "web") return false;
+  if (isExpoGoRuntime()) return false;
   return Boolean(nativeModule()?.pullSampleBuffer);
 }
 
@@ -62,6 +85,12 @@ function identityHashFromRgb(raw: unknown): string | null {
     height: LIVE_VIDEO_IDENTITY_RGB_SIZE,
     data,
   });
+}
+
+function cropQuad(raw: unknown): number[] | null {
+  if (!Array.isArray(raw) || raw.length !== 8) return null;
+  if (!raw.every((v) => typeof v === "number" && Number.isFinite(v))) return null;
+  return raw as number[];
 }
 
 export async function setLiveVideoScannerSession(active: boolean): Promise<void> {
@@ -110,6 +139,9 @@ export async function pullLiveVideoSampleBuffer(): Promise<LiveVideoFrame | null
       identityHash: identityHashFromRgb(frame.identityRgb),
       identityCropJpeg:
         typeof frame.identityCropJpeg === "string" ? frame.identityCropJpeg : null,
+      identityCropQuad: cropQuad(frame.identityCropQuad),
+      cardBox: normalizeLiveCardBox(frame.cardBox),
+      detectMs: typeof frame.detectMs === "number" ? frame.detectMs : null,
       videoFrameJpeg: typeof frame.videoFrameJpeg === "string" ? frame.videoFrameJpeg : null,
     };
   } catch {

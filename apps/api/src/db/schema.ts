@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import {
   check,
+  index,
   integer,
   primaryKey,
   real,
@@ -67,6 +68,8 @@ export const crmScans = sqliteTable("crm_scans", {
   imageStorageRef: text("image_storage_ref"),
   imageSource: text("image_source").notNull().default("user_capture"),
   imageMimeType: text("image_mime_type"),
+  /** Backend review M2: Idempotency-Key request body hash (replay after restart → 422 on mismatch). */
+  idempotencyBodyHash: text("idempotency_body_hash"),
   recognitionJson: text("recognition_json").notNull(),
   mappingJson: text("mapping_json"),
   mappingStatus: text("mapping_status"),
@@ -125,7 +128,7 @@ export const crmInventoryItems = sqliteTable(
     check("crm_inventory_items_intent_chk", sql`${table.intent} in ('purchased', 'watchlist')`),
     check(
       "crm_inventory_items_workflow_state_chk",
-      sql`${table.workflowState} in ('watching', 'watchlist_closed', 'acquired', 'drafted', 'archived')`,
+      sql`${table.workflowState} in ('watching', 'watchlist_closed', 'acquired', 'drafted', 'archived', 'details_needed')`,
     ),
     uniqueIndex("crm_inventory_items_watchlist_open_uidx")
       .on(table.userId, table.cardflowCardId, table.selectedVariant)
@@ -144,12 +147,12 @@ export const crmPurchases = sqliteTable(
     purchasedAt: text("purchased_at").notNull(),
     sourceNote: text("source_note"),
     currency: text("currency").notNull().default("USD"),
-    purchasePrice: integer("purchase_price").notNull(),
+    purchasePrice: integer("purchase_price"),
     shipping: integer("shipping").notNull().default(0),
     tax: integer("tax").notNull().default(0),
     fees: integer("fees").notNull().default(0),
     supplies: integer("supplies").notNull().default(0),
-    allInTotal: integer("all_in_total").notNull(),
+    allInTotal: integer("all_in_total"),
     notes: text("notes"),
     maxBuyAmount: integer("max_buy_amount"),
     referencePriceAmount: integer("reference_price_amount"),
@@ -204,8 +207,112 @@ export const crmSessions = sqliteTable(
     userId: text("user_id").notNull(),
     createdAt: text("created_at").notNull(),
     expiresAt: text("expires_at").notNull(),
+    isGuest: integer("is_guest", { mode: "boolean" }).notNull().default(false),
   },
-  (table) => [unique("crm_sessions_token_hash").on(table.tokenHash)],
+  (table) => [
+    unique("crm_sessions_token_hash").on(table.tokenHash),
+    index("crm_sessions_guest_expiry_idx").on(table.isGuest, table.expiresAt),
+  ],
+);
+
+/** Open sign-up: email + scrypt password hash. `user_id` is `acct_<uuid>`. */
+export const userAccounts = sqliteTable(
+  "user_accounts",
+  {
+    userId: text("user_id").primaryKey(),
+    email: text("email").notNull(),
+    passwordHash: text("password_hash").notNull(),
+    createdAt: text("created_at").notNull(),
+    /** Null until the 6-digit code is confirmed. Accounts from before 0017 are backfilled. */
+    emailVerifiedAt: text("email_verified_at"),
+    /** Backend review M1: verification codes ever sent (lifetime cap). */
+    verificationSends: integer("verification_sends").notNull().default(0),
+  },
+  (table) => [unique("user_accounts_email").on(table.email)],
+);
+
+/**
+ * Sean: CardSight consent, current state per user. Backend review M4: a decline is `declined_at`
+ * (never a fake grant); every change is also appended to `consent_events`.
+ */
+export const providerConsents = sqliteTable(
+  "provider_consents",
+  {
+    userId: text("user_id").notNull(),
+    provider: text("provider", { enum: ["cardsight"] }).notNull(),
+    version: text("version").notNull(),
+    grantedAt: text("granted_at"),
+    declinedAt: text("declined_at"),
+    withdrawnAt: text("withdrawn_at"),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.userId, table.provider] }),
+    check("provider_consents_provider_chk", sql`${table.provider} in ('cardsight')`),
+  ],
+);
+
+/** Backend review M4: append-only consent history (grant, decline, withdraw), never updated. */
+export const consentEvents = sqliteTable(
+  "consent_events",
+  {
+    seq: integer("seq").primaryKey({ autoIncrement: true }),
+    eventId: text("event_id").notNull(),
+    userId: text("user_id").notNull(),
+    provider: text("provider", { enum: ["cardsight"] }).notNull(),
+    kind: text("kind", { enum: ["grant", "decline", "withdraw"] }).notNull(),
+    version: text("version").notNull(),
+    at: text("at").notNull(),
+  },
+  (table) => [
+    unique("consent_events_event_id").on(table.eventId),
+    index("consent_events_user_idx").on(table.userId, table.seq),
+    check("consent_events_kind_chk", sql`${table.kind} in ('grant', 'decline', 'withdraw')`),
+  ],
+);
+
+/** Backend review M5: CardSight calls per user per calendar month (signed-in and guest caps). */
+export const cardsightUserUsage = sqliteTable(
+  "cardsight_user_usage",
+  {
+    userId: text("user_id").notNull(),
+    monthKey: text("month_key").notNull(),
+    used: integer("used").notNull().default(0),
+  },
+  (table) => [primaryKey({ columns: [table.userId, table.monthKey] })],
+);
+
+/** Backend review M1: emails per address per UTC day (pruned after a day). */
+export const emailSendCounts = sqliteTable(
+  "email_send_counts",
+  {
+    email: text("email").notNull(),
+    day: text("day").notNull(),
+    count: integer("count").notNull().default(0),
+  },
+  (table) => [primaryKey({ columns: [table.email, table.day] })],
+);
+
+/** Email verification: one live 6-digit code per user (SHA-256 only), 15 min, 5 tries. */
+export const emailVerificationCodes = sqliteTable("email_verification_codes", {
+  userId: text("user_id").primaryKey(),
+  codeHash: text("code_hash").notNull(),
+  createdAt: text("created_at").notNull(),
+  expiresAt: text("expires_at").notNull(),
+  attempts: integer("attempts").notNull().default(0),
+});
+
+/** Forgot password: single-use, 1 h tokens. Only the SHA-256 of the token is stored. */
+export const passwordResetTokens = sqliteTable(
+  "password_reset_tokens",
+  {
+    tokenHash: text("token_hash").primaryKey(),
+    userId: text("user_id").notNull(),
+    createdAt: text("created_at").notNull(),
+    expiresAt: text("expires_at").notNull(),
+    usedAt: text("used_at"),
+  },
+  (table) => [index("password_reset_tokens_user_idx").on(table.userId)],
 );
 
 /** Server-side CardFlow invited user → PokéCollector user. Never a client JWT. */
@@ -263,6 +370,22 @@ export const crmGradingReturned = sqliteTable("crm_grading_returned", {
   returnedAt: text("returned_at").notNull(),
 });
 
+/**
+ * Persisted first-party grade stills. Files live next to SQLite; this row is
+ * the retention clock. Deleted after 30 days or on account deletion.
+ */
+export const gradePhotoObjects = sqliteTable(
+  "grade_photo_objects",
+  {
+    userId: text("user_id").notNull(),
+    inventoryItemId: text("inventory_item_id").notNull(),
+    side: text("side").notNull(),
+    storageRef: text("storage_ref").notNull(),
+    createdAt: text("created_at").notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.userId, table.inventoryItemId, table.side] })],
+);
+
 /** Photo estimate for one inventory copy. Reused until the photos change. */
 export const gradeEstimateCache = sqliteTable(
   "grade_estimate_cache",
@@ -293,8 +416,179 @@ export const portfolioValueSnapshots = sqliteTable(
   (table) => [primaryKey({ columns: [table.userId, table.snapshotDate] })],
 );
 
+/** Plan + purchased extra pre-grade credits. Monthly usage is in grade_quota_usage. */
+export const gradeAccounts = sqliteTable(
+  "grade_accounts",
+  {
+    userId: text("user_id").primaryKey(),
+    plan: text("plan").notNull().default("free"),
+    extraCredits: integer("extra_credits").notNull().default(0),
+    updatedAt: text("updated_at").notNull(),
+    /** Allowance anchor: when the account was first seen (free users reset on this day). */
+    anchorAt: text("anchor_at"),
+    /** Billing date once premium billing exists; wins over anchor_at. */
+    billingAnchorAt: text("billing_anchor_at"),
+    /** Period of the last credit purchase (informational). Bought credits never expire (Sean, Oct 16). */
+    creditsPeriod: text("credits_period"),
+  },
+  (table) => [check("grade_accounts_plan_chk", sql`${table.plan} in ('free', 'premium')`)],
+);
+
+/** Pre-grade estimates used in one UTC calendar month. */
+export const gradeQuotaUsage = sqliteTable(
+  "grade_quota_usage",
+  {
+    userId: text("user_id").notNull(),
+    monthKey: text("month_key").notNull(),
+    used: integer("used").notNull().default(0),
+  },
+  (table) => [primaryKey({ columns: [table.userId, table.monthKey] })],
+);
+
+/** Global vendor call budget (CardSight identify). */
+export const vendorQuotaUsage = sqliteTable(
+  "vendor_quota_usage",
+  {
+    provider: text("provider").notNull(),
+    monthKey: text("month_key").notNull(),
+    used: integer("used").notNull().default(0),
+  },
+  (table) => [primaryKey({ columns: [table.provider, table.monthKey] })],
+);
+
+/** P1-26: what Confirm showed and what was picked. Metadata only, no photos. */
+export const scanConfirmEvents = sqliteTable(
+  "scan_confirm_events",
+  {
+    eventId: integer("event_id").primaryKey({ autoIncrement: true }),
+    scanId: text("scan_id").notNull(),
+    userId: text("user_id").notNull(),
+    via: text("via").notNull(),
+    shownTcgdexIdsJson: text("shown_tcgdex_ids_json").notNull(),
+    chosenTcgdexId: text("chosen_tcgdex_id").notNull(),
+    chosenRank: integer("chosen_rank"),
+    selectedVariant: text("selected_variant"),
+    confidence: text("confidence"),
+    recognitionProvider: text("recognition_provider"),
+    createdAt: text("created_at").notNull(),
+  },
+  (table) => [
+    index("scan_confirm_events_chosen_idx").on(table.chosenTcgdexId),
+    index("scan_confirm_events_created_idx").on(table.createdAt),
+    index("scan_confirm_events_user_idx").on(table.userId),
+    index("scan_confirm_events_user_created_idx").on(table.userId, table.createdAt),
+    index("scan_confirm_events_scan_idx").on(table.scanId),
+  ],
+);
+
+/** P1-12: reference prices the user typed (source "you"). */
+export const userPriceSnapshots = sqliteTable(
+  "user_price_snapshots",
+  {
+    snapshotId: text("snapshot_id").primaryKey(),
+    userId: text("user_id").notNull(),
+    tcgdexId: text("tcgdex_id").notNull(),
+    variant: text("variant"),
+    amountCents: integer("amount_cents").notNull(),
+    currency: text("currency").notNull().default("USD"),
+    enteredAt: text("entered_at").notNull(),
+  },
+  (table) => [index("user_price_snapshots_card_idx").on(table.userId, table.tcgdexId, table.enteredAt)],
+);
+
+/** P2-03: per-user sale records for the P&L. Cents; fees optional. */
+export const userCardSales = sqliteTable(
+  "user_card_sales",
+  {
+    userId: text("user_id").notNull(),
+    inventoryItemId: text("inventory_item_id").notNull(),
+    salePriceCents: integer("sale_price_cents").notNull(),
+    saleFeesCents: integer("sale_fees_cents"),
+    saleAt: text("sale_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.userId, table.inventoryItemId] }),
+    index("user_card_sales_sale_at_idx").on(table.saleAt),
+  ],
+);
+
+/** P2-07: per-user pre-grade estimate history (estimates only, not official grades). */
+export const gradeEstimateHistory = sqliteTable(
+  "grade_estimate_history",
+  {
+    entryId: text("entry_id").primaryKey(),
+    userId: text("user_id").notNull(),
+    inventoryItemId: text("inventory_item_id").notNull(),
+    overall: real("overall").notNull(),
+    confidence: text("confidence"),
+    recordedAt: text("recorded_at").notNull(),
+  },
+  (table) => [index("grade_estimate_history_item_idx").on(table.userId, table.inventoryItemId, table.recordedAt)],
+);
+
+/** Data Engineer review: append-only purchase ledger (see purchase-ledger.ts). */
+export const purchaseEvents = sqliteTable(
+  "purchase_events",
+  {
+    seq: integer("seq").primaryKey({ autoIncrement: true }),
+    eventId: text("event_id").notNull(),
+    purchaseId: text("purchase_id").notNull(),
+    userId: text("user_id").notNull(),
+    inventoryItemId: text("inventory_item_id").notNull(),
+    kind: text("kind").notNull(),
+    purchasedAt: text("purchased_at").notNull(),
+    snapshot: text("snapshot"),
+    at: text("at").notNull(),
+  },
+  (table) => [
+    uniqueIndex("purchase_events_event_id").on(table.eventId),
+    index("purchase_events_user_purchased_idx").on(table.userId, table.purchasedAt),
+    index("purchase_events_purchase_idx").on(table.purchaseId, table.seq),
+    index("purchase_events_item_idx").on(table.inventoryItemId),
+    check("purchase_events_kind_chk", sql`${table.kind} in ('recorded', 'edited', 'voided')`),
+  ],
+);
+
+/** Backend review M3: persisted Idempotency-Key results for queued writes (24 h). */
+export const idempotencyKeys = sqliteTable(
+  "idempotency_keys",
+  {
+    userId: text("user_id").notNull(),
+    idemKey: text("idem_key").notNull(),
+    bodyHash: text("body_hash").notNull(),
+    status: integer("status").notNull(),
+    response: text("response").notNull(),
+    createdAt: text("created_at").notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.userId, table.idemKey] }), index("idempotency_keys_created_idx").on(table.createdAt)],
+);
+
+/**
+ * Sean (Oct 17): accounts attest 18+ (sign-up checkbox, or an in-app confirmation for testers and
+ * existing accounts). Only the attestation, its time and the wording version; never a birth date.
+ */
+export const ageConfirmations = sqliteTable(
+  "age_confirmations",
+  {
+    userId: text("user_id").primaryKey(),
+    ageConfirmed18Plus: integer("age_confirmed_18plus", { mode: "boolean" }).notNull(),
+    ageAttestedAt: text("age_attested_at").notNull(),
+    version: text("version").notNull(),
+  },
+  (table) => [check("age_confirmations_true_chk", sql`${table.ageConfirmed18Plus} = 1`)],
+);
+
 export const schema = {
+  ageConfirmations,
   cardflowCards,
+  userAccounts,
+  passwordResetTokens,
+  emailVerificationCodes,
+  providerConsents,
+  consentEvents,
+  cardsightUserUsage,
+  emailSendCounts,
   cardExternalIds,
   crmScans,
   crmConfirmations,
@@ -307,5 +601,15 @@ export const schema = {
   crmGradingSubmitted,
   crmGradingReturned,
   gradeEstimateCache,
+  gradePhotoObjects,
   portfolioValueSnapshots,
+  gradeAccounts,
+  gradeQuotaUsage,
+  vendorQuotaUsage,
+  scanConfirmEvents,
+  userPriceSnapshots,
+  userCardSales,
+  gradeEstimateHistory,
+  purchaseEvents,
+  idempotencyKeys,
 };

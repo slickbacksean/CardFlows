@@ -1,5 +1,7 @@
 import {
+  AGE_GATE_COPY,
   MARKETPLACE_AUTOMATION_NO_ENABLE_COPY,
+  PRACTICE_COPY,
   SETTINGS_KICKER,
   SETTINGS_RESEARCH_FLAGS,
   SETTINGS_RESEARCH_SECTION_LABEL,
@@ -12,14 +14,21 @@ import {
   type CardFlowHealth,
   type InvitedIdentity,
   type SettingsStackLoad,
+  classifyLoadError,
+  SCREEN_LOADING_LABELS,
+  SCREEN_STATE_COPY,
+  SETTINGS_STATUS_COPY,
 } from "@cardflow/shared";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { PreferencesScreenHeader } from "@/components/ui/preferences-screen-header";
+import { PrimaryButton } from "@/components/ui/primary-button";
+import { InfoRow } from "@/components/ui/screen-state";
 import { getHealth } from "@/lib/api";
 import {
+  isGuestSession,
   loadIdentitySession,
 } from "@/lib/identity";
 import { colors, space } from "@/lib/theme";
@@ -30,6 +39,29 @@ export default function SettingsScreen() {
   const [identity, setIdentity] = useState<InvitedIdentity | null>(null);
   const [stack, setStack] = useState<CardFlowHealth | null>(null);
   const [stackLoad, setStackLoad] = useState<SettingsStackLoad>("checking");
+  const [stackError, setStackError] = useState<string | null>(null);
+
+  const checkHealth = useCallback((isCancelled: () => boolean = () => false) => {
+    setStackLoad("checking");
+    setStackError(null);
+    void getHealth()
+      .then((health) => {
+        if (isCancelled()) return;
+        setStack(health);
+        setStackLoad("ready");
+      })
+      .catch((caught: unknown) => {
+        if (isCancelled()) return;
+        setStack(null);
+        setStackLoad("unavailable");
+        // UX review P1-6: information, not a user error. Offline says so.
+        setStackError(
+          classifyLoadError(caught) === "offline"
+            ? `${SCREEN_STATE_COPY.offlineTitle}. ${SCREEN_STATE_COPY.offlineBody}`
+            : SETTINGS_STATUS_COPY.checkFailed,
+        );
+      });
+  }, []);
 
   const applySession = useCallback(
     (session: { identity: InvitedIdentity | null }) => {
@@ -52,21 +84,11 @@ export default function SettingsScreen() {
           applySession({ identity: null });
           setKicker(SETTINGS_KICKER);
         });
-      void getHealth()
-        .then((health) => {
-          if (cancelled) return;
-          setStack(health);
-          setStackLoad("ready");
-        })
-        .catch(() => {
-          if (cancelled) return;
-          setStack(null);
-          setStackLoad("unavailable");
-        });
+      checkHealth(() => cancelled);
       return () => {
         cancelled = true;
       };
-    }, [applySession]),
+    }, [applySession, checkHealth]),
   );
 
   return (
@@ -75,17 +97,32 @@ export default function SettingsScreen() {
       <ScrollView contentContainerStyle={styles.content} style={styles.flex}>
         <Text style={styles.kicker}>{kicker}</Text>
 
-        <Text style={styles.sectionFirst}>This tester</Text>
-        <Text style={styles.body}>{identity?.label ?? "No invite session"}</Text>
+        <Text style={styles.sectionFirst}>Account</Text>
+        <Text style={styles.body}>{identity?.label ?? "Not signed in"}</Text>
+        <JobRow label="Sign in or sign up" onPress={() => router.push("/sign-up")} />
         <JobRow
-          label="Use a different invite code"
+          label="Use a tester invite code"
           onPress={() => router.push("/switch-tester")}
+        />
+
+        <JobRow
+          label={PRACTICE_COPY.entryLabel}
+          onPress={() => router.push("/practice")}
         />
 
         <JobRow
           label={settingsJobLabel("max_buy_rules")}
           onPress={() => router.push("/max-buy-rules")}
         />
+
+        <JobRow label="Usage analytics" onPress={() => router.push("/analytics")} />
+
+        {/* Policy Reviewer (Oct 17): guests get no provider toggle, only a sign-up row. */}
+        {isGuestSession() ? (
+          <JobRow label={AGE_GATE_COPY.guestSettings} onPress={() => router.push("/sign-up")} />
+        ) : (
+          <JobRow label="Card recognition" onPress={() => router.push("/card-recognition")} />
+        )}
 
         <Text style={styles.section}>{SETTINGS_STACK_SECTION_LABEL}</Text>
         {SETTINGS_STACK_STATUS_ROWS.map((row) => {
@@ -103,6 +140,23 @@ export default function SettingsScreen() {
             </View>
           );
         })}
+
+        {stackLoad === "checking" ? (
+          <Text accessibilityLiveRegion="polite" style={styles.body}>
+            {SCREEN_LOADING_LABELS.settings}
+          </Text>
+        ) : null}
+        {stackLoad === "unavailable" ? (
+          <>
+            <InfoRow message={stackError} />
+            <PrimaryButton
+              accessibilityLabel={SETTINGS_STATUS_COPY.retryLabel}
+              label={SCREEN_STATE_COPY.retry}
+              onPress={() => checkHealth()}
+              tone="muted"
+            />
+          </>
+        ) : null}
 
         <Text style={styles.section}>{SETTINGS_RESEARCH_SECTION_LABEL}</Text>
         {SETTINGS_RESEARCH_FLAGS.map((flag) => {

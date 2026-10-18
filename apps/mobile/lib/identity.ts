@@ -1,5 +1,7 @@
-import { type InvitedIdentity } from "@cardflow/shared";
-import { createSession, getIdentity, listInventory } from "./api";
+import { isGuestUserId, type InvitedIdentity } from "@cardflow/shared";
+import { createAccount, createGuestSession, createSession, getIdentity, listInventory, signInWithPassword } from "./api";
+import { resetAgeConfirmationCache } from "./age-confirmation";
+import { resetCardSightConsentCache } from "./cardsight-consent";
 import { stopLiveVideoIdentify } from "./live-identify";
 import { clearLivestreamOverlay } from "./livestream";
 import {
@@ -13,6 +15,8 @@ import {
 interface IdentitySession {
   identity: InvitedIdentity | null;
   invitedUsers: InvitedIdentity[];
+  /** Open sign-up accounts: false until the emailed code is confirmed. */
+  emailVerified?: boolean;
 }
 
 let cachedUserId: string | null = null;
@@ -50,11 +54,33 @@ function requestStatus(error: unknown): number | undefined {
   return typeof status === "number" ? status : undefined;
 }
 
+/** Open sign-up / sign-in. The guest bearer rides along so the API moves the guest's scans. */
+export async function signUpWithEmail(
+  email: string,
+  password: string,
+  mode: "sign_up" | "sign_in",
+  ageConfirmed18Plus = false,
+): Promise<IdentitySession> {
+  const result = mode === "sign_up" ? await createAccount(email, password, ageConfirmed18Plus) : await signInWithPassword(email, password);
+  await persistSessionToken(result.token);
+  setSessionToken(result.token);
+  const session = { ...toSession(result), emailVerified: result.emailVerified };
+  rememberIdentity(session.identity);
+  // A guest's CardSight answer moves with the account; anyone else is re-checked on next upload.
+  resetCardSightConsentCache();
+  resetAgeConfirmationCache();
+  restorePromise = Promise.resolve(session);
+  return session;
+}
+
 export async function redeemInviteCode(inviteCode: string): Promise<IdentitySession> {
   const result = await createSession(inviteCode);
   await persistSessionToken(result.token);
   const session = toSession(result);
   rememberIdentity(session.identity);
+  // A guest's CardSight answer moves with the account; anyone else is re-checked on next upload.
+  resetCardSightConsentCache();
+  resetAgeConfirmationCache();
   restorePromise = Promise.resolve(session);
   stopLiveVideoIdentify();
   clearLivestreamOverlay();
@@ -77,8 +103,22 @@ async function restoreIdentitySession(): Promise<IdentitySession> {
     setSessionToken(null);
     await persistSessionToken(null);
   }
-  rememberIdentity(null);
-  return signedOut;
+  // No stored session -> try a browse-only guest session. 404 = guest mode is off.
+  try {
+    const guest = await createGuestSession();
+    setSessionToken(guest.token);
+    await persistSessionToken(guest.token);
+    rememberIdentity(guest.identity);
+    return { identity: guest.identity, invitedUsers: [] };
+  } catch {
+    rememberIdentity(null);
+    return signedOut;
+  }
+}
+
+/** D9: true while the app runs on a guest session. */
+export function isGuestSession(): boolean {
+  return isGuestUserId(cachedUserId);
 }
 
 export async function ensureIdentitySession(): Promise<IdentitySession> {

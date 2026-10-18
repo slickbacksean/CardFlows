@@ -2,6 +2,7 @@ import {
   buildClipboardExport,
   canMarkReadyForReview,
   computeCostToAskSpread,
+  purchasedAllInAmount,
   descriptionStarter,
   LISTING_AI_COPY_ENABLED,
   LOCKED_DISPLAY_CURRENCY,
@@ -123,13 +124,14 @@ export function applyDraftPatch(
 export function draftView(draft: ListingDraft, item: InventoryItemRecord) {
   const spread = computeCostToAskSpread({
     askingPrice: draft.askingPrice,
-    allInTotal: item.purchase?.costBasis.allInTotal ?? null,
+    allInTotal: purchasedAllInAmount(item),
     currency: LOCKED_DISPLAY_CURRENCY,
+    workflowState: item.workflowState,
   });
   return {
     draft,
     costToAsk: spread,
-    allInTotal: item.purchase?.costBasis.allInTotal ?? null,
+    allInTotal: purchasedAllInAmount(item),
     readyForReview: {
       required: ["title", "condition", "asking_price"],
       missing: readyForReviewMissing(draft),

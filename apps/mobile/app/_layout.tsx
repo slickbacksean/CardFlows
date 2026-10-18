@@ -1,13 +1,25 @@
-import { type ErrorBoundaryProps, Link, Stack } from "expo-router";
+import { QueryClientProvider } from "@tanstack/react-query";
+import { type ErrorBoundaryProps, Link, Stack, router } from "expo-router";
+import { EMAIL_VERIFICATION_COPY } from "@cardflow/shared";
+import { onEmailUnverified, onSignupRequired } from "@/lib/api";
 import { StatusBar } from "expo-status-bar";
 import { useEffect, useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { startWriteQueue } from "@/lib/write-queue";
+import { startScanQueue } from "@/lib/scan-queue";
+import { flushProductEvents, loadAnalyticsPreference } from "@/lib/product-events";
+import { Alert, AppState, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { PrimaryButton } from "@/components/ui/primary-button";
 import { ensureIdentitySession } from "@/lib/identity";
+import { showSignupPrompt } from "@/lib/signup-prompt";
+import { cardFlowQueryClient } from "@/lib/query-client";
+import { captureMobileException, initMobileSentry } from "@/lib/sentry";
 import { colors, space } from "@/lib/theme";
 
+initMobileSentry();
+
 export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
+  captureMobileException(error);
   return (
     <SafeAreaView style={styles.safe}>
       <View style={styles.stack}>
@@ -27,15 +39,43 @@ export default function RootLayout() {
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
+    // D7: send queued opt-in events when the app goes to the background.
+    const sub = AppState.addEventListener("change", (next) => {
+      if (next !== "active") void flushProductEvents();
+    });
+    return () => sub.remove();
+  }, []);
+
+  useEffect(() => {
+    void loadAnalyticsPreference();
     void ensureIdentitySession()
       .catch(() => undefined)
       .finally(() => setReady(true));
   }, []);
 
+  // Browse-only guests (Sean, Oct 17): the API's 403 signup_required opens the one sign-up prompt.
+  useEffect(() => onSignupRequired(() => showSignupPrompt()), []);
+  // Sean: pre-grade estimates need a verified email. One prompt, then the code screen.
+  useEffect(() => {
+    let showing = false;
+    return onEmailUnverified(() => {
+      if (showing) return;
+      showing = true;
+      // UX review P1-8 / Community review 2: plain copy, a Verify email button, and the
+      // code screen knows a pre-grade estimate is waiting.
+      Alert.alert(EMAIL_VERIFICATION_COPY.promptTitle, EMAIL_VERIFICATION_COPY.promptBody, [
+        { text: "Not now", style: "cancel", onPress: () => { showing = false; } },
+        { text: "Verify email", onPress: () => { showing = false; router.push({ pathname: "/verify-email", params: { from: "pregrade" } }); } },
+      ], { cancelable: true, onDismiss: () => { showing = false; } });
+    });
+  }, []);
+  useEffect(() => (ready ? startWriteQueue() : undefined), [ready]);
+  useEffect(() => (ready ? startScanQueue() : undefined), [ready]);
+
   if (!ready) return null;
 
   return (
-    <>
+    <QueryClientProvider client={cardFlowQueryClient}>
       <Stack
         screenOptions={{
           headerStyle: { backgroundColor: colors.bg },
@@ -56,12 +96,17 @@ export default function RootLayout() {
         <Stack.Screen name="draft/[draftId]" options={{ headerShown: false }} />
         <Stack.Screen name="settings" options={{ headerShown: false }} />
         <Stack.Screen name="switch-tester" options={{ headerShown: false }} />
+        <Stack.Screen name="sign-up" options={{ headerShown: false }} />
         <Stack.Screen name="about" options={{ headerShown: false }} />
+        <Stack.Screen name="analytics" options={{ headerShown: false }} />
+        <Stack.Screen name="practice" options={{ headerShown: false }} />
         <Stack.Screen name="max-buy-rules" options={{ headerShown: false }} />
         <Stack.Screen name="watch" options={{ headerShown: false }} />
+        <Stack.Screen name="verify-email" options={{ headerShown: false }} />
+        <Stack.Screen name="card-recognition" options={{ headerShown: false }} />
       </Stack>
       <StatusBar style="light" />
-    </>
+    </QueryClientProvider>
   );
 }
 

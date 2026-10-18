@@ -8,6 +8,9 @@ interface PrimaryButtonProps {
   onPress: () => void;
   disabled?: boolean;
   tone?: PrimaryButtonTone;
+  /** Defaults to the label. */
+  accessibilityLabel?: string;
+  accessibilityHint?: string;
 }
 
 const TONE_STYLES: Record<PrimaryButtonTone, { backgroundColor: string; color: string }> = {
@@ -22,12 +25,17 @@ export function PrimaryButton({
   onPress,
   disabled,
   tone = "cta",
+  accessibilityLabel,
+  accessibilityHint,
 }: PrimaryButtonProps) {
   const { backgroundColor, color } = TONE_STYLES[tone];
 
   return (
     <Pressable
+      accessibilityHint={accessibilityHint}
+      accessibilityLabel={accessibilityLabel ?? label}
       accessibilityRole="button"
+      accessibilityState={{ disabled: Boolean(disabled) }}
       disabled={disabled}
       onPress={onPress}
       style={[styles.button, { backgroundColor, opacity: disabled ? 0.5 : 1 }]}
@@ -43,6 +51,9 @@ const styles = StyleSheet.create({
     paddingVertical: space.sm + 2,
     paddingHorizontal: space.md,
     alignItems: "center",
+    justifyContent: "center",
+    // 48 dp covers iOS 44 pt and Android 48 dp; grows with Dynamic Type.
+    minHeight: 48,
   },
   label: {
     fontSize: 15,

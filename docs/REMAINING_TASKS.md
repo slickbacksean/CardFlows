@@ -28,7 +28,7 @@ The “Done” blurb at the top of [ROADMAP.md](./ROADMAP.md) is stale. Capture 
 
 **Already closed (do not redo):** money parser (`parseDollarsToCents` rejects `1.2.`, `$5`, `12,50`, `abc`, and negatives with 400, nothing stored); invite sessions (`POST /v1/sessions` and `PATCH /v1/identity` require an invite code; auto-session only when `CARD_FLOW_DEV_AUTO_SESSION=true`); OpenCLIP phases A–B, including accept threshold B2 (the unchecked B2 line in [LIVE_IDENTITY_OPENCLIP_STEPS.md](./LIVE_IDENTITY_OPENCLIP_STEPS.md) is stale).
 
-**Already on this machine (not new work):** gitignored YOLO weights, English pHash index, SQLite, OpenCLIP URL and visual index, PokéCollector URL, Claude grade key and workspace id, PokeTrace key and URL, mobile `EXPO_PUBLIC_API_URL`. Leave empty on purpose: CardSight key, live-identity ONNX path, PSA sidecar URL (Claude is the grade path while that URL is unset), custom invite codes (defaults stay `alex-beta` and `jordan-beta`).
+**Already on this machine (not new work):** gitignored YOLO weights, English pHash index, SQLite, OpenCLIP URL and visual index, PokéCollector URL, Claude grade key and workspace id, PokeTrace key and URL, mobile `EXPO_PUBLIC_API_URL`. Leave empty on purpose: CardSight key, live-identity ONNX path, PSA sidecar URL (Claude is the grade path while that URL is unset), tester invite codes (env only, no defaults; unset = off).
 
 ---
 
@@ -48,7 +48,7 @@ Touch: [apps/api/src/recognition-env.ts](../apps/api/src/recognition-env.ts), Ca
 
 - [x] Done.
 
-Default grade estimate is `off` outside tests. Missing PSA URL and missing Anthropic key stay `off`, not mock “Estimate 8.5.” The sheet says “Estimate unavailable.” This machine already has Claude configured, so a configured local API may still return a vision estimate.
+Default grade estimate is `off` outside tests. Missing PSA URL and missing Anthropic key stay `off`, not mock “Estimate 8.5.” The sheet says “Pre-grade estimate unavailable. Try again later.” This machine already has Claude configured, so a configured local API may still return a vision estimate.
 
 Touch: [apps/api/src/grade-estimate-env.ts](../apps/api/src/grade-estimate-env.ts), Prepare sheet.
 

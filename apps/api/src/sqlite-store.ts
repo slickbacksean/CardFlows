@@ -1,6 +1,8 @@
 import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { and, asc, desc, eq, gte } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, isNull } from "drizzle-orm";
+import type { ConfirmEvent, UserPriceSnapshot } from "@cardflow/shared";
+import { USER_PRICE_SNAPSHOTS_PER_CARD } from "./store";
 import {
   catalogFingerprint,
   cachedCatalogCardMatches,
@@ -8,6 +10,7 @@ import {
   computeMaxBuy,
   confirmIdentity,
   DEFAULT_MAX_BUY_PREFERENCES,
+  GRADE_SIDES,
   LISTING_AI_COPY_ENABLED,
   listInvitedIdentities,
   LOCKED_DISPLAY_CURRENCY,
@@ -31,16 +34,27 @@ import {
   type RecognitionScenario,
   type TitleTemplateId,
   type TcgdexVariants,
+  isGradePlan,
+  type GradePlan,
 } from "@cardflow/shared";
 import { catalogDisplayFromCard } from "./listing";
+import { createSqliteSalesStore } from "./sales-store";
+import { createSqlitePurchaseLedger } from "./purchase-ledger";
+import { createSqliteAgeConfirmationStore } from "./age-store";
+import { createSqliteConsentStore } from "./consent-store";
+import { createSqliteIdempotencyStore } from "./idempotency-store";
+import { createSqliteGradeHistoryStore } from "./grade-history-store";
 import { applyMvpMigrations, isMemorySqlitePath } from "./db/migrate";
 import {
   gradeImageStorageCandidates,
   gradeImageStorageRef,
   isFirstPartyGradeImageRef,
   mimeFromGradeStorageRef,
+  stripImageMetadata,
   type GradeImageBytes,
 } from "./grade-image";
+import { createSqliteAccountStore } from "./account-store";
+import { isGradePhotoExpired, type PhotoPurgeResult } from "./photo-retention";
 import {
   isFirstPartyScanImageRef,
   mimeFromScanStorageRef,
@@ -56,7 +70,13 @@ import {
   crmGradingReturned,
   crmGradingSubmitted,
   gradeEstimateCache,
+  gradeAccounts,
+  gradePhotoObjects,
+  gradeQuotaUsage,
   portfolioValueSnapshots,
+  vendorQuotaUsage,
+  scanConfirmEvents,
+  userPriceSnapshots,
   crmInventoryItems,
   crmListingDrafts,
   crmPurchases,
@@ -76,6 +96,9 @@ import {
 import {
   inventoryItemWithLiveGuidance as overlayLiveMaxBuy,
   type ConfirmationRecord,
+  type GradeAccountRecord,
+  type GradeQuotaConsumeInput,
+  type GradeQuotaConsumeResult,
   type InventoryItemRecord,
   type PortfolioValueSnapshot,
   type ScanRecord,
@@ -165,6 +188,18 @@ function grainForIntent(intent: InventoryIntent): InventoryItemRecord["grain"] {
   return intent === "purchased" ? "physical_copy" : "interest_not_physical_copy";
 }
 
+function workflowStateFromRow(value: string): InventoryItemRecord["workflowState"] {
+  if (
+    value === "drafted" ||
+    value === "watching" ||
+    value === "details_needed" ||
+    value === "watchlist_closed"
+  ) {
+    return value;
+  }
+  return "acquired";
+}
+
 function asDraftStatus(value: string): ListingDraftStatus {
   return value === "ready_for_review" ? "ready_for_review" : "draft";
 }
@@ -223,6 +258,7 @@ function catalogImageFromRow(card: {
 
 export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStorePort {
   const { sqlite, db } = applyMvpMigrations(options.sqlitePath);
+  const purchaseLedger = createSqlitePurchaseLedger(db);
   const memoryImages = new Map<string, ScanImageBytes>();
   const memoryGradeImages = new Map<string, GradeImageBytes>();
   const sqliteDir = isMemorySqlitePath(options.sqlitePath)
@@ -255,18 +291,19 @@ export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStor
     return { token, identity, session };
   }
 
-  function getSessionByToken(token: string): SessionRecord | undefined {
+  function getSessionByToken(token: string, now: Date = new Date()): SessionRecord | undefined {
     const row = db
       .select()
       .from(crmSessions)
       .where(eq(crmSessions.tokenHash, hashSessionToken(token)))
       .get();
-    if (!row || isSessionExpired(row.expiresAt)) return undefined;
+    if (!row || isSessionExpired(row.expiresAt, now)) return undefined;
     return {
       sessionId: row.sessionId,
       userId: row.userId,
       createdAt: row.createdAt,
       expiresAt: row.expiresAt,
+      isGuest: row.isGuest === true,
     };
   }
 
@@ -556,6 +593,7 @@ export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStor
       inventoryItemId: inventoryItemIdForScan(row.scanId),
       imageStorageRef: row.imageStorageRef,
       imageMimeType: normalizeScanImageMime(row.imageMimeType),
+      idempotencyBodyHash: row.idempotencyBodyHash ?? null,
       recognition: envelope.recognition,
       mapping,
     };
@@ -570,6 +608,7 @@ export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStor
       imageStorageRef: scan.imageStorageRef,
       imageSource: "user_capture",
       imageMimeType: scan.imageMimeType,
+      idempotencyBodyHash: scan.idempotencyBodyHash ?? null,
       recognitionJson: serializeRecognition(scan),
       mappingJson: JSON.stringify(scan.mapping),
       mappingStatus: scan.mapping.status,
@@ -610,6 +649,20 @@ export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStor
     return row ? scanFromRow(row) : undefined;
   }
 
+  /** D9: user IDs that have scans and start with `prefix` (guest cleanup). */
+  function listScanUserIds(prefix: string): string[] {
+    return [
+      ...new Set(
+        db
+          .select({ userId: crmScans.userId })
+          .from(crmScans)
+          .all()
+          .map((row) => row.userId)
+          .filter((id) => id.startsWith(prefix)),
+      ),
+    ];
+  }
+
   function listScans(userId: string): ScanRecord[] {
     return db
       .select()
@@ -625,6 +678,12 @@ export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStor
     return scan;
   }
 
+  function unlinkStored(storageRef: string): void {
+    if (!sqliteDir) return;
+    const filePath = path.join(sqliteDir, storageRef);
+    if (existsSync(filePath)) unlinkSync(filePath);
+  }
+
   function saveScanImage(
     scanId: string,
     input: { bytes: Uint8Array; mimeType: ScanImageMimeType },
@@ -632,7 +691,7 @@ export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStor
     const record: ScanImageBytes = {
       storageRef: scanImageStorageRef(scanId, input.mimeType),
       mimeType: input.mimeType,
-      bytes: input.bytes,
+      bytes: stripImageMetadata(input.bytes, input.mimeType),
     };
     if (!sqliteDir) {
       memoryImages.set(scanId, record);
@@ -673,22 +732,37 @@ export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStor
     userId: string,
     inventoryItemId: string,
     side: GradeSide,
-    input: { bytes: Uint8Array; mimeType: ScanImageMimeType },
+    input: { bytes: Uint8Array; mimeType: ScanImageMimeType; createdAt?: string },
   ): GradeImageBytes | undefined {
     if (!getInventoryItem(userId, inventoryItemId)) return undefined;
+    const createdAt = input.createdAt ?? new Date().toISOString();
     const record: GradeImageBytes = {
       storageRef: gradeImageStorageRef(inventoryItemId, side, input.mimeType),
       mimeType: input.mimeType,
-      bytes: input.bytes,
+      bytes: stripImageMetadata(input.bytes, input.mimeType),
+      createdAt,
     };
     for (const candidate of gradeImageStorageCandidates(inventoryItemId, side)) {
       if (candidate === record.storageRef) continue;
       memoryGradeImages.delete(candidate);
-      if (sqliteDir) {
-        const stale = path.join(sqliteDir, candidate);
-        if (existsSync(stale)) unlinkSync(stale);
-      }
+      unlinkStored(candidate);
     }
+    db.insert(gradePhotoObjects)
+      .values({
+        userId,
+        inventoryItemId,
+        side,
+        storageRef: record.storageRef,
+        createdAt,
+      })
+      .onConflictDoUpdate({
+        target: [gradePhotoObjects.userId, gradePhotoObjects.inventoryItemId, gradePhotoObjects.side],
+        set: {
+          storageRef: record.storageRef,
+          createdAt,
+        },
+      })
+      .run();
     if (!sqliteDir) {
       memoryGradeImages.set(record.storageRef, record);
       return record;
@@ -716,13 +790,149 @@ export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStor
       }
       const filePath = path.join(sqliteDir, candidate);
       if (!existsSync(filePath)) continue;
+      const meta = db
+        .select()
+        .from(gradePhotoObjects)
+        .where(
+          and(
+            eq(gradePhotoObjects.userId, userId),
+            eq(gradePhotoObjects.inventoryItemId, inventoryItemId),
+            eq(gradePhotoObjects.side, side),
+          ),
+        )
+        .get();
       return {
         storageRef: candidate,
         mimeType,
         bytes: new Uint8Array(readFileSync(filePath)),
+        createdAt: meta?.createdAt,
       };
     }
     return undefined;
+  }
+
+  function deleteGradeEstimateCache(userId: string, inventoryItemId: string): void {
+    db.delete(gradeEstimateCache)
+      .where(
+        and(
+          eq(gradeEstimateCache.userId, userId),
+          eq(gradeEstimateCache.inventoryItemId, inventoryItemId),
+        ),
+      )
+      .run();
+  }
+
+  function deleteGradeImage(
+    userId: string,
+    inventoryItemId: string,
+    side: GradeSide,
+  ): boolean {
+    if (!getInventoryItem(userId, inventoryItemId)) return false;
+    let deleted = false;
+    for (const candidate of gradeImageStorageCandidates(inventoryItemId, side)) {
+      if (memoryGradeImages.delete(candidate)) deleted = true;
+      if (sqliteDir) {
+        const filePath = path.join(sqliteDir, candidate);
+        if (existsSync(filePath)) {
+          unlinkSync(filePath);
+          deleted = true;
+        }
+      }
+    }
+    const removed = db
+      .delete(gradePhotoObjects)
+      .where(
+        and(
+          eq(gradePhotoObjects.userId, userId),
+          eq(gradePhotoObjects.inventoryItemId, inventoryItemId),
+          eq(gradePhotoObjects.side, side),
+        ),
+      )
+      .run();
+    if (removed.changes > 0) deleted = true;
+    deleteGradeEstimateCache(userId, inventoryItemId);
+    return deleted;
+  }
+
+  function deleteScanImage(userId: string, scanId: string): boolean {
+    const scan = getScan(userId, scanId);
+    if (!scan) return false;
+    let deleted = false;
+    if (memoryImages.delete(scanId)) deleted = true;
+    if (scan.imageStorageRef) {
+      unlinkStored(scan.imageStorageRef);
+      deleted = true;
+    }
+    if (scan.imageStorageRef || scan.imageMimeType) {
+      persistScan({ ...scan, imageStorageRef: null, imageMimeType: null });
+      deleted = true;
+    }
+    return deleted;
+  }
+
+  /** D9: guest cleanup. Photos (files too), then the scan rows. Returns scans removed. */
+  function deleteUserScans(userId: string): number {
+    deleteUserPhotos(userId);
+    const scans = listScans(userId);
+    for (const scan of scans) memoryImages.delete(scan.scanId);
+    db.delete(crmScans).where(eq(crmScans.userId, userId)).run();
+    return scans.length;
+  }
+
+  function deleteUserPhotos(userId: string): PhotoPurgeResult {
+    let deleted = 0;
+    for (const item of listInventory(userId)) {
+      for (const side of GRADE_SIDES) {
+        if (deleteGradeImage(userId, item.inventoryItemId, side)) deleted += 1;
+      }
+    }
+    for (const scan of listScans(userId)) {
+      if (deleteScanImage(userId, scan.scanId)) deleted += 1;
+    }
+    return { deleted };
+  }
+
+  /**
+   * Data Engineer review: account deletion removes rows first, then files. This collects the
+   * user's photo locations while the rows still exist; the returned function unlinks them.
+   */
+  function prepareUserPhotoDeletion(userId: string): () => PhotoPurgeResult {
+    const scanIds = listScans(userId).map((scan) => scan.scanId);
+    const storageRefs = listScans(userId).flatMap((scan) => (scan.imageStorageRef ? [scan.imageStorageRef] : []));
+    const gradeCandidates = listInventory(userId).flatMap((item) =>
+      GRADE_SIDES.flatMap((side) => gradeImageStorageCandidates(item.inventoryItemId, side)),
+    );
+    return () => {
+      let deleted = 0;
+      for (const id of scanIds) if (memoryImages.delete(id)) deleted += 1;
+      for (const ref of storageRefs) {
+        const filePath = sqliteDir ? path.join(sqliteDir, ref) : null;
+        if (filePath && existsSync(filePath)) {
+          unlinkSync(filePath);
+          deleted += 1;
+        }
+      }
+      for (const candidate of gradeCandidates) {
+        if (memoryGradeImages.delete(candidate)) deleted += 1;
+        const filePath = sqliteDir ? path.join(sqliteDir, candidate) : null;
+        if (filePath && existsSync(filePath)) {
+          unlinkSync(filePath);
+          deleted += 1;
+        }
+      }
+      return { deleted };
+    };
+  }
+
+  function purgeExpiredGradePhotos(now: Date = new Date()): PhotoPurgeResult {
+    const rows = db.select().from(gradePhotoObjects).all();
+    let deleted = 0;
+    for (const row of rows) {
+      if (!isGradePhotoExpired(row.createdAt, now)) continue;
+      if (row.side !== "front" && row.side !== "back") continue;
+      if (deleteGradeImage(row.userId, row.inventoryItemId, row.side)) deleted += 1;
+    }
+    return { deleted };
   }
 
   function confirmationFromRow(row: typeof crmConfirmations.$inferSelect): ConfirmationRecord {
@@ -866,12 +1076,12 @@ export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStor
       purchasedAt: purchase.purchasedAt,
       currency: purchase.currency,
       costBasis: {
-        purchasePrice: centsToDollarString(purchase.purchasePrice),
+        purchasePrice: dollarsFromCents(purchase.purchasePrice),
         shipping: centsToDollarString(purchase.shipping),
         tax: centsToDollarString(purchase.tax),
         fees: centsToDollarString(purchase.fees),
         supplies: centsToDollarString(purchase.supplies),
-        allInTotal: centsToDollarString(purchase.allInTotal),
+        allInTotal: dollarsFromCents(purchase.allInTotal),
       },
       maxBuy,
     };
@@ -894,14 +1104,10 @@ export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStor
       condition: item.condition,
       quantity: item.quantity,
       tags: parseTags(item.tags),
-      workflowState:
-        item.workflowState === "drafted"
-          ? "drafted"
-          : item.workflowState === "watching"
-            ? "watching"
-            : "acquired",
+      workflowState: workflowStateFromRow(item.workflowState),
       referencePriceAmount: dollarsFromCents(item.referencePriceAmount),
       targetMaxBuyAmount: dollarsFromCents(item.targetMaxBuyAmount),
+      closedAt: item.closedAt ?? null,
       createdAt: item.createdAt,
       purchase: purchase ? purchaseFromRow(item, purchase) : null,
     };
@@ -946,16 +1152,24 @@ export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStor
 
   function persistPurchase(item: InventoryItemRecord): void {
     if (!item.purchase) return;
+    purchaseLedger.record(item.userId, {
+      purchaseId: item.purchase.purchaseId,
+      inventoryItemId: item.inventoryItemId,
+      purchasedAt: item.purchase.purchasedAt,
+      snapshot: item.purchase,
+      at: new Date().toISOString(),
+    });
     const cost = item.purchase.costBasis;
     const referenceCents = optionalDollarsToCents(
       item.referencePriceAmount ?? item.purchase.maxBuy.referencePriceAmount,
     );
-    const purchasePrice = optionalDollarsToCents(cost.purchasePrice) ?? 0;
+    const purchasePrice = optionalDollarsToCents(cost.purchasePrice);
     const shipping = optionalDollarsToCents(cost.shipping) ?? 0;
     const tax = optionalDollarsToCents(cost.tax) ?? 0;
     const fees = optionalDollarsToCents(cost.fees) ?? 0;
     const supplies = optionalDollarsToCents(cost.supplies) ?? 0;
-    const allInTotal = optionalDollarsToCents(cost.allInTotal) ?? 0;
+    const allInTotal =
+      purchasePrice === null ? null : (optionalDollarsToCents(cost.allInTotal) ?? 0);
     const maxBuyAmount = optionalDollarsToCents(item.purchase.maxBuy.maxBuyAmount);
     db.insert(crmPurchases)
       .values({
@@ -1011,7 +1225,7 @@ export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStor
         workflowState: item.workflowState,
         targetMaxBuyAmount: optionalDollarsToCents(item.targetMaxBuyAmount),
         referencePriceAmount: optionalDollarsToCents(item.referencePriceAmount),
-        closedAt: null,
+        closedAt: item.closedAt ?? null,
         createdAt: item.createdAt,
         updatedAt: now,
       })
@@ -1025,6 +1239,7 @@ export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStor
           workflowState: item.workflowState,
           targetMaxBuyAmount: optionalDollarsToCents(item.targetMaxBuyAmount),
           referencePriceAmount: optionalDollarsToCents(item.referencePriceAmount),
+          closedAt: item.closedAt ?? null,
           updatedAt: now,
         },
       })
@@ -1054,6 +1269,64 @@ export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStor
   function saveInventoryItem(item: InventoryItemRecord): InventoryItemRecord {
     persistInventoryItem(item);
     return item;
+  }
+
+  function deleteGradeImages(inventoryItemId: string): void {
+    for (const side of GRADE_SIDES) {
+      for (const candidate of gradeImageStorageCandidates(inventoryItemId, side)) {
+        memoryGradeImages.delete(candidate);
+        if (!sqliteDir) continue;
+        const filePath = path.join(sqliteDir, candidate);
+        if (existsSync(filePath)) unlinkSync(filePath);
+      }
+    }
+  }
+
+  /** Reverses a Purchased write. Leaves no inventory, purchase, or draft row behind. */
+  function deleteInventoryItem(userId: string, inventoryItemId: string): boolean {
+    const item = loadInventoryItem(userId, inventoryItemId);
+    if (!item) return false;
+    sqlite.transaction(() => {
+      // Data Engineer review: void the purchase in the ledger; the crm_purchases row must go
+      // with the inventory item (foreign key).
+      purchaseLedger.voidForItem(userId, inventoryItemId, new Date().toISOString());
+      db.delete(crmPurchases).where(eq(crmPurchases.inventoryItemId, inventoryItemId)).run();
+      db.delete(crmListingDrafts).where(eq(crmListingDrafts.inventoryItemId, inventoryItemId)).run();
+      db.delete(crmGradingSubmitted)
+        .where(
+          and(
+            eq(crmGradingSubmitted.userId, userId),
+            eq(crmGradingSubmitted.inventoryItemId, inventoryItemId),
+          ),
+        )
+        .run();
+      db.delete(crmGradingReturned)
+        .where(
+          and(
+            eq(crmGradingReturned.userId, userId),
+            eq(crmGradingReturned.inventoryItemId, inventoryItemId),
+          ),
+        )
+        .run();
+      db.delete(gradeEstimateCache)
+        .where(
+          and(
+            eq(gradeEstimateCache.userId, userId),
+            eq(gradeEstimateCache.inventoryItemId, inventoryItemId),
+          ),
+        )
+        .run();
+      db.delete(crmInventoryItems)
+        .where(
+          and(
+            eq(crmInventoryItems.inventoryItemId, inventoryItemId),
+            eq(crmInventoryItems.userId, userId),
+          ),
+        )
+        .run();
+    })();
+    deleteGradeImages(inventoryItemId);
+    return true;
   }
 
   function draftFromRow(
@@ -1431,6 +1704,145 @@ export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStor
     return snapshot;
   }
 
+  function getGradeAccount(userId: string): GradeAccountRecord {
+    const row = db.select().from(gradeAccounts).where(eq(gradeAccounts.userId, userId)).get();
+    if (!row) return { plan: "free", extraCredits: 0, anchorAt: null, billingAnchorAt: null, creditsPeriod: null };
+    return {
+      plan: isGradePlan(row.plan) ? row.plan : "free",
+      extraCredits: Math.max(0, row.extraCredits),
+      anchorAt: row.anchorAt ?? null,
+      billingAnchorAt: row.billingAnchorAt ?? null,
+      creditsPeriod: row.creditsPeriod ?? null,
+    };
+  }
+
+  function ensureGradeAccount(userId: string, at: string): void {
+    db.insert(gradeAccounts)
+      .values({ userId, plan: "free", extraCredits: 0, updatedAt: at, anchorAt: at })
+      .onConflictDoNothing()
+      .run();
+  }
+
+  function ensureGradeAnchor(userId: string, at: string): GradeAccountRecord {
+    ensureGradeAccount(userId, at);
+    sqlite.prepare("UPDATE grade_accounts SET anchor_at = ? WHERE user_id = ? AND anchor_at IS NULL").run(at, userId);
+    return getGradeAccount(userId);
+  }
+
+  function setBillingAnchor(userId: string, billingAnchorAt: string | null, at: string): GradeAccountRecord {
+    ensureGradeAnchor(userId, at);
+    sqlite.prepare("UPDATE grade_accounts SET billing_anchor_at = ?, updated_at = ? WHERE user_id = ?").run(billingAnchorAt, at, userId);
+    return getGradeAccount(userId);
+  }
+
+  function setGradePlan(userId: string, plan: GradePlan, at: string): GradeAccountRecord {
+    const nextPlan = isGradePlan(plan) ? plan : "free";
+    ensureGradeAccount(userId, at);
+    db.update(gradeAccounts)
+      .set({ plan: nextPlan, updatedAt: at })
+      .where(eq(gradeAccounts.userId, userId))
+      .run();
+    return getGradeAccount(userId);
+  }
+
+  function addGradeCredits(userId: string, credits: number, at: string, periodKey?: string): GradeAccountRecord {
+    const add = Math.floor(credits);
+    if (!Number.isFinite(add) || add <= 0) return getGradeAccount(userId);
+    return sqlite.transaction(() => {
+      ensureGradeAccount(userId, at);
+      if (periodKey !== undefined) {
+        // Bought credits never expire (Sean, Oct 16): always added. credits_period only records
+        // the period of the last purchase.
+        sqlite
+          .prepare(`UPDATE grade_accounts SET extra_credits = extra_credits + ?, credits_period = ?, updated_at = ? WHERE user_id = ?`)
+          .run(add, periodKey, at, userId);
+        return getGradeAccount(userId);
+      }
+      sqlite
+        .prepare(
+          `UPDATE grade_accounts SET extra_credits = extra_credits + ?, updated_at = ? WHERE user_id = ?`,
+        )
+        .run(add, at, userId);
+      return getGradeAccount(userId);
+    })();
+  }
+
+  function getGradeQuotaUsage(userId: string, monthKey: string): number {
+    const row = db
+      .select()
+      .from(gradeQuotaUsage)
+      .where(and(eq(gradeQuotaUsage.userId, userId), eq(gradeQuotaUsage.monthKey, monthKey)))
+      .get();
+    return row?.used ?? 0;
+  }
+
+  function consumeGradeQuota(userId: string, input: GradeQuotaConsumeInput): GradeQuotaConsumeResult {
+    return sqlite.transaction(() => {
+      ensureGradeAccount(userId, input.at);
+      db.insert(gradeQuotaUsage)
+        .values({ userId, monthKey: input.monthKey, used: 0 })
+        .onConflictDoNothing()
+        .run();
+      const monthly = sqlite
+        .prepare(
+          `UPDATE grade_quota_usage SET used = used + 1
+           WHERE user_id = ? AND month_key = ? AND used < ?`,
+        )
+        .run(userId, input.monthKey, input.monthlyLimit);
+      if (monthly.changes === 1) {
+        return {
+          ok: true as const,
+          source: "monthly" as const,
+          usedThisMonth: getGradeQuotaUsage(userId, input.monthKey),
+          extraCredits: getGradeAccount(userId).extraCredits,
+        };
+      }
+      // Allowance used up: spend a bought credit. Bought credits never expire.
+      const credit = sqlite
+        .prepare(
+          `UPDATE grade_accounts SET extra_credits = extra_credits - 1, updated_at = ?
+           WHERE user_id = ? AND extra_credits > 0`,
+        )
+        .run(input.at, userId);
+      const account = getGradeAccount(userId);
+      const usedThisMonth = getGradeQuotaUsage(userId, input.monthKey);
+      if (credit.changes === 1) {
+        return {
+          ok: true as const,
+          source: "credit" as const,
+          usedThisMonth,
+          extraCredits: account.extraCredits,
+        };
+      }
+      return { ok: false as const, usedThisMonth, extraCredits: account.extraCredits };
+    })();
+  }
+
+  function getVendorQuotaUsage(provider: string, monthKey: string): number {
+    const row = db
+      .select()
+      .from(vendorQuotaUsage)
+      .where(and(eq(vendorQuotaUsage.provider, provider), eq(vendorQuotaUsage.monthKey, monthKey)))
+      .get();
+    return row?.used ?? 0;
+  }
+
+  function consumeVendorQuota(provider: string, monthKey: string, cap: number): boolean {
+    return sqlite.transaction(() => {
+      db.insert(vendorQuotaUsage)
+        .values({ provider, monthKey, used: 0 })
+        .onConflictDoNothing()
+        .run();
+      const result = sqlite
+        .prepare(
+          `UPDATE vendor_quota_usage SET used = used + 1
+           WHERE provider = ? AND month_key = ? AND used < ?`,
+        )
+        .run(provider, monthKey, cap);
+      return result.changes === 1;
+    })();
+  }
+
   function listPortfolioSnapshots(
     userId: string,
     sinceDate?: string | null,
@@ -1457,11 +1869,136 @@ export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStor
       }));
   }
 
+  function saveConfirmEvent(event: ConfirmEvent): void {
+    db.insert(scanConfirmEvents)
+      .values({
+        scanId: event.scanId,
+        userId: event.userId,
+        via: event.via,
+        shownTcgdexIdsJson: JSON.stringify(event.shownTcgdexIds),
+        chosenTcgdexId: event.chosenTcgdexId,
+        chosenRank: event.chosenRank,
+        selectedVariant: event.selectedVariant,
+        confidence: event.confidence,
+        recognitionProvider: event.recognitionProvider,
+        createdAt: event.at,
+      })
+      .run();
+  }
+
+  function rowToConfirmEvent(row: typeof scanConfirmEvents.$inferSelect): ConfirmEvent {
+    let shown: string[] = [];
+    try {
+      const parsed = JSON.parse(row.shownTcgdexIdsJson) as unknown;
+      if (Array.isArray(parsed)) shown = parsed.filter((x): x is string => typeof x === "string");
+    } catch {
+      shown = [];
+    }
+    return {
+      scanId: row.scanId,
+      userId: row.userId,
+      via: row.via as ConfirmEvent["via"],
+      shownTcgdexIds: shown,
+      chosenTcgdexId: row.chosenTcgdexId,
+      chosenRank: row.chosenRank ?? null,
+      selectedVariant: row.selectedVariant ?? null,
+      confidence: row.confidence ?? null,
+      recognitionProvider: row.recognitionProvider ?? null,
+      at: row.createdAt,
+    };
+  }
+
+  function listConfirmEvents(options: { since?: string; limit?: number } = {}): ConfirmEvent[] {
+    const base = db.select().from(scanConfirmEvents);
+    const filtered = options.since ? base.where(gte(scanConfirmEvents.createdAt, options.since)) : base;
+    const rows = filtered.orderBy(asc(scanConfirmEvents.createdAt), asc(scanConfirmEvents.eventId)).all();
+    const events = rows.map(rowToConfirmEvent);
+    return options.limit ? events.slice(-options.limit) : events;
+  }
+
+  function confirmCounts(tcgdexIds: readonly string[]): Map<string, number> {
+    const counts = new Map<string, number>();
+    const ids = [...new Set(tcgdexIds)].filter(Boolean);
+    if (ids.length === 0) return counts;
+    const rows = db
+      .select({ id: scanConfirmEvents.chosenTcgdexId })
+      .from(scanConfirmEvents)
+      .where(inArray(scanConfirmEvents.chosenTcgdexId, ids))
+      .all();
+    for (const row of rows) counts.set(row.id, (counts.get(row.id) ?? 0) + 1);
+    return counts;
+  }
+
+  function variantCounts(tcgdexId: string): Map<string, number> {
+    const counts = new Map<string, number>();
+    const rows = db
+      .select({ v: scanConfirmEvents.selectedVariant })
+      .from(scanConfirmEvents)
+      .where(eq(scanConfirmEvents.chosenTcgdexId, tcgdexId))
+      .all();
+    for (const row of rows) if (row.v) counts.set(row.v, (counts.get(row.v) ?? 0) + 1);
+    return counts;
+  }
+
+  function deleteUserConfirmEvents(userId: string): number {
+    return db.delete(scanConfirmEvents).where(eq(scanConfirmEvents.userId, userId)).run().changes;
+  }
+
+  function saveUserPriceSnapshot(userId: string, snapshot: UserPriceSnapshot): UserPriceSnapshot {
+    const cents = Math.round(Number(snapshot.amount) * 100);
+    db.insert(userPriceSnapshots)
+      .values({
+        snapshotId: snapshot.snapshotId,
+        userId,
+        tcgdexId: snapshot.tcgdexId,
+        variant: snapshot.variant,
+        amountCents: cents,
+        currency: "USD",
+        enteredAt: snapshot.enteredAt,
+      })
+      .run();
+    return { ...snapshot, amount: centsToDollarString(cents) };
+  }
+
+  function listUserPriceSnapshots(userId: string, tcgdexId: string, variant?: string | null): UserPriceSnapshot[] {
+    const where = [eq(userPriceSnapshots.userId, userId), eq(userPriceSnapshots.tcgdexId, tcgdexId)];
+    if (variant !== undefined) {
+      where.push(variant === null ? isNull(userPriceSnapshots.variant) : eq(userPriceSnapshots.variant, variant));
+    }
+    return db
+      .select()
+      .from(userPriceSnapshots)
+      .where(and(...where))
+      .orderBy(desc(userPriceSnapshots.enteredAt))
+      .limit(USER_PRICE_SNAPSHOTS_PER_CARD)
+      .all()
+      .map((row) => ({
+        snapshotId: row.snapshotId,
+        tcgdexId: row.tcgdexId,
+        variant: row.variant ?? null,
+        amount: centsToDollarString(row.amountCents),
+        currency: "USD" as const,
+        source: "you" as const,
+        enteredAt: row.enteredAt,
+      }));
+  }
+
+  function deleteUserPriceSnapshots(userId: string): number {
+    return db.delete(userPriceSnapshots).where(eq(userPriceSnapshots.userId, userId)).run().changes;
+  }
+
   return {
     sqlitePath: options.sqlitePath,
     close() {
       sqlite.close();
     },
+    sales: createSqliteSalesStore(db),
+    purchaseLedger,
+    idempotency: createSqliteIdempotencyStore(db),
+    consents: createSqliteConsentStore(db),
+    ageConfirmations: createSqliteAgeConfirmationStore(db),
+    gradeHistory: createSqliteGradeHistoryStore(db),
+    accounts: createSqliteAccountStore(sqlite, db),
     createSession,
     getSessionByToken,
     getPokecollectorUserMapping,
@@ -1478,8 +2015,15 @@ export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStor
     saveScanImage,
     readStoredScanImage,
     getScanImage,
+    deleteScanImage,
     saveGradeImage,
     getGradeImage,
+    deleteGradeImage,
+    deleteUserPhotos,
+    prepareUserPhotoDeletion,
+    deleteUserScans,
+    listScanUserIds,
+    purgeExpiredGradePhotos,
     listInventory,
     confirmScan,
     rejectScan,
@@ -1493,6 +2037,7 @@ export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStor
     getDraftForInventoryItem,
     saveDraft,
     saveInventoryItem,
+    deleteInventoryItem,
     listGradingSubmitted,
     listGradingReturned,
     saveGradingSubmitted,
@@ -1503,5 +2048,22 @@ export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStor
     saveGradeEstimateCache,
     savePortfolioSnapshot,
     listPortfolioSnapshots,
+    getGradeAccount,
+    setGradePlan,
+    addGradeCredits,
+    ensureGradeAnchor,
+    setBillingAnchor,
+    getGradeQuotaUsage,
+    consumeGradeQuota,
+    getVendorQuotaUsage,
+    consumeVendorQuota,
+    saveConfirmEvent,
+    listConfirmEvents,
+    confirmCounts,
+    variantCounts,
+    deleteUserConfirmEvents,
+    saveUserPriceSnapshot,
+    listUserPriceSnapshots,
+    deleteUserPriceSnapshots,
   };
 }

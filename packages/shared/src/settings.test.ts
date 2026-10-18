@@ -22,6 +22,7 @@ import {
   settingsVisibleCopy,
 } from "./settings";
 import type { CardFlowHealth } from "./health";
+import { readApiClientSource } from "./repo-sources";
 
 function readSettingsScreen(): string {
   return readFileSync(
@@ -98,6 +99,13 @@ describe("Settings stack labels", () => {
     liveVideoYolo: false,
     liveIdentityVisual: "openclip",
     gradeEstimate: "cardgrading",
+    gradeEngine: {
+      ok: true,
+      opencv: "4.10.0",
+      numpy: "2.2.0",
+      error: null,
+      checkedAt: "2026-10-13T00:00:00.000Z",
+    },
     slabPricing: "poketrace",
   };
 
@@ -135,10 +143,7 @@ describe("Settings shows who is signed in", () => {
       path.join(path.dirname(fileURLToPath(import.meta.url)), "../../../apps/mobile/lib/identity.ts"),
       "utf8",
     );
-    const api = readFileSync(
-      path.join(path.dirname(fileURLToPath(import.meta.url)), "../../../apps/mobile/lib/api.ts"),
-      "utf8",
-    );
+    const api = readApiClientSource();
 
     expect(screen).toContain("useState(SETTINGS_KICKER)");
     expect(screen).toContain("loadIdentitySession()");

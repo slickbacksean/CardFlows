@@ -16,6 +16,7 @@ import {
 } from "./livestream-overlay";
 import { mapRecognitionToCatalog } from "./mapper";
 import { identifyCardMock } from "./mock-recognition";
+import { readApiClientSource } from "./repo-sources";
 
 const repoRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 const SCREENSHOT_APIS =
@@ -112,12 +113,14 @@ describe("Task 9 livestream device QA", () => {
 
     const overlay = readRepoFile("apps/mobile/components/ui/screener-overlay.tsx");
     const scanTab = readRepoFile("apps/mobile/app/(tabs)/scan-tab.tsx");
-    const client = readRepoFile("apps/mobile/lib/api.ts");
+    const client = readApiClientSource();
     expect(overlay).toContain("Looking for a card…");
     expect(overlay).not.toContain("savePurchased");
-    expect(overlay).toContain("I bought this");
-    expect(scanTab).toContain("saveLivestreamPurchase");
-    expect(scanTab).toContain("PurchaseSheet");
+    expect(overlay).toContain("Purchased");
+    expect(overlay).toContain("shouldAcceptLiveHudPurchaseTap");
+    expect(overlay).not.toContain("I bought this");
+    expect(scanTab).toMatch(/saveLivestreamPurchase\(|runQueueableWrite\("livestream_purchase"/);
+    expect(scanTab).not.toContain("PurchaseSheet");
     expect(client).toContain("/v1/livestream/identify");
     expect(client).not.toMatch(/saveInventoryItem|addPurchased/);
   });
@@ -232,7 +235,7 @@ describe("Task 9 livestream device QA", () => {
     }
     expect(scanTab).not.toContain("/capture");
     expect(scanTab).not.toContain("/v1/scans");
-    expect(scanTab).toContain('Platform.OS === "web"');
+    expect(scanTab).toContain("isLiveVideoNativeAvailable");
     expect(scanTab).toContain("LIVESTREAM_SCANNER_UNAVAILABLE_MESSAGE");
     expect(overlay).toContain("LIVESTREAM_SCANNER_UNAVAILABLE_MESSAGE");
     expect(iosPump).toContain("live_video");

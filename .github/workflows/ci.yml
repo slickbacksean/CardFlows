@@ -37,6 +37,10 @@ jobs:
       - name: Test
         run: pnpm test
 
+      - name: Purchased lane smoke (livestream → Purchased → Undo → finish details)
+        if: ${{ !cancelled() }}
+        run: pnpm smoke:purchased
+
       - name: Typecheck
         if: ${{ !cancelled() }}
         run: pnpm typecheck
@@ -90,6 +94,11 @@ jobs:
           (cd services/card-finder && ../../apps/api/.venv/bin/python -m unittest test_tilt test_score test_finder -v)
           (cd services/condition-patches && ../../apps/api/.venv/bin/python -m unittest test_extract -v)
 
+      - name: Livestream 4-corner warp + recorded stream
+        run: |
+          apps/api/.venv/bin/python services/live-identity-openclip/scripts/test_warp.py
+          apps/api/.venv/bin/python services/live-identity-openclip/scripts/eval_recorded_stream.py
+
       - name: Real end-to-end photo grade
         run: pnpm --filter @cardflow/api test:grade-e2e
 
@@ -108,7 +117,7 @@ jobs:
 
       - name: Smoke test /health
         run: |
-          docker run -d --name cardflow-api -p 8080:8080 --memory=2g --cpus=1 cardflow-api:ci
+          docker run -d --name cardflow-api -p 8080:8080 --memory=2g --cpus=1 -e CARD_FLOW_TRUST_PROXY_HOPS=0 cardflow-api:ci
           ready=0
           for i in $(seq 1 30); do
             if curl -fsS http://127.0.0.1:8080/health -o health.json \

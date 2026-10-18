@@ -1,0 +1,69 @@
+import * as Device from "expo-device";
+import { Platform } from "react-native";
+import {
+  PERF_BATCH_MAX,
+  PERF_SAMPLE_RATE,
+  createPerfOutbox,
+  deviceClassFor,
+  type PerfBatch,
+  type PerfStage,
+} from "@cardflow/shared";
+import { postPerfTelemetry } from "./api";
+import { isAnalyticsEnabled, onAnalyticsDisabled } from "./product-events";
+
+/**
+ * P1-18: sampled on-device stage timings. Sent only when the user has turned on analytics
+ * (the same switch as PostHog); with it off nothing is buffered or sent. Only numbers, a bucketed device class and the model
+ * name leave the phone; never images or card data. Expo Go exposes no thermal API, so thermal is
+ * "unknown" until a dev build adds one.
+ */
+const FLUSH_MS = 30_000;
+const outbox = createPerfOutbox(isAnalyticsEnabled);
+let timer: ReturnType<typeof setTimeout> | null = null;
+
+onAnalyticsDisabled(() => {
+  outbox.clear();
+  if (timer) clearTimeout(timer);
+  timer = null;
+});
+
+function osName(): PerfBatch["os"] {
+  return Platform.OS === "ios" || Platform.OS === "android" || Platform.OS === "web" ? Platform.OS : "other";
+}
+
+export function recordPerfStage(stage: PerfStage, ms: number, random: () => number = Math.random): void {
+  if (!isAnalyticsEnabled()) return;
+  if (!Number.isFinite(ms) || ms < 0 || random() >= PERF_SAMPLE_RATE) return;
+  const size = outbox.record({ stage, ms });
+  if (size === 0) return;
+  if (size >= PERF_BATCH_MAX) void flushPerfTelemetry();
+  else if (!timer) timer = setTimeout(() => void flushPerfTelemetry(), FLUSH_MS);
+}
+
+/** Times an async step and records it (sampled). */
+export async function timePerfStage<T>(stage: PerfStage, run: () => Promise<T>): Promise<T> {
+  const start = Date.now();
+  try {
+    return await run();
+  } finally {
+    recordPerfStage(stage, Date.now() - start);
+  }
+}
+
+export async function flushPerfTelemetry(): Promise<void> {
+  if (timer) clearTimeout(timer);
+  timer = null;
+  const samples = outbox.take(PERF_BATCH_MAX);
+  if (samples.length === 0) return;
+  try {
+    await postPerfTelemetry({
+      deviceClass: deviceClassFor({ yearClass: Device.deviceYearClass, totalMemoryBytes: Device.totalMemory }),
+      deviceModel: Device.modelName ?? null,
+      os: osName(),
+      thermal: "unknown",
+      samples,
+    });
+  } catch {
+    // Telemetry is best effort; drop on failure rather than retry.
+  }
+}
