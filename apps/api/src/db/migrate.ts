@@ -26,6 +26,7 @@ export function applyMvpMigrations(sqlitePath: string): {
   const sqlite = new Database(sqlitePath);
   if (!isMemorySqlitePath(sqlitePath)) {
     sqlite.pragma("journal_mode = WAL");
+    sqlite.pragma("synchronous = NORMAL");
   }
   sqlite.pragma("busy_timeout = 5000");
   const db = drizzle(sqlite, { schema });

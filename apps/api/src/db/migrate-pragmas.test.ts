@@ -11,7 +11,7 @@ afterEach(() => {
 });
 
 describe("SQLite startup pragmas", () => {
-  it("a file database starts with foreign_keys=ON, journal_mode=WAL and busy_timeout=5000", () => {
+  it("a file database starts with foreign_keys=ON, journal_mode=WAL and busy_timeout=5000, synchronous=NORMAL", () => {
     const dir = mkdtempSync(path.join(tmpdir(), "cardflow-pragmas-"));
     dirs.push(dir);
     const { sqlite } = applyMvpMigrations(path.join(dir, "cardflow.sqlite"));
@@ -19,6 +19,7 @@ describe("SQLite startup pragmas", () => {
       expect(sqlite.pragma("foreign_keys", { simple: true })).toBe(1);
       expect(sqlite.pragma("journal_mode", { simple: true })).toBe("wal");
       expect(sqlite.pragma("busy_timeout", { simple: true })).toBe(5000);
+      expect(sqlite.pragma("synchronous", { simple: true })).toBe(1);
     } finally {
       sqlite.close();
     }
