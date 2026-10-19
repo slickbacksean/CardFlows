@@ -16,7 +16,7 @@ export const livestreamRoutes = {
     response: z.looseObject({
       ok: z.literal(true),
       access: z.looseObject({
-        state: z.enum(["ready", "trial", "locked", "premium"]),
+        state: z.enum(["trial", "locked", "premium"]),
         trialDays: z.number(),
         trialStartedAt: z.string().nullable(),
         trialEndsAt: z.string().nullable(),

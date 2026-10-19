@@ -643,18 +643,8 @@ export const ageConfirmations = sqliteTable(
 );
 
 
-/**
- * Sean (Oct 18): livestream scanner 3-day trial. Starts on first identify/guesses use.
- * Frames stay in-house (never CardSight). Deleted with the account.
- */
-export const livestreamTrials = sqliteTable("livestream_trials", {
-  userId: text("user_id").primaryKey(),
-  startedAt: text("started_at").notNull(),
-});
-
 export const schema = {
   ageConfirmations,
-  livestreamTrials,
   cardflowCards,
   userAccounts,
   passwordResetTokens,

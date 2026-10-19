@@ -1478,24 +1478,31 @@ export function createApp(
   });
 
   /**
-   * Sean (Oct 18): livestream is signed-in + 18+, free for 3 days from first use, then Premium.
+   * Sean (Oct 18/19): livestream is signed-in + 18+, free for 3 days from account creation, then Premium.
    * Frames stay in-house (OpenCLIP/pHash) — never CardSight, so no CardSight consent check.
    * v1 hides IAP: after the trial, locked with "coming soon" (no purchase button).
    */
+  const accountCreatedAtForLivestream = (userId: string): string | null => {
+    const account = store.accounts.getAccount(userId);
+    if (account?.createdAt) return account.createdAt;
+    // Invited/dev users without user_accounts: grade anchor is "first seen" and starts the window.
+    const grade = getGradeAccount(userId);
+    if (grade.anchorAt) return grade.anchorAt;
+    return store.ensureGradeAnchor(userId, now().toISOString()).anchorAt ?? null;
+  };
   const livestreamAccessSnapshot = (userId: string): LivestreamAccess => {
     const premium = resolveAccountPlan(userId, getGradeAccount(userId).plan) === "premium";
-    const started = store.livestreamTrials.get(userId)?.startedAt ?? null;
-    return livestreamAccessFor({ premium, trialStartedAt: started, now: now() });
+    return livestreamAccessFor({
+      premium,
+      accountCreatedAt: accountCreatedAtForLivestream(userId),
+      now: now(),
+    });
   };
   const ensureLivestreamAccess = (c: Context) => {
     const userId = c.get("userId") as string;
     if (isGuestUserId(userId)) return { ok: false as const, response: signupRequired(c, "scan") };
     if (!hasAgeConfirmation(store.ageConfirmations, userId)) return { ok: false as const, response: ageRequired(c) };
-    let access = livestreamAccessSnapshot(userId);
-    if (access.state === "ready") {
-      store.livestreamTrials.start(userId, now().toISOString());
-      access = livestreamAccessSnapshot(userId);
-    }
+    const access = livestreamAccessSnapshot(userId);
     if (!livestreamAccessAllowed(access)) {
       return { ok: false as const, response: c.json(premiumRequiredBody("livestream_scanner"), 403) };
     }

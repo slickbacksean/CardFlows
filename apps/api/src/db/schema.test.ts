@@ -78,7 +78,6 @@ describe("MVP CRM schema", () => {
       "grade_photo_objects",
       "grade_quota_usage",
       "idempotency_keys",
-      "livestream_trials",
       "north_star_weekly_totals",
       "password_reset_tokens",
       "pokecollector_pending_deletions",
