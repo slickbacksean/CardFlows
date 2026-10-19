@@ -354,9 +354,10 @@ export interface CreateAppOptions {
   /** When true, a missing Authorization header acts as the default invited user. */
   devAutoSession?: boolean;
   /**
-   * Browse-only guest sessions (Sean, Oct 17): guests look around; every scan, grade, livestream,
-   * save and CardSight route answers 403 signup_required. Default from CARD_FLOW_GUEST_BROWSE=true
-   * (off otherwise). CARD_FLOW_GUEST_SCANS is gone: there are no guest scans any more.
+   * Legacy guest sessions (retired for the app, Sean Oct 18). Off by default. When on
+   * (CARD_FLOW_GUEST_BROWSE=true or tests), minting still works and browse-only gating applies,
+   * but the mobile app never calls POST /v1/sessions/guest. Prefer leaving this off.
+   * CARD_FLOW_GUEST_SCANS is ignored (no guest scans).
    */
   guestMode?: boolean;
   /** D9: how often ended-guest data is purged (default hourly; always within 24 h). */
@@ -583,7 +584,7 @@ export function createApp(
     !devAutoSession &&
     (options.guestMode ?? process.env.CARD_FLOW_GUEST_BROWSE?.trim().toLowerCase() === "true");
   if (options.guestMode === undefined && process.env.CARD_FLOW_GUEST_SCANS?.trim()) {
-    console.warn("[guest] CARD_FLOW_GUEST_SCANS is ignored: guests are browse-only now. Use CARD_FLOW_GUEST_BROWSE=true for guest sessions.");
+    console.warn("[guest] CARD_FLOW_GUEST_SCANS is ignored (no guest scans). Guest minting stays off unless CARD_FLOW_GUEST_BROWSE=true (app no longer uses guests).");
   }
   const guestMintsPerHour = options.guestMintsPerHour ?? 10;
   /** Scan Idempotency-Key -> first scan ID (body hash, in-flight, 24 h). */

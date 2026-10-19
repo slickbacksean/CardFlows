@@ -1,53 +1,25 @@
-import { GUEST_SIGNUP_COPY } from "@cardflow/shared";
 import { router } from "expo-router";
 import { useEffect } from "react";
-import { Alert } from "react-native";
-import { isGuestSession } from "./identity";
+import { isGuestSession, peekActiveUserId } from "./identity";
 
 /**
- * Sean (Oct 17, 8:36 PM PT): guests are browse-only. One sign-up prompt, the same one the API's
- * 403 signup_required opens: "Sign up to scan, grade and save cards. It's free."
+ * Sean (Oct 18, 2026): free account required. Signed-out users are sent to sign in / sign up
+ * (no "Not now" browse path). Kept as a safety net for gated actions if a session drops mid-flow.
  */
-let showing = false;
-
 export function showSignupPrompt(): void {
-  if (showing) return;
-  showing = true;
-  const done = () => {
-    showing = false;
-  };
-  Alert.alert(
-    GUEST_SIGNUP_COPY.title,
-    GUEST_SIGNUP_COPY.body,
-    [
-      { text: GUEST_SIGNUP_COPY.dismiss, style: "cancel", onPress: done },
-      {
-        text: GUEST_SIGNUP_COPY.action,
-        onPress: () => {
-          done();
-          router.push("/sign-up");
-        },
-      },
-    ],
-    { cancelable: true, onDismiss: done },
-  );
+  router.replace("/sign-up");
 }
 
-/**
- * Before a scan, grade or save: true for an account. A guest gets the sign-up prompt instead and
- * nothing starts (no camera, no upload).
- */
+/** True when a non-guest session is active; otherwise send the user to sign-up. */
 export function requireAccount(): boolean {
-  if (!isGuestSession()) return true;
+  if (peekActiveUserId() && !isGuestSession()) return true;
   showSignupPrompt();
   return false;
 }
 
-/** A screen that is itself a gated action (the camera): a guest gets the prompt and is sent back. */
+/** A screen that is itself a gated action (the camera): signed-out users go to sign-up. */
 export function useAccountOrLeave(): void {
   useEffect(() => {
     if (requireAccount()) return;
-    if (router.canGoBack()) router.back();
-    else router.replace("/(tabs)/collection");
   }, []);
 }

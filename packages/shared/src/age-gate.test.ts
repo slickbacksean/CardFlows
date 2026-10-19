@@ -15,7 +15,7 @@ describe("Sean (Oct 17): 18+ is stated at sign-up; no birth-date screen", () => 
     expect(AGE_GATE_COPY.signUpLine).toBe(
       "By creating an account, you confirm you're 18 or older and agree to the Terms and Privacy Policy.",
     );
-    expect(AGE_GATE_COPY.guestSettings).toBe("Sign up to use CardSight card recognition.");
+    expect(AGE_GATE_COPY.guestSettings).toBe("Create a free account to use CardSight card recognition.");
     expect(AGE_GATE_COPY.captureTip).toBe("Photograph only the card. Keep faces, hands, and personal details out of the shot.");
     expect(AGE_GATE_VERSION).toBe("2026-10-17.2");
     expect(Object.values(AGE_GATE_COPY).join(" ")).not.toMatch(/birth|month|year|\bkids?\b|child|parent|\bAI\b|PSA|BGS|CGC/i);
@@ -53,9 +53,9 @@ describe("Policy Reviewer: guests never get CardSight", () => {
     expect(guestRouteAllowed("POST", "/v1/scans")).toBe(false);
   });
 
-  it("capture: no CardSight prompt for guests; accounts confirm 18+ before the prompt, all before upload", () => {
+  it("capture: accounts confirm 18+ before the CardSight prompt, all before upload", () => {
     const capture = read("apps/mobile/app/capture.tsx");
-    const gate = capture.indexOf("if (imageUri && !isGuestSession() && (await ensureAccountAgeConfirmed())) {");
+    const gate = capture.indexOf("if (imageUri && (await ensureAccountAgeConfirmed())) {");
     const ask = capture.indexOf("await askCardSightConsentOnce()");
     expect(gate).toBeGreaterThan(-1);
     expect(gate).toBeLessThan(ask);
@@ -63,11 +63,12 @@ describe("Policy Reviewer: guests never get CardSight", () => {
     expect(capture).toContain("AGE_GATE_COPY.captureTip");
   });
 
-  it("Settings shows guests the sign-up line instead of the CardSight toggle", () => {
+  it("Settings always shows the CardSight toggle (guest look-around removed)", () => {
     const settings = read("apps/mobile/app/settings.tsx");
-    expect(settings).toMatch(/isGuestSession\(\) \? \(\s*<JobRow label=\{AGE_GATE_COPY\.guestSettings\}/);
+    expect(settings).toContain('<JobRow label="Card recognition" onPress={() => router.push("/card-recognition")} />');
+    expect(settings).not.toContain("isGuestSession");
     const screen = read("apps/mobile/app/card-recognition.tsx");
-    expect(screen).toContain("AGE_GATE_COPY.guestSettings");
+    expect(screen).not.toContain("isGuestSession");
     expect(screen).toContain("if (next && !(await ensureAccountAgeConfirmed())) return;");
   });
 

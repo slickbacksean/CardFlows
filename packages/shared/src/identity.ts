@@ -81,9 +81,9 @@ export const ACCOUNT_SWITCH_CONFIRM_MESSAGE =
 export const ACCOUNT_SWITCH_CONFIRM_ACTION = "Switch tester";
 export const ACCOUNT_SWITCH_STAY_ACTION = "Stay";
 
-/** WIREFRAMES.md §10c — private beta is not a HoloDex-style account wall. */
-export const CAPTURE_REQUIRES_LOGIN: false = false;
-export const SIGN_UP_WALL_ENABLED: false = false;
+/** Sean (Oct 18, 2026): free account required before any app access. Sign in / sign up is the first screen. */
+export const CAPTURE_REQUIRES_LOGIN: true = true;
+export const SIGN_UP_WALL_ENABLED: true = true;
 export const NOT_THIS_TESTER_LABEL = "Not this tester";
 
 export function identityAfterNotThisTester(): InvitedIdentity {
@@ -128,11 +128,6 @@ const PRIVATE_BETA_IDP_PATTERNS = [
   { id: "marketplace_oauth", pattern: /marketplace oauth/i },
 ] as const;
 
-const SIGN_UP_WALL_PATTERNS = [
-  { id: "sign_up_to_continue", pattern: /sign up to (continue|scan)|create (an )?account/i },
-  { id: "please_sign_in", pattern: /please (log|sign) in|login required|must (log|sign) in/i },
-] as const;
-
 export function forbiddenPrivateBetaIdp(copy: string): string | null {
   for (const item of PRIVATE_BETA_IDP_PATTERNS) {
     if (item.pattern.test(copy)) return item.id;
@@ -140,11 +135,10 @@ export function forbiddenPrivateBetaIdp(copy: string): string | null {
   return null;
 }
 
+/**
+ * Social / third-party IdP copy that must not appear until Sign in with Apple (or another
+ * social login) ships. The free-account wall itself is required (SIGN_UP_WALL_ENABLED).
+ */
 export function forbiddenSignUpWall(copy: string): string | null {
-  const idp = forbiddenPrivateBetaIdp(copy);
-  if (idp) return idp;
-  for (const item of SIGN_UP_WALL_PATTERNS) {
-    if (item.pattern.test(copy)) return item.id;
-  }
-  return null;
+  return forbiddenPrivateBetaIdp(copy);
 }

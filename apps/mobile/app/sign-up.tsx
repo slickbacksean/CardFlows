@@ -1,7 +1,6 @@
 import {
   ACCOUNT_AUTH_COPY,
   AGE_GATE_COPY,
-  GUEST_SIGNUP_COPY,
   PASSWORD_MIN_LENGTH,
   SIGNUP_ALLOWANCE_NOTE,
   isValidEmail,
@@ -15,11 +14,11 @@ import { authStyles } from "@/components/ui/auth-styles";
 import { PreferencesScreenHeader } from "@/components/ui/preferences-screen-header";
 import { PrimaryButton } from "@/components/ui/primary-button";
 import { InlineError } from "@/components/ui/screen-state";
-import { isGuestSession, signUpWithEmail } from "@/lib/identity";
+import { peekActiveUserId, signUpWithEmail } from "@/lib/identity";
 import { flushScanQueue } from "@/lib/scan-queue";
 import { colors } from "@/lib/theme";
 
-/** Open sign-up (email + password). Testers can still use an invite code. */
+/** Open sign-up / sign-in. First screen when signed out (Sean, Oct 18). Email and password only. */
 export default function SignUpScreen() {
   const router = useRouter();
   // UX review P1-4: "Sign in" from a session-ended error opens this screen in sign-in mode.
@@ -31,7 +30,7 @@ export default function SignUpScreen() {
   const [saving, setSaving] = useState(false);
   // Policy Reviewer (Oct 17): required, unchecked by default.
   const [over18, setOver18] = useState(false);
-  const guest = isGuestSession();
+  const signedIn = !!peekActiveUserId();
 
   async function submit() {
     if (!isValidEmail(email)) return setError(ACCOUNT_AUTH_COPY.badEmail);
@@ -47,7 +46,7 @@ export default function SignUpScreen() {
       void flushScanQueue();
       // Sean: new accounts confirm their email (6-digit code) before pre-grade estimates.
       if (session.emailVerified === false) router.replace({ pathname: "/verify-email", params: { email: email.trim() } });
-      else router.back();
+      else router.replace("/(tabs)/collection");
     } catch (caught) {
       setError(actionErrorMessage(caught, mode === "sign_up" ? ACCOUNT_AUTH_COPY.signUpFailed : ACCOUNT_AUTH_COPY.signInFailed));
     } finally {
@@ -58,9 +57,9 @@ export default function SignUpScreen() {
   const title = mode === "sign_up" ? "Create account" : "Sign in";
   return (
     <View style={authStyles.flex}>
-      <PreferencesScreenHeader dismiss="back" title={title} />
+      <PreferencesScreenHeader dismiss={signedIn ? "back" : null} title={title} />
       <ScrollView contentContainerStyle={authStyles.content} keyboardShouldPersistTaps="handled">
-        {guest ? <Text style={authStyles.body}>{GUEST_SIGNUP_COPY.body}</Text> : null}
+        <Text style={authStyles.body}>Create a free account to use CardFlow. Sign in if you already have one.</Text>
         {mode === "sign_up" ? <Text style={authStyles.body}>{SIGNUP_ALLOWANCE_NOTE}</Text> : null}
         <TextInput
           accessibilityLabel="Email"
@@ -111,9 +110,6 @@ export default function SignUpScreen() {
             <Text style={authStyles.link}>Forgot password?</Text>
           </Pressable>
         ) : null}
-        <Pressable accessibilityRole="button" onPress={() => router.push("/switch-tester")}>
-          <Text style={authStyles.link}>Have a tester invite code?</Text>
-        </Pressable>
       </ScrollView>
     </View>
   );

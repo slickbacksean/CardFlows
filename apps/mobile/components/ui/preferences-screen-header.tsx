@@ -8,7 +8,8 @@ export type PreferencesDismissKind = "close" | "back";
 
 interface PreferencesScreenHeaderProps {
   title: string;
-  dismiss: PreferencesDismissKind;
+  /** Omit or pass null on the signed-out sign-in screen (no way back into the app). */
+  dismiss?: PreferencesDismissKind | null;
 }
 
 export function leavePreferencesStack(router: {
@@ -23,23 +24,28 @@ export function leavePreferencesStack(router: {
   router.replace("/(tabs)/collection");
 }
 
-export function PreferencesScreenHeader({ title, dismiss }: PreferencesScreenHeaderProps) {
+export function PreferencesScreenHeader({ title, dismiss = "back" }: PreferencesScreenHeaderProps) {
   const router = useRouter();
+  const showDismiss = dismiss === "close" || dismiss === "back";
   const accessibilityLabel = dismiss === "close" ? "Close" : "Back";
   const iconName = dismiss === "close" ? "close" : "chevron-back";
 
   return (
     <SafeAreaView edges={["top"]} style={styles.safe}>
       <View style={styles.topBar}>
-        <Pressable
-          accessibilityLabel={accessibilityLabel}
-          accessibilityRole="button"
-          hitSlop={12}
-          onPress={() => leavePreferencesStack(router)}
-          style={styles.iconButton}
-        >
-          <Ionicons color={colors.text} name={iconName} size={28} />
-        </Pressable>
+        {showDismiss ? (
+          <Pressable
+            accessibilityLabel={accessibilityLabel}
+            accessibilityRole="button"
+            hitSlop={12}
+            onPress={() => leavePreferencesStack(router)}
+            style={styles.iconButton}
+          >
+            <Ionicons color={colors.text} name={iconName} size={28} />
+          </Pressable>
+        ) : (
+          <View style={styles.iconButton} />
+        )}
         <Text numberOfLines={1} style={styles.topTitle}>
           {title}
         </Text>

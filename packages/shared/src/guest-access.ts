@@ -1,8 +1,10 @@
 /**
- * Sean (Oct 17, 8:36 PM PT): guests are **browse-only**. They can look around the app, but any
- * scan, grade or save needs sign-up first; the free account is the entry tier. This replaces
- * D9's guest scan allowance. The API enforces it with 403 `signup_required`; the app only opens
- * the sign-up prompt.
+ * Sean (Oct 18, 2026): guest look-around is removed. The app requires a free account before any
+ * screen. Helpers below remain for (1) refusing leftover guest sessions on the API when
+ * CARD_FLOW_GUEST_BROWSE is accidentally left on, and (2) cleaning old guest rows. The mobile
+ * app never mints guest sessions.
+ *
+ * Earlier (Oct 17): guests were browse-only with 403 `signup_required` on scan/grade/save.
  */
 import type { InvitedIdentity } from "./identity";
 
@@ -13,10 +15,10 @@ export const SIGNUP_REQUIRED_CODE = "signup_required";
 export type SignupReason = "scan" | "grade" | "cardsight" | "save";
 
 export const GUEST_SIGNUP_COPY = {
-  title: "Sign up to keep going",
-  body: "Sign up to scan, grade and save cards. It's free.",
+  title: "Create a free account",
+  body: "Create a free account to use CardFlow.",
   action: "Sign up",
-  dismiss: "Not now",
+  dismiss: "Cancel",
 } as const;
 
 export function isGuestUserId(userId: string | null | undefined): boolean {
