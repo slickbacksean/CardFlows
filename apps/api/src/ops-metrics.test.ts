@@ -46,6 +46,19 @@ describe("P1-17 ops metrics", () => {
     const off = createApp(undefined, { opsMetrics: new OpsMetrics(), opsToken: null });
     expect((await off.request("/ops/metrics")).status).toBe(404);
   });
+
+  it("alerts once when CardSight usage reaches ~80% of the monthly cap", () => {
+    const seen: OpsAlert[] = [];
+    const m = new OpsMetrics([(a) => seen.push(a)]);
+    m.recordCardSightBudgetUsage(599, 750);
+    expect(seen).toHaveLength(0);
+    m.recordCardSightBudgetUsage(600, 750);
+    m.recordCardSightBudgetUsage(601, 750);
+    expect(seen).toHaveLength(1);
+    expect(seen[0]?.kind).toBe("cardsight_budget_80");
+    expect(seen[0]?.message).toContain("600/750");
+  });
+
 });
 
 describe("P1-18 device perf telemetry", () => {

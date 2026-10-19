@@ -13,6 +13,11 @@ export interface GradeCardMagicGate {
   client: CardMagicClient | null;
   /** Signed-in, 18+, current consent, Cap room — same rules as CardSight identify. */
   mayCall: boolean;
+  /**
+   * Peek: false when total CardSight calls this month have hit the ID reserve floor
+   * (used >= cap − CARD_FLOW_CARDMAGIC_ID_RESERVE). Skips without consuming budget.
+   */
+  mayUseIdReserve?: () => boolean;
   /** Take one from the per-user monthly CardSight cap; false when exhausted. */
   takeUse?: () => boolean;
   /** Optional global budget gate (same as identify). */
@@ -59,8 +64,18 @@ export async function tryCardMagicForGrade(input: {
   const { gate, still, side } = input;
   if (!gate.client) return { path: "local", reason: "disabled" };
   if (!gate.mayCall) return { path: "local", reason: "no_consent" };
-  if (gate.consumeBudget && !gate.consumeBudget()) return { path: "local", reason: "budget" };
-  if (gate.takeUse && !gate.takeUse()) return { path: "local", reason: "user_cap" };
+  if (gate.mayUseIdReserve && !gate.mayUseIdReserve()) {
+    console.info(`grade-cardmagic side=${side} path=local reason=id_reserve`);
+    return { path: "local", reason: "id_reserve" };
+  }
+  if (gate.consumeBudget && !gate.consumeBudget()) {
+    console.info(`grade-cardmagic side=${side} path=local reason=budget`);
+    return { path: "local", reason: "budget" };
+  }
+  if (gate.takeUse && !gate.takeUse()) {
+    console.info(`grade-cardmagic side=${side} path=local reason=user_cap`);
+    return { path: "local", reason: "user_cap" };
+  }
 
   const result = await gate.client.process({
     bytes: still.bytes,

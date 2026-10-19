@@ -169,3 +169,65 @@ describe("CardMagic on grade detect (hybrid)", () => {
     expect(res.status).toBe(403);
   });
 });
+
+describe("CardMagic ID reserve + global budget", () => {
+  it("skips CardMagic when total CardSight usage has hit the ID reserve floor", async () => {
+    const store = createMemoryStore();
+    store.ageConfirmations.confirm(DEFAULT_INVITED_USER_ID, AGE_GATE_VERSION, "2026-10-18T00:00:00.000Z");
+    // Cap 10, reserve 8 → CardMagic only while used < 2
+    store.consumeVendorQuota("cardsight", "2026-10", 10);
+    store.consumeVendorQuota("cardsight", "2026-10", 10);
+    expect(store.getVendorQuotaUsage("cardsight", "2026-10")).toBe(2);
+
+    const localCalls: unknown[] = [];
+    const fetchMock = vi.fn(async () =>
+      new Response(zipOneCard(CROP, JPEG), {
+        status: 200,
+        headers: { "content-type": "application/zip", "X-CardMagic-Count": "1" },
+      }),
+    );
+    const app = createApp(store, {
+      cardMagic: createCardMagicClient({ apiKey: "k", fetch: fetchMock as never }),
+      cardgrading: localRunner(localCalls),
+      gradeQuota: false,
+      cardSightMonthlyBudget: 10,
+      cardMagicIdReserve: 8,
+      now: () => new Date("2026-10-18T12:00:00.000Z"),
+    });
+    await grantConsent(app);
+    const { status, body } = await detect(app);
+    expect(status).toBe(200);
+    expect(body).toMatchObject({ ok: true, status: "found", cropPath: "local" });
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(localCalls).toHaveLength(1);
+    // Reserve skip must not burn more of the shared budget.
+    expect(store.getVendorQuotaUsage("cardsight", "2026-10")).toBe(2);
+  });
+
+  it("runs CardMagic and consumes the shared budget while under the reserve floor", async () => {
+    const store = createMemoryStore();
+    store.ageConfirmations.confirm(DEFAULT_INVITED_USER_ID, AGE_GATE_VERSION, "2026-10-18T00:00:00.000Z");
+    const localCalls: unknown[] = [];
+    const fetchMock = vi.fn(async () =>
+      new Response(zipOneCard(CROP, JPEG), {
+        status: 200,
+        headers: { "content-type": "application/zip", "X-CardMagic-Count": "1" },
+      }),
+    );
+    const app = createApp(store, {
+      cardMagic: createCardMagicClient({ apiKey: "k", fetch: fetchMock as never }),
+      cardgrading: localRunner(localCalls),
+      gradeQuota: false,
+      cardSightMonthlyBudget: 10,
+      cardMagicIdReserve: 8,
+      now: () => new Date("2026-10-18T12:00:00.000Z"),
+    });
+    await grantConsent(app);
+    const { status, body } = await detect(app);
+    expect(status).toBe(200);
+    expect(body).toMatchObject({ ok: true, cropPath: "cardmagic" });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(localCalls).toHaveLength(0);
+    expect(store.getVendorQuotaUsage("cardsight", "2026-10")).toBe(1);
+  });
+});

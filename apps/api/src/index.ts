@@ -8,7 +8,7 @@ import { createRecognitionFromEnv } from "./recognition-env";
 import { cardSightAdapterFromEnv } from "./cardsight-adapter";
 import { cardMagicFromEnv } from "./cardmagic-adapter";
 import { consumeCardSightBudget } from "./cardsight-budget";
-import { cardSightMonthlyBudgetFromEnv, cardSightUserCapsFromEnv } from "./grade-quota-env";
+import { cardMagicIdReserveFromEnv, cardSightMonthlyBudgetFromEnv, cardSightUserCapsFromEnv } from "./grade-quota-env";
 import { createGradeEstimateFromEnv, gradeEngineProbeFromEnv } from "./grade-estimate-env";
 import { createSlabPricingFromEnv } from "./poketrace-env";
 import { resolveDevAutoSession } from "./session";
@@ -51,12 +51,20 @@ const { client: liveIdentityOpenclip, reason: openclipReason } =
 // Sean: CardSight only with CARD_FLOW_CARDSIGHT_ADAPTER=on + CARDSIGHT_API_KEY, and the app calls
 // it only for users who allowed it (current consent version); everyone else gets the local matcher.
 const cardSightBudget = cardSightMonthlyBudgetFromEnv();
+const cardMagicIdReserve = cardMagicIdReserveFromEnv(process.env, cardSightBudget);
 const cardSight = cardSightAdapterFromEnv(process.env, {
-  consumeBudget: () => consumeCardSightBudget({ consume: store.consumeVendorQuota, cap: cardSightBudget, now: new Date() }),
+  consumeBudget: () =>
+    consumeCardSightBudget({
+      consume: store.consumeVendorQuota,
+      getUsage: store.getVendorQuotaUsage,
+      cap: cardSightBudget,
+      now: new Date(),
+      onUsage: (used, cap) => opsMetrics.recordCardSightBudgetUsage(used, cap),
+    }),
 });
 const cardMagic = cardMagicFromEnv(process.env, {
   // Same global monthly budget as identify (one CardSight plan).
-  // Per-call takeUse is applied in the grade detect route.
+  // ID reserve + per-call takeUse are applied in the grade detect route.
 });
 const liveVideoYoloHolder: { detector: ObbDetector | null } = { detector: null };
 const app = createApp(store, {
@@ -68,6 +76,8 @@ const app = createApp(store, {
   cardSight,
   cardMagic,
   cardSightUserCaps: cardSightUserCapsFromEnv(),
+  cardSightMonthlyBudget: cardSightBudget,
+  cardMagicIdReserve,
   grading,
   cardgrading,
   gradeEngineProbe,

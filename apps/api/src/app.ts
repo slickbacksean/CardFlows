@@ -3,10 +3,11 @@ import { emailSenderFromEnv, type EmailSender } from "./email-sender";
 import { cardSightMonthKey, consentState, hasActiveConsent } from "./consent-store";
 import { AGE_CONFIRMATION_REQUIRED_CODE, AGE_GATE_COPY, AGE_GATE_VERSION } from "@cardflow/shared";
 import { ageConfirmationState, hasAgeConfirmation } from "./age-store";
-import { ageGateEnabledFromEnv, CARDSIGHT_GUEST_MONTHLY_CAP, CARDSIGHT_USER_MONTHLY_CAP_DEFAULT } from "./grade-quota-env";
+import { ageGateEnabledFromEnv, cardMagicIdReserveFromEnv, cardSightMonthlyBudgetFromEnv, CARDSIGHT_GUEST_MONTHLY_CAP, CARDSIGHT_USER_MONTHLY_CAP_DEFAULT } from "./grade-quota-env";
 import { createRecognitionWithFallback } from "./cardsight-adapter";
 import type { CardMagicClient } from "./cardmagic-adapter";
 import { cardMagicCornersToExtraShots, tryCardMagicForGrade, type GradeCropPath } from "./grade-cardmagic";
+import { canCardMagicUseBudget, consumeCardSightBudget } from "./cardsight-budget";
 import { ALLOWANCE_TOMBSTONE_TTL_MS, allowanceTombstoneKey, normalizeEmail, type DeletionAuditKind } from "./account-store";
 import { routePath } from "hono/route";
 import { CARDSIGHT_CONSENT_VERSION, INVITED_USERS, EMAIL_CODE_LIFETIME_SENDS, EMAIL_SENDS_PER_ADDRESS_PER_DAY, UNVERIFIED_ACCOUNT_TTL_DAYS, EMAIL_CODE_LENGTH, EMAIL_RESEND_COOLDOWN_MS, EMAIL_UNVERIFIED_CODE, EMAIL_VERIFICATION_COPY, EMAIL_VERIFICATION_TTL_MS, isEmailCode, passwordResetEmailText, verificationEmailText, quotaAnchor, quotaPeriodFor, ACCOUNT_AUTH_COPY, ACCOUNT_DELETION_COPY, PASSWORD_RESET_TTL_MS, GUEST_MINT_WINDOW_MS, GUEST_SESSION_TTL_MS, isValidEmail, passwordProblem, GUEST_USER_PREFIX, SIGNUP_REQUIRED_CODE, guestIdentity, guestRouteBlockReason, isGuestUserId, isHot, parsePerfBatch, signupMessage, type SignupReason } from "@cardflow/shared";
@@ -486,6 +487,11 @@ export interface CreateAppOptions {
   /** Global CardSight identify budget. Defaults to `CARD_FLOW_CARDSIGHT_MONTHLY_BUDGET`; off in tests. */
   cardSightMonthlyBudget?: number | null;
   /**
+   * Calls reserved for card ID so CardMagic cannot burn the free plan.
+   * Defaults to `CARD_FLOW_CARDMAGIC_ID_RESERVE` (600 when cap is 750, else ~80% of cap).
+   */
+  cardMagicIdReserve?: number;
+  /**
    * Speed-bump app key (`X-CardFlow-App-Key`). Defaults to `CARD_FLOW_APP_API_KEY`.
    * Null/empty skips the check (tests and local unless configured).
    */
@@ -708,6 +714,14 @@ export function createApp(
   const recognitionCache = serverCache ? createRecognitionCache() : null;
   const cardSightUserCaps = options.cardSightUserCaps ?? { signedIn: CARDSIGHT_USER_MONTHLY_CAP_DEFAULT };
   const cardMagic = options.cardMagic ?? null;
+  const cardSightMonthlyBudget =
+    options.cardSightMonthlyBudget !== undefined
+      ? options.cardSightMonthlyBudget
+      : cardSightMonthlyBudgetFromEnv();
+  const cardMagicIdReserve =
+    options.cardMagicIdReserve !== undefined
+      ? options.cardMagicIdReserve
+      : cardMagicIdReserveFromEnv(process.env, cardSightMonthlyBudget);
   const pokecollectorAccounts = options.pokecollectorAccounts ?? offPokecollectorAccounts;
   const recognitionProvider = options.recognition ?? mockCardRecognitionProvider;
   const gradingProvider = options.grading ?? mockCardGradingProvider;
@@ -2900,6 +2914,20 @@ export function createApp(
             hasAgeConfirmation(store.ageConfirmations, userId) &&
             userCap > 0 &&
             hasActiveConsent(store.consents, userId),
+          // Sean (Oct 18): save most of the free-plan CardSight cap for ID; CardMagic uses the remainder.
+          mayUseIdReserve: () => {
+            if (cardSightMonthlyBudget == null) return true;
+            const used = store.getVendorQuotaUsage("cardsight", monthKey);
+            return canCardMagicUseBudget(used, cardSightMonthlyBudget, cardMagicIdReserve);
+          },
+          consumeBudget: () =>
+            consumeCardSightBudget({
+              consume: store.consumeVendorQuota,
+              getUsage: store.getVendorQuotaUsage,
+              cap: cardSightMonthlyBudget,
+              now: now(),
+              onUsage: (used, cap) => metrics.recordCardSightBudgetUsage(used, cap),
+            }),
           takeUse: () => store.consents.takeMonthlyUse(userId, monthKey, userCap),
         },
         still: parsed.still,
