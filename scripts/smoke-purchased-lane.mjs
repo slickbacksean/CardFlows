@@ -74,6 +74,13 @@ try {
   check(session.status === 200 && typeof session.body?.token === "string", "tester signs in with an invite code");
   token = session.body.token;
 
+  // Invite testers confirm 18+ in-app before livestream (same as CardSight).
+  const age = await call("/v1/age-confirmation", {
+    method: "POST",
+    body: JSON.stringify({ ageConfirmed18Plus: true, version: "2026-10-17.2" }),
+  });
+  check(age.status === 200 && age.body?.ok, "tester confirms 18+");
+
   const guess = await call(`/v1/livestream/guesses/${TCGDEX_ID}?confidence=High`);
   check(guess.status === 200 && guess.body?.ok, "mock HUD guess for the card on stream");
 
