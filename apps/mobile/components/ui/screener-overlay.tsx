@@ -107,8 +107,8 @@ export function ScreenerOverlay({
     const tcgdexId = liveIdentity.tcgdexId;
     const fallback = emptyLiveOverlayGuess(tcgdexId, liveIdentity.confidence);
     void getCachedLiveOverlayGuess(tcgdexId, liveIdentity.confidence)
-      .then((response) => {
-        if (!cancelled) setLiveGuess(response.guess);
+      .then((guess) => {
+        if (!cancelled) setLiveGuess(guess);
       })
       .catch(() => {
         if (!cancelled) setLiveGuess(fallback);
