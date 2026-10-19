@@ -35,3 +35,11 @@ When CardSight is off, out of budget, or not consented, the local matcher return
 ## Cap
 
 About **9** cards per photo (`MULTI_CARD_SCAN_MAX`).
+
+## Scan summary
+
+After every card in a multi-card photo is confirmed or skipped, the phone opens a
+**Scan summary** listing confirmed cards (thumbnail, name, set, number, raw price
+when cached, Purchased state) and a skipped count. Each confirmed row opens Decide.
+**Done** returns to MyDEX; **Scan another** returns to capture. Single-card scans
+still go straight to Decide.

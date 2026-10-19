@@ -116,6 +116,7 @@ function AppRoot() {
           options={{ headerShown: false, animation: "fade", gestureEnabled: true }}
         />
         <Stack.Screen name="scan/[scanId]" options={{ headerShown: false }} />
+        <Stack.Screen name="scan-summary/[scanId]" options={{ headerShown: false }} />
         <Stack.Screen name="decide/[cardflowCardId]" options={{ headerShown: false }} />
         <Stack.Screen name="draft/[draftId]" options={{ headerShown: false }} />
         <Stack.Screen name="settings" options={{ headerShown: false }} />

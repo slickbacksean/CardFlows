@@ -557,6 +557,15 @@ export function confirmScan(input: {
       ...cardRow,
       state: "confirmed",
       confirmationId: confirmation.confirmationId,
+      cardflowCardId: confirmation.cardflowCardId,
+      mapping: {
+        ...cardRow.mapping,
+        canonicalCard: confirmed.canonicalCard,
+        tcgdexId: confirmation.tcgdexId,
+        cardflowCardId: confirmation.cardflowCardId,
+        status: "matched",
+        confidence: "High",
+      },
     };
   }
 

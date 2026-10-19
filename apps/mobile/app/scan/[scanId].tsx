@@ -198,6 +198,7 @@ export default function ScanScreen() {
         source: pickedFromSearch ? "manual_search" : "candidate",
       });
       if (pickedFromSearch) trackEvent("manual_search_used");
+      const isMulti = (result.scan.cardResults?.length ?? 0) > 1;
       const pendingLeft = result.scan.cardResults?.some((r) => r.state === "pending");
       if (pendingLeft) {
         setScan(result.scan);
@@ -211,6 +212,13 @@ export default function ScanScreen() {
               null,
           );
         }
+        return;
+      }
+      if (isMulti) {
+        router.replace({
+          pathname: "/scan-summary/[scanId]",
+          params: { scanId: result.scan.scanId },
+        });
         return;
       }
       const cardflowCardId = result.canonicalCard.cardflowCardId;
@@ -347,6 +355,13 @@ export default function ScanScreen() {
                         row?.mapping.candidates[0]?.tcgdexId ??
                         null,
                     );
+                    return;
+                  }
+                  if ((result.scan.cardResults?.length ?? 0) > 1) {
+                    router.replace({
+                      pathname: "/scan-summary/[scanId]",
+                      params: { scanId: result.scan.scanId },
+                    });
                   }
                 } catch (caught) {
                   setError(caught instanceof Error ? caught.message : "Couldn't skip");

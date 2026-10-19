@@ -137,7 +137,13 @@ describe("multi-card scan + English-only", () => {
     });
     const tcgdexId = created.body.scan.cardResults[0]?.mapping.tcgdexId ?? "base1-58";
     const confirmed = await json<{
-      scan: { cardResults: Array<{ state: string }> };
+      scan: {
+        cardResults: Array<{
+          state: string;
+          cardflowCardId: string | null;
+          confirmationId: string | null;
+        }>;
+      };
       canonicalCard: { tcgdexId: string };
     }>(app, `/v1/scans/${created.body.scan.scanId}/confirm`, {
       method: "POST",
@@ -146,5 +152,43 @@ describe("multi-card scan + English-only", () => {
     expect(confirmed.status).toBe(200);
     expect(confirmed.body.canonicalCard.tcgdexId).toBe(tcgdexId);
     expect(confirmed.body.scan.cardResults[0]?.state).toBe("confirmed");
+    expect(confirmed.body.scan.cardResults[0]?.cardflowCardId).toBeTruthy();
+    expect(confirmed.body.scan.cardResults[0]?.confirmationId).toBeTruthy();
+  });
+
+  it("keeps cardflowCardId on each confirmed row after skipping the rest", async () => {
+    const app = createApp(createMemoryStore(), {
+      recognition: multiRecognitionProvider(),
+      allowDevScenario: true,
+    });
+    const created = await json<{
+      scan: {
+        scanId: string;
+        cardResults: Array<{ mapping: { tcgdexId: string | null } }>;
+      };
+    }>(app, "/v1/scans", {
+      method: "POST",
+      body: JSON.stringify({ captureMethod: "camera_photo", scenario: "high-confidence" }),
+    });
+    const tcgdexId = created.body.scan.cardResults[0]?.mapping.tcgdexId ?? "base1-58";
+    await json(app, `/v1/scans/${created.body.scan.scanId}/confirm`, {
+      method: "POST",
+      body: JSON.stringify({ tcgdexId, detectionIndex: 0 }),
+    });
+    // Skip English Charizard and Japanese Pikachu
+    await json(app, `/v1/scans/${created.body.scan.scanId}/cards/1/skip`, { method: "POST" });
+    const skipJa = await json<{
+      scan: {
+        cardResults: Array<{ state: string; cardflowCardId: string | null }>;
+      };
+    }>(app, `/v1/scans/${created.body.scan.scanId}/cards/2/skip`, { method: "POST" });
+    expect(skipJa.status).toBe(200);
+    expect(skipJa.body.scan.cardResults.map((r) => r.state)).toEqual([
+      "confirmed",
+      "skipped",
+      "skipped",
+    ]);
+    expect(skipJa.body.scan.cardResults[0]?.cardflowCardId).toBeTruthy();
+    expect(skipJa.body.scan.cardResults.every((r) => r.state !== "pending")).toBe(true);
   });
 });

@@ -1099,6 +1099,15 @@ export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStor
         ...cardRow,
         state: "confirmed",
         confirmationId: confirmation.confirmationId,
+        cardflowCardId: confirmation.cardflowCardId,
+        mapping: {
+          ...cardRow.mapping,
+          canonicalCard: canonicalCard,
+          tcgdexId: confirmation.tcgdexId,
+          cardflowCardId: confirmation.cardflowCardId,
+          status: "matched",
+          confidence: "High",
+        },
       };
     }
     const pendingLeft = cardResults?.some((r) => r.state === "pending") ?? false;
@@ -1115,6 +1124,18 @@ export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStor
       canonicalCard = { ...canonicalCard, cardflowCardId: persistedId };
       confirmation.cardflowCardId = persistedId;
       scan.cardflowCardId = persistedId;
+      if (scan.cardResults && scan.cardResults[detectionIndex]) {
+        const row = scan.cardResults[detectionIndex]!;
+        scan.cardResults[detectionIndex] = {
+          ...row,
+          cardflowCardId: persistedId,
+          mapping: {
+            ...row.mapping,
+            canonicalCard,
+            cardflowCardId: persistedId,
+          },
+        };
+      }
       persistExternalIds(canonicalCard, confirmed.matchMethod, now);
       persistScan(scan);
       db.insert(crmConfirmations)

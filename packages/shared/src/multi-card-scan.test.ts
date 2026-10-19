@@ -58,3 +58,58 @@ describe("multi-card scan helpers", () => {
     expect(results[0]!.mapping.status).toBe("matched");
   });
 });
+
+describe("multi-card summary helpers", () => {
+  it("labels skipped counts and detects when the summary should open", async () => {
+    const { multiCardSkippedLabel, multiCardSummaryDone, buildMultiCardResults } = await import(
+      "./multi-card-scan"
+    );
+    const { mapAllDetectionsToCatalog } = await import("./mapper");
+    const { ENGLISH_CARDS_ONLY_NOTE: _ } = await import("./english-cards");
+    expect(multiCardSkippedLabel(0)).toBe("0 cards skipped");
+    expect(multiCardSkippedLabel(1)).toBe("1 card skipped");
+    expect(multiCardSkippedLabel(3)).toBe("3 cards skipped");
+
+    const recognition = {
+      provider: "mock" as const,
+      ok: true,
+      vendorRequestId: "s",
+      processingTimeMs: 1,
+      detections: [
+        {
+          confidence: "High" as const,
+          matchLevel: "exact",
+          vendorCardId: "a",
+          name: "Pikachu",
+          setName: "Base Set",
+          number: "58",
+          language: "en",
+          fields: [],
+          candidates: [],
+        },
+        {
+          confidence: "High" as const,
+          matchLevel: "exact",
+          vendorCardId: "b",
+          name: "X",
+          setName: "Base Set",
+          number: "1",
+          language: "en",
+          fields: [],
+          candidates: [],
+        },
+      ],
+      error: null,
+    };
+    const mappings = await mapAllDetectionsToCatalog(recognition);
+    let results = buildMultiCardResults({ detections: recognition.detections, mappings });
+    expect(multiCardSummaryDone(results)).toBe(false);
+    results = results.map((r, i) => ({
+      ...r,
+      state: i === 0 ? ("confirmed" as const) : ("skipped" as const),
+      cardflowCardId: i === 0 ? "cf" : null,
+    }));
+    expect(multiCardSummaryDone(results)).toBe(true);
+    expect(multiCardSummaryDone(results.slice(0, 1))).toBe(false);
+  });
+});

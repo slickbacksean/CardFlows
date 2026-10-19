@@ -47,6 +47,8 @@ export interface MultiCardScanResult {
   /** False for unsupported-language detections. */
   countsTowardAllowance: boolean;
   confirmationId: string | null;
+  /** Set when state is confirmed. */
+  cardflowCardId: string | null;
 }
 
 export function capMultiCardDetections<T>(detections: readonly T[]): T[] {
@@ -81,6 +83,30 @@ export function buildMultiCardResults(input: {
       notice,
       countsTowardAllowance: multiCardCountsTowardAllowance(detection.language),
       confirmationId: null,
+      cardflowCardId: null,
     };
   });
+}
+
+/** Summary screen after every multi-card row is confirmed or skipped. */
+export const MULTI_CARD_SUMMARY_COPY = {
+  title: "Scan summary",
+  skippedOne: "1 card skipped",
+  purchased: "Purchased",
+  notPurchased: "Not purchased yet",
+  done: "Done",
+  scanAnother: "Scan another",
+  emptyConfirmed: "No cards confirmed from this photo.",
+  openDecide: "Open card",
+} as const;
+
+export function multiCardSkippedLabel(count: number): string {
+  const n = Math.max(0, Math.floor(count));
+  if (n === 1) return MULTI_CARD_SUMMARY_COPY.skippedOne;
+  return `${n} cards skipped`;
+}
+
+export function multiCardSummaryDone(cardResults: readonly MultiCardScanResult[]): boolean {
+  if (cardResults.length <= 1) return false;
+  return cardResults.every((r) => r.state !== "pending");
 }
