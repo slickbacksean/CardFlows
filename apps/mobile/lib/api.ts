@@ -432,9 +432,20 @@ export function rejectScan(scanId: string) {
 
 export function confirmScan(
   scanId: string,
-  input: { tcgdexId: string; selectedVariant?: string | null; via?: "manual_search" },
+  input: {
+    tcgdexId: string;
+    selectedVariant?: string | null;
+    via?: "manual_search";
+    detectionIndex?: number;
+  },
 ) {
   return callApi(apiContract.confirmScan, { params: { scanId }, body: input });
+}
+
+export function skipScanCard(scanId: string, detectionIndex: number) {
+  return callApi(apiContract.skipScanCard, {
+    params: { scanId, detectionIndex: String(detectionIndex) },
+  });
 }
 
 export function getCard(cardflowCardId: string) {

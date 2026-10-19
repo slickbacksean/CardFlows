@@ -52,6 +52,11 @@ export interface RecognitionDetection {
   language: string | null;
   fields: RecognitionField[];
   candidates: RecognitionCandidate[];
+  /**
+   * Optional normalized crop box (0–1). CardSight identify does not return boxes
+   * today (OpenAPI IdentificationData has confidence/card/grading only).
+   */
+  cropBox?: { x: number; y: number; width: number; height: number } | null;
 }
 
 export interface RecognitionError {

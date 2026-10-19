@@ -120,6 +120,9 @@ export interface SqliteStorePort extends StorePort {
 interface PersistedRecognitionEnvelope {
   scenario: RecognitionScenario;
   recognition: CardFlowNormalizedRecognitionResult;
+  /** Multi-card confirm queue (optional; absent on older scans). */
+  cardResults?: import("@cardflow/shared").MultiCardScanResult[];
+  scanHint?: string | null;
 }
 
 function isScenario(value: unknown): value is RecognitionScenario {
@@ -165,6 +168,8 @@ function serializeRecognition(scan: ScanRecord): string {
   const envelope: PersistedRecognitionEnvelope = {
     scenario: scan.scenario,
     recognition: scan.recognition,
+    ...(scan.cardResults ? { cardResults: scan.cardResults } : {}),
+    ...(scan.scanHint != null ? { scanHint: scan.scanHint } : {}),
   };
   return JSON.stringify(envelope);
 }
@@ -624,6 +629,8 @@ export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStor
       idempotencyBodyHash: row.idempotencyBodyHash ?? null,
       recognition: envelope.recognition,
       mapping,
+      cardResults: envelope.cardResults,
+      scanHint: envelope.scanHint ?? null,
     };
   }
 
@@ -1042,11 +1049,19 @@ export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStor
     selectedTcgdexId: string;
     selectedVariant?: string | null;
     catalogCard?: CardFlowCanonicalCard | null;
+    detectionIndex?: number;
   }): {
     scan: ScanRecord;
     confirmation: ConfirmationRecord;
     canonicalCard: CardFlowCanonicalCard;
   } {
+    const detectionIndex = Math.max(0, Math.floor(input.detectionIndex ?? 0));
+    const cardResults = input.scan.cardResults ? [...input.scan.cardResults] : undefined;
+    const cardRow = cardResults?.[detectionIndex];
+    if (cardRow && !cardRow.countsTowardAllowance) {
+      throw new Error(cardRow.notice ?? "Only English cards are supported for now.");
+    }
+    const mappingForConfirm = cardRow?.mapping ?? input.scan.mapping;
     const existing = db
       .select()
       .from(cardflowCards)
@@ -1060,7 +1075,7 @@ export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStor
         ? input.catalogCard ?? existingCanonical ?? null
         : undefined;
     const confirmed = confirmIdentity({
-      mapping: input.scan.mapping,
+      mapping: mappingForConfirm,
       selectedTcgdexId: input.selectedTcgdexId,
       selectedVariant: input.selectedVariant,
       existingCardflowCardId: existing?.cardflowCardId ?? null,
@@ -1079,11 +1094,20 @@ export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStor
       confirmedAt: now,
       mintedCardflowCardId: confirmed.mintedCardflowCardId,
     };
+    if (cardResults && cardRow) {
+      cardResults[detectionIndex] = {
+        ...cardRow,
+        state: "confirmed",
+        confirmationId: confirmation.confirmationId,
+      };
+    }
+    const pendingLeft = cardResults?.some((r) => r.state === "pending") ?? false;
     const scan: ScanRecord = {
       ...input.scan,
-      preInventoryState: "identity_confirmed",
+      preInventoryState: pendingLeft ? input.scan.preInventoryState : "identity_confirmed",
       cardflowCardId: confirmation.cardflowCardId,
       confirmationId: confirmation.confirmationId,
+      cardResults,
     };
 
     sqlite.transaction(() => {
@@ -1111,6 +1135,23 @@ export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStor
     })();
 
     return { scan, confirmation, canonicalCard };
+  }
+
+  function skipScanCard(scan: ScanRecord, detectionIndex: number): ScanRecord | null {
+    if (scan.preInventoryState === "identity_confirmed" && !(scan.cardResults?.length)) return null;
+    const idx = Math.max(0, Math.floor(detectionIndex));
+    const cardResults = scan.cardResults ? [...scan.cardResults] : undefined;
+    if (!cardResults || !cardResults[idx]) return null;
+    if (cardResults[idx]!.state === "confirmed") return null;
+    cardResults[idx] = { ...cardResults[idx]!, state: "skipped" };
+    const pendingLeft = cardResults.some((r) => r.state === "pending");
+    const next: ScanRecord = {
+      ...scan,
+      cardResults,
+      preInventoryState: pendingLeft ? scan.preInventoryState : "identity_rejected",
+    };
+    persistScan(next);
+    return next;
   }
 
   function rejectScan(scan: ScanRecord): ScanRecord | null {
@@ -2122,6 +2163,7 @@ export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStor
     purgeExpiredGradePhotos,
     listInventory,
     confirmScan,
+    skipScanCard,
     rejectScan,
     getConfirmation,
     getCanonical,

@@ -12,6 +12,10 @@ import {
 } from "./catalog";
 import { catalogFingerprint } from "./mock-catalog";
 import { CONFIRM_COULD_NOT_CONFIRM_MESSAGE } from "./confirm-copy";
+import {
+  ENGLISH_CARDS_ONLY_LOOKUP_METHOD,
+  ENGLISH_CARDS_ONLY_NOTE,
+} from "./english-cards";
 import { normalizeEnglishTcgdexId } from "./obb-phash";
 import type {
   CardFlowCanonicalCard,
@@ -392,11 +396,11 @@ async function mapRecognitionToCatalogUnchecked(
         setName: primaryKeys.setName,
         resolvedSetId: null,
         localId: primaryKeys.localId,
-        method: "language is not en; auto-map rejected",
+        method: ENGLISH_CARDS_ONLY_LOOKUP_METHOD,
         nameVerified: false,
         nameOnlySearchForbiddenForAutoMap: true,
       },
-      recommendedUx: "English raw singles only for MVP. Do not auto-map other languages.",
+      recommendedUx: ENGLISH_CARDS_ONLY_NOTE,
     });
   }
 
@@ -572,4 +576,27 @@ async function mapRecognitionToCatalogUnchecked(
 function detectionSourceName(keys: unknown): string {
   const provider = (keys as { provider?: unknown }).provider;
   return typeof provider === "string" ? provider : "recognition";
+}
+
+/**
+ * Map every detection in a multi-card identify result (capped by the caller).
+ * Each detection is mapped on its own so a non-English card does not block the others.
+ */
+export async function mapAllDetectionsToCatalog(
+  recognition: CardFlowNormalizedRecognitionResult,
+  catalog: CardCatalogProvider = mockTcgdexCatalogProvider,
+): Promise<CatalogMappingResult[]> {
+  if (!recognition.detections.length) {
+    return [await mapRecognitionToCatalog(recognition, catalog)];
+  }
+  const out: CatalogMappingResult[] = [];
+  for (const detection of recognition.detections) {
+    out.push(
+      await mapRecognitionToCatalog(
+        { ...recognition, detections: [detection] },
+        catalog,
+      ),
+    );
+  }
+  return out;
 }

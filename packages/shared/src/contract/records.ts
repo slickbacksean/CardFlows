@@ -1,6 +1,7 @@
 /** Records the API returns that the phone reads directly (moved from apps/mobile/lib/api.ts). */
 import { z } from "zod";
 import type { CardFlowCanonicalCard, CaptureMethod, CostToAskSpread, ListingDraft, RecognitionScenario } from "../types";
+import type { MultiCardScanResult } from "../multi-card-scan";
 import { typed } from "./core";
 import { CanonicalCardSchema, CostToAskSchema, ListingDraftSchema } from "./models";
 
@@ -45,6 +46,8 @@ export interface ScanRecord {
     userConfirmation: { recommendedUx: string };
     error: { message: string } | null;
   };
+  cardResults?: MultiCardScanResult[];
+  scanHint?: string | null;
 }
 
 export const ScanRecordSchema = typed<ScanRecord>(
@@ -63,6 +66,8 @@ export const ScanRecordSchema = typed<ScanRecord>(
       canonicalCard: CanonicalCardSchema.nullable(),
       candidates: z.array(CanonicalCardSchema),
     }),
+    cardResults: z.array(z.unknown()).optional(),
+    scanHint: z.string().nullable().optional(),
   }),
 );
 

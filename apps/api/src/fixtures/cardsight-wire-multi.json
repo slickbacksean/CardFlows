@@ -1,0 +1,46 @@
+{
+  "_synthetic": "Multi-card identify response shape from CardSight OpenAPI IdentifyCardResponseInput.",
+  "success": true,
+  "requestId": "req_wire_multi_001",
+  "processingTime": 520,
+  "detectedCount": 3,
+  "identifiedCount": 3,
+  "detections": [
+    {
+      "confidence": "High",
+      "card": {
+        "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+        "name": "Pikachu",
+        "setName": "Base Set",
+        "number": "58",
+        "fields": [{ "key": "CARD_LANGUAGE", "value": "en" }]
+      }
+    },
+    {
+      "confidence": "High",
+      "card": {
+        "id": "b2c3d4e5-f6a7-8901-bcde-f12345678901",
+        "name": "Charizard",
+        "setName": "Base Set",
+        "number": "4",
+        "fields": [{ "key": "CARD_LANGUAGE", "value": "en" }]
+      }
+    },
+    {
+      "confidence": "Medium",
+      "card": {
+        "id": "c3d4e5f6-a7b8-9012-cdef-123456789012",
+        "name": "フシギダネ",
+        "setName": "Base Set",
+        "number": "44",
+        "fields": [{ "key": "CARD_LANGUAGE", "value": "ja" }]
+      },
+      "grading": {
+        "confidence": "High",
+        "company": { "name": "PSA" },
+        "grade": { "value": "10" },
+        "certNumber": "12345678"
+      }
+    }
+  ]
+}

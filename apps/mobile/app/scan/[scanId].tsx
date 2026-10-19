@@ -25,8 +25,9 @@ import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-
 import { SafeAreaView } from "react-native-safe-area-context";
 import { HowThisWorksSheet } from "@/components/ui/how-this-works-sheet";
 import { LabeledFigure } from "@/components/ui/labeled-figure";
+import { MultiCardScanList } from "@/components/ui/multi-card-scan-list";
 import { PrimaryButton } from "@/components/ui/primary-button";
-import { confirmScan, getScan, rejectScan, type ScanRecord } from "@/lib/api";
+import { confirmScan, getScan, rejectScan, skipScanCard, type ScanRecord } from "@/lib/api";
 import { rememberCatalogCards, searchCatalogWithSnapshot } from "@/lib/catalog-snapshot";
 import { prefetchCandidatePrices } from "@/lib/price-queries";
 import { getConfirmPictureUri } from "@/lib/scan-capture";
@@ -53,6 +54,7 @@ export default function ScanScreen() {
   const [searchNotice, setSearchNotice] = useState<string | null>(null);
   const [isSearching, setIsSearching] = useState(false);
   const [howThisWorksOpen, setHowThisWorksOpen] = useState(false);
+  const [multiIndex, setMultiIndex] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -185,15 +187,32 @@ export default function ScanScreen() {
         searchCards.some((card) => card.tcgdexId === selectedTcgdexId) &&
         scan.mapping.canonicalCard?.tcgdexId !== selectedTcgdexId &&
         !scan.mapping.candidates.some((card) => card.tcgdexId === selectedTcgdexId);
+      const multi = (scan.cardResults?.length ?? 0) > 1;
       const result = await confirmScan(scan.scanId, {
         tcgdexId: selectedTcgdexId,
         ...(pickedFromSearch ? { via: "manual_search" as const } : {}),
+        ...(multi ? { detectionIndex: multiIndex } : {}),
       });
       trackEvent("confirm", {
         time_to_confirm_ms: msSinceScan(scan.scanId),
         source: pickedFromSearch ? "manual_search" : "candidate",
       });
       if (pickedFromSearch) trackEvent("manual_search_used");
+      const pendingLeft = result.scan.cardResults?.some((r) => r.state === "pending");
+      if (pendingLeft) {
+        setScan(result.scan);
+        const nextPending = result.scan.cardResults?.findIndex((r) => r.state === "pending") ?? -1;
+        if (nextPending >= 0) {
+          setMultiIndex(nextPending);
+          const row = result.scan.cardResults?.[nextPending];
+          setSelectedTcgdexId(
+            row?.mapping.canonicalCard?.tcgdexId ??
+              row?.mapping.candidates[0]?.tcgdexId ??
+              null,
+          );
+        }
+        return;
+      }
       const cardflowCardId = result.canonicalCard.cardflowCardId;
       router.push({
         pathname: "/decide/[cardflowCardId]",
@@ -293,7 +312,54 @@ export default function ScanScreen() {
           />
         ) : null}
 
-        {scan && frame === "high" && selected ? (
+        {scan && (scan.cardResults?.length ?? 0) > 1 ? (
+          <MultiCardScanList
+            activeIndex={multiIndex}
+            cards={scan.cardResults ?? []}
+            error={error}
+            isBusy={isConfirming}
+            onConfirm={() => void onConfirm()}
+            onSelectIndex={(index) => {
+              setMultiIndex(index);
+              const row = scan.cardResults?.[index];
+              const pick =
+                row?.mapping.canonicalCard?.tcgdexId ??
+                row?.mapping.candidates[0]?.tcgdexId ??
+                null;
+              setSelectedTcgdexId(pick);
+              setError(null);
+            }}
+            onSelectTcgdexId={setSelectedTcgdexId}
+            onSkip={() => {
+              void (async () => {
+                if (!scan) return;
+                setIsConfirming(true);
+                setError(null);
+                try {
+                  const result = await skipScanCard(scan.scanId, multiIndex);
+                  setScan(result.scan);
+                  const nextPending = result.scan.cardResults?.findIndex((r) => r.state === "pending") ?? -1;
+                  if (nextPending >= 0) {
+                    setMultiIndex(nextPending);
+                    const row = result.scan.cardResults?.[nextPending];
+                    setSelectedTcgdexId(
+                      row?.mapping.canonicalCard?.tcgdexId ??
+                        row?.mapping.candidates[0]?.tcgdexId ??
+                        null,
+                    );
+                  }
+                } catch (caught) {
+                  setError(caught instanceof Error ? caught.message : "Couldn't skip");
+                } finally {
+                  setIsConfirming(false);
+                }
+              })();
+            }}
+            selectedTcgdexId={selectedTcgdexId}
+          />
+        ) : null}
+
+        {scan && (scan.cardResults?.length ?? 0) <= 1 && frame === "high" && selected ? (
           <HighConfirm
             captureUri={captureUri}
             card={selected}
@@ -305,7 +371,7 @@ export default function ScanScreen() {
           />
         ) : null}
 
-        {scan && frame === "ambiguous" ? (
+        {scan && (scan.cardResults?.length ?? 0) <= 1 && frame === "ambiguous" ? (
           <AmbiguousConfirm
             captureUri={captureUri}
             cards={scan.mapping.candidates}
@@ -319,7 +385,7 @@ export default function ScanScreen() {
           />
         ) : null}
 
-        {scan && (frame === "high" || frame === "ambiguous") ? (
+        {scan && (scan.cardResults?.length ?? 0) <= 1 && (frame === "high" || frame === "ambiguous") ? (
           searchOpen ? (
             <View style={styles.stack}>
               {manualSearch}

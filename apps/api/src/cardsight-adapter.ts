@@ -8,14 +8,16 @@
  * - Wire mapping is tolerant and based on the integration doc; recorded responses in
  *   `fixtures/cardsight-wire-*.json` are synthetic until a staging key exists.
  */
-import type {
-  CardFlowNormalizedRecognitionResult,
-  CardRecognitionProvider,
-  IdentifyCardRequest,
-  RecognitionCandidate,
-  RecognitionConfidence,
-  RecognitionDetection,
-  RecognitionError,
+import {
+  MULTI_CARD_SCAN_MAX,
+  type CardFlowNormalizedRecognitionResult,
+  type CardRecognitionProvider,
+  type IdentifyCardRequest,
+  type RecognitionCandidate,
+  type RecognitionConfidence,
+  type RecognitionDetection,
+  type RecognitionError,
+  type RecognitionField,
 } from "@cardflow/shared";
 
 export const CARDSIGHT_BASE_URL = "https://api.cardsight.ai";
@@ -76,14 +78,32 @@ function str(value: unknown): string | null {
 
 type Wire = Record<string, unknown>;
 
+function wireFields(card: Wire): RecognitionField[] {
+  const raw = Array.isArray(card.fields) ? (card.fields as Wire[]) : [];
+  const out: RecognitionField[] = [];
+  for (const entry of raw) {
+    const key = str(entry.key) ?? str(entry.name);
+    const value = str(entry.value);
+    if (key && value) out.push({ key, value });
+  }
+  return out;
+}
+
+function languageFromCard(card: Wire, fields: RecognitionField[]): string | null {
+  const fromField = fields.find((f) => f.key.toUpperCase() === "CARD_LANGUAGE")?.value ?? null;
+  return fromField ?? str(card.language);
+}
+
 function cardFields(card: Wire) {
   const set = (card.set ?? {}) as Wire;
+  const fields = wireFields(card);
   return {
     vendorCardId: str(card.id) ?? str(card.cardId),
     name: str(card.name),
     setName: str(card.setName) ?? str(set.name),
     number: str(card.number) ?? str(card.cardNumber),
-    language: str(card.language),
+    language: languageFromCard(card, fields),
+    fields,
   };
 }
 
@@ -104,22 +124,30 @@ export function mapCardSightWire(body: unknown, elapsedMs: number | null): CardF
   if (root.success === false || (root.detections !== undefined && !Array.isArray(root.detections))) {
     return failure(CARDSIGHT_BAD_RESPONSE);
   }
+  // Sean: ignore slab/grading payloads (raw cards only). CardSight may still send them.
   const rawDetections = Array.isArray(root.detections) ? (root.detections as Wire[]) : [];
-  const detections: RecognitionDetection[] = rawDetections.map((det) => {
+  const detections: RecognitionDetection[] = rawDetections.slice(0, MULTI_CARD_SCAN_MAX).map((det) => {
     const card = ((det.card ?? det) as Wire) ?? {};
-    const suggestions = Array.isArray(det.suggestions) ? (det.suggestions as Wire[]) : [];
-    const candidates: RecognitionCandidate[] = suggestions.map((s, rank) => ({
-      ...cardFields((s.card ?? s) as Wire),
-      fields: [],
-      rank,
-    }));
+    // Prefer suggestions on the detection; fall back to card.suggestions (OpenAPI shape).
+    const suggestionSource =
+      Array.isArray(det.suggestions)
+        ? (det.suggestions as Wire[])
+        : Array.isArray(card.suggestions)
+          ? (card.suggestions as Wire[])
+          : [];
+    const base = cardFields(card);
+    const candidates: RecognitionCandidate[] = suggestionSource.map((s, rank) => {
+      const sug = cardFields((s.card ?? s) as Wire);
+      return { ...sug, rank };
+    });
+    // cropBox: CardSight identify OpenAPI has no bounding box fields today.
     return {
       confidence: confidence(det.confidence),
       // Backend review: a missing matchLevel is unknown (null), never "exact".
       matchLevel: str(det.matchLevel),
-      ...cardFields(card),
-      fields: [],
+      ...base,
       candidates,
+      cropBox: null,
     };
   });
   return {

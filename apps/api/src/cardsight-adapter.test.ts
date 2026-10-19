@@ -128,3 +128,20 @@ describe("CardSight confidence (backend review L4)", () => {
     expect(result.detections.map((d) => d.confidence)).toEqual([null, null, "Low"]);
   });
 });
+
+describe("multi-card CardSight wire (Sean Oct 18)", () => {
+  it("returns up to 9 detections, reads CARD_LANGUAGE, ignores slab grading", async () => {
+    const provider = createCardSightRecognitionProvider({
+      apiKey: "k",
+      fetch: (async () => json(200, wire("cardsight-wire-multi.json"))) as never,
+      sleep: noSleep,
+    });
+    const result = await provider.identifyCard(req);
+    expect(result.ok).toBe(true);
+    expect(result.detections).toHaveLength(3);
+    expect(result.detections[0]?.language).toBe("en");
+    expect(result.detections[2]?.language).toBe("ja");
+    expect(result.detections[2]).not.toHaveProperty("grading");
+    expect(result.detections[0]?.cropBox).toBeNull();
+  });
+});

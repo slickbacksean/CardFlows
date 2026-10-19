@@ -5,6 +5,12 @@ import { AGE_CONFIRMATION_REQUIRED_CODE, AGE_GATE_COPY, AGE_GATE_VERSION } from 
 import { ageConfirmationState, hasAgeConfirmation } from "./age-store";
 import { ageGateEnabledFromEnv, CARDSIGHT_GUEST_MONTHLY_CAP, CARDSIGHT_USER_MONTHLY_CAP_DEFAULT } from "./grade-quota-env";
 import { createRecognitionWithFallback } from "./cardsight-adapter";
+import {
+  monthStartIso,
+  recognitionWithMultiCardMappings,
+  scanQuotaForUser,
+} from "./multi-card-scan";
+import { SCAN_QUOTA_COPY } from "@cardflow/shared";
 import { ALLOWANCE_TOMBSTONE_TTL_MS, allowanceTombstoneKey, normalizeEmail, type DeletionAuditKind } from "./account-store";
 import { routePath } from "hono/route";
 import { CARDSIGHT_CONSENT_VERSION, INVITED_USERS, EMAIL_CODE_LIFETIME_SENDS, EMAIL_SENDS_PER_ADDRESS_PER_DAY, UNVERIFIED_ACCOUNT_TTL_DAYS, EMAIL_CODE_LENGTH, EMAIL_RESEND_COOLDOWN_MS, EMAIL_UNVERIFIED_CODE, EMAIL_VERIFICATION_COPY, EMAIL_VERIFICATION_TTL_MS, isEmailCode, passwordResetEmailText, verificationEmailText, quotaAnchor, quotaPeriodFor, ACCOUNT_AUTH_COPY, ACCOUNT_DELETION_COPY, PASSWORD_RESET_TTL_MS, GUEST_MINT_WINDOW_MS, GUEST_SESSION_TTL_MS, isValidEmail, passwordProblem, GUEST_USER_PREFIX, SIGNUP_REQUIRED_CODE, guestIdentity, guestRouteBlockReason, isGuestUserId, isHot, parsePerfBatch, signupMessage, type SignupReason } from "@cardflow/shared";
@@ -527,6 +533,7 @@ export function createApp(
     listUserPriceSnapshots,
     deleteUserPriceSnapshots,
     confirmScan,
+    skipScanCard,
     createSession,
     findCachedCanonicals,
     getCanonical,
@@ -2591,9 +2598,10 @@ export function createApp(
           liveIdentifyEnabled ? mockCardRecognitionProvider : recognitionProvider;
         recognition = await mockProvider.identifyCard(identifyRequest);
       }
-      const mapped = await mapRecognitionToCatalog(recognition, catalog);
-      // P1-26: cards users keep confirming move up the candidate list.
-      const mapping =
+      const multi = await recognitionWithMultiCardMappings(recognition, catalog);
+      recognition = multi.recognition;
+      // P1-26: cards users keep confirming move up the candidate list (primary mapping + each card).
+      const rerank = (mapped: typeof multi.mapping) =>
         mapped.candidates.length > 1
           ? {
               ...mapped,
@@ -2604,6 +2612,12 @@ export function createApp(
               ),
             }
           : mapped;
+      const mapping = rerank(multi.mapping);
+      const cardResults = multi.cardResults.map((row) => ({
+        ...row,
+        mapping: rerank(row.mapping),
+      }));
+      const scanHint = multi.scanHint;
       // Backend review M1: the account may have been deleted while recognition ran. Recheck the
       // session right before saving; if it's gone, drop the scan and its temp image.
       const bearer = parseBearerToken(c.req.header("authorization"));
@@ -2627,6 +2641,8 @@ export function createApp(
         idempotencyBodyHash: scanIdempotencyKey ? bodyHash : null,
         recognition,
         mapping,
+        cardResults,
+        scanHint,
       });
       if (claim?.kind === "new") claim.finish(bodyHash, scan.scanId);
       return c.json({ ok: true, scan, variantSuggestions: variantSuggestionsFor(scan.mapping) }, 201);
@@ -2659,21 +2675,42 @@ export function createApp(
   });
 
   app.post("/v1/scans/:scanId/confirm", async (c) => {
-    const scan = getScan(c.get("userId"), c.req.param("scanId"));
+    const userId = c.get("userId");
+    const scan = getScan(userId, c.req.param("scanId"));
     if (!scan) return c.json({ ok: false, error: "Scan not found" }, 404);
     const body = await c.req.json<{
       tcgdexId?: string;
       selectedVariant?: string | null;
       via?: string | null;
+      detectionIndex?: number;
     }>();
     if (!body.tcgdexId) {
       return c.json({ ok: false, error: "tcgdexId is required" }, 400);
     }
+    const detectionIndex = Math.max(0, Math.floor(body.detectionIndex ?? 0));
+    const cardRow = scan.cardResults?.[detectionIndex];
+    if (cardRow && !cardRow.countsTowardAllowance) {
+      return c.json({ ok: false, error: cardRow.notice ?? SCAN_QUOTA_COPY.englishOnly }, 400);
+    }
+    // Sean: 30 free confirmed cards / month; Premium unlimited. Per confirmed card.
+    const plan = resolveAccountPlan(userId, getGradeAccount(userId).plan);
+    const since = monthStartIso(now());
+    const usedThisMonth = listConfirmEvents({ since }).filter((e) => e.userId === userId).length;
+    const quota = scanQuotaForUser({ plan, confirmEventsThisMonth: usedThisMonth, now: now() });
+    if (!quota.unlimited && quota.remainingScans <= 0) {
+      return c.json({
+        ok: false,
+        error: SCAN_QUOTA_COPY.outOfScans,
+        code: "scan_quota_exceeded",
+        quota,
+      }, 403);
+    }
     try {
+      const mappingForConfirm = cardRow?.mapping ?? scan.mapping;
       const resolvedCatalog = await catalogCardForConfirm(
         catalog,
         body.tcgdexId,
-        scan.mapping,
+        mappingForConfirm,
         body.selectedVariant,
       );
       const cachedCatalog = findCachedCanonicals({
@@ -2701,29 +2738,30 @@ export function createApp(
         selectedTcgdexId: body.tcgdexId,
         selectedVariant: body.selectedVariant,
         catalogCard,
+        detectionIndex,
       });
       const correction = scanCorrectionFor({
         scanId: scan.scanId,
-        userId: c.get("userId"),
+        userId,
         via: body.via,
-        predictedTcgdexId: scan.mapping.tcgdexId ?? scan.mapping.canonicalCard?.tcgdexId ?? null,
-        candidateTcgdexIds: scan.mapping.candidates.map((card) => card.tcgdexId),
+        predictedTcgdexId: mappingForConfirm.tcgdexId ?? mappingForConfirm.canonicalCard?.tcgdexId ?? null,
+        candidateTcgdexIds: mappingForConfirm.candidates.map((card) => card.tcgdexId),
         chosenTcgdexId: body.tcgdexId,
-        recognitionProvider: scan.mapping.provider,
+        recognitionProvider: mappingForConfirm.provider,
       });
       if (correction) recordScanCorrection(correction);
-      const shown = scan.mapping.candidates.map((card) => card.tcgdexId);
-      const predicted = scan.mapping.tcgdexId ?? scan.mapping.canonicalCard?.tcgdexId ?? null;
+      const shown = mappingForConfirm.candidates.map((card) => card.tcgdexId);
+      const predicted = mappingForConfirm.tcgdexId ?? mappingForConfirm.canonicalCard?.tcgdexId ?? null;
       saveConfirmEvent(
         confirmEventFor({
           scanId: scan.scanId,
-          userId: c.get("userId"),
+          userId,
           via: body.via,
           shownTcgdexIds: shown.length > 0 ? shown : predicted ? [predicted] : [],
           chosenTcgdexId: body.tcgdexId,
           selectedVariant: body.selectedVariant ?? null,
-          confidence: scan.mapping.confidence ?? null,
-          recognitionProvider: scan.mapping.provider,
+          confidence: mappingForConfirm.confidence ?? null,
+          recognitionProvider: mappingForConfirm.provider,
         }),
       );
       return c.json({
@@ -2767,6 +2805,21 @@ export function createApp(
       return c.json({ ok: false, error: "Scan is already confirmed" }, 409);
     }
     return c.json({ ok: true, scan: rejected });
+  });
+
+  /** Multi-card: skip one detection. Does not use the monthly scan allowance. */
+  app.post("/v1/scans/:scanId/cards/:detectionIndex/skip", (c) => {
+    const scan = getScan(c.get("userId"), c.req.param("scanId"));
+    if (!scan) return c.json({ ok: false, error: "Scan not found" }, 404);
+    const raw = Number(c.req.param("detectionIndex"));
+    if (!Number.isFinite(raw) || raw < 0) {
+      return c.json({ ok: false, error: "detectionIndex is required" }, 400);
+    }
+    const skipped = skipScanCard(scan, raw);
+    if (!skipped) {
+      return c.json({ ok: false, error: "That card can't be skipped" }, 409);
+    }
+    return c.json({ ok: true, scan: skipped });
   });
 
   app.get("/v1/cards/:cardflowCardId", (c) => {
