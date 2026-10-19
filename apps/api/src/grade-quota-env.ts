@@ -52,6 +52,22 @@ export function cardSightMonthlyBudgetFromEnv(env: Env = process.env): number | 
   return positiveInt(env.CARD_FLOW_CARDSIGHT_MONTHLY_BUDGET, CARDSIGHT_MONTHLY_BUDGET_DEFAULT);
 }
 
+/**
+ * Monthly CardSight calls reserved for card ID so CardMagic cannot burn the free plan.
+ * Default: 600 when the cap is 750 (free plan), otherwise about 80% of the cap.
+ * CardMagic may run only while total used < cap − reserve; ID still uses the full cap.
+ */
+export function cardMagicIdReserveFromEnv(
+  env: Env = process.env,
+  cap: number | null = cardSightMonthlyBudgetFromEnv(env),
+): number {
+  if (cap == null || cap <= 0) return 0;
+  const raw = env.CARD_FLOW_CARDMAGIC_ID_RESERVE?.trim();
+  if (raw && /^\d+$/.test(raw)) return Math.min(Number(raw), cap);
+  if (cap === CARDSIGHT_MONTHLY_BUDGET_DEFAULT) return 600;
+  return Math.floor(cap * 0.8);
+}
+
 /** Backend review M5: default per-user CardSight calls per calendar month. */
 export const CARDSIGHT_USER_MONTHLY_CAP_DEFAULT = 50;
 /** Sean (Oct 17): guests make no 18+ statement, so they never get CardSight. Not configurable. */

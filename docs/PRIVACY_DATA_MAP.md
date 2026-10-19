@@ -96,7 +96,7 @@ Public GitHub product docs (`MVP_SCOPE.md`, `PRODUCT_OVERVIEW.md`, `NON_GOALS.md
 | **Access permissions** | Owner + server |
 | **Retention proposal** | Life of account or until user deletes the scan |
 | **User deletion behavior** | Delete row + linked image (**see 4**) |
-| **Sent to CardSight / TCGdex / analytics?** | CardSight receives the **image** (and whatever metadata the API requires — **Open:** exact request fields). Do not send unrelated CRM fields. |
+| **Sent to CardSight / TCGdex / analytics?** | CardSight receives the **image** for identify and, when CardMagic is on, for cropping/straightening **grade photos** (and whatever metadata the API requires — **Open:** exact request fields). Do not send unrelated CRM fields. See [CARDMAGIC.md](./CARDMAGIC.md). |
 | **Never log?** | Do not log request bodies that include images. Scan id + status only. |
 
 ### 6. Recognition results (candidate card, confidence, language, set, variant)
