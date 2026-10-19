@@ -42,13 +42,15 @@ export const PREMIUM_REQUIRED_CODE = "premium_required";
  * the API answers 403 premium_required to free accounts. Each estimate still uses quota.
  */
 export const BATCH_GRADE_HEADER = "x-cardflow-batch";
-export const PREMIUM_FEATURES = ["batch_grading", "grade_history", "credit_packs"] as const;
+export const PREMIUM_FEATURES = ["batch_grading", "grade_history", "credit_packs", "livestream_scanner"] as const;
 export type PremiumFeature = (typeof PREMIUM_FEATURES)[number];
 
 const FEATURE_LINE: Record<PremiumFeature, string> = {
   batch_grading: "Batch pre-grade is part of Premium.",
   credit_packs: "Credit packs are for Premium members.",
   grade_history: `Your full pre-grade estimate history is part of Premium. Free accounts see the ${GRADE_HISTORY_FREE_VISIBLE} most recent; older ones stay saved.`,
+  /** v1: IAP hidden — plain locked copy, no purchase button (Sean, Oct 18). */
+  livestream_scanner: "Livestream scanner is a Premium feature, coming soon.",
 };
 
 export const PREMIUM_PROMPT_COPY = {

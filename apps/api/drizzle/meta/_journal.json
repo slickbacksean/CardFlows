@@ -183,6 +183,13 @@
       "when": 1791696000000,
       "tag": "0025_allowance_tombstones",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "6",
+      "when": 1791782400000,
+      "tag": "0026_livestream_trials",
+      "breakpoints": true
     }
   ]
 }

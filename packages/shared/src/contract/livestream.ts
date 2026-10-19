@@ -9,6 +9,21 @@ const Timing = typed<{ stages: Partial<Record<LiveScanStage, number>>; warped: b
 );
 
 export const livestreamRoutes = {
+  getLivestreamAccess: defineRoute({
+    method: "GET",
+    path: "/v1/livestream/access",
+    bodyKind: "none",
+    response: z.looseObject({
+      ok: z.literal(true),
+      access: z.looseObject({
+        state: z.enum(["ready", "trial", "locked", "premium"]),
+        trialDays: z.number(),
+        trialStartedAt: z.string().nullable(),
+        trialEndsAt: z.string().nullable(),
+        daysLeft: z.number(),
+      }),
+    }),
+  }),
   getLiveOverlayGuess: defineRoute({
     method: "GET",
     path: "/v1/livestream/guesses/:tcgdexId",

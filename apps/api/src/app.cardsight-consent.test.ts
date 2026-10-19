@@ -432,7 +432,7 @@ describe("Backend review: recognition cache and fallbacks", () => {
         fetchCalls.push(args);
         return new Response("{}", { status: 200 });
       }) as typeof fetch,
-      consumeBudget: () => false,
+      budgetAvailable: () => false,
     });
     const { app, local } = setup({ cardSight: adapter });
     await consent(app, { granted: true, version: CARDSIGHT_CONSENT_VERSION });
@@ -457,5 +457,32 @@ describe("Backend review: recognition cache and fallbacks", () => {
     });
     expect(res.status).toBe(200);
     expect(cardSight.calls).toHaveLength(0);
+  });
+});
+
+describe("CardSight charge-on-success (Sean Oct 18)", () => {
+  it("failed CardSight calls do not use the monthly cap; success does", async () => {
+    const failing = spy("cardsight", false);
+    const { app, store, local } = setup({
+      cardSight: failing.provider,
+      cardSightUserCaps: { signedIn: 2 },
+      now: () => new Date("2026-10-20T12:00:00.000Z"),
+    });
+    await consent(app, { granted: true, version: CARDSIGHT_CONSENT_VERSION });
+    await scan(app);
+    expect(failing.calls).toHaveLength(1);
+    expect(local.calls.length).toBeGreaterThan(0);
+    expect(store.consents.monthlyUse(await currentUserId(app), "2026-10")).toBe(0);
+
+    const ok = spy("cardsight", true);
+    const second = setup({
+      cardSight: ok.provider,
+      cardSightUserCaps: { signedIn: 2 },
+      now: () => new Date("2026-10-20T12:00:00.000Z"),
+    });
+    await consent(second.app, { granted: true, version: CARDSIGHT_CONSENT_VERSION });
+    await scan(second.app);
+    expect(ok.calls).toHaveLength(1);
+    expect(second.store.consents.monthlyUse(await currentUserId(second.app), "2026-10")).toBe(1);
   });
 });

@@ -4,6 +4,7 @@ import type { NorthStarWeekTotal } from "@cardflow/shared";
 import { createMemorySalesStore, type SalesStore } from "./sales-store";
 import { createMemoryPurchaseLedger, type PurchaseLedger } from "./purchase-ledger";
 import { createMemoryAgeConfirmationStore, type AgeConfirmationStore } from "./age-store";
+import { createMemoryLivestreamTrialStore, type LivestreamTrialStore } from "./livestream-trial-store";
 import { createMemoryConsentStore, type ConsentStore } from "./consent-store";
 import { createMemoryIdempotencyStore, type IdempotencyStore } from "./idempotency-store";
 import { createMemoryGradeHistoryStore, type GradeHistoryStore } from "./grade-history-store";
@@ -823,6 +824,8 @@ export interface StorePort {
   consents: ConsentStore;
   /** Sean (Oct 17): accounts' 18+ attestation (time + wording version; never a birth date). */
   ageConfirmations: AgeConfirmationStore;
+  /** Sean (Oct 18): livestream scanner 3-day trial (starts on first use). */
+  livestreamTrials: LivestreamTrialStore;
   /** P2-07 pre-grade estimate history. */
   gradeHistory: GradeHistoryStore;
   createSession: typeof createSession;
@@ -1072,6 +1075,7 @@ export function createMemoryStore(): StorePort {
     idempotency: createMemoryIdempotencyStore(),
     consents: createMemoryConsentStore(),
     ageConfirmations: createMemoryAgeConfirmationStore(),
+    livestreamTrials: createMemoryLivestreamTrialStore(),
     gradeHistory: createMemoryGradeHistoryStore(),
     createSession,
     getSessionByToken,
@@ -1366,6 +1370,7 @@ function createMemoryAccountStore(
       counts.idempotency_keys = port.idempotency.deleteUser(userId);
       counts.provider_consents = port.consents.deleteUser(userId);
       counts.age_confirmations = port.ageConfirmations.deleteUser(userId);
+      counts.livestream_trials = port.livestreamTrials.deleteUser(userId);
       for (const item of port.listInventory(userId)) port.deleteInventoryItem(userId, item.inventoryItemId);
       store.inventory = store.inventory.filter((item) => item.userId !== userId);
       for (const [id, c] of store.confirmations) if ((c as { userId?: string }).userId === userId) store.confirmations.delete(id);

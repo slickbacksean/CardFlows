@@ -28,6 +28,7 @@ describe("D14 premium", () => {
       afterPremium: "If your Premium ends, credits you already bought still work. They're used after your free monthly estimates.",
     });
     expect(premiumFeatureLine("credit_packs")).toBe("Credit packs are for Premium members.");
+    expect(premiumFeatureLine("livestream_scanner")).toBe("Livestream scanner is a Premium feature, coming soon.");
     expect(CREDITS_NEVER_EXPIRE_COPY).toBe(
       "Your monthly allowance resets on your reset date and unused monthly estimates don't roll over. Credits you buy never expire.",
     );

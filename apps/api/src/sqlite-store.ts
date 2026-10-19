@@ -41,6 +41,7 @@ import { catalogDisplayFromCard } from "./listing";
 import { createSqliteSalesStore } from "./sales-store";
 import { createSqlitePurchaseLedger } from "./purchase-ledger";
 import { createSqliteAgeConfirmationStore } from "./age-store";
+import { createSqliteLivestreamTrialStore } from "./livestream-trial-store";
 import { createSqliteConsentStore } from "./consent-store";
 import { createSqliteIdempotencyStore } from "./idempotency-store";
 import { createSqliteGradeHistoryStore } from "./grade-history-store";
@@ -2150,6 +2151,7 @@ export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStor
     idempotency: createSqliteIdempotencyStore(db),
     consents: createSqliteConsentStore(db),
     ageConfirmations: createSqliteAgeConfirmationStore(db),
+    livestreamTrials: createSqliteLivestreamTrialStore(db),
     gradeHistory: createSqliteGradeHistoryStore(db),
     accounts: createSqliteAccountStore(sqlite, db),
     createSession,

@@ -566,6 +566,15 @@ export {
   livestreamUsesDesktopSite,
   livestreamWebViewUserAgent,
 } from "./livestream-navigation";
+export {
+  LIVESTREAM_TRIAL_DAYS,
+  LIVESTREAM_TRIAL_MS,
+  livestreamAccessAllowed,
+  livestreamAccessFor,
+  livestreamTrialDaysLeft,
+  livestreamTrialEndsAt,
+} from "./livestream-trial";
+export type { LivestreamAccess, LivestreamAccessState } from "./livestream-trial";
 export { livestreamOverlayKind, livestreamOverlayUsesHud } from "./livestream-overlay";
 export type { LivestreamOverlayKind, LivestreamOverlayKindInput } from "./livestream-overlay";
 export {
