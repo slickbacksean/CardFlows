@@ -1,5 +1,6 @@
 /**
- * D14 (Sean-approved): premium tier. Placeholder prices until IAP ships (CARD_FLOW_IAP_ENABLED off).
+ * D14 (Sean-approved): premium tier. Placeholder prices until IAP ships
+ * (`CARD_FLOW_IAP_ENABLED` / `EXPO_PUBLIC_CARD_FLOW_IAP_ENABLED` off).
  * Batch grading and full estimate history are premium-only. Free users see their 10 most recent
  * estimates per card; older ones keep saving on the server and show once the user upgrades.
  * Monthly allowances reset on the 1st of each month (UTC; the billing date once Apple billing exists) and don't roll over.
@@ -49,8 +50,8 @@ const FEATURE_LINE: Record<PremiumFeature, string> = {
   batch_grading: "Batch pre-grade is part of Premium.",
   credit_packs: "Credit packs are for Premium members.",
   grade_history: `Your full pre-grade estimate history is part of Premium. Free accounts see the ${GRADE_HISTORY_FREE_VISIBLE} most recent; older ones stay saved.`,
-  /** v1: IAP hidden — plain locked copy, no purchase button (Sean, Oct 18). */
-  livestream_scanner: "Livestream scanner is a Premium feature, coming soon.",
+  /** Sean (Oct 19): after the 3-day trial, prompt to subscribe (paywall in the app). */
+  livestream_scanner: "Subscribe to Premium to keep using the livestream scanner.",
 };
 
 export const PREMIUM_PROMPT_COPY = {
@@ -71,6 +72,46 @@ export const CREDIT_PACK_COPY = {
   /** Sean (Oct 17): leftover credits stay usable if Premium ends; only buying needs Premium. */
   afterPremium: "If your Premium ends, credits you already bought still work. They're used after your free monthly estimates.",
 } as const;
+
+
+/**
+ * Sean (Oct 19): paywall after the livestream 3-day trial ends.
+ * IAP is not live yet (no Apple Developer account / StoreKit / RevenueCat; Expo Go only).
+ * `startPremiumPurchase()` is the single entry point; while IAP is off it only shows
+ * `openingSoon`. When `EXPO_PUBLIC_CARD_FLOW_IAP_ENABLED` is on, the paywall must show
+ * price, period, auto-renew terms, Restore Purchases, and Terms/Privacy (Apple 3.1.2).
+ */
+export const LIVESTREAM_PAYWALL_COPY = {
+  title: "Your 3-day livestream trial has ended",
+  body: "Subscribe to Premium to keep using the livestream scanner.",
+  subscribe: "Subscribe to Premium",
+  notNow: "Not now",
+  openingSoon: "Subscriptions are opening soon.",
+  /** Shown only when IAP is enabled (Apple 3.1.2). Prices stay placeholders until StoreKit is wired. */
+  plans: `${PREMIUM_PLACEHOLDER_PRICING.monthly} or ${PREMIUM_PLACEHOLDER_PRICING.yearly}`,
+  autoRenew:
+    "Premium renews automatically unless you cancel at least 24 hours before the end of the current period. Manage or cancel in your Apple ID Account Settings.",
+  restore: "Restore Purchases",
+  terms: "Terms of Use",
+  privacy: "Privacy Policy",
+  purchaseNotConnected: "Purchases aren't connected yet.",
+} as const;
+
+/**
+ * Placeholder legal URLs for the IAP-on paywall. Replace with the published pages before
+ * turning on `CARD_FLOW_IAP_ENABLED` / `EXPO_PUBLIC_CARD_FLOW_IAP_ENABLED`.
+ */
+export const PREMIUM_LEGAL_URLS = {
+  terms: "https://cardflow.app/terms",
+  privacy: "https://cardflow.app/privacy",
+} as const;
+
+
+/** True when the IAP flag string is an explicit on value (`true` / `1`). */
+export function premiumIapEnabledFromEnv(raw: string | undefined): boolean {
+  const value = raw?.trim().toLowerCase();
+  return value === "true" || value === "1";
+}
 
 export function premiumFeatureLine(feature: PremiumFeature): string {
   return FEATURE_LINE[feature];

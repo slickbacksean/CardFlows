@@ -1480,7 +1480,7 @@ export function createApp(
   /**
    * Sean (Oct 18/19): livestream is signed-in + 18+, free for 3 days from account creation, then Premium.
    * Frames stay in-house (OpenCLIP/pHash) — never CardSight, so no CardSight consent check.
-   * v1 hides IAP: after the trial, locked with "coming soon" (no purchase button).
+   * After the trial: 403 premium_required; the app shows a subscribe paywall (IAP stub until StoreKit).
    */
   const accountCreatedAtForLivestream = (userId: string): string | null => {
     const account = store.accounts.getAccount(userId);

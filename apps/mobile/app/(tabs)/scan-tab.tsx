@@ -16,7 +16,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { LivestreamBrowser, type LivestreamBrowserHandle } from "@/components/ui/livestream-browser";
-import { PremiumPrompt } from "@/components/ui/premium-prompt";
+import { LivestreamPaywall } from "@/components/ui/livestream-paywall";
 import { InlineError, ScreenError } from "@/components/ui/screen-state";
 import { ScreenerOverlay } from "@/components/ui/screener-overlay";
 import { getLivestreamAccess, undoLivestreamPurchase } from "@/lib/api";
@@ -53,6 +53,7 @@ export default function ScanTabScreen() {
   const [tabFocused, setTabFocused] = useState(true);
   const [liveIdentity, setLiveIdentity] = useState<LiveVideoIdentityResult | null>(null);
   const [livestreamAccess, setLivestreamAccess] = useState<LivestreamAccess | null>(null);
+  const [paywallDismissed, setPaywallDismissed] = useState(false);
   const browserRef = useRef<LivestreamBrowserHandle>(null);
   const chrome = LIVESTREAM_PLATFORMS[platform];
   const scannerUnavailable = !isLiveVideoNativeAvailable();
@@ -63,6 +64,7 @@ export default function ScanTabScreen() {
     useCallback(() => {
       setTabFocused(true);
       let cancelled = false;
+      setPaywallDismissed(false);
       void getLivestreamAccess()
         .then((res) => {
           if (!cancelled) setLivestreamAccess(res.access);
@@ -266,10 +268,15 @@ export default function ScanTabScreen() {
               : `Livestream scanner trial: ${livestreamAccess.daysLeft} days left`}
           </Text>
         ) : null}
-        {livestreamLocked ? (
+        {livestreamLocked && !paywallDismissed ? (
           <View style={styles.lockedCard}>
-            <PremiumPrompt feature="livestream_scanner" />
+            <LivestreamPaywall onDismiss={() => setPaywallDismissed(true)} />
           </View>
+        ) : null}
+        {livestreamLocked && paywallDismissed ? (
+          <Text accessibilityRole="text" style={styles.trialBanner}>
+            Subscribe to Premium to keep using the livestream scanner.
+          </Text>
         ) : null}
         {purchaseError ? (
           <View style={styles.purchaseError}>

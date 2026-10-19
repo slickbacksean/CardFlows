@@ -1,8 +1,9 @@
 /**
  * Livestream scanner access: free for 3 days from account creation, then Premium.
- * v1 hides in-app purchases, so after the trial the app shows a locked
- * "coming soon" message (no purchase button). Frames stay in-house
- * (OpenCLIP/pHash) and never go to CardSight — no CardSight consent check.
+ * After the trial the app shows a subscribe paywall (`LivestreamPaywall`); IAP is
+ * stubbed behind `EXPO_PUBLIC_CARD_FLOW_IAP_ENABLED` until StoreKit ships.
+ * Frames stay in-house (OpenCLIP/pHash) and never go to CardSight — no CardSight
+ * consent check.
  *
  * Sean (Oct 19): the trial clock starts when the user creates their account
  * (`user_accounts.created_at`), not on first scanner use.
