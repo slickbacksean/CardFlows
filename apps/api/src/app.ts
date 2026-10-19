@@ -3,7 +3,7 @@ import { emailSenderFromEnv, type EmailSender } from "./email-sender";
 import { cardSightMonthKey, consentState, hasActiveConsent } from "./consent-store";
 import { AGE_CONFIRMATION_REQUIRED_CODE, AGE_GATE_COPY, AGE_GATE_VERSION } from "@cardflow/shared";
 import { ageConfirmationState, hasAgeConfirmation } from "./age-store";
-import { ageGateEnabledFromEnv, CARDSIGHT_GUEST_MONTHLY_CAP, CARDSIGHT_USER_MONTHLY_CAP_DEFAULT } from "./grade-quota-env";
+import { ageGateEnabledFromEnv, cardMagicIdReserveFromEnv, cardSightMonthlyBudgetFromEnv, CARDSIGHT_GUEST_MONTHLY_CAP, CARDSIGHT_USER_MONTHLY_CAP_DEFAULT } from "./grade-quota-env";
 import { createRecognitionWithFallback } from "./cardsight-adapter";
 import {
   monthStartIso,
@@ -11,6 +11,9 @@ import {
   scanQuotaForUser,
 } from "./multi-card-scan";
 import { SCAN_QUOTA_COPY } from "@cardflow/shared";
+import type { CardMagicClient } from "./cardmagic-adapter";
+import { cardMagicCornersToExtraShots, tryCardMagicForGrade, type GradeCropPath } from "./grade-cardmagic";
+import { canCardMagicUseBudget, consumeCardSightBudget } from "./cardsight-budget";
 import { ALLOWANCE_TOMBSTONE_TTL_MS, allowanceTombstoneKey, normalizeEmail, type DeletionAuditKind } from "./account-store";
 import { routePath } from "hono/route";
 import { CARDSIGHT_CONSENT_VERSION, INVITED_USERS, EMAIL_CODE_LIFETIME_SENDS, EMAIL_SENDS_PER_ADDRESS_PER_DAY, UNVERIFIED_ACCOUNT_TTL_DAYS, EMAIL_CODE_LENGTH, EMAIL_RESEND_COOLDOWN_MS, EMAIL_UNVERIFIED_CODE, EMAIL_VERIFICATION_COPY, EMAIL_VERIFICATION_TTL_MS, isEmailCode, passwordResetEmailText, verificationEmailText, quotaAnchor, quotaPeriodFor, ACCOUNT_AUTH_COPY, ACCOUNT_DELETION_COPY, PASSWORD_RESET_TTL_MS, GUEST_MINT_WINDOW_MS, GUEST_SESSION_TTL_MS, isValidEmail, passwordProblem, GUEST_USER_PREFIX, SIGNUP_REQUIRED_CODE, guestIdentity, guestRouteBlockReason, isGuestUserId, isHot, parsePerfBatch, signupMessage, type SignupReason } from "@cardflow/shared";
@@ -202,6 +205,7 @@ import {
 import { parseScanCreateRequest } from "./scan-request";
 import { parseGradeDetectRequest, parseGradeEstimateRequest, parseGradeExtraRequest, type ParsedGradeStill } from "./grade-estimate-request";
 import { detectCardForGrade, pregradePhotoPair } from "./grade-photo-flow";
+import { stripImageMetadata } from "./grade-image";
 import type { CardgradingRunner } from "./cardgrading-run";
 import {
   applyDraftPatch,
@@ -360,9 +364,10 @@ export interface CreateAppOptions {
   /** When true, a missing Authorization header acts as the default invited user. */
   devAutoSession?: boolean;
   /**
-   * Browse-only guest sessions (Sean, Oct 17): guests look around; every scan, grade, livestream,
-   * save and CardSight route answers 403 signup_required. Default from CARD_FLOW_GUEST_BROWSE=true
-   * (off otherwise). CARD_FLOW_GUEST_SCANS is gone: there are no guest scans any more.
+   * Legacy guest sessions (retired for the app, Sean Oct 18). Off by default. When on
+   * (CARD_FLOW_GUEST_BROWSE=true or tests), minting still works and browse-only gating applies,
+   * but the mobile app never calls POST /v1/sessions/guest. Prefer leaving this off.
+   * CARD_FLOW_GUEST_SCANS is ignored (no guest scans).
    */
   guestMode?: boolean;
   /** D9: how often ended-guest data is purged (default hourly; always within 24 h). */
@@ -413,6 +418,11 @@ export interface CreateAppOptions {
    * cardSightUserCapsFromEnv). Past the cap, scans use the local matcher. Guests: always 0.
    */
   cardSightUserCaps?: { signedIn: number };
+  /**
+   * Sean (Oct 18): CardMagic for saved grading photos. Null/undefined = off.
+   * Same consent/age/guest rules as CardSight identify; falls back to local detect.
+   */
+  cardMagic?: CardMagicClient | null;
   /** P1-07: async grade jobs. Defaults to CARD_FLOW_GRADE_JOBS=on (off). */
   gradeJobs?: boolean;
   gradeJobLimits?: { ttlMs?: number; maxActiveJobs?: number; maxActiveJobsPerUser?: number; sweepMs?: number; maxStoredJobs?: number };
@@ -483,6 +493,11 @@ export interface CreateAppOptions {
   premiumUserIds?: string[];
   /** Global CardSight identify budget. Defaults to `CARD_FLOW_CARDSIGHT_MONTHLY_BUDGET`; off in tests. */
   cardSightMonthlyBudget?: number | null;
+  /**
+   * Calls reserved for card ID so CardMagic cannot burn the free plan.
+   * Defaults to `CARD_FLOW_CARDMAGIC_ID_RESERVE` (600 when cap is 750, else ~80% of cap).
+   */
+  cardMagicIdReserve?: number;
   /**
    * Speed-bump app key (`X-CardFlow-App-Key`). Defaults to `CARD_FLOW_APP_API_KEY`.
    * Null/empty skips the check (tests and local unless configured).
@@ -590,7 +605,7 @@ export function createApp(
     !devAutoSession &&
     (options.guestMode ?? process.env.CARD_FLOW_GUEST_BROWSE?.trim().toLowerCase() === "true");
   if (options.guestMode === undefined && process.env.CARD_FLOW_GUEST_SCANS?.trim()) {
-    console.warn("[guest] CARD_FLOW_GUEST_SCANS is ignored: guests are browse-only now. Use CARD_FLOW_GUEST_BROWSE=true for guest sessions.");
+    console.warn("[guest] CARD_FLOW_GUEST_SCANS is ignored (no guest scans). Guest minting stays off unless CARD_FLOW_GUEST_BROWSE=true (app no longer uses guests).");
   }
   const guestMintsPerHour = options.guestMintsPerHour ?? 10;
   /** Scan Idempotency-Key -> first scan ID (body hash, in-flight, 24 h). */
@@ -706,6 +721,15 @@ export function createApp(
   const pricing = serverCache ? cachedPricingProvider(basePricing) : basePricing;
   const recognitionCache = serverCache ? createRecognitionCache() : null;
   const cardSightUserCaps = options.cardSightUserCaps ?? { signedIn: CARDSIGHT_USER_MONTHLY_CAP_DEFAULT };
+  const cardMagic = options.cardMagic ?? null;
+  const cardSightMonthlyBudget =
+    options.cardSightMonthlyBudget !== undefined
+      ? options.cardSightMonthlyBudget
+      : cardSightMonthlyBudgetFromEnv();
+  const cardMagicIdReserve =
+    options.cardMagicIdReserve !== undefined
+      ? options.cardMagicIdReserve
+      : cardMagicIdReserveFromEnv(process.env, cardSightMonthlyBudget);
   const pokecollectorAccounts = options.pokecollectorAccounts ?? offPokecollectorAccounts;
   const recognitionProvider = options.recognition ?? mockCardRecognitionProvider;
   const gradingProvider = options.grading ?? mockCardGradingProvider;
@@ -2931,16 +2955,70 @@ export function createApp(
       if ("error" in parsed) {
         return c.json({ ok: false, error: parsed.error }, parsed.status);
       }
-      const result = await detectCardForGrade({
-        runner: cardgrading,
+      const userId = c.get("userId") as string;
+      const monthKey = cardSightMonthKey(now());
+      const userCap = isGuestUserId(userId) ? CARDSIGHT_GUEST_MONTHLY_CAP : cardSightUserCaps.signedIn;
+      // Sean (Oct 18): CardMagic for saved grade photos when enabled + consented; else local finder.
+      const magic = await tryCardMagicForGrade({
+        gate: {
+          client: cardMagic,
+          mayCall:
+            Boolean(cardMagic) &&
+            !isGuestUserId(userId) &&
+            hasAgeConfirmation(store.ageConfirmations, userId) &&
+            userCap > 0 &&
+            hasActiveConsent(store.consents, userId),
+          // Sean (Oct 18): save most of the free-plan CardSight cap for ID; CardMagic uses the remainder.
+          mayUseIdReserve: () => {
+            if (cardSightMonthlyBudget == null) return true;
+            const used = store.getVendorQuotaUsage("cardsight", monthKey);
+            return canCardMagicUseBudget(used, cardSightMonthlyBudget, cardMagicIdReserve);
+          },
+          consumeBudget: () =>
+            consumeCardSightBudget({
+              consume: store.consumeVendorQuota,
+              getUsage: store.getVendorQuotaUsage,
+              cap: cardSightMonthlyBudget,
+              now: now(),
+              onUsage: (used, cap) => metrics.recordCardSightBudgetUsage(used, cap),
+            }),
+          takeUse: () => store.consents.takeMonthlyUse(userId, monthKey, userCap),
+        },
         still: parsed.still,
         side: parsed.side,
-        captureMeta: parsed.captureMeta ?? null,
       });
+      let cropPath: GradeCropPath = "local";
+      let stillForStage = parsed.still;
+      let result;
+      if (magic.path === "cardmagic") {
+        cropPath = "cardmagic";
+        stillForStage = magic.still;
+        result = magic.crop;
+        // Full-grade session: store CardMagic corner close-ups as advisory extras when asked.
+        if (parsed.sessionId) {
+          for (const extra of cardMagicCornersToExtraShots(magic.corners)) {
+            saveGradeExtraShot({
+              userId,
+              sessionId: parsed.sessionId,
+              side: parsed.side,
+              shot: extra.shot,
+              still: { bytes: stripImageMetadata(extra.bytes, "image/jpeg"), mimeType: "image/jpeg" },
+            });
+          }
+        }
+      } else {
+        result = await detectCardForGrade({
+          runner: cardgrading,
+          still: parsed.still,
+          side: parsed.side,
+          captureMeta: parsed.captureMeta ?? null,
+        });
+      }
+      console.info(`grade-detect-path side=${parsed.side} path=${cropPath} found=${result.ok}`);
       // Retake and unavailable are answers, not transport errors: 200 with ok:false.
-      if (!result.ok) return c.json(result);
-      const uploadId = gradeUploads.stage(c.get("userId"), parsed.side, parsed.still);
-      return c.json({ ...result, uploadId });
+      if (!result.ok) return c.json({ ...result, cropPath });
+      const uploadId = gradeUploads.stage(userId, parsed.side, stillForStage);
+      return c.json({ ...result, uploadId, cropPath });
     },
   );
 

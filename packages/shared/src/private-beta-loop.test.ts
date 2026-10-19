@@ -201,7 +201,7 @@ describe("Private-beta loop as the active invited user", () => {
     expect(patchPrefs).not.toContain("saveInventoryItem");
     expect(patchPrefs).not.toContain("saveDraft");
 
-    expect(identity).toContain("createSession(inviteCode)");
+    expect(identity).not.toContain("createSession(inviteCode)"); // app UI no longer redeems invites
     expect(identity).not.toContain("confirmScan");
     expect(identity).not.toContain("savePurchased");
     expect(preferences).toContain("patchPreferences");

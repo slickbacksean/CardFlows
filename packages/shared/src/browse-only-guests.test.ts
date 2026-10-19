@@ -3,7 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
-/** Sean (Oct 17, 8:36 PM PT): guests browse; the app opens the sign-up prompt before any scan, grade or save. */
+/** Sean (Oct 18, 2026): free account required; guest look-around removed. */
 const REPO = path.join(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 const read = (rel: string) => readFileSync(path.join(REPO, rel), "utf8");
 
@@ -18,23 +18,39 @@ function sources(dir: string): string[] {
   });
 }
 
-describe("browse-only guests in the app", () => {
-  it("one sign-up prompt with the signup_required copy, opened by the API's 403 and by gated taps", () => {
+describe("auth-required app (no guest look-around)", () => {
+  it("signed-out launch redirects to sign-up; identity never mints a guest session", () => {
+    const rootLayout = read("apps/mobile/app/_layout.tsx");
+    expect(rootLayout).toContain('Redirect href="/sign-up"');
+    expect(rootLayout).toContain("AUTH_SEGMENTS");
+    expect(rootLayout).toContain("subscribeAuth");
+    const identity = read("apps/mobile/lib/identity.ts");
+    expect(identity).not.toContain("createGuestSession");
+    expect(identity).not.toContain("redeemInviteCode");
+    const signUp = read("apps/mobile/app/sign-up.tsx");
+    expect(signUp).not.toContain("Have a tester invite code?");
+    expect(signUp).not.toContain("/switch-tester");
+    expect(existsSync(path.join(REPO, "apps/mobile/app/switch-tester.tsx"))).toBe(false);
+    expect(identity).toContain("isSignedInIdentity");
+    expect(identity).toContain("Leftover guest token");
+  });
+
+  it("signup prompt sends users to sign-up (no Not now browse dismiss)", () => {
     const prompt = read("apps/mobile/lib/signup-prompt.ts");
-    expect(prompt).toContain("Alert.alert(\n    GUEST_SIGNUP_COPY.title,\n    GUEST_SIGNUP_COPY.body,");
-    expect(prompt).toContain('router.push("/sign-up")');
+    expect(prompt).toContain('router.replace("/sign-up")');
+    expect(prompt).not.toContain("Alert.alert");
+    expect(prompt).not.toContain("GUEST_SIGNUP_COPY");
     expect(read("apps/mobile/app/_layout.tsx")).toContain("onSignupRequired(() => showSignupPrompt())");
   });
 
-  it("gated taps check for an account before any camera, upload or grade", () => {
+  it("gated taps still check for an account before camera, upload or grade", () => {
     expect(read("apps/mobile/app/(tabs)/collection.tsx")).toMatch(/const openScan = \(\) => \{\s*if \(requireAccount\(\)\) router\.push\("\/capture"\);/);
-    expect(read("apps/mobile/app/(tabs)/collection.tsx")).not.toContain('router.push("/capture")}');
     const capture = read("apps/mobile/app/capture.tsx");
     expect(capture).toContain("useAccountOrLeave();");
     expect(capture.indexOf("if (!requireAccount()) return;")).toBeLessThan(capture.indexOf("await createScan("));
     expect(read("apps/mobile/app/(tabs)/scan-tab.tsx")).toContain("if (next && !requireAccount()) return;");
     const grading = read("apps/mobile/app/(tabs)/grading.tsx");
-    expect(grading).toContain('useState<"photo" | "pipeline">(() => (isGuestSession() ? "pipeline" : "photo"))');
+    expect(grading).toContain('useState<"photo" | "pipeline">("photo")');
     expect(grading).toContain('if (requireAccount()) setPane("photo");');
     expect(grading).toContain('if (requireAccount()) router.push("/grade-batch");');
   });

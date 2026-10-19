@@ -80,11 +80,11 @@ Repeat for `preview`, and for `development` if wanted. `apps/mobile/.env.example
   - **Pacing is per process:** the 30 requests and 2 logins a minute are counted inside one API process. Two API processes, or the API plus the relink script, share PokéCollector's per-IP limit (60 and 5) without coordinating. Run one API process against PokéCollector and don't run the relink while the deletion queue is busy.
   - Ops check: `SELECT mode, attempts, last_result, next_attempt_at FROM pokecollector_pending_deletions;` (no personal data).
   - `email_send_counts` keys are HMAC-SHA256 with `CARD_FLOW_SERVER_PEPPER` (required in production, 32+ random characters; the API refuses to start without it).
-  - Accounts with a password must send it; guests and invite testers don't.
+  - Accounts with a password must send it; invite testers don't.
   - A retried delete with the same token gets `410`.
   - In-flight scans and grade jobs are refused afterwards. An orphan sweep (every 6 h) looks at every `user_id` in any table and removes rows of deleted accounts, and orphan image files older than an hour (on disk and in memory-image mode).
   - Each delete writes one audit row `{at, kind, rowsDeleted}` with no PII.
-- **App:** Settings > **Delete account** lists what is deleted (including the PokéCollector line), the subscription and grading-credit notes, and the anonymous-totals line. It asks for the password, or for DELETE typed by guests and testers, then confirms once more.
+- **App:** Settings > **Delete account** lists what is deleted (including the PokéCollector line), the subscription and grading-credit notes, and the anonymous-totals line. It asks for the password, or for DELETE typed by invite testers, then confirms once more.
   - Grade history keys on the phone are found from an on-device list of item IDs the phone has seen (`cardflow-item-index.json`, IDs only), plus the server's list when it still answers, so a failed list can't leave history behind.
   - It deletes on the server first. Only after that succeeds (or the server answers `410`/`401`) does it wipe the phone: write queue, scan queue and its photos, grade-flow photo files, grade flow state, on-phone grade history, query cache, analytics install ID and session.
   - If a step fails, the screen says so and suggests reinstalling.

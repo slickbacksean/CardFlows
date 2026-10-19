@@ -1,15 +1,13 @@
 # App Review notes (draft)
 
-- Guests can browse the app (FullDEX catalog, prices, and empty MyDEX, Grading and Export screens) but can't scan, grade or save anything. Any of those opens the sign-up prompt: "Sign up to scan, grade and save cards. It's free." The free account is the entry tier (Sean, Oct 17).
-- Anyone can create an account with an email and password (Settings or the sign-up prompt). No invite code is needed.
+- **Free account required (Sean, Oct 18):** the first screen is Sign in / Sign up. There is no guest look-around. Anyone can create a free account with an email and password (plus the required "I confirm I'm 18 or older." checkbox). No invite code is needed.
 - Reviewer account: Sean to create one and enter the email and password in App Store Connect > App Review Information.
-- Account deletion: Settings > Delete account removes the account and all its data. Accounts with a password confirm with it; guests and invite testers type DELETE (P4).
+- Account deletion: Settings > Delete account removes the account and all its data. Accounts with a password confirm with it (P4).
 - **TODO (before the Play submission):** Google Play also needs a **web** account deletion-request page (a public URL, entered in Play Console > Data safety > Data deletion) that works without the app installed. Not built yet. It should say what is deleted (same list as the app) and how to request it (for example, a form or a support email that runs the same server delete after the owner is verified).
-- Tester invite codes still work (server env only) but aren't needed for review.
+- Invite codes are not offered in the app (Sean, Oct 18). Sign-up is open email + password only.
 - **Age (18+ accounts):**
-  - Guests only browse, so they're never asked their age and never upload photos.
   - Creating an account requires confirming 18+ (a required checkbox, unchecked by default).
-  - CardSight is used only for 18+ account holders who consent. Guests never get CardSight or its prompt.
+  - CardSight is used only for 18+ account holders who consent.
   - The reviewer demo account is created through sign-up, so it has already confirmed 18+.
 - **Apple age rating:** answer the age-rating questionnaire truthfully, then set the higher **18+** rating (App Store Connect > App Information > Age Rating, "Override to higher age rating"). Confirm that control exists once the Apple developer account is set up.
 - **Google Play:** Target audience and content > target age group **18 and over** only. Keep the store listing focused on resellers and collectors (no child-directed art or wording). Answer the IARC content-rating questionnaire truthfully.

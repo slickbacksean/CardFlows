@@ -10,7 +10,12 @@ const ALERT_COOLDOWN_MS = 30 * 60_000;
 export const ERROR_SPIKE_MIN_REQUESTS = 20;
 export const ERROR_SPIKE_RATE = 0.05;
 
-export type OpsAlertKind = "vendor_401" | "vendor_5xx" | "server_5xx_spike" | "pokecollector_deletion_failed";
+export type OpsAlertKind =
+  | "vendor_401"
+  | "vendor_5xx"
+  | "server_5xx_spike"
+  | "pokecollector_deletion_failed"
+  | "cardsight_budget_80";
 
 export interface OpsAlert {
   kind: OpsAlertKind;
@@ -87,6 +92,17 @@ export class OpsMetrics {
       "pokecollector_deletion_failed",
       "pokecollector_deletion_failed",
       "A PokéCollector account deletion gave up after the maximum attempts. See /ops/pokecollector-deletions and RELEASE_ENV.",
+    );
+  }
+
+  /** Sean (Oct 18): warn near the free-plan CardSight hard stop (~80% of monthly cap). */
+  recordCardSightBudgetUsage(used: number, cap: number) {
+    if (cap <= 0 || used < Math.ceil(cap * 0.8)) return;
+    const pct = Math.round((used / cap) * 100);
+    this.alert(
+      "cardsight_budget_80",
+      "cardsight_budget_80",
+      `CardSight monthly usage is at ${used}/${cap} (~${pct}%). Free plan hard-stops at the cap.`,
     );
   }
 

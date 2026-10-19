@@ -79,3 +79,7 @@ Classical OpenCV only; no model training. See `apps/api/scripts/eval_full_extras
 - Card-grader Corner Wear boxes are small label crops, not phone guide-box close-ups; face-crop FPR is high (~0.72 at score≤8). That is why close-ups are **advisory by default** and only the high-conf gate can lower the corners grade (≤1 pt). Flag: `RETUNE_CORNER_CLOSEUP`.
 - Tilt surface cannot match a moving lamp for holo glare vs scratches.
 - pokemon-tcg-condition is tiny/noisy; numbers are directional only.
+
+## CardMagic (saved photos)
+
+When `CARD_FLOW_CARDMAGIC=on` and the user has CardSight consent, flat grade photos are cropped by CardSight CardMagic before the local grader. Corner close-ups from CardMagic can fill the extras session. Live auto-capture stays on-device. See [CARDMAGIC.md](./CARDMAGIC.md).

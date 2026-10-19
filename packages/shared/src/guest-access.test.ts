@@ -82,7 +82,7 @@ describe("browse-only guests", () => {
   });
 
   it("one sign-up message for every wall; no guest scan allowance left anywhere", () => {
-    expect(GUEST_SIGNUP_COPY.body).toBe("Sign up to scan, grade and save cards. It's free.");
+    expect(GUEST_SIGNUP_COPY.body).toBe("Create a free account to use CardFlow.");
     for (const reason of ["scan", "grade", "cardsight", "save"] as const) expect(signupMessage(reason)).toBe(GUEST_SIGNUP_COPY.body);
     expect(Object.values(GUEST_SIGNUP_COPY).join(" ")).not.toMatch(/\bAI\b|PSA|BGS|CGC|profit|guarantee|free month|reward|3 free|scans left/i);
     for (const name of ["GUEST_FREE_SCANS", "guestScansRemaining", "GUEST_SCAN_WALL_NOTE", "GUEST_RETENTION_NOTE"]) {

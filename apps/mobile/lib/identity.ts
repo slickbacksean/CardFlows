@@ -1,5 +1,5 @@
 import { isGuestUserId, type InvitedIdentity } from "@cardflow/shared";
-import { createAccount, createGuestSession, createSession, getIdentity, listInventory, signInWithPassword } from "./api";
+import { createAccount, getIdentity, listInventory, signInWithPassword } from "./api";
 import { resetAgeConfirmationCache } from "./age-confirmation";
 import { setDeviceItemIndexOwner } from "./device-item-index";
 import { resetCardSightConsentCache } from "./cardsight-consent";
@@ -23,6 +23,22 @@ interface IdentitySession {
 let cachedUserId: string | null = null;
 let restorePromise: Promise<IdentitySession> | null = null;
 
+type AuthListener = (userId: string | null) => void;
+const authListeners = new Set<AuthListener>();
+
+function notifyAuthListeners() {
+  for (const listener of authListeners) listener(cachedUserId);
+}
+
+/** Subscribe to signed-in user id changes (null when signed out). */
+export function subscribeAuth(listener: AuthListener): () => void {
+  authListeners.add(listener);
+  listener(cachedUserId);
+  return () => {
+    authListeners.delete(listener);
+  };
+}
+
 export function peekActiveUserId(): string {
   return cachedUserId ?? "";
 }
@@ -30,6 +46,7 @@ export function peekActiveUserId(): string {
 function rememberIdentity(identity: InvitedIdentity | null) {
   cachedUserId = identity?.userId ?? null;
   setDeviceItemIndexOwner(cachedUserId);
+  notifyAuthListeners();
 }
 
 function toSession(result: {
@@ -45,7 +62,7 @@ function toSession(result: {
 
 const signedOut: IdentitySession = { identity: null, invitedUsers: [] };
 
-/** Drop a stored invite token only when the API rejects it. A restart or timeout must keep it. */
+/** Drop a stored session token only when the API rejects it. A restart or timeout must keep it. */
 export function shouldClearStoredSession(status: number | undefined): boolean {
   return status === 401 || status === 403;
 }
@@ -56,7 +73,12 @@ function requestStatus(error: unknown): number | undefined {
   return typeof status === "number" ? status : undefined;
 }
 
-/** Open sign-up / sign-in. The guest bearer rides along so the API moves the guest's scans. */
+/** True when the session is a signed-up account (not a guest, not empty). */
+export function isSignedInIdentity(identity: InvitedIdentity | null | undefined): boolean {
+  return !!identity?.userId && !isGuestUserId(identity.userId);
+}
+
+/** Open sign-up / sign-in. */
 export async function signUpWithEmail(
   email: string,
   password: string,
@@ -68,26 +90,12 @@ export async function signUpWithEmail(
   setSessionToken(result.token);
   const session = { ...toSession(result), emailVerified: result.emailVerified };
   rememberIdentity(session.identity);
-  // A guest's CardSight answer moves with the account; anyone else is re-checked on next upload.
   resetCardSightConsentCache();
   resetAgeConfirmationCache();
   restorePromise = Promise.resolve(session);
   return session;
 }
 
-export async function redeemInviteCode(inviteCode: string): Promise<IdentitySession> {
-  const result = await createSession(inviteCode);
-  await persistSessionToken(result.token);
-  const session = toSession(result);
-  rememberIdentity(session.identity);
-  // A guest's CardSight answer moves with the account; anyone else is re-checked on next upload.
-  resetCardSightConsentCache();
-  resetAgeConfirmationCache();
-  restorePromise = Promise.resolve(session);
-  stopLiveVideoIdentify();
-  clearLivestreamOverlay();
-  return session;
-}
 
 async function restoreIdentitySession(): Promise<IdentitySession> {
   const stored = await loadPersistedSessionToken();
@@ -95,32 +103,23 @@ async function restoreIdentitySession(): Promise<IdentitySession> {
     setSessionToken(stored);
     try {
       const restored = toSession(await getIdentity());
-      if (restored.identity) {
+      if (restored.identity && isSignedInIdentity(restored.identity)) {
         rememberIdentity(restored.identity);
         return restored;
       }
+      // Leftover guest token (retired browse-only path): clear and treat as signed out.
     } catch (error) {
       if (!shouldClearStoredSession(requestStatus(error))) throw error;
     }
     setSessionToken(null);
     await persistSessionToken(null);
   }
-  // No stored session -> try a browse-only guest session. 404 = guest mode is off.
-  try {
-    const guest = await createGuestSession();
-    setSessionToken(guest.token);
-    await persistSessionToken(guest.token);
-    rememberIdentity(guest.identity);
-    return { identity: guest.identity, invitedUsers: [] };
-  } catch {
-    rememberIdentity(null);
-    return signedOut;
-  }
+  rememberIdentity(null);
+  return signedOut;
 }
 
 /**
- * P4 account deletion: forget the session on this phone. The next screen that needs a
- * session starts fresh (a new guest session when guest mode is on).
+ * Forget the session on this phone. The next screen is sign in / sign up (no guest session).
  */
 export async function signOutLocally(): Promise<void> {
   setSessionToken(null);
@@ -133,12 +132,12 @@ export async function signOutLocally(): Promise<void> {
   clearLivestreamOverlay();
 }
 
-/** D9: true while the app runs on a guest session. */
+/** True only for a leftover guest_… id; the app no longer creates these. */
 export function isGuestSession(): boolean {
   return isGuestUserId(cachedUserId);
 }
 
-/** Signed-up accounts (`acct_…`) have a password; guests and invite testers don't. */
+/** Signed-up accounts (`acct_…`) have a password. */
 export function isPasswordAccountSession(): boolean {
   return typeof cachedUserId === "string" && cachedUserId.startsWith("acct_");
 }
@@ -171,6 +170,3 @@ export async function currentInventoryCount(): Promise<number> {
   return result.items.length;
 }
 
-export async function switchActiveIdentity(inviteCode: string): Promise<IdentitySession> {
-  return redeemInviteCode(inviteCode);
-}

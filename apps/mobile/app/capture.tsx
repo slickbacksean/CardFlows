@@ -33,7 +33,6 @@ import { InlineError } from "@/components/ui/screen-state";
 import { createScan } from "@/lib/api";
 import { ensureAccountAgeConfirmed } from "@/lib/age-confirmation";
 import { askCardSightConsentOnce } from "@/lib/cardsight-consent";
-import { isGuestSession } from "@/lib/identity";
 import { requireAccount, useAccountOrLeave } from "@/lib/signup-prompt";
 import { getMockScenario } from "@/lib/mock-scenario";
 import { prepareScanStill, rememberScanCapture } from "@/lib/scan-capture";
@@ -94,7 +93,7 @@ export default function CaptureScreen() {
     // Sean: the one-time CardSight disclosure comes before the first photo is uploaded.
     // Policy Reviewer (Oct 17): guests never see it (they never get CardSight), and accounts
     // confirm 18+ first (testers and existing accounts once; new accounts did at sign-up).
-    if (imageUri && !isGuestSession() && (await ensureAccountAgeConfirmed())) {
+    if (imageUri && (await ensureAccountAgeConfirmed())) {
       await askCardSightConsentOnce();
     }
     const startedAt = Date.now();

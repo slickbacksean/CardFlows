@@ -5,7 +5,7 @@
 **Blocked on:** the Apple Developer account (Sean).
 
 ## Is it required to ship?
-App Review Guideline 4.8 requires Sign in with Apple only when an app offers a third-party or social login (Google, Facebook, …). CardFlow signs in with **email + password** (plus tester invite codes), so it is **not required** today. If a social login is ever added, Sign in with Apple must ship in the same release.
+App Review Guideline 4.8 requires Sign in with Apple only when an app offers a third-party or social login (Google, Facebook, …). CardFlow signs in with **email + password** only, so it is **not required** today. If a social login is ever added, Sign in with Apple must ship in the same release.
 
 ## What Sean needs to provide
 1. Apple Developer Program membership.

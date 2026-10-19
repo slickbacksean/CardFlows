@@ -96,7 +96,7 @@ Public GitHub product docs (`MVP_SCOPE.md`, `PRODUCT_OVERVIEW.md`, `NON_GOALS.md
 | **Access permissions** | Owner + server |
 | **Retention proposal** | Life of account or until user deletes the scan |
 | **User deletion behavior** | Delete row + linked image (**see 4**) |
-| **Sent to CardSight / TCGdex / analytics?** | CardSight receives the **image** (and whatever metadata the API requires — **Open:** exact request fields). Do not send unrelated CRM fields. |
+| **Sent to CardSight / TCGdex / analytics?** | CardSight receives the **image** for identify and, when CardMagic is on, for cropping/straightening **grade photos** (and whatever metadata the API requires — **Open:** exact request fields). Do not send unrelated CRM fields. See [CARDMAGIC.md](./CARDMAGIC.md). |
 | **Never log?** | Do not log request bodies that include images. Scan id + status only. |
 
 ### 6. Recognition results (candidate card, confidence, language, set, variant)
@@ -314,7 +314,7 @@ See `docs/STORE_PRIVACY_LABELS.md` for the App Store / Play answers and the perf
 
 **Perf timings (`/v1/telemetry/perf`):** optional and opt-in. They're sent only when the analytics switch is on (the same switch as PostHog, off by default), and pending timings are dropped when it's turned off. They go to CardFlow's own API, not PostHog, and are kept as in-memory aggregates only. Store declaration if declared: Diagnostics > Performance Data, not linked, not tracking.
 
-**Accounts:** `user_accounts` (email, scrypt password hash, created_at). Sessions in `crm_sessions` (guest sessions flagged `is_guest`, 24-hour expiry). Account deletion removes every `user_id` row in one transaction. Guests are browse-only (Sean, Oct 17): they can't scan, grade or save, so a guest has only its session row (and nothing else to move at sign-up). Guests can delete it (`POST /v1/account/delete`); otherwise it's purged within 24 h after the session ends. Rows left from guest scans made before this change still move to the account on sign-up, or are purged with the session.
+**Accounts:** `user_accounts` (email, scrypt password hash, created_at). Sessions in `crm_sessions` (legacy guest sessions may still be flagged `is_guest`, 24-hour expiry). Account deletion removes every `user_id` row in one transaction. **Sean, Oct 18:** the app requires a free account; guest look-around is removed and the app never mints `POST /v1/sessions/guest`. Leftover guest rows from earlier builds expire in 24h and are purged by the existing cleanup when that path was enabled; no destructive migration drops guest tables in this change. Ops can later delete stranded `guest_*` user_id rows if any remain.
 
 **Device model:** sent with perf timings (opt-in analytics only) and not stored server-side.
 

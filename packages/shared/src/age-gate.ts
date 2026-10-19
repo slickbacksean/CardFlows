@@ -4,7 +4,8 @@
  * I'm 18 or older.", plus the Terms/Privacy line. The API refuses `POST /v1/accounts` without
  * `ageConfirmed18Plus: true` and stores only `age_attested_at` and this wording version.
  * Testers and existing accounts confirm once in the app (`POST /v1/age-confirmation`) before any
- * CardSight call. Guests make no statement, so they never get CardSight (our own matcher only).
+ * CardSight call. Guest look-around is removed (Sean, Oct 18): every user is an account or
+ * invite tester.
  */
 
 /** Version of the sign-up statement. Bump when its wording changes. */
@@ -21,8 +22,8 @@ export const AGE_GATE_COPY = {
   confirmBody: "CardSight card recognition is for people 18 and older. Until you confirm, CardFlow's own matcher identifies your cards.",
   confirmAction: "I confirm I'm 18 or older.",
   confirmLater: "Not now",
-  /** Settings > Card recognition, for guests (they never see the CardSight prompt or toggle). */
-  guestSettings: "Sign up to use CardSight card recognition.",
+  /** Retained for docs/tests of the retired guest path; the app no longer shows guest Settings. */
+  guestSettings: "Create a free account to use CardSight card recognition.",
   signUpLine: "By creating an account, you confirm you're 18 or older and agree to the Terms and Privacy Policy.",
   captureTip: "Photograph only the card. Keep faces, hands, and personal details out of the shot.",
   /** API answer when sign-up arrives without the checkbox. */
