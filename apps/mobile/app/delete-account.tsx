@@ -10,7 +10,7 @@ import { colors, space } from "@/lib/theme";
 
 /**
  * P4: in-app account deletion (Apple 5.1.1(v)). Says exactly what goes, asks for the password
- * (accounts that have one, Backend review M4) or for DELETE typed (invite testers),
+ * (accounts that have one, Backend review M4) or for DELETE typed when there is no password,
  * confirms once more, then deletes on the server before wiping the phone.
  */
 export default function DeleteAccountScreen() {

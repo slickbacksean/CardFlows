@@ -63,7 +63,7 @@ The API also **refuses to start** in production without `CARD_FLOW_SERVER_PEPPER
 ## Open sign-up env
 - `CARD_FLOW_GUEST_BROWSE` stays **off** (Sean, Oct 18: free account required; the app never mints guests). If set to `true`, legacy browse-only guest minting still works for tests/ops (`POST /v1/sessions/guest`, 24-hour sessions in `crm_sessions`, 403 `signup_required` on gated routes via `guestRouteBlockReason`). Leave it unset in production. `CARD_FLOW_GUEST_SCANS` is ignored (no guest scans); if set, the API logs a warning.
 - **Old guest rows:** do not drop `crm_sessions.is_guest` or related tables in this change. Leftover guest sessions expire in 24h and are purged by the existing cleanup job when guest mode was previously on. A later ops note can delete any stranded `guest_*` user_id rows if needed; no destructive migration here.
-- `CARD_FLOW_INVITE_ALEX` / `CARD_FLOW_INVITE_JORDAN` are tester invite codes. **There are no defaults;** unset means invite sign-in is off for that tester.
+- `CARD_FLOW_INVITE_ALEX` / `CARD_FLOW_INVITE_JORDAN` remain for the legacy `POST /v1/sessions` invite route (server/tests only). **The app no longer offers invite codes** (Sean, Oct 18). Leave unset in production; there are no defaults.
 
 ## Launch checklist §2 — Railway SQLite failure modes (Oct 18 audit)
 

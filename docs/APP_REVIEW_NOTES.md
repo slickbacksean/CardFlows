@@ -2,9 +2,9 @@
 
 - **Free account required (Sean, Oct 18):** the first screen is Sign in / Sign up. There is no guest look-around. Anyone can create a free account with an email and password (plus the required "I confirm I'm 18 or older." checkbox). No invite code is needed.
 - Reviewer account: Sean to create one and enter the email and password in App Store Connect > App Review Information.
-- Account deletion: Settings > Delete account removes the account and all its data. Accounts with a password confirm with it; invite testers type DELETE (P4).
+- Account deletion: Settings > Delete account removes the account and all its data. Accounts with a password confirm with it (P4).
 - **TODO (before the Play submission):** Google Play also needs a **web** account deletion-request page (a public URL, entered in Play Console > Data safety > Data deletion) that works without the app installed. Not built yet. It should say what is deleted (same list as the app) and how to request it (for example, a form or a support email that runs the same server delete after the owner is verified).
-- Tester invite codes still work (server env only) but aren't needed for review.
+- Invite codes are not offered in the app (Sean, Oct 18). Sign-up is open email + password only.
 - **Age (18+ accounts):**
   - Creating an account requires confirming 18+ (a required checkbox, unchecked by default).
   - CardSight is used only for 18+ account holders who consent.

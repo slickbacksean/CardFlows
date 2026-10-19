@@ -1094,6 +1094,7 @@ export function createGuestSession() {
   return callApi(apiContract.createGuestSession, {});
 }
 
+/** Legacy POST /v1/sessions helper. Unused by the app (Sean, Oct 18: open sign-up only). */
 export function createSession(inviteCode: string) {
   return callApi(apiContract.createSession, { body: { inviteCode } });
 }

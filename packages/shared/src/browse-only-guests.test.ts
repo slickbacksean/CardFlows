@@ -26,6 +26,11 @@ describe("auth-required app (no guest look-around)", () => {
     expect(rootLayout).toContain("subscribeAuth");
     const identity = read("apps/mobile/lib/identity.ts");
     expect(identity).not.toContain("createGuestSession");
+    expect(identity).not.toContain("redeemInviteCode");
+    const signUp = read("apps/mobile/app/sign-up.tsx");
+    expect(signUp).not.toContain("Have a tester invite code?");
+    expect(signUp).not.toContain("/switch-tester");
+    expect(existsSync(path.join(REPO, "apps/mobile/app/switch-tester.tsx"))).toBe(false);
     expect(identity).toContain("isSignedInIdentity");
     expect(identity).toContain("Leftover guest token");
   });

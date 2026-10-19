@@ -24,7 +24,6 @@ const AUTH_SEGMENTS = new Set([
   "sign-up",
   "forgot-password",
   "reset-password",
-  "switch-tester",
   "verify-email",
 ]);
 
@@ -139,7 +138,6 @@ function AppRoot() {
         <Stack.Screen name="decide/[cardflowCardId]" options={{ headerShown: false }} />
         <Stack.Screen name="draft/[draftId]" options={{ headerShown: false }} />
         <Stack.Screen name="settings" options={{ headerShown: false }} />
-        <Stack.Screen name="switch-tester" options={{ headerShown: false }} />
         <Stack.Screen name="sign-up" options={{ headerShown: false }} />
         <Stack.Screen name="about" options={{ headerShown: false }} />
         <Stack.Screen name="analytics" options={{ headerShown: false }} />

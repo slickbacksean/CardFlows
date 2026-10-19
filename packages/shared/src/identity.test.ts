@@ -192,7 +192,7 @@ describe("Account switching", () => {
     expect(ACCOUNT_SWITCH_SECTION_LABEL).toBe("Invited testers");
   });
 
-  it("lets Settings switch invited testers without minting inventory", () => {
+  it("Settings has no invite-code UI; open sign-up only (Sean, Oct 18)", () => {
     const settings = readRepoFile("apps/mobile/app/settings.tsx");
     const identity = readRepoFile("apps/mobile/lib/identity.ts");
     const apiClient = readApiClientSource();
@@ -201,16 +201,19 @@ describe("Account switching", () => {
     const collection = readRepoFile("apps/mobile/app/(tabs)/collection.tsx");
 
     expect(settings).toContain(">Account<");
-    expect(settings).toContain("switch-tester");
+    expect(settings).not.toContain("switch-tester");
+    expect(settings).not.toContain("Use a tester invite code");
+    expect(settings).not.toContain("/switch-tester");
     expect(settings).not.toContain("invitedUsers.map");
-    expect(identity).toContain("createSession(inviteCode)");
+    expect(identity).not.toContain("createSession(inviteCode)");
+    expect(identity).not.toContain("redeemInviteCode");
+    expect(identity).not.toContain("switchActiveIdentity");
     expect(identity).not.toContain("inviteCodeForUserId");
     expect(identity).not.toContain("DEFAULT_INVITED_INVITE_CODE");
     expect(identity).toContain("persistSessionToken(result.token)");
     expect(identity).toContain("listInventory()");
     expect(identity).not.toContain("patchIdentity");
-    expect(apiClient).toContain('"/v1/sessions"');
-    expect(apiClient).toContain("body: { inviteCode }");
+    expect(existsSync(path.join(repoRoot, "apps/mobile/app/switch-tester.tsx"))).toBe(false);
     expect(apiClient).not.toContain("patchIdentity");
 
     expect(store).toContain("export function createSession(");
@@ -362,7 +365,9 @@ describe("Auth-required wall (Sean, Oct 18)", () => {
     );
     expect(rootLayout).not.toContain("InviteGate");
     expect(settings).toContain(">Account<");
-    expect(settings).toContain("switch-tester");
+    expect(settings).not.toContain("switch-tester");
+    expect(settings).not.toContain("Use a tester invite code");
+    expect(settings).not.toContain("/switch-tester");
     expect(settings).not.toMatch(/Sign in with Apple|Sign in with Google/i);
 
     expect(capture).toContain("createScan");
@@ -382,13 +387,12 @@ describe("Auth-required wall (Sean, Oct 18)", () => {
 });
 
 describe("Mobile session restore", () => {
-  it("persists the invite token on native and restores it on cold start", () => {
+  it("persists the session token on native and restores it on cold start", () => {
     const sessionToken = readRepoFile("apps/mobile/lib/session-token.ts");
     const identity = readRepoFile("apps/mobile/lib/identity.ts");
     const apiClient = readApiClientSource();
     const rootLayout = readRepoFile("apps/mobile/app/_layout.tsx");
     const settings = readRepoFile("apps/mobile/app/settings.tsx");
-    const switchTester = readRepoFile("apps/mobile/app/switch-tester.tsx");
     const mobilePackage = readRepoFile("apps/mobile/package.json");
     const appJson = readRepoFile("apps/mobile/app.json");
     const capture = readRepoFile("apps/mobile/app/capture.tsx");
@@ -421,7 +425,7 @@ describe("Mobile session restore", () => {
 
     expect(settings).toContain("settingsKickerForIdentity(session.identity)");
     expect(settings).toContain(">Account<");
-    expect(switchTester).toContain("shouldConfirmAccountSwitch");
+    expect(existsSync(path.join(repoRoot, "apps/mobile/app/switch-tester.tsx"))).toBe(false);
     expect(settings).not.toMatch(/ImagePicker|launchImageLibrary|avatar photo/i);
 
     expect(capture).not.toContain("Redirect");
@@ -431,33 +435,26 @@ describe("Mobile session restore", () => {
 });
 
 describe("Session loop check", () => {
-  it("keeps identity request-scoped with invite codes and no Apple/Google wall", () => {
-    const alex = INVITED_USERS[0].userId;
-    const jordan = INVITED_USERS[1].userId;
-    expect(
-      shouldConfirmAccountSwitch({
-        currentUserId: alex,
-        nextUserId: jordan,
-        currentInventoryCount: 1,
-      }),
-    ).toBe(true);
-
+  it("keeps identity request-scoped with open sign-up and no Apple/Google wall", () => {
     const settings = readRepoFile("apps/mobile/app/settings.tsx");
-    const switchTester = readRepoFile("apps/mobile/app/switch-tester.tsx");
     const identity = readRepoFile("apps/mobile/lib/identity.ts");
     const capture = readRepoFile("apps/mobile/app/capture.tsx");
     const collection = readRepoFile("apps/mobile/app/(tabs)/collection.tsx");
+    const signUp = readRepoFile("apps/mobile/app/sign-up.tsx");
     const api = readApiSource();
 
-    expect(switchTester).toContain("shouldConfirmAccountSwitch");
-    expect(switchTester).toContain("Alert.alert");
-    expect(switchTester).toContain("switchActiveIdentity");
+    expect(existsSync(path.join(repoRoot, "apps/mobile/app/switch-tester.tsx"))).toBe(false);
     expect(settings).toContain(">Account<");
+    expect(settings).not.toContain("switch-tester");
+    expect(signUp).not.toContain("Have a tester invite code?");
+    expect(signUp).not.toContain("/switch-tester");
+    expect(signUp).not.toContain("switch-tester");
     expect(identity).toContain("persistSessionToken(result.token)");
     expect(identity).not.toContain("inviteCodeForUserId");
+    expect(identity).not.toContain("redeemInviteCode");
     expect(identity).not.toContain("patchIdentity");
     expect(api).toContain("parseBearerToken");
-    expect(api).toContain("c.get(\"userId\")");
+    expect(api).toContain('c.get("userId")');
     expect(api).not.toContain("export function setActiveIdentity(");
 
     expect(SIGN_UP_WALL_ENABLED).toBe(true);

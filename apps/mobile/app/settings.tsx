@@ -101,10 +101,6 @@ export default function SettingsScreen() {
         <Text style={styles.sectionFirst}>Account</Text>
         <Text style={styles.body}>{identity?.label ?? "Not signed in"}</Text>
         <JobRow label="Switch account" onPress={() => router.push("/sign-up")} />
-        <JobRow
-          label="Use a tester invite code"
-          onPress={() => router.push("/switch-tester")}
-        />
 
         <JobRow
           label={PRACTICE_COPY.entryLabel}

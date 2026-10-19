@@ -18,7 +18,7 @@ import { peekActiveUserId, signUpWithEmail } from "@/lib/identity";
 import { flushScanQueue } from "@/lib/scan-queue";
 import { colors } from "@/lib/theme";
 
-/** Open sign-up / sign-in. First screen when signed out (Sean, Oct 18). Testers can still use an invite code. */
+/** Open sign-up / sign-in. First screen when signed out (Sean, Oct 18). Email and password only. */
 export default function SignUpScreen() {
   const router = useRouter();
   // UX review P1-4: "Sign in" from a session-ended error opens this screen in sign-in mode.
@@ -110,9 +110,6 @@ export default function SignUpScreen() {
             <Text style={authStyles.link}>Forgot password?</Text>
           </Pressable>
         ) : null}
-        <Pressable accessibilityRole="button" onPress={() => router.push("/switch-tester")}>
-          <Text style={authStyles.link}>Have a tester invite code?</Text>
-        </Pressable>
       </ScrollView>
     </View>
   );

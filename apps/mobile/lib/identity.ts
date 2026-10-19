@@ -1,5 +1,5 @@
 import { isGuestUserId, type InvitedIdentity } from "@cardflow/shared";
-import { createAccount, createSession, getIdentity, listInventory, signInWithPassword } from "./api";
+import { createAccount, getIdentity, listInventory, signInWithPassword } from "./api";
 import { resetAgeConfirmationCache } from "./age-confirmation";
 import { setDeviceItemIndexOwner } from "./device-item-index";
 import { resetCardSightConsentCache } from "./cardsight-consent";
@@ -62,7 +62,7 @@ function toSession(result: {
 
 const signedOut: IdentitySession = { identity: null, invitedUsers: [] };
 
-/** Drop a stored invite token only when the API rejects it. A restart or timeout must keep it. */
+/** Drop a stored session token only when the API rejects it. A restart or timeout must keep it. */
 export function shouldClearStoredSession(status: number | undefined): boolean {
   return status === 401 || status === 403;
 }
@@ -73,7 +73,7 @@ function requestStatus(error: unknown): number | undefined {
   return typeof status === "number" ? status : undefined;
 }
 
-/** True when the session is a signed-up account or invite tester (not a guest, not empty). */
+/** True when the session is a signed-up account (not a guest, not empty). */
 export function isSignedInIdentity(identity: InvitedIdentity | null | undefined): boolean {
   return !!identity?.userId && !isGuestUserId(identity.userId);
 }
@@ -96,18 +96,6 @@ export async function signUpWithEmail(
   return session;
 }
 
-export async function redeemInviteCode(inviteCode: string): Promise<IdentitySession> {
-  const result = await createSession(inviteCode);
-  await persistSessionToken(result.token);
-  const session = toSession(result);
-  rememberIdentity(session.identity);
-  resetCardSightConsentCache();
-  resetAgeConfirmationCache();
-  restorePromise = Promise.resolve(session);
-  stopLiveVideoIdentify();
-  clearLivestreamOverlay();
-  return session;
-}
 
 async function restoreIdentitySession(): Promise<IdentitySession> {
   const stored = await loadPersistedSessionToken();
@@ -149,7 +137,7 @@ export function isGuestSession(): boolean {
   return isGuestUserId(cachedUserId);
 }
 
-/** Signed-up accounts (`acct_…`) have a password; invite testers don't. */
+/** Signed-up accounts (`acct_…`) have a password. */
 export function isPasswordAccountSession(): boolean {
   return typeof cachedUserId === "string" && cachedUserId.startsWith("acct_");
 }
@@ -182,6 +170,3 @@ export async function currentInventoryCount(): Promise<number> {
   return result.items.length;
 }
 
-export async function switchActiveIdentity(inviteCode: string): Promise<IdentitySession> {
-  return redeemInviteCode(inviteCode);
-}
