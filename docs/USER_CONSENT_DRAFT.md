@@ -40,9 +40,9 @@ You can skip saving the photo after the scan if you only want a one-time check. 
 
 ## 2. Sending the selected image to CardSight
 
-**Decided (Sean, Oct 17):** a one-time prompt before the first photo is uploaded, with a Settings toggle to withdraw. The shipped text is `CARDSIGHT_CONSENT_COPY` in `packages/shared/src/cardsight-consent.ts`, version `CARDSIGHT_CONSENT_VERSION` (bumped to `2026-10-18.2` for the plain-language improve-service line, so earlier answers are asked again). This disclosure is the only place CardFlow copy may say "AI"; estimate copy never does. It is stored on the server with its version and timestamps (`provider_consents`: granted, declined or withdrawn). A "Don't allow" is recorded as a decline, never as a grant. Every grant, decline and withdrawal is also appended to `consent_events`, a history that is never edited; it's deleted with the account. **Only for accounts that confirmed 18+ (Policy Reviewer, Oct 17): guests never get CardSight, never see this prompt or the Settings toggle (Settings shows "Sign up to use CardSight card recognition."), and no guest answer carries over at sign-up. Guests can't scan at all (browse only, Sean, Oct 17); only photos taken after an account consents go to CardSight.** Each account also has a monthly CardSight cap (50 by default; guests 0). Past it, that user's photos stay on CardFlow's own matcher until the next month. The server checks consent right before calling CardSight. Without consent, CardFlow's own matcher or manual search is used. Changing the wording or CardSight's terms means bumping the version, and everyone is asked again.
+**Decided (Sean, Oct 17):** a one-time prompt before the first photo is uploaded, with a Settings toggle to withdraw. The shipped text is `CARDSIGHT_CONSENT_COPY` in `packages/shared/src/cardsight-consent.ts`, version `CARDSIGHT_CONSENT_VERSION` (bumped to `2026-10-18.2` for CardMagic grade-crop and the plain-language improve-service line, so earlier answers are asked again). This disclosure is the only place CardFlow copy may say "AI"; estimate copy never does. It is stored on the server with its version and timestamps (`provider_consents`: granted, declined or withdrawn). A "Don't allow" is recorded as a decline, never as a grant. Every grant, decline and withdrawal is also appended to `consent_events`, a history that is never edited; it's deleted with the account. **Only for accounts that confirmed 18+ (Policy Reviewer, Oct 17).** Guest look-around was removed (Sean, Oct 18): every user has an account before using the app. Only photos taken after an account consents go to CardSight. Each account also has a monthly CardSight cap (50 by default; Free plan ops reserve most calls for identify — see `docs/CARDMAGIC.md`). Past it, that user's photos stay on CardFlow's own matcher until the next month. The server checks consent right before calling CardSight. Without consent, CardFlow's own matcher or manual search is used. Changing the wording or CardSight's terms means bumping the version, and everyone is asked again.
 
-> **Card recognition.** CardFlow can use CardSight, our card-recognition provider, to identify cards from your photos and to crop and straighten grade photos. If you have an account, have confirmed you're 18 or older, and allow it, your card photos are sent to CardSight. Guests can't upload photos. CardSight may use photos you send to improve its card recognition service. CardSight's terms let it keep these images and use them to train its AI models. Turning this off later stops new uploads but doesn't remove photos CardSight already has. If you don't allow it, CardFlow matches cards on its own servers, or you can search manually. You can change this anytime in Settings.
+> **Card recognition.** CardFlow can use CardSight, our card-recognition provider, to identify cards from your photos and to crop and straighten grade photos. If you have confirmed you're 18 or older and allow it, your card photos are sent to CardSight. CardSight may use photos you send to improve its card recognition service. CardSight's terms let it keep these images and use them to train its AI models. Turning this off later stops new uploads but doesn't remove photos CardSight already has. If you don't allow it, CardFlow matches and crops cards on its own servers, or you can search manually. You can change this anytime in Settings.
 >
 > **Settings > Card recognition** (toggle help): When on, card photos are also sent to CardSight, our card-recognition provider, to identify cards and to crop and straighten grade photos. CardSight may use photos you send to improve its card recognition service. CardSight's terms let it keep these images and use them to train its AI models. Turning this off stops new uploads but doesn't remove photos CardSight already has. When off, CardFlow matches cards on its own servers only.
 >
@@ -108,7 +108,7 @@ Account deletion is not the same as turning the app off or “freezing” the ac
 
 **Privacy policy draft: deleting your account (P4, Policy Reviewer)**
 
-Settings > Delete account deletes your CardFlow account and everything in it right away: your sign-in, email and password, MyDEX, your Watchlist and purchase details, scans and card photos, pre-grade estimate history, sales, listing drafts, Max Buy rules, your CardSight choice and your 18+ confirmation. Guests can delete their guest data the same way.
+Settings > Delete account deletes your CardFlow account and everything in it right away: your sign-in, email and password, MyDEX, your Watchlist and purchase details, scans and card photos, pre-grade estimate history, sales, listing drafts, Max Buy rules, your CardSight choice and your 18+ confirmation.
 
 If your account was linked to PokéCollector, CardFlow removes the link and deletes the cards and wishlist it stored there. This can take up to 2 weeks, and PokéCollector's own backups may keep a copy for a while.
 
@@ -180,11 +180,11 @@ We use **Sentry** (Functional Software, Inc.), a service provider that processes
 
 ---
 
-## 6a. Guests (browse only)
+## 6a. Free account required (no guest look-around)
 
-**Decided (Sean, Oct 17, 8:36 PM PT):** guests can look around the app but must sign up before any scan, grade or saving. The free account is the entry tier. This replaces the 3 free guest scans (D9).
+**Decided (Sean, Oct 18):** a free account is required before any part of the app. Sign in / sign up is the first screen. Guest look-around (browse-only guests from Oct 17) is removed. The API still accepts `CARD_FLOW_GUEST_BROWSE=true` for legacy/test minting only; production leaves it off, and the mobile app never calls `POST /v1/sessions/guest`.
 
-**Privacy policy draft:** You can look around CardFlow as a guest without an account. Guests can't scan, grade or save cards, so we don't receive card photos from guests. A guest session lasts 24 hours and holds only a random guest ID and session token. You can delete it anytime (Settings > Delete account), and we delete it within 24 hours after the session ends. To scan, grade or save cards, create a free account.
+**Privacy policy draft:** Creating a free CardFlow account is required to use the app. You can delete your account anytime (Settings > Delete account).
 
 **Accounts (open sign-up):** to create an account we collect your email address and a password. We store only a salted, one-way hash of the password (scrypt), never the password itself. Your email is used to sign you in. Deleting your account (Settings) removes your email, password hash, sessions and every record keyed to your account, in one step.
 
@@ -213,12 +213,12 @@ Draft list for Settings:
 - **Sign-up:** a required checkbox, unchecked by default: "I confirm I'm 18 or older." The screen keeps the line "By creating an account, you confirm you're 18 or older and agree to the Terms and Privacy Policy." The server refuses `POST /v1/accounts` without `ageConfirmed18Plus` and stores only `age_attested_at` and the wording version (`age_confirmations`).
 - **Testers and existing accounts:** they confirm once in the app ("I confirm I'm 18 or older.") before any CardSight call. Until then, CardFlow's own matcher is used.
 - **CardSight:** called only for an account that has an 18+ confirmation AND current consent.
-- **Guests:** they make no age statement, so they never get CardSight, even if a consent is sent. They can't scan or upload photos (browse only).
+- **Accounts only:** guest look-around was removed (Sean, Oct 18). Every user signs up or signs in before using the app.
 - **Under-18 reports:** an ops-only path (`POST /ops/under-18-report`, ops token) turns CardSight off and deletes the account and its data.
 
 **Privacy policy draft: Age**
 
-> CardFlow is intended for people 18 and older. Creating an account requires confirming you're 18 or older. Guests can look around without an account but can't scan, grade or save cards. We don't knowingly collect personal information from anyone under 18. If you believe someone under 18 has given us information, contact us at [contact email] and we'll delete it.
+> CardFlow is intended for people 18 and older. Creating a free account is required to use the app and requires confirming you're 18 or older. We don't knowingly collect personal information from anyone under 18. If you believe someone under 18 has given us information, contact us at [contact email] and we'll delete it.
 
 **Counsel notes:**
 - Ask CardSight in writing whether self-attestation (a sign-up checkbox) is acceptable under their under-18 term.

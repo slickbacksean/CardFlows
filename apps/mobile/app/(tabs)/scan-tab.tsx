@@ -120,7 +120,6 @@ export default function ScanTabScreen() {
   function toggleScanner() {
     if (scannerUnavailable) return;
     const next = !scannerOn;
-    // Browse-only guests (Sean, Oct 17): watching is fine; identifying needs sign-up.
     if (next && !requireAccount()) return;
     setScannerOn(next);
     if (next) startLiveVideoIdentify();

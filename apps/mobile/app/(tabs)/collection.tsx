@@ -86,8 +86,7 @@ function matchesSearch(item: InventoryItem, query: string): boolean {
 
 export default function CollectionScreen() {
   const router = useRouter();
-  // Browse-only guests (Sean, Oct 17): Scan opens the sign-up prompt instead of the camera.
-  const openScan = () => {
+    const openScan = () => {
     if (requireAccount()) router.push("/capture");
   };
   const { width } = useWindowDimensions();

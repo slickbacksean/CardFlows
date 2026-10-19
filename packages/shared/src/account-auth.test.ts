@@ -13,9 +13,9 @@ describe("open sign-up rules", () => {
   it("sign-in failure copy doesn't say which part was wrong", () => {
     expect(ACCOUNT_AUTH_COPY.signInFailed).toBe("Email or password is incorrect.");
   });
-  it("browse-only guests (Sean, Oct 17): 24-hour sessions and one sign-up message", () => {
+  it("legacy guest helpers retained; app no longer mints guests (Sean, Oct 18)", () => {
     expect(GUEST_SESSION_TTL_MS).toBe(24 * 60 * 60 * 1000);
-    expect(GUEST_SIGNUP_COPY.body).toBe("Sign up to scan, grade and save cards. It's free.");
+    expect(GUEST_SIGNUP_COPY.body).toBe("Create a free account to use CardFlow.");
   });
 });
 

@@ -77,12 +77,12 @@ describe("CardSight disclosure (Policy Reviewer, Oct 16)", () => {
     expect(disclosuresSeen).toBe(2); // the exemption matches the real strings, nothing else
   });
 
-  it("the capture screen asks accounts before any photo upload; guests are never asked (no CardSight)", () => {
+  it("the capture screen asks before any photo upload (accounts only; guest look-around removed)", () => {
     const capture = readFileSync(path.join(REPO, "apps/mobile/app/capture.tsx"), "utf8");
     const ask = capture.indexOf("await askCardSightConsentOnce()");
     expect(ask).toBeGreaterThan(-1);
     expect(ask).toBeLessThan(capture.indexOf("await createScan("));
-    expect(capture).toMatch(/!isGuestSession\(\) && \(await ensureAccountAgeConfirmed\(\)\)\) \{\s*await askCardSightConsentOnce\(\)/);
+    expect(capture).toMatch(/if \(imageUri && \(await ensureAccountAgeConfirmed\(\)\)\) \{\s*await askCardSightConsentOnce\(\)/);
   });
 
   it("the grade flow asks accounts before the first grade photo upload", () => {

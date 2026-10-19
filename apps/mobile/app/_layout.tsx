@@ -1,6 +1,6 @@
 import { QueryClientProvider } from "@tanstack/react-query";
-import { type ErrorBoundaryProps, Link, Stack, router } from "expo-router";
-import { EMAIL_VERIFICATION_COPY, RELEASE_API_URL_ERROR_COPY, releaseApiUrlProblem } from "@cardflow/shared";
+import { type ErrorBoundaryProps, Link, Redirect, Stack, router, useSegments } from "expo-router";
+import { EMAIL_VERIFICATION_COPY, RELEASE_API_URL_ERROR_COPY, isGuestUserId, releaseApiUrlProblem } from "@cardflow/shared";
 import { onEmailUnverified, onSignupRequired } from "@/lib/api";
 import { StatusBar } from "expo-status-bar";
 import { useEffect, useState } from "react";
@@ -10,7 +10,7 @@ import { flushProductEvents, loadAnalyticsPreference } from "@/lib/product-event
 import { Alert, AppState, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { PrimaryButton } from "@/components/ui/primary-button";
-import { ensureIdentitySession } from "@/lib/identity";
+import { ensureIdentitySession, subscribeAuth } from "@/lib/identity";
 import { showSignupPrompt } from "@/lib/signup-prompt";
 import { cardFlowQueryClient } from "@/lib/query-client";
 import { captureMobileException, initMobileSentry, loadCrashReportsPreference } from "@/lib/sentry";
@@ -18,6 +18,14 @@ import { colors, space } from "@/lib/theme";
 
 // Policy Reviewer (P4): Settings > Send crash reports (off by default, opt-in) gates Sentry.
 void loadCrashReportsPreference().then(() => initMobileSentry());
+
+/** Routes reachable while signed out (auth stack only). */
+const AUTH_SEGMENTS = new Set([
+  "sign-up",
+  "forgot-password",
+  "reset-password",
+  "verify-email",
+]);
 
 export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
   captureMobileException(error);
@@ -61,6 +69,10 @@ export default function RootLayout() {
 
 function AppRoot() {
   const [ready, setReady] = useState(false);
+  const [userId, setUserId] = useState<string | null>(null);
+  const segments = useSegments();
+  const signedIn = !!userId && !isGuestUserId(userId);
+  const inAuthRoute = AUTH_SEGMENTS.has(segments[0] ?? "");
 
   useEffect(() => {
     // D7: send queued opt-in events when the app goes to the background.
@@ -72,12 +84,14 @@ function AppRoot() {
 
   useEffect(() => {
     void loadAnalyticsPreference();
+    const unsub = subscribeAuth(setUserId);
     void ensureIdentitySession()
       .catch(() => undefined)
       .finally(() => setReady(true));
+    return unsub;
   }, []);
 
-  // Browse-only guests (Sean, Oct 17): the API's 403 signup_required opens the one sign-up prompt.
+  // Safety net: leftover guest tokens or mid-flow 403 signup_required → sign-up screen.
   useEffect(() => onSignupRequired(() => showSignupPrompt()), []);
   // Sean: pre-grade estimates need a verified email. One prompt, then the code screen.
   useEffect(() => {
@@ -93,10 +107,15 @@ function AppRoot() {
       ], { cancelable: true, onDismiss: () => { showing = false; } });
     });
   }, []);
-  useEffect(() => (ready ? startWriteQueue() : undefined), [ready]);
-  useEffect(() => (ready ? startScanQueue() : undefined), [ready]);
+  useEffect(() => (ready && signedIn ? startWriteQueue() : undefined), [ready, signedIn]);
+  useEffect(() => (ready && signedIn ? startScanQueue() : undefined), [ready, signedIn]);
 
   if (!ready) return null;
+
+  // Sean (Oct 18): free account required. Signed-out users only see the auth stack.
+  if (!signedIn && !inAuthRoute) {
+    return <Redirect href="/sign-up" />;
+  }
 
   return (
     <QueryClientProvider client={cardFlowQueryClient}>
@@ -119,7 +138,6 @@ function AppRoot() {
         <Stack.Screen name="decide/[cardflowCardId]" options={{ headerShown: false }} />
         <Stack.Screen name="draft/[draftId]" options={{ headerShown: false }} />
         <Stack.Screen name="settings" options={{ headerShown: false }} />
-        <Stack.Screen name="switch-tester" options={{ headerShown: false }} />
         <Stack.Screen name="sign-up" options={{ headerShown: false }} />
         <Stack.Screen name="about" options={{ headerShown: false }} />
         <Stack.Screen name="analytics" options={{ headerShown: false }} />
@@ -130,6 +148,8 @@ function AppRoot() {
         <Stack.Screen name="delete-account" options={{ headerShown: false }} />
         <Stack.Screen name="crash-reports" options={{ headerShown: false }} />
         <Stack.Screen name="card-recognition" options={{ headerShown: false }} />
+        <Stack.Screen name="forgot-password" options={{ headerShown: false }} />
+        <Stack.Screen name="reset-password" options={{ headerShown: false }} />
       </Stack>
       <StatusBar style="light" />
     </QueryClientProvider>
