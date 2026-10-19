@@ -1557,6 +1557,8 @@ export function createApp(
     const stages: LiveScanSample["stages"] = {};
     let warped = false;
     let openclipTcgdexId: string | null = null;
+    let openclipCandidates: { tcgdexId: string; similarity: number }[] = [];
+    let openclipSimilarity: number | null = null;
     if (livestreamIdentify === "yolo_identity" && liveIdentityOpenclip) {
       const decodeStart = performance.now();
       const crop = decodeIdentityCropJpeg(identityCropJpeg);
@@ -1572,9 +1574,12 @@ export function createApp(
           stages.warp = match.timings.warpMs;
           stages.embed = match.timings.embedMs;
           stages.search = match.timings.searchMs;
+          stages.match = match.timings.searchMs ?? match.timings.totalMs;
           stages.orb = match.timings.orbMs;
         }
         warped = match?.warped === true;
+        if (match?.candidates?.length) openclipCandidates = match.candidates;
+        if (typeof match?.similarity === "number") openclipSimilarity = match.similarity;
         if (match?.accepted && match.tcgdexId) {
           openclipTcgdexId = normalizeLiveVideoTcgdexId(match.tcgdexId);
         }
@@ -1608,7 +1613,11 @@ export function createApp(
       },
       classifier: livestreamIdentify === "yolo_identity" ? "yolo_identity" : "none",
     });
-    if (!livestreamTiming) return c.json({ ok: true, identity });
+    const extras = {
+      ...(openclipCandidates.length ? { candidates: openclipCandidates } : {}),
+      ...(openclipSimilarity != null ? { similarity: openclipSimilarity } : {}),
+    };
+    if (!livestreamTiming) return c.json({ ok: true, identity, ...extras });
     stages.server = performance.now() - startedAt;
     const sample: LiveScanSample = {
       stages,
@@ -1617,7 +1626,7 @@ export function createApp(
     };
     livestreamTimingLog.add(sample);
     console.info(`[livestream-timing] ${JSON.stringify({ ...sample, tcgdexId: identity.tcgdexId })}`);
-    return c.json({ ok: true, identity, timing: { stages, warped } });
+    return c.json({ ok: true, identity, timing: { stages, warped }, ...extras });
   });
 
   /** Debug only: p50/p95 per stage of recent livestream matches. 404 unless timing is on. */

@@ -1,6 +1,6 @@
 import { Image } from "expo-image";
 import { useEffect, useRef, useState } from "react";
-import { AccessibilityInfo, Pressable, StyleSheet, Text, View } from "react-native";
+import { AccessibilityInfo, Linking, Pressable, StyleSheet, Text, View } from "react-native";
 import { WebView } from "react-native-webview";
 import {
   HudBubble,
@@ -8,12 +8,20 @@ import {
   PurchasedUndoToast,
 } from "@/components/ui/hud-bubble";
 import { livestreamHudPageUrl, publishLivestreamHud } from "@/lib/huds";
-import { getLiveOverlayGuess } from "@/lib/api";
+import {
+  getCachedLiveOverlayGuess,
+  livestreamTcgplayerLink,
+  livestreamTcgplayerLinkPreferred,
+  LIVESTREAM_TCGPLAYER_LINK_COPY,
+} from "@/lib/livestream-price";
+import { getLiveIdentityVote } from "@/lib/live-identify";
 import { overlayDollarLabel } from "@/lib/livestream";
 import { colors, space } from "@/lib/theme";
 import {
   emptyLiveOverlayGuess,
   isStableLiveIdentity,
+  LIVE_VOTE_PICK_ONE_COPY,
+  LIVE_VOTE_WAITING_COPY,
   LIVESTREAM_SCANNER_UNAVAILABLE_DETAIL,
   LIVESTREAM_SCANNER_UNAVAILABLE_MESSAGE,
   livestreamHudOriginWhitelist,
@@ -98,7 +106,7 @@ export function ScreenerOverlay({
     let cancelled = false;
     const tcgdexId = liveIdentity.tcgdexId;
     const fallback = emptyLiveOverlayGuess(tcgdexId, liveIdentity.confidence);
-    void getLiveOverlayGuess(tcgdexId, liveIdentity.confidence)
+    void getCachedLiveOverlayGuess(tcgdexId, liveIdentity.confidence)
       .then((response) => {
         if (!cancelled) setLiveGuess(response.guess);
       })
@@ -260,11 +268,21 @@ function overlayBubbleCopy(
   }
   if (kind === "live_guess" && liveGuess?.tcgdexId) {
     const name = liveGuess.name ?? liveGuess.tcgdexId;
+    if (livestreamTcgplayerLinkPreferred()) {
+      return { title: name, subtitle: LIVESTREAM_TCGPLAYER_LINK_COPY, live: true };
+    }
     return {
       title: name,
       subtitle: `Estimate ${overlayDollarLabel(liveGuess.estimateAmount, "No estimate")}`,
       live: true,
     };
+  }
+  const vote = getLiveIdentityVote();
+  if (kind === "looking" && vote?.tier === "pick_one") {
+    return { title: LIVE_VOTE_PICK_ONE_COPY, subtitle: "Tap a match to confirm", live: true };
+  }
+  if (kind === "looking" && vote?.tier === "waiting" && readingCard) {
+    return { title: LIVE_VOTE_WAITING_COPY, subtitle: "Hold the card steady", live: true };
   }
   if (kind === "looking" && readingCard) {
     return { title: "Reading this card…", subtitle: "Matching the live crop", live: true };
@@ -489,3 +507,10 @@ const styles = StyleSheet.create({
   figureMeta: { color: colors.muted, fontSize: 12, lineHeight: 16 },
   caption: { color: colors.muted, fontSize: 12, lineHeight: 16 },
 });
+
+
+/** Optional HUD link-out: opens a public TCGplayer search for the current guess. */
+export function openLivestreamTcgplayerLink(guess: LiveOverlayGuess): void {
+  const { url } = livestreamTcgplayerLink(guess);
+  void Linking.openURL(url);
+}

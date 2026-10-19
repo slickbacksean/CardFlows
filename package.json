@@ -23,6 +23,7 @@
     "test:legacy": "pnpm build:legacy && pnpm --filter @cardflows/shared test && pnpm --filter @cardflows/api test",
     "typecheck:legacy": "pnpm build:legacy && pnpm --filter @cardflows/api typecheck",
     "livestream:timing": "node scripts/livestream-timing.mjs",
+    "livestream:replay": "node scripts/livestream-replay.mjs",
     "smoke:purchased": "node scripts/smoke-purchased-lane.mjs"
   },
   "dependencies": {

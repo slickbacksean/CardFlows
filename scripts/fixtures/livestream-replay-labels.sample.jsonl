@@ -1,0 +1,7 @@
+# Sample labels for scripts/livestream-replay.mjs
+# One JSON object per line. Times are seconds from the start of the video.
+# tcgdexId null = no-card segment (used for false-ID scoring).
+{"startSec":0,"endSec":3.0,"tcgdexId":null,"notes":"lead-in, no card"}
+{"startSec":3.0,"endSec":11.5,"tcgdexId":"base1-58","set":"base1","number":"58","steady":true,"variant":null}
+{"startSec":11.5,"endSec":14.0,"tcgdexId":null,"notes":"seller switches cards"}
+{"startSec":14.0,"endSec":22.0,"tcgdexId":"sv1-1","set":"sv1","number":"1","steady":true,"variant":"holo"}
