@@ -36,7 +36,7 @@ CardMagic counts against the same per-user monthly CardSight cap as identify (an
 
 ## User copy
 
-Grade guidelines ask users to take the card out of any slab or toploader before grading. CardSight disclosure (version `2026-10-18.1`) says photos may be sent to identify cards and to crop/straighten grade photos.
+Grade guidelines ask users to take the card out of any slab or toploader before grading. CardSight disclosure (version `2026-10-18.2`) says photos may be sent to identify cards and to crop/straighten grade photos, and that CardSight may use photos you send to improve its card recognition service.
 
 ## Docs
 

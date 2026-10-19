@@ -25,10 +25,10 @@ const unquote = (chunk: string) => chunk.slice(1, -1).replace(/\\'/g, "'").repla
 describe("CardSight disclosure (Policy Reviewer, Oct 16)", () => {
   it("uses the approved wording exactly, with a bumped version", () => {
     expect(CARDSIGHT_CONSENT_COPY.body).toBe(
-      "CardFlow can use CardSight, our card-recognition provider, to identify cards from your photos and to crop and straighten grade photos. If you allow it, your card photos are sent to CardSight. CardSight's terms let it keep these images and use them to train its AI models. Turning this off later stops new uploads but doesn't remove photos CardSight already has. If you don't allow it, CardFlow matches and crops cards on its own servers, or you can search manually. You can change this anytime in Settings.",
+      "CardFlow can use CardSight, our card-recognition provider, to identify cards from your photos and to crop and straighten grade photos. If you allow it, your card photos are sent to CardSight. CardSight may use photos you send to improve its card recognition service. CardSight's terms let it keep these images and use them to train its AI models. Turning this off later stops new uploads but doesn't remove photos CardSight already has. If you don't allow it, CardFlow matches and crops cards on its own servers, or you can search manually. You can change this anytime in Settings.",
     );
     expect(CARDSIGHT_CONSENT_COPY.settingsHelp).toBe(
-      "When on, card photos are also sent to CardSight, our card-recognition provider, to identify cards and to crop and straighten grade photos. CardSight's terms let it keep these images and use them to train its AI models. Turning this off stops new uploads but doesn't remove photos CardSight already has. When off, CardFlow matches and crops cards on its own servers only.",
+      "When on, card photos are also sent to CardSight, our card-recognition provider, to identify cards and to crop and straighten grade photos. CardSight may use photos you send to improve its card recognition service. CardSight's terms let it keep these images and use them to train its AI models. Turning this off stops new uploads but doesn't remove photos CardSight already has. When off, CardFlow matches and crops cards on its own servers only.",
     );
     expect(CARDSIGHT_CONSENT_VERSION).not.toBe("2026-10-17");
     expect(CARDSIGHT_AI_DISCLOSURES).toEqual([CARDSIGHT_CONSENT_COPY.body, CARDSIGHT_CONSENT_COPY.settingsHelp]);
