@@ -33,6 +33,8 @@ export const scanRoutes = {
     body: z.object({
       tcgdexId: z.string(),
       selectedVariant: z.string().nullable().optional(),
+      /** Multi-card: which detection in cardResults to confirm (default 0). */
+      detectionIndex: z.number().int().nonnegative().optional(),
     }),
     response: z.looseObject({
       ok: z.literal(true),
@@ -44,6 +46,12 @@ export const scanRoutes = {
   rejectScan: defineRoute({
     method: "POST",
     path: "/v1/scans/:scanId/reject",
+    bodyKind: "none",
+    response: ScanResponse,
+  }),
+  skipScanCard: defineRoute({
+    method: "POST",
+    path: "/v1/scans/:scanId/cards/:detectionIndex/skip",
     bodyKind: "none",
     response: ScanResponse,
   }),

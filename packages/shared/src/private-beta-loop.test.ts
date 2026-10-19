@@ -132,7 +132,7 @@ describe("Private-beta loop as the active invited user", () => {
     expect(api).toContain("preInventoryState: \"scan_captured\"");
     expect(api).toContain("identifyLiveCaptureStill");
     expect(readRepoFile("apps/api/src/scan-card-name.ts")).toContain("fallback.identifyCard");
-    expect(api).toContain("await mapRecognitionToCatalog(recognition, catalog)");
+    expect(api).toContain("recognitionWithMultiCardMappings(recognition, catalog)");
     expect(api).toContain("Confirm the card before Purchased");
     expect(api).toContain("Confirm the card before Watchlist");
     expect(api).toContain("getConfirmation(userId, body.confirmationId)");

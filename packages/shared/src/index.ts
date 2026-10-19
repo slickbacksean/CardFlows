@@ -523,7 +523,7 @@ export {
   yolo11ObbLayoutFromDims,
   YOLO11_OBB_INPUT,
 } from "./obb-detect";
-export { mapRecognitionToCatalog } from "./mapper";
+export { mapRecognitionToCatalog, mapAllDetectionsToCatalog } from "./mapper";
 export {
   classifiedTcgdexIdFromLiveVideoMetadata,
   identifyLiveVideo,
@@ -842,3 +842,6 @@ export * from "./grade-full-mode";
 export * from "./account-deletion";
 export * from "./sign-in-with-apple";
 export * from "./crash-reports";
+export * from "./english-cards";
+export * from "./multi-card-scan";
+export * from "./scan-quota";

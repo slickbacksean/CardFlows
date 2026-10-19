@@ -98,6 +98,13 @@ export interface ScanRecord {
   idempotencyBodyHash?: string | null;
   recognition: CardFlowNormalizedRecognitionResult;
   mapping: CatalogMappingResult;
+  /**
+   * Per-detection confirm queue for multi-card scans (and length-1 for single).
+   * Absent on scans created before multi-card support.
+   */
+  cardResults?: import("@cardflow/shared").MultiCardScanResult[];
+  /** Shown when CardSight was unavailable and only one card was returned. */
+  scanHint?: string | null;
 }
 
 export interface ConfirmationRecord {
@@ -501,13 +508,30 @@ export function confirmScan(input: {
   selectedTcgdexId: string;
   selectedVariant?: string | null;
   catalogCard?: CardFlowCanonicalCard | null;
+  /** Multi-card: which cardResults row to confirm (default 0). */
+  detectionIndex?: number;
 }): { scan: ScanRecord; confirmation: ConfirmationRecord; canonicalCard: CardFlowCanonicalCard } {
+  const detectionIndex = Math.max(0, Math.floor(input.detectionIndex ?? 0));
+  const cardResults = input.scan.cardResults ? [...input.scan.cardResults] : undefined;
+  const cardRow = cardResults?.[detectionIndex];
+  if (cardRow && !cardRow.countsTowardAllowance) {
+    throw new Error(cardRow.notice ?? "Only English cards are supported for now.");
+  }
+  if (cardRow && cardRow.state === "confirmed" && cardRow.confirmationId) {
+    const existing = store.confirmations.get(cardRow.confirmationId);
+    const canonical = existing ? store.canonicalByFingerprint.get(catalogFingerprint("en", existing.tcgdexId)) : undefined;
+    // Fall through to mint path when the confirmation row is missing.
+    if (existing && canonical) {
+      return { scan: input.scan, confirmation: existing, canonicalCard: canonical };
+    }
+  }
+  const mappingForConfirm = cardRow?.mapping ?? input.scan.mapping;
   const fingerprint = catalogFingerprint("en", input.selectedTcgdexId);
   const existing = store.canonicalByFingerprint.get(fingerprint);
   const catalogCard =
     input.catalogCard !== undefined ? input.catalogCard ?? existing ?? null : undefined;
   const confirmed = confirmIdentity({
-    mapping: input.scan.mapping,
+    mapping: mappingForConfirm,
     selectedTcgdexId: input.selectedTcgdexId,
     selectedVariant: input.selectedVariant,
     existingCardflowCardId: existing?.cardflowCardId ?? null,
@@ -528,17 +552,54 @@ export function confirmScan(input: {
     mintedCardflowCardId: confirmed.mintedCardflowCardId,
   };
 
+  if (cardResults && cardRow) {
+    cardResults[detectionIndex] = {
+      ...cardRow,
+      state: "confirmed",
+      confirmationId: confirmation.confirmationId,
+      cardflowCardId: confirmation.cardflowCardId,
+      mapping: {
+        ...cardRow.mapping,
+        canonicalCard: confirmed.canonicalCard,
+        tcgdexId: confirmation.tcgdexId,
+        cardflowCardId: confirmation.cardflowCardId,
+        status: "matched",
+        confidence: "High",
+      },
+    };
+  }
+
+  const pendingLeft = cardResults?.some((r) => r.state === "pending") ?? false;
   const scan: ScanRecord = {
     ...input.scan,
-    preInventoryState: "identity_confirmed",
+    preInventoryState: pendingLeft ? input.scan.preInventoryState : "identity_confirmed",
     cardflowCardId: confirmation.cardflowCardId,
     confirmationId: confirmation.confirmationId,
+    cardResults,
   };
 
   store.confirmations.set(confirmation.confirmationId, confirmation);
   store.scans.set(scan.scanId, scan);
 
   return { scan, confirmation, canonicalCard: confirmed.canonicalCard };
+}
+
+/** Skip one detection in a multi-card scan (or the only card). Does not mint or use allowance. */
+export function skipScanCard(scan: ScanRecord, detectionIndex: number): ScanRecord | null {
+  if (scan.preInventoryState === "identity_confirmed" && !(scan.cardResults?.length)) return null;
+  const idx = Math.max(0, Math.floor(detectionIndex));
+  const cardResults = scan.cardResults ? [...scan.cardResults] : undefined;
+  if (!cardResults || !cardResults[idx]) return null;
+  if (cardResults[idx]!.state === "confirmed") return null;
+  cardResults[idx] = { ...cardResults[idx]!, state: "skipped" };
+  const pendingLeft = cardResults.some((r) => r.state === "pending");
+  const next: ScanRecord = {
+    ...scan,
+    cardResults,
+    preInventoryState: pendingLeft ? scan.preInventoryState : "identity_rejected",
+  };
+  store.scans.set(scan.scanId, next);
+  return next;
 }
 
 /** Sets the scan aside. Does not mint a card or an inventory row. */
@@ -797,6 +858,7 @@ export interface StorePort {
   purgeExpiredGradePhotos: typeof purgeExpiredGradePhotos;
   listInventory: typeof listInventory;
   confirmScan: typeof confirmScan;
+  skipScanCard: typeof skipScanCard;
   rejectScan: typeof rejectScan;
   getConfirmation: typeof getConfirmation;
   getCanonical: typeof getCanonical;
@@ -1060,6 +1122,7 @@ export function createMemoryStore(): StorePort {
     purgeExpiredGradePhotos,
     listInventory,
     confirmScan,
+    skipScanCard,
     rejectScan,
     getConfirmation,
     getCanonical,

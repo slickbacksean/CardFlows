@@ -297,7 +297,7 @@ export default function CaptureScreen() {
         <View style={styles.helpCard}>
           <Text style={styles.helpTitle}>Still photo only</Text>
           <Text style={styles.helpBody}>
-            Fill the frame with one English raw single. CardFlow does not identify
+            Fill the frame with one or more English raw singles (up to nine). CardFlow does not identify
             while you hold the camera. Scan does not create inventory.
           </Text>
         </View>
@@ -452,7 +452,7 @@ function CameraSurface({
         </View>
       </View>
       <Text style={styles.copy}>
-        Take a still photo of one English raw single to identify it.
+        Take a still photo of one or more English raw singles to identify them.
       </Text>
       <Text style={styles.copy}>{AGE_GATE_COPY.captureTip}</Text>
     </View>
