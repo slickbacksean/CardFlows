@@ -19,6 +19,7 @@ import {
 } from "./multi-card-scan";
 import { SCAN_QUOTA_COPY, TERMS_COPY, TERMS_REQUIRED_CODE, TERMS_VERSION } from "@cardflow/shared";
 import { NO_PASSWORD_HASH, type SocialProvider } from "./account-store";
+import { appleKeyConfigFromEnv, createAppleTokenClient, openToken, sealToken, type AppleTokenClient } from "./apple-revoke";
 import {
   createJwksSocialVerifier,
   socialAuthConfigFromEnv,
@@ -410,7 +411,7 @@ export interface CreateAppOptions {
   /** Sean (Oct 19): sign-up must accept the Terms of Service. Always on outside tests. */
   termsGate?: boolean;
   /** Sign in with Apple / Google (tests inject a verifier; default reads env + provider JWKS). */
-  socialAuth?: { config: SocialAuthConfig; verifier?: SocialTokenVerifier };
+  socialAuth?: { config: SocialAuthConfig; verifier?: SocialTokenVerifier; apple?: AppleTokenClient | null };
   /** Tests: receives the purge so it can run on demand. */
   onUnverifiedPurge?: (run: () => { accountsPurged: number }) => void;
   /** Backend review M1 (P4): orphan sweep interval (0 = off; default 6 h) and a test handle. */
@@ -1332,6 +1333,18 @@ export function createApp(
   const termsRequired = (c: Context) =>
     c.json({ ok: false, error: TERMS_REQUIRED_CODE, message: TERMS_COPY.required }, 400);
   const termsAcceptedIn = (body: Record<string, unknown>) => body.termsAccepted === true && body.termsVersion === TERMS_VERSION;
+  /**
+   * Accounts from before the Terms (or an older version) accept them on their next sign-in:
+   * null = OK (recorded now if accepted in this request), otherwise the terms_required answer.
+   */
+  const termsGateForSignIn = (c: Context, account: { userId: string; termsVersion?: string | null }, body: Record<string, unknown>) => {
+    if (!termsGate || account.termsVersion === TERMS_VERSION) return null;
+    if (termsAcceptedIn(body)) {
+      store.accounts.setTermsAcceptance(account.userId, TERMS_VERSION, now().toISOString());
+      return null;
+    }
+    return termsRequired(c);
+  };
   const ageRequired = (c: Context) =>
     c.json({ ok: false, error: AGE_CONFIRMATION_REQUIRED_CODE, message: AGE_GATE_COPY.required }, 400);
 
@@ -1975,6 +1988,8 @@ export function createApp(
       if (!existing || !(await verifyPassword(password, existing.passwordHash))) {
         return c.json({ ok: false, error: ACCOUNT_AUTH_COPY.signUpFailed }, 400);
       }
+      const needTerms = termsGateForSignIn(c, existing, signUpBody);
+      if (needTerms) return needTerms;
       account = existing;
     }
     if (created) {
@@ -2008,11 +2023,30 @@ export function createApp(
   // Sean (Oct 19): Sign in with Apple / Google. Each is off until configured (see social-auth.ts).
   const socialConfig = options.socialAuth?.config ?? socialAuthConfigFromEnv();
   const socialVerifier = options.socialAuth?.verifier ?? createJwksSocialVerifier(socialConfig);
+  // Apple is offered only with the key that lets account deletion revoke the Apple token.
+  const appleTokens: AppleTokenClient | null = options.socialAuth
+    ? (options.socialAuth.apple ?? null)
+    : (() => {
+        const cfg = appleKeyConfigFromEnv();
+        return cfg ? createAppleTokenClient(cfg) : null;
+      })();
+  const providerOn = (p: SocialProvider) => socialProviderEnabled(socialConfig, p) && (p !== "apple" || appleTokens !== null);
+  if (socialProviderEnabled(socialConfig, "apple") && !appleTokens) {
+    console.warn("[auth] CARD_FLOW_APPLE_SIGNIN is on but the Apple key (TEAM_ID/KEY_ID/PRIVATE_KEY) is missing: Apple sign-in stays off.");
+  }
+  /** Fire-and-forget: revoke Apple tokens before the rows go (App Review 5.1.1(v)). */
+  const revokeSocialTokens = (userId: string) => {
+    if (!appleTokens) return;
+    for (const { provider, sealed } of store.accounts.listSocialRefreshTokens(userId)) {
+      const token = provider === "apple" ? openToken(sealed) : null;
+      if (token) void appleTokens.revoke(token).catch((err) => console.warn("[auth] Apple revoke failed", String(err)));
+    }
+  };
   app.get("/v1/auth/providers", (c) =>
     c.json({
       ok: true as const,
-      apple: socialProviderEnabled(socialConfig, "apple"),
-      google: socialProviderEnabled(socialConfig, "google"),
+      apple: providerOn("apple"),
+      google: providerOn("google"),
     }),
   );
   app.post("/v1/sessions/social", async (c) => {
@@ -2022,7 +2056,7 @@ export function createApp(
     const provider = body.provider === "apple" || body.provider === "google" ? (body.provider as SocialProvider) : null;
     const idToken = typeof body.idToken === "string" ? body.idToken : "";
     if (!provider || !idToken) return c.json({ ok: false, error: "Bad request" }, 400);
-    if (!socialProviderEnabled(socialConfig, provider)) return c.json({ ok: false, error: "Not found" }, 404);
+    if (!providerOn(provider)) return c.json({ ok: false, error: "Not found" }, 404);
     let verified;
     try {
       verified = await socialVerifier({ provider, idToken, nonce: typeof body.nonce === "string" ? body.nonce : null });
@@ -2030,15 +2064,23 @@ export function createApp(
       return c.json({ ok: false, error: ACCOUNT_AUTH_COPY.signInFailed }, 401);
     }
     const at = now().toISOString();
-    const finish = (account: { userId: string; email: string }, created: boolean) => {
+    const storeAppleCode = async () => {
+      const code = typeof body.authorizationCode === "string" ? body.authorizationCode : "";
+      if (provider !== "apple" || !code || !appleTokens) return;
+      const refresh = await appleTokens.exchangeCode(code).catch(() => null);
+      if (refresh) store.accounts.setSocialRefreshToken("apple", verified.subject, sealToken(refresh));
+    };
+    const finish = async (account: { userId: string; email: string }, created: boolean) => {
+      await storeAppleCode();
       const session = accountSession(account);
+      const fresh = store.accounts.getAccount(account.userId);
       return c.json({
         ok: true as const,
         ...session,
         invitedUsers: [session.identity],
         movedScans: 0,
         emailVerified: isUserEmailVerified(account.userId),
-        hasPassword: false,
+        hasPassword: Boolean(fresh && fresh.passwordHash !== NO_PASSWORD_HASH),
         created,
       });
     };
@@ -2047,6 +2089,8 @@ export function createApp(
     if (linkedUserId) {
       const account = store.accounts.getAccount(linkedUserId);
       if (!account) return c.json({ ok: false, error: ACCOUNT_AUTH_COPY.signInFailed }, 401);
+      const needTerms = termsGateForSignIn(c, account, body);
+      if (needTerms) return needTerms;
       return finish(account, false);
     }
     // Linking or creating needs an email the provider verified.
@@ -2057,6 +2101,15 @@ export function createApp(
     // 2) Existing account with this verified email: link and sign in.
     const existing = store.accounts.findByEmail(email);
     if (existing) {
+      const needTerms = termsGateForSignIn(c, existing, body);
+      if (needTerms) return needTerms;
+      if (!isUserEmailVerified(existing.userId)) {
+        // Mobile Tech Lead (PR 113): an unverified email/password account may have been created by
+        // someone else with this address. The provider proved ownership, so it takes over: the
+        // password is cleared and every session is signed out before the link.
+        store.accounts.setPasswordHash(existing.userId, NO_PASSWORD_HASH);
+        store.accounts.deleteSessionsForUser(existing.userId);
+      }
       store.accounts.linkSocial({ provider, subject: verified.subject, userId: existing.userId, email, at });
       store.accounts.markEmailVerified(existing.userId, at);
       return finish(existing, false);
@@ -2099,6 +2152,9 @@ export function createApp(
       overLimit(ipFailKey, authLimits.signInPerIp, window);
       return c.json({ ok: false, error: ACCOUNT_AUTH_COPY.signInFailed }, 401);
     }
+    const signInBody = await c.req.json<Record<string, unknown>>().catch(() => ({}) as Record<string, unknown>);
+    const needTerms = termsGateForSignIn(c, existing, signInBody);
+    if (needTerms) return needTerms;
     const moved = adoptGuestData(c.req.header("authorization"), existing.userId);
     const session = accountSession(existing);
     return c.json({
@@ -2319,6 +2375,7 @@ export function createApp(
    * weeks were counted at its first delete, so only the stray purchases and scans are added.
    */
   const deleteUserEverything = (userId: string, kind: DeletionAuditKind, deleteOptions: { activeWeeksCounted?: boolean } = {}) => {
+    revokeSocialTokens(userId);
     // Data Engineer review: every user_id row in one transaction first, then the files (whose
     // locations were collected before the rows went). A crash in between leaves orphan files
     // with no personal rows, which the photo retention sweep removes, never rows without files.

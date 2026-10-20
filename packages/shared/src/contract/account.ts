@@ -49,6 +49,8 @@ const SocialSignInBody = z.object({
   provider: z.enum(["apple", "google"]),
   idToken: z.string(),
   nonce: z.string().optional(),
+  /** Apple only: one-time code the API exchanges for a refresh token (revoked on deletion). */
+  authorizationCode: z.string().optional(),
   ageConfirmed18Plus: z.literal(true).optional(),
   ageGateVersion: z.string().optional(),
   termsAccepted: z.literal(true).optional(),
@@ -57,7 +59,13 @@ const SocialSignInBody = z.object({
 
 const money = z.union([z.string(), z.number()]).nullable().optional();
 
-const PasswordBody = z.object({ email: z.string(), password: z.string() });
+const PasswordBody = z.object({
+  email: z.string(),
+  password: z.string(),
+  /** Accounts from before the Terms accept them on their next sign-in (terms_required). */
+  termsAccepted: z.literal(true).optional(),
+  termsVersion: z.string().optional(),
+});
 
 export const accountRoutes = {
   /** Open sign-up. A guest bearer moves the guest's scans to the new account. */

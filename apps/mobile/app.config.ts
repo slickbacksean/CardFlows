@@ -42,6 +42,7 @@ export const PUBLIC_ENV_VARS: ReadonlyArray<{
   { name: "EXPO_PUBLIC_CARD_FLOW_GRADE_JOBS", purpose: "Async pre-grade jobs (=1)", profiles: APP_ENVS },
   { name: "EXPO_PUBLIC_CARD_FLOW_LIVESTREAM_TIMING", purpose: "Livestream timing logs (=1)", profiles: ["development", "preview"], enforced: true },
   { name: "EXPO_PUBLIC_CARD_FLOW_LIVESTREAM_PRICE_SNAPSHOT", purpose: "Bulk livestream price snapshot (=1; default off, Policy risk)", profiles: ["development", "preview"], enforced: true },
+  { name: "EXPO_PUBLIC_APPLE_SIGNIN_ENABLED", purpose: "Sign in with Apple entitlement + button (=1; needs a rebuild; default off)", profiles: APP_ENVS },
   { name: "EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID", purpose: "Google sign-in OAuth client ID for iOS (optional; public)", profiles: APP_ENVS },
   { name: "EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID", purpose: "Google sign-in OAuth client ID for Android (optional; public)", profiles: APP_ENVS },
   { name: "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID", purpose: "Google sign-in OAuth web client ID (optional; public)", profiles: APP_ENVS },
@@ -124,8 +125,18 @@ export default ({ config }: ConfigContext): ExpoConfig => {
   const errors = releaseEnvErrors(process.env);
   if (errors.length > 0) throw new Error(`CardFlow release config:\n- ${errors.join("\n- ")}`);
   const release = releaseEnvSummary(process.env);
+  // Mobile Tech Lead (PR 113): the Sign in with Apple entitlement + plugin only when the build
+  // opts in, so the current dev client and Expo Go don't need a rebuild. Off by default.
+  const appleSignIn = process.env.EXPO_PUBLIC_APPLE_SIGNIN_ENABLED?.trim() === "1";
+  const base = config as ExpoConfig;
   return {
-    ...(config as ExpoConfig),
+    ...base,
+    ...(appleSignIn
+      ? {
+          ios: { ...base.ios, usesAppleSignIn: true },
+          plugins: [...(base.plugins ?? []), "expo-apple-authentication"],
+        }
+      : {}),
     extra: {
       ...config.extra,
       appEnv: release.appEnv,

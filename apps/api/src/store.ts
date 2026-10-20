@@ -1203,6 +1203,7 @@ function createMemoryAccountStore(
   const sendsByAddressDay = new Map<string, number>();
   const byEmail = new Map<string, string>();
   const socialLinks = new Map<string, string>();
+  const socialTokens = new Map<string, string>();
   const deletionAudit: DeletionAuditEntry[] = [];
   const allowanceTombstones = new Map<string, AllowanceTombstone>();
   const northStarTotals = new Map<string, NorthStarWeekTotal>();
@@ -1225,6 +1226,20 @@ function createMemoryAccountStore(
     },
     linkSocial({ provider, subject, userId }) {
       if (!socialLinks.has(`${provider}:${subject}`)) socialLinks.set(`${provider}:${subject}`, userId);
+    },
+    setSocialRefreshToken(provider, subject, sealed) {
+      if (socialLinks.has(`${provider}:${subject}`)) socialTokens.set(`${provider}:${subject}`, sealed);
+    },
+    listSocialRefreshTokens(userId) {
+      const out: Array<{ provider: "apple" | "google"; sealed: string }> = [];
+      for (const [k, sealed] of socialTokens) {
+        if (socialLinks.get(k) === userId) out.push({ provider: k.split(":")[0] as "apple" | "google", sealed });
+      }
+      return out;
+    },
+    setTermsAcceptance(userId, version, at) {
+      const account = accounts.get(userId);
+      if (account) accounts.set(userId, { ...account, termsVersion: version, termsAcceptedAt: at });
     },
     markEmailVerified(userId, at) {
       const account = accounts.get(userId);
@@ -1383,7 +1398,7 @@ function createMemoryAccountStore(
         });
       }
       port.deleteUserPhotos(userId);
-      for (const [key, owner] of socialLinks) if (owner === userId) socialLinks.delete(key);
+      for (const [key, owner] of socialLinks) if (owner === userId) { socialLinks.delete(key); socialTokens.delete(key); }
       counts.crm_scans = port.deleteUserScans(userId);
       counts.scan_confirm_events = port.deleteUserConfirmEvents(userId);
       counts.user_price_snapshots = port.deleteUserPriceSnapshots(userId);

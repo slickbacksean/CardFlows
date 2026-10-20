@@ -1088,6 +1088,7 @@ export function signInWithSocialToken(input: {
   provider: "apple" | "google";
   idToken: string;
   nonce?: string;
+  authorizationCode?: string;
   ageConfirmed18Plus: boolean;
   termsAccepted: boolean;
 }) {
@@ -1096,6 +1097,7 @@ export function signInWithSocialToken(input: {
       provider: input.provider,
       idToken: input.idToken,
       ...(input.nonce ? { nonce: input.nonce } : {}),
+      ...(input.authorizationCode ? { authorizationCode: input.authorizationCode } : {}),
       ...(input.ageConfirmed18Plus ? { ageConfirmed18Plus: true as const, ageGateVersion: AGE_GATE_VERSION } : {}),
       ...(input.termsAccepted ? { termsAccepted: true as const, termsVersion: TERMS_VERSION } : {}),
     },
@@ -1125,8 +1127,11 @@ export function confirmPasswordReset(token: string, password: string) {
   return callApi(apiContract.confirmPasswordReset, { body: { token, password } });
 }
 
-export function signInWithPassword(email: string, password: string) {
-  return callApi(apiContract.signInWithPassword, { body: { email, password } });
+export function signInWithPassword(email: string, password: string, termsAccepted = false) {
+  // Accounts from before the Terms accept them on their next sign-in (server: terms_required).
+  return callApi(apiContract.signInWithPassword, {
+    body: termsAccepted ? { email, password, termsAccepted: true, termsVersion: TERMS_VERSION } : { email, password },
+  });
 }
 
 /** Legacy API helper. The app never calls this (Sean, Oct 18: free account required). */

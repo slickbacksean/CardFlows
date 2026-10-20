@@ -653,6 +653,8 @@ export const authIdentities = sqliteTable(
     subject: text("subject").notNull(),
     userId: text("user_id").notNull(),
     email: text("email"),
+    /** Apple only: refresh token, AES-GCM sealed (revoked on account deletion). */
+    refreshTokenEnc: text("refresh_token_enc"),
     createdAt: text("created_at").notNull(),
   },
   (table) => [primaryKey({ columns: [table.provider, table.subject] }), index("auth_identities_user_idx").on(table.userId)],

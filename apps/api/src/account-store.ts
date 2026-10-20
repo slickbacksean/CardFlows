@@ -53,6 +53,11 @@ export interface AccountStore {
   /** Sean (Oct 19): Apple/Google subject → account. */
   findUserBySocial(provider: SocialProvider, subject: string): string | null;
   linkSocial(input: { provider: SocialProvider; subject: string; userId: string; email: string | null; at: string }): void;
+  /** Apple refresh token (sealed) for a linked subject. */
+  setSocialRefreshToken(provider: SocialProvider, subject: string, sealed: string): void;
+  /** Sealed refresh tokens for a user's linked identities (Apple revoke on deletion). */
+  listSocialRefreshTokens(userId: string): Array<{ provider: SocialProvider; sealed: string }>;
+  setTermsAcceptance(userId: string, version: string, at: string): void;
   /** Provider-verified email on an existing account (Apple/Google link). */
   markEmailVerified(userId: string, at: string): void;
   findByEmail(email: string): AccountRecord | null;
@@ -296,6 +301,24 @@ export function createSqliteAccountStore(
     },
     linkSocial({ provider, subject, userId, email, at }) {
       db.insert(authIdentities).values({ provider, subject, userId, email, createdAt: at }).onConflictDoNothing().run();
+    },
+    setSocialRefreshToken(provider, subject, sealed) {
+      db.update(authIdentities)
+        .set({ refreshTokenEnc: sealed })
+        .where(and(eq(authIdentities.provider, provider), eq(authIdentities.subject, subject)))
+        .run();
+    },
+    listSocialRefreshTokens(userId) {
+      return db
+        .select({ provider: authIdentities.provider, sealed: authIdentities.refreshTokenEnc })
+        .from(authIdentities)
+        .where(eq(authIdentities.userId, userId))
+        .all()
+        .filter((r) => r.sealed)
+        .map((r) => ({ provider: r.provider as SocialProvider, sealed: r.sealed! }));
+    },
+    setTermsAcceptance(userId, version, at) {
+      db.update(userAccounts).set({ termsVersion: version, termsAcceptedAt: at }).where(eq(userAccounts.userId, userId)).run();
     },
     markEmailVerified(userId, at) {
       db.update(userAccounts).set({ emailVerifiedAt: at }).where(and(eq(userAccounts.userId, userId), isNull(userAccounts.emailVerifiedAt))).run();

@@ -8,6 +8,7 @@ import {
   actionErrorMessage,
   PRIVACY_URL,
   TERMS_COPY,
+  TERMS_REQUIRED_CODE,
 } from "@cardflow/shared";
 import * as WebBrowser from "expo-web-browser";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -38,6 +39,8 @@ export default function SignUpScreen() {
   const [agreed, setAgreed] = useState(false);
   // A first Apple/Google sign-in waits here until both boxes are checked (no account before that).
   const [pendingSocial, setPendingSocial] = useState<SocialToken | null>(null);
+  // Accounts from before the Terms accept them on their next sign-in (server: terms_required).
+  const [termsNeeded, setTermsNeeded] = useState(false);
   const signedIn = !!peekActiveUserId();
 
   async function submit() {
@@ -47,16 +50,22 @@ export default function SignUpScreen() {
       if (problem) return setError(problem);
       if (!over18) return setError(AGE_GATE_COPY.required);
       if (!agreed) return setError(TERMS_COPY.required);
+    } else if (termsNeeded && !agreed) {
+      return setError(TERMS_COPY.required);
     }
     setSaving(true);
     setError(null);
     try {
-      const session = await signUpWithEmail(email.trim(), password, mode, mode === "sign_up" && over18, mode === "sign_up" && agreed);
+      const session = await signUpWithEmail(email.trim(), password, mode, mode === "sign_up" && over18, (mode === "sign_up" || termsNeeded) && agreed);
       void flushScanQueue();
       // Sean: new accounts confirm their email (6-digit code) before pre-grade estimates.
       if (session.emailVerified === false) router.replace({ pathname: "/verify-email", params: { email: email.trim() } });
       else router.replace("/(tabs)/collection");
     } catch (caught) {
+      if ((caught as { code?: string }).code === TERMS_REQUIRED_CODE) {
+        setTermsNeeded(true);
+        return setError(TERMS_COPY.required);
+      }
       setError(actionErrorMessage(caught, mode === "sign_up" ? ACCOUNT_AUTH_COPY.signUpFailed : ACCOUNT_AUTH_COPY.signInFailed));
     } finally {
       setSaving(false);
@@ -72,7 +81,12 @@ export default function SignUpScreen() {
       void flushScanQueue();
       router.replace("/(tabs)/collection");
     } catch (caught) {
-      if ((caught as { code?: string }).code === "signup_details_required") {
+      if ((caught as { code?: string }).code === TERMS_REQUIRED_CODE) {
+        // Existing account from before the Terms: accept them, then Continue.
+        setPendingSocial(token);
+        setTermsNeeded(true);
+        setError(TERMS_COPY.required);
+      } else if ((caught as { code?: string }).code === "signup_details_required") {
         // New account: show both required boxes, then Continue retries with the same token.
         setPendingSocial(token);
         setMode("sign_up");
@@ -86,8 +100,10 @@ export default function SignUpScreen() {
     }
   }
 
-  const showChecks = mode === "sign_up" || pendingSocial !== null;
-  const checksOk = over18 && agreed;
+  // The 18+ box is for new accounts; the Terms box also shows when an existing account needs it.
+  const showAge = mode === "sign_up" || (pendingSocial !== null && !termsNeeded);
+  const showChecks = showAge || termsNeeded;
+  const checksOk = agreed && (!showAge || over18);
   const title = mode === "sign_up" ? "Create account" : "Sign in";
   return (
     <View style={authStyles.flex}>
@@ -121,7 +137,7 @@ export default function SignUpScreen() {
           textContentType={mode === "sign_up" ? "newPassword" : "password"}
           value={password}
         />
-        {showChecks ? (
+        {showAge ? (
           <Pressable
             accessibilityLabel={AGE_GATE_COPY.checkbox}
             accessibilityRole="checkbox"
@@ -164,7 +180,7 @@ export default function SignUpScreen() {
         ) : (
           <PrimaryButton accessibilityHint={mode === "sign_up" && !over18 ? AGE_GATE_COPY.disabledHint : undefined} disabled={saving || (mode === "sign_up" && !over18) || (mode === "sign_up" && !agreed)} label={saving ? (mode === "sign_up" ? "Creating account…" : "Signing in…") : title} onPress={() => void submit()} />
         )}
-        <Pressable accessibilityRole="button" onPress={() => { setMode(mode === "sign_up" ? "sign_in" : "sign_up"); setError(null); setPendingSocial(null); }}>
+        <Pressable accessibilityRole="button" onPress={() => { setMode(mode === "sign_up" ? "sign_in" : "sign_up"); setError(null); setPendingSocial(null); setTermsNeeded(false); }}>
           <Text style={authStyles.link}>{mode === "sign_up" ? "Already have an account? Sign in" : "New here? Create an account"}</Text>
         </Pressable>
         {mode === "sign_in" ? (

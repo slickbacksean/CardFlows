@@ -7,6 +7,7 @@ CREATE TABLE `auth_identities` (
 	`subject` text NOT NULL,
 	`user_id` text NOT NULL,
 	`email` text,
+	`refresh_token_enc` text,
 	`created_at` text NOT NULL,
 	PRIMARY KEY(`provider`, `subject`)
 );--> statement-breakpoint

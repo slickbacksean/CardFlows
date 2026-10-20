@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-require-imports -- optional native modules load lazily (PR 113 review) */
 /**
  * Sean (Oct 19): Sign in with Apple (iOS) and Google, next to email/password. Expo Go compatible:
  * expo-apple-authentication ships in Expo Go on iOS; Google uses expo-auth-session (PKCE) in the
@@ -6,21 +7,49 @@
  *   EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID, EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID, EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID
  * The server verifies the ID token (signature, issuer, audience, nonce) before any session.
  */
-import * as AppleAuthentication from "expo-apple-authentication";
-import * as Crypto from "expo-crypto";
-import * as Google from "expo-auth-session/providers/google";
-import * as WebBrowser from "expo-web-browser";
+import { requireOptionalNativeModule } from "expo";
 import { useEffect, useState } from "react";
 import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { getAuthProviders } from "@/lib/api";
 import { colors } from "@/lib/theme";
 
-WebBrowser.maybeCompleteAuthSession();
+/*
+ * Mobile Tech Lead (PR 113): no forced rebuild. Like device-level.ts / live-video-native.ts, each
+ * native-backed module is loaded only when its native module is in this binary; otherwise the
+ * button is hidden (current dev client, Expo Go without it).
+ */
+type AppleModule = typeof import("expo-apple-authentication");
+type CryptoModule = typeof import("expo-crypto");
+type GoogleModule = typeof import("expo-auth-session/providers/google");
+
+function loadOptional<T>(nativeName: string, load: () => T): T | null {
+  try {
+    return requireOptionalNativeModule(nativeName) ? load() : null;
+  } catch {
+    return null;
+  }
+}
+
+const APPLE_BUILD_FLAG = process.env.EXPO_PUBLIC_APPLE_SIGNIN_ENABLED?.trim() === "1";
+const Crypto = loadOptional<CryptoModule>("ExpoCrypto", () => require("expo-crypto"));
+const AppleAuthentication =
+  Platform.OS === "ios" && APPLE_BUILD_FLAG && Crypto
+    ? loadOptional<AppleModule>("ExpoAppleAuthentication", () => require("expo-apple-authentication"))
+    : null;
+const Google = Crypto
+  ? loadOptional<GoogleModule>("ExpoWebBrowser", () => {
+      const browser = require("expo-web-browser") as typeof import("expo-web-browser");
+      browser.maybeCompleteAuthSession();
+      return require("expo-auth-session/providers/google");
+    })
+  : null;
 
 export interface SocialToken {
   provider: "apple" | "google";
   idToken: string;
   nonce?: string;
+  /** Apple only: one-time code the API exchanges so account deletion can revoke the token. */
+  authorizationCode?: string;
 }
 
 const GOOGLE_IDS = {
@@ -36,6 +65,7 @@ function googleConfiguredForPlatform(): boolean {
 }
 
 async function appleToken(): Promise<SocialToken | null> {
+  if (!AppleAuthentication || !Crypto) return null;
   const rawNonce = Crypto.randomUUID();
   const hashed = await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, rawNonce);
   try {
@@ -43,15 +73,17 @@ async function appleToken(): Promise<SocialToken | null> {
       requestedScopes: [AppleAuthentication.AppleAuthenticationScope.EMAIL],
       nonce: hashed,
     });
-    return credential.identityToken ? { provider: "apple", idToken: credential.identityToken, nonce: rawNonce } : null;
+    return credential.identityToken
+      ? { provider: "apple", idToken: credential.identityToken, nonce: rawNonce, authorizationCode: credential.authorizationCode ?? undefined }
+      : null;
   } catch (error) {
     if ((error as { code?: string }).code === "ERR_REQUEST_CANCELED") return null;
     throw error;
   }
 }
 
-function GoogleButton({ disabled, onToken, onError }: { disabled: boolean; onToken: (t: SocialToken) => void; onError: (e: unknown) => void }) {
-  const [request, response, promptAsync] = Google.useIdTokenAuthRequest(GOOGLE_IDS);
+function GoogleButton({ google, disabled, onToken, onError }: { google: GoogleModule; disabled: boolean; onToken: (t: SocialToken) => void; onError: (e: unknown) => void }) {
+  const [request, response, promptAsync] = google.useIdTokenAuthRequest(GOOGLE_IDS);
   useEffect(() => {
     if (response?.type !== "success") return;
     const idToken = response.params.id_token ?? response.authentication?.idToken;
@@ -78,14 +110,14 @@ export function SocialSignInButtons({ disabled, onToken, onError }: { disabled: 
     void getAuthProviders()
       .then((p) => setServer({ apple: p.apple, google: p.google }))
       .catch(() => undefined);
-    if (Platform.OS === "ios") void AppleAuthentication.isAvailableAsync().then(setAppleAvailable).catch(() => undefined);
+    if (AppleAuthentication) void AppleAuthentication.isAvailableAsync().then(setAppleAvailable).catch(() => undefined);
   }, []);
-  const showApple = Platform.OS === "ios" && appleAvailable && server.apple;
-  const showGoogle = server.google && googleConfiguredForPlatform();
+  const showApple = AppleAuthentication !== null && appleAvailable && server.apple;
+  const showGoogle = Google !== null && server.google && googleConfiguredForPlatform();
   if (!showApple && !showGoogle) return null;
   return (
     <View style={styles.stack}>
-      {showApple ? (
+      {showApple && AppleAuthentication ? (
         <AppleAuthentication.AppleAuthenticationButton
           buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.WHITE}
           buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
@@ -97,7 +129,7 @@ export function SocialSignInButtons({ disabled, onToken, onError }: { disabled: 
           style={styles.apple}
         />
       ) : null}
-      {showGoogle ? <GoogleButton disabled={disabled} onError={onError} onToken={onToken} /> : null}
+      {showGoogle && Google ? <GoogleButton google={Google} disabled={disabled} onError={onError} onToken={onToken} /> : null}
       <Text style={styles.or}>or use email</Text>
     </View>
   );
