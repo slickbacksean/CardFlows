@@ -80,7 +80,7 @@ Public GitHub product docs (`MVP_SCOPE.md`, `PRODUCT_OVERVIEW.md`, `NON_GOALS.md
 | **Purpose** | Recognition assist; user record of the scan |
 | **Storage location** | **Assumption:** private Storage bucket; object key includes `user_id`. Optional local cache on device. |
 | **Access permissions** | Owner via short-lived signed URL only; backend for CardSight forward. **Never** public-read. |
-| **Retention proposal** | **Proposal:** keep until the user deletes the scan **or** auto-delete raw image N days after confirmation (founder picks N; default suggestion 30 days). Store a cropped card region rather than the full original when possible. |
+| **Retention** | **Decided (Sean, Oct 19): photos are not stored.** Scan photos are used only to identify the card and are deleted as soon as identification and confirmation finish; grade photos (front/back and angled extras) are deleted as soon as the grade result is saved. An hourly sweep deletes anything left (failed or abandoned work) after 24 h (`CARD_FLOW_SCAN_PHOTO_TTL_HOURS=24`). MyDEX and scan history show the catalog image. Only grade numbers and text results are kept. |
 | **User deletion behavior** | Delete object(s) and signed-URL ability. Disclose that CardSight may already have processed a copy (**Open:** CardSight retention / training). |
 | **Sent to CardSight / TCGdex / analytics?** | **CardSight:** **Yes**, only after explicit user action on that image (**Known** intent). CardSight ToS: Your Data may be used to provide Software, improve it, and **train ML/AI**. **TCGdex:** no. **Analytics:** never send raw images. |
 | **Never log?** | **Yes — never log raw images or image bytes.** |
@@ -324,11 +324,11 @@ Primary data is SQLite plus photo files on one Railway volume (US West). Backup 
 
 | Copy | Holds deleted users' data for at most |
 |---|---|
-| Litestream replica (snapshot retention 168 h) | 7 days |
+| Litestream replica (snapshot retention 336 h) | 14 days |
 | Railway volume backups (Daily only; never Weekly/Monthly) | 6 days |
 | `/data/pre-migrate/` copies (keep 3, pruned at 14 days) | 14 days |
 | Planned nightly DB snapshots (follow-up) | 14 days |
-| Planned photo mirror (follow-up) | ~24 h after local deletion |
+| Photos | Not backed up: scan and grade photos are deleted within 24 h (see §4) |
 
 All fit inside the "up to 2 weeks" deletion promise. Providers: Cloudflare R2 (recommended) or Railway Buckets (Tigris), both encrypted at rest by the provider; Litestream v0.5 has **no client-side encryption**, so access relies on bucket-scoped tokens. Staging and production never share a bucket or token.
 

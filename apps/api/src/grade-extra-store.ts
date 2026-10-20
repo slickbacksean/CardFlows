@@ -8,11 +8,30 @@ import type { GradeExtraShot, GradeSide } from "@cardflow/shared";
 /**
  * Full 14-photo extras: tilted + corner close-ups, linked to a grade session id,
  * blur-checked on the server, kept ≤ 30 days like graded photos.
- *   grade-extras/<userId>/<sessionId>/meta.json
- *   grade-extras/<userId>/<sessionId>/<side>-<shot>.jpg
+ *   <dataDir>/grade/extras/<userId>/<sessionId>/meta.json
+ *   <dataDir>/grade/extras/<userId>/<sessionId>/<side>-<shot>.jpg
  */
 
-const EXTRA_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "data", "grade-extras");
+const API_DATA_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "data");
+/** Pre-fix location (not on the Railway volume). Still swept so old local files get cleaned up. */
+const LEGACY_EXTRA_DIR = path.join(API_DATA_DIR, "grade-extras");
+
+/**
+ * Dev Ops (Oct 19): extras live next to the DB on the data volume, under `<dataDir>/grade/extras`
+ * (`/data/grade/extras` on Railway), so they survive redeploys. The data dir is the folder of
+ * CARD_FLOW_SQLITE_PATH, the same rule the SQLite store uses for scan and grade photos.
+ */
+export function gradeExtrasDir(env: NodeJS.Dict<string | undefined> = process.env): string {
+  const raw = env.CARD_FLOW_SQLITE_PATH?.trim();
+  if (!raw || raw === ":memory:") return path.join(API_DATA_DIR, "grade", "extras");
+  const db = path.isAbsolute(raw) ? raw : path.resolve(raw);
+  return path.join(path.dirname(db), "grade", "extras");
+}
+
+function extraRoots(): string[] {
+  const current = gradeExtrasDir();
+  return current === LEGACY_EXTRA_DIR ? [current] : [current, LEGACY_EXTRA_DIR];
+}
 
 export const MIN_EXTRA_SHARPNESS = 60;
 export const GRADE_SESSION_ID_RE = /^[a-zA-Z0-9_-]{8,64}$/;
@@ -26,7 +45,7 @@ function safeUser(userId: string): string {
 }
 
 function sessionDir(userId: string, sessionId: string): string {
-  return path.join(EXTRA_DIR, safeUser(userId), sessionId);
+  return path.join(gradeExtrasDir(), safeUser(userId), sessionId);
 }
 
 export interface GradeExtraMeta {
@@ -150,48 +169,67 @@ export function gradeExtrasSessionPath(userId: string, sessionId: string): strin
 }
 
 export function deleteUserGradeExtras(userId: string): number {
-  const rootDir = path.join(EXTRA_DIR, safeUser(userId));
-  if (!existsSync(rootDir)) return 0;
   let deleted = 0;
-  try {
-    for (const session of readdirSync(rootDir)) {
-      const dir = path.join(rootDir, session);
-      try {
-        deleted += readdirSync(dir).filter((n) => n !== "meta.json").length;
-        rmSync(dir, { recursive: true, force: true });
-      } catch { /* continue */ }
-    }
-    rmSync(rootDir, { recursive: true, force: true });
-  } catch { /* ignore */ }
+  for (const root of extraRoots()) {
+    const rootDir = path.join(root, safeUser(userId));
+    if (!existsSync(rootDir)) continue;
+    try {
+      for (const session of readdirSync(rootDir)) {
+        const dir = path.join(rootDir, session);
+        try {
+          deleted += readdirSync(dir).filter((n) => n !== "meta.json").length;
+          rmSync(dir, { recursive: true, force: true });
+        } catch { /* continue */ }
+      }
+      rmSync(rootDir, { recursive: true, force: true });
+    } catch { /* ignore */ }
+  }
   return deleted;
 }
 
 export function purgeExpiredGradeExtras(now: Date = new Date()): { deleted: number } {
-  if (!existsSync(EXTRA_DIR)) return { deleted: 0 };
   let deleted = 0;
   const cutoff = now.getTime() - GRADED_PHOTO_RETENTION_MS;
-  for (const user of readdirSync(EXTRA_DIR)) {
-    const userRoot = path.join(EXTRA_DIR, user);
-    try {
-      if (!statSync(userRoot).isDirectory()) continue;
-    } catch { continue; }
-    for (const session of readdirSync(userRoot)) {
-      const dir = path.join(userRoot, session);
-      const meta = readMeta(dir);
-      let created = meta ? Date.parse(meta.createdAt) : NaN;
-      if (!Number.isFinite(created)) {
-        try { created = statSync(dir).mtimeMs; } catch { created = 0; }
-      }
-      if (created > cutoff) continue;
+  for (const root of extraRoots()) {
+    if (!existsSync(root)) continue;
+    for (const user of readdirSync(root)) {
+      const userRoot = path.join(root, user);
       try {
-        deleted += readdirSync(dir).filter((n) => n !== "meta.json").length;
-        rmSync(dir, { recursive: true, force: true });
-      } catch { /* continue */ }
+        if (!statSync(userRoot).isDirectory()) continue;
+      } catch { continue; }
+      for (const session of readdirSync(userRoot)) {
+        const dir = path.join(userRoot, session);
+        const meta = readMeta(dir);
+        let created = meta ? Date.parse(meta.createdAt) : NaN;
+        if (!Number.isFinite(created)) {
+          try { created = statSync(dir).mtimeMs; } catch { created = 0; }
+        }
+        if (created > cutoff) continue;
+        try {
+          deleted += readdirSync(dir).filter((n) => n !== "meta.json").length;
+          rmSync(dir, { recursive: true, force: true });
+        } catch { /* continue */ }
+      }
     }
   }
   return { deleted };
 }
 
 export function gradeExtrasRootForTests(): string {
-  return EXTRA_DIR;
+  return gradeExtrasDir();
+}
+
+/** Sean (Oct 19): angled extras are deleted as soon as the grade result is back. */
+export function deleteGradeExtrasSession(userId: string, sessionId: string): number {
+  if (!isGradeSessionId(sessionId)) return 0;
+  let deleted = 0;
+  for (const root of extraRoots()) {
+    const dir = path.join(root, safeUser(userId), sessionId);
+    if (!existsSync(dir)) continue;
+    try {
+      deleted += readdirSync(dir).filter((n) => n !== "meta.json").length;
+      rmSync(dir, { recursive: true, force: true });
+    } catch { /* ignore */ }
+  }
+  return deleted;
 }

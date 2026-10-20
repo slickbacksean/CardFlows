@@ -206,16 +206,12 @@ describe("POST /v1/inventory/:id/grade-estimate", () => {
     expect(backOnly.body.estimate).toEqual(emptyGradeEstimate());
   });
 
-  it("uses the Capture scan still as front and stores a back still first-party", async () => {
-    const seen: Array<{ front?: Uint8Array; back?: Uint8Array; mimeType?: string }> = [];
+  it("Sean (Oct 19): no stored photos. The scan still is gone after confirm and grade photos after the result", async () => {
+    const seen: Array<{ front?: Uint8Array; back?: Uint8Array }> = [];
     const grading: CardGradingProvider = {
       name: "mock",
       async estimateGrade(req) {
-        seen.push({
-          front: req.frontImage?.bytes,
-          back: req.backImage?.bytes,
-          mimeType: req.mimeType,
-        });
+        seen.push({ front: req.frontImage?.bytes, back: req.backImage?.bytes });
         return mockCardGradingProvider.estimateGrade(req);
       },
     };
@@ -234,44 +230,27 @@ describe("POST /v1/inventory/:id/grade-estimate", () => {
     }>(app, "/v1/inventory");
     const row = inventory.body.items.find((item) => item.inventoryItemId === inventoryItemId);
     expect(row?.scanId).toBe(confirmation.scanId);
-    expect(row?.imageStorageRef).toBe(`scans/${confirmation.scanId}.jpg`);
-    expect(row?.imageStorageRef).not.toMatch(/^https?:/i);
+    expect(row?.imageStorageRef).toBeNull();
     expect(row?.card?.imageUrl).toContain("assets.tcgdex.net");
-    expect(row?.card?.imageUrl).not.toContain("/v1/scans/");
-    expect(row?.gradePhotos).toEqual({ front: false, back: false });
-
-    const fromScan = await postEstimate(app, inventoryItemId);
-    expect(fromScan.status).toBe(200);
-    expect(fromScan.body.estimate?.overall).not.toBeNull();
-    expect(fromScan.body.estimate?.usedBack).toBe(false);
-    expect(seen[0]?.front).toEqual(TINY_JPEG);
-    expect(seen[0]?.back).toBeUndefined();
-    expect(JSON.stringify(fromScan.body)).not.toMatch(/assets\.tcgdex\.net/);
+    expect((await app.request(`/v1/scans/${confirmation.scanId}/image`)).status).toBe(404);
 
     const BACK_JPEG = Uint8Array.from([0xff, 0xd8, 0xff, 0xdb, 0xd9]);
-    const withBack = await postEstimate(app, inventoryItemId, {
+    const graded = await postEstimate(app, inventoryItemId, {
+      front: jpegFile("front.jpg", TINY_JPEG),
       back: jpegFile("back.jpg", BACK_JPEG),
     });
-    expect(withBack.status).toBe(200);
-    expect(withBack.body.estimate?.usedBack).toBe(true);
-    expect(seen[1]?.front).toEqual(TINY_JPEG);
-    expect(seen[1]?.back).toEqual(BACK_JPEG);
+    expect(graded.status).toBe(200);
+    expect(graded.body.estimate?.overall).not.toBeNull();
+    expect(seen[0]?.front).toEqual(TINY_JPEG);
+    expect(seen[0]?.back).toEqual(BACK_JPEG);
 
-    const storedBack = await app.request(`/v1/inventory/${inventoryItemId}/grade-photos/back`);
-    expect(storedBack.status).toBe(200);
-    expect(storedBack.headers.get("content-type")).toBe("image/jpeg");
-    expect(new Uint8Array(await storedBack.arrayBuffer())).toEqual(BACK_JPEG);
-
-    const reused = await postEstimate(app, inventoryItemId);
-    expect(reused.body.estimate?.usedBack).toBe(true);
-    expect(seen).toHaveLength(2);
-
+    expect((await app.request(`/v1/inventory/${inventoryItemId}/grade-photos/back`)).status).toBe(404);
     const listed = await json<{
       items: Array<{ inventoryItemId: string; gradePhotos: { front: boolean; back: boolean } }>;
     }>(app, "/v1/inventory");
     expect(
       listed.body.items.find((item) => item.inventoryItemId === inventoryItemId)?.gradePhotos,
-    ).toEqual({ front: false, back: true });
+    ).toEqual({ front: false, back: false });
   });
 
   it("rejects watchlist copies with the existing watchlist copy", async () => {
@@ -564,7 +543,11 @@ describe("Task 8 grading Prepare HTTP loop", () => {
       front: jpegFile("front.jpg"),
       back: jpegFile("back.jpg"),
     });
-    const second = await postEstimate(app, inventoryItemId);
+    // Photos are deleted after the result (Sean, Oct 19), so the same photos are sent again.
+    const second = await postEstimate(app, inventoryItemId, {
+      front: jpegFile("front.jpg"),
+      back: jpegFile("back.jpg"),
+    });
     expect(first.status).toBe(200);
     expect(second.status).toBe(200);
     expect(calls).toBe(1);

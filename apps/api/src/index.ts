@@ -1,3 +1,4 @@
+import path from "node:path";
 import { serve } from "@hono/node-server";
 import { loadLocalApiEnv } from "./local-env";
 import { captureApiException, initApiSentry } from "./sentry";
@@ -13,7 +14,8 @@ import { createGradeEstimateFromEnv, gradeEngineProbeFromEnv } from "./grade-est
 import { createSlabPricingFromEnv } from "./poketrace-env";
 import { resolveDevAutoSession } from "./session";
 import { installUnmappedSetNameLogger } from "./tcgdex-catalog";
-import { startPhotoRetentionJob } from "./photo-retention";
+import { scanPhotoTtlHoursFromEnv, startPhotoRetentionJob } from "./photo-retention";
+import { startDiskUsageMonitor } from "./disk-usage";
 import { purgeExpiredGradeExtras } from "./grade-extra-store";
 import { createStoreFromEnv } from "./store-env";
 import { loadOptionalPhashIndex } from "./obb-phash-provider";
@@ -89,18 +91,28 @@ const app = createApp(store, {
   liveVideoObb: () => liveVideoYoloHolder.detector,
   liveIdentifyEnabled: recognitionSelection.identifyEnabled,
 });
+// Sean (Oct 19): photos are deleted right after identification / grading. This hourly sweep
+// catches anything left by failed or abandoned work: grade stills and extras after 24 h, scan
+// stills after CARD_FLOW_SCAN_PHOTO_TTL_HOURS (24). Image files only; rows and MyDEX stay.
+const scanPhotoTtlHours = scanPhotoTtlHoursFromEnv();
 const photoRetention = startPhotoRetentionJob({
   purge: (now) => {
     const graded = store.purgeExpiredGradePhotos(now);
     const extras = purgeExpiredGradeExtras(now);
-    return { deleted: graded.deleted + extras.deleted };
+    const scans = store.purgeExpiredScanPhotos(now, scanPhotoTtlHours);
+    return { deleted: graded.deleted + extras.deleted + scans.deleted };
   },
   onPurge: (result) => {
     if (result.deleted > 0) {
-      console.log(`Photo retention: deleted ${result.deleted} graded photo(s)/extra(s) older than 30 days`);
+      console.log(`Photo retention: swept ${result.deleted} leftover photo(s) older than 24 h`);
     }
   },
 });
+// Low-disk alert at 70% / 85% of the data volume (same alert sinks as P1-17).
+const diskMonitor =
+  selection.kind === "sqlite"
+    ? startDiskUsageMonitor({ dir: path.dirname(selection.sqlitePath), metrics: opsMetrics })
+    : null;
 
 void resolveLiveVideoObbDetector().then((detector) => {
   liveVideoYoloHolder.detector = detector;
@@ -144,6 +156,7 @@ function shutdown(signal: string) {
   shuttingDown = true;
   const startedAt = Date.now();
   photoRetention.stop();
+  diskMonitor?.stop();
   const finish = () => {
     try {
       (store as { close?: () => void }).close?.();

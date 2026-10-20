@@ -5,11 +5,11 @@ logging:
   level: info
   type: json
 
-# Full snapshot daily; keep 90 days of snapshots + LTX history (point-in-time window).
-# 90 days matches the backup window in the privacy draft (Sean): deleted data is gone within 90 days.
+# Full snapshot daily; keep 14 days of snapshots + LTX history (point-in-time window).
+# Sean (Oct 19): backups are capped at 14 days so deleted data is gone within 2 weeks.
 snapshot:
   interval: 24h
-  retention: 2160h
+  retention: 336h
 
 # Check replica LTX contiguity every 6h.
 validation:
@@ -35,6 +35,7 @@ dbs:
       region: ${LITESTREAM_REGION}
       access-key-id: ${LITESTREAM_ACCESS_KEY_ID}
       secret-access-key: ${LITESTREAM_SECRET_ACCESS_KEY}
+      # Dev Ops (Oct 19): 10 s keeps WAL uploads inside R2's free Class A tier.
       sync-interval: 10s
       # true for R2 (unverified); false for Railway Buckets (Tigris).
       require-content-md5: ${LITESTREAM_REQUIRE_CONTENT_MD5}

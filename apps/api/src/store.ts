@@ -59,6 +59,7 @@ import {
 } from "./grade-image";
 import {
   isGradePhotoExpired,
+  isScanPhotoExpired,
   type GradePhotoObject,
   type PhotoPurgeResult,
 } from "./photo-retention";
@@ -497,6 +498,17 @@ export function purgeExpiredGradePhotos(now: Date = new Date()): PhotoPurgeResul
   return { deleted };
 }
 
+/** Sean (Oct 19): safety-net sweep. Scan photo files older than `ttlHours` go; rows stay. */
+export function purgeExpiredScanPhotos(now: Date, ttlHours: number): PhotoPurgeResult {
+  let deleted = 0;
+  for (const scan of [...store.scans.values()]) {
+    if (!scan.imageStorageRef && !store.scanImages.has(scan.scanId)) continue;
+    if (!isScanPhotoExpired(scan.capturedAt, now, ttlHours)) continue;
+    if (deleteScanImage(scan.userId, scan.scanId)) deleted += 1;
+  }
+  return { deleted };
+}
+
 export function listInventory(userId: string): InventoryItemRecord[] {
   return [...store.inventory]
     .filter((item) => item.userId === userId)
@@ -856,6 +868,7 @@ export interface StorePort {
   deleteUserScans: typeof deleteUserScans;
   listScanUserIds: typeof listScanUserIds;
   purgeExpiredGradePhotos: typeof purgeExpiredGradePhotos;
+  purgeExpiredScanPhotos: typeof purgeExpiredScanPhotos;
   listInventory: typeof listInventory;
   confirmScan: typeof confirmScan;
   skipScanCard: typeof skipScanCard;
@@ -1120,6 +1133,7 @@ export function createMemoryStore(): StorePort {
     deleteUserScans,
     listScanUserIds,
     purgeExpiredGradePhotos,
+    purgeExpiredScanPhotos,
     listInventory,
     confirmScan,
     skipScanCard,

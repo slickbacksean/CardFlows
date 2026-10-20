@@ -14,7 +14,7 @@ import { createApp } from "./app";
 import type { CardgradingRunner } from "./cardgrading-run";
 import { createGradeUploadCache, imageCarriesExif, imageCarriesGps } from "./grade-image";
 import {
-  GRADED_PHOTO_RETENTION_DAYS,
+  GRADED_PHOTO_RETENTION_HOURS,
   isGradePhotoExpired,
   startPhotoRetentionJob,
 } from "./photo-retention";
@@ -189,12 +189,12 @@ describe("P0-07 photo privacy", () => {
       mimeType: "image/jpeg",
       createdAt,
     });
-    expect(GRADED_PHOTO_RETENTION_DAYS).toBe(30);
-    expect(isGradePhotoExpired(createdAt, new Date("2026-01-30T23:59:59.000Z"))).toBe(false);
-    expect(store.purgeExpiredGradePhotos(new Date("2026-01-30T23:59:59.000Z")).deleted).toBe(0);
+    expect(GRADED_PHOTO_RETENTION_HOURS).toBe(24);
+    expect(isGradePhotoExpired(createdAt, new Date("2026-01-01T23:59:59.000Z"))).toBe(false);
+    expect(store.purgeExpiredGradePhotos(new Date("2026-01-01T23:59:59.000Z")).deleted).toBe(0);
     expect(store.getGradeImage(userId, item.inventoryItemId, "front")).toBeDefined();
 
-    const day30 = new Date("2026-01-31T00:00:00.000Z");
+    const day30 = new Date("2026-01-02T00:00:00.000Z");
     expect(isGradePhotoExpired(createdAt, day30)).toBe(true);
     expect(store.purgeExpiredGradePhotos(day30).deleted).toBe(2);
     expect(store.getGradeImage(userId, item.inventoryItemId, "front")).toBeUndefined();

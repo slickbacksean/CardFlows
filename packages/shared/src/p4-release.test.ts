@@ -517,11 +517,11 @@ describe("P4: account deletion end to end", () => {
 });
 
 describe("P4: docs from the Policy and Dev Ops reviews", () => {
-  it("privacy draft: PokéCollector, anonymous totals, backups 90 days, Sentry as a provider", () => {
+  it("privacy draft: PokéCollector, anonymous totals, backups 14 days, Sentry as a provider", () => {
     const draft = read("docs/USER_CONSENT_DRAFT.md");
     expect(draft).toContain(POKECOLLECTOR_DELETION_LINE);
     expect(draft).toContain(ANONYMOUS_LEDGER_LINE);
-    expect(draft).toContain("Deleted data is removed from backups within 90 days.");
+    expect(draft).toContain("Deleted data is removed from backups within 14 days.");
     expect(draft).toContain("**Sentry** (Functional Software, Inc.)");
     expect(draft).toContain("Settings > Send crash reports");
     expect(draft).toContain("Crash reports are off by default");

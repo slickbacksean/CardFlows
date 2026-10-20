@@ -12,7 +12,7 @@ What the repo does now:
 - `CARD_FLOW_MAINTENANCE=1` runs `src/maintenance.ts` (no DB; /health 200, all else 503 + Retry-After).
 - CI `api-image`: also boots the image on a root-owned volume, checks ownership, WAL, restart survival and the volume guard.
 
-Not in this PR yet (follow-ups, see the source plan §6, §7 A, §8.5): the in-app nightly DB snapshot + photo mirror to the bucket (`@aws-sdk/client-s3`), `restore-photos.ts`, `GET /ops/db-stats`, and the `backup_failed` / `volume_low` ops alerts. Until then, DB backups are Litestream (continuous, 90 days) plus Railway Daily volume backups (6 days); **photos are only covered by the Railway volume backup**.
+Not in this PR yet (follow-ups, see the source plan §6, §7 A, §8.5): the in-app nightly DB snapshot + photo mirror to the bucket (`@aws-sdk/client-s3`), `restore-photos.ts`, `GET /ops/db-stats`, and the `backup_failed` / `volume_low` ops alerts. Until then, DB backups are Litestream (continuous, 14 days) plus Railway Daily volume backups (6 days); **photos are only covered by the Railway volume backup**.
 
 ## Railway project layout
 
@@ -125,7 +125,7 @@ Railway-provided (don't set): `RAILWAY_VOLUME_MOUNT_PATH`, `RAILWAY_VOLUME_NAME`
 | `LITESTREAM_HEARTBEAT_URL` | optional | Healthchecks URL | low | |
 | `CARD_FLOW_BACKUPS_REQUIRED` | `true` | `true` | no | boot fails if backup env is missing |
 | `CARD_FLOW_BACKUP_BUCKET/ENDPOINT/REGION/ACCESS_KEY_ID/SECRET_ACCESS_KEY` | reference the `LITESTREAM_*` values | same | keys **yes** | same bucket, `snapshots/` and `photos/` prefixes |
-| `CARD_FLOW_BACKUP_RETENTION_DAYS` / `CARD_FLOW_BACKUP_HOUR_UTC` / `CARD_FLOW_BACKUP_HEARTBEAT_URL` | 90 / 10 / optional | 90 / 10 / Healthchecks URL | low | |
+| `CARD_FLOW_BACKUP_RETENTION_DAYS` / `CARD_FLOW_BACKUP_HOUR_UTC` / `CARD_FLOW_BACKUP_HEARTBEAT_URL` | 14 / 10 / optional | 14 / 10 / Healthchecks URL | low | |
 | `MAX_CONCURRENT_GRADES` / `MAX_QUEUED_GRADES` | 1 / 3 | 1 / 3 | no | revisit with a 2 GB limit |
 
 **Must stay unset in staging and production:** `CARD_FLOW_DEV_AUTO_SESSION`, `CARD_FLOW_IAP_STUB`, `CARD_FLOW_ULTRALYTICS_AGPL_ACCEPTED` (until the license decision), `CARD_FLOW_STORE=memory`, `CARDSIGHT_MOCK_SCENARIO`, `CARDFLOW_GRADE_DEBUG_IMAGES`, `CARD_FLOW_REQUIRE_VOLUME=false`, `CARD_FLOW_MAINTENANCE` (except during a restore).

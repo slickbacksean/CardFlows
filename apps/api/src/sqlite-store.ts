@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { and, asc, desc, eq, gte, inArray, isNull } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, isNotNull, isNull } from "drizzle-orm";
 import type { ConfirmEvent, UserPriceSnapshot } from "@cardflow/shared";
 import { USER_PRICE_SNAPSHOTS_PER_CARD } from "./store";
 import {
@@ -54,7 +54,7 @@ import {
   type GradeImageBytes,
 } from "./grade-image";
 import { createSqliteAccountStore } from "./account-store";
-import { isGradePhotoExpired, type PhotoPurgeResult } from "./photo-retention";
+import { isGradePhotoExpired, isScanPhotoExpired, type PhotoPurgeResult } from "./photo-retention";
 import {
   isFirstPartyScanImageRef,
   mimeFromScanStorageRef,
@@ -1004,6 +1004,21 @@ export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStor
       if (!isGradePhotoExpired(row.createdAt, now)) continue;
       if (row.side !== "front" && row.side !== "back") continue;
       if (deleteGradeImage(row.userId, row.inventoryItemId, row.side)) deleted += 1;
+    }
+    return { deleted };
+  }
+
+  /** Sean (Oct 19): safety-net sweep. Scan photo files older than `ttlHours` go; rows stay. */
+  function purgeExpiredScanPhotos(now: Date, ttlHours: number): PhotoPurgeResult {
+    const rows = db
+      .select({ scanId: crmScans.scanId, userId: crmScans.userId, capturedAt: crmScans.capturedAt })
+      .from(crmScans)
+      .where(isNotNull(crmScans.imageStorageRef))
+      .all();
+    let deleted = 0;
+    for (const row of rows) {
+      if (!isScanPhotoExpired(row.capturedAt, now, ttlHours)) continue;
+      if (deleteScanImage(row.userId, row.scanId)) deleted += 1;
     }
     return { deleted };
   }
@@ -2182,6 +2197,7 @@ export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStor
     deleteUserScans,
     listScanUserIds,
     purgeExpiredGradePhotos,
+    purgeExpiredScanPhotos,
     listInventory,
     confirmScan,
     skipScanCard,

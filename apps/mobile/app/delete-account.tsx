@@ -85,6 +85,7 @@ export default function DeleteAccountScreen() {
               </Text>
             ))}
             <Text style={styles.body}>{c.keeps}</Text>
+            <Text style={styles.body}>{c.photos}</Text>
             <Text style={styles.body}>{c.subscription}</Text>
             <Text style={styles.body}>{c.credits}</Text>
             {needsPassword ? (

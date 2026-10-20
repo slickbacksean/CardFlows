@@ -228,10 +228,9 @@ describe("first-party scan stills", () => {
     stores.push(second);
     const app = createApp(second);
 
+    // Sean (Oct 19): the still is deleted once the scan is confirmed; MyDEX uses catalog art.
     const image = await app.request(`/v1/scans/${scan.scan.scanId}/image`);
-    expect(image.status).toBe(200);
-    expect(image.headers.get("content-type")).toBe("image/jpeg");
-    expect(new Uint8Array(await image.arrayBuffer())).toEqual(TINY_JPEG);
+    expect(image.status).toBe(404);
 
     const inventory = await json<{
       items: Array<{ card: { imageUrl: string | null; tcgdexId: string } | null }>;
