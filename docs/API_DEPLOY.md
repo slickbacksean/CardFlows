@@ -49,7 +49,7 @@ New sign-ups get a 6-digit code by email. It works once, expires in 15 minutes a
 |---|---|
 | `CARD_FLOW_EMAIL_SENDER` | `resend`, or unset. When unset, codes are logged in development only and nothing is sent in production (the API warns at startup). |
 | `RESEND_API_KEY` | Required with `resend`. |
-| `CARD_FLOW_EMAIL_FROM` | Required with `resend`: a verified sender, e.g. `CardFlow <TODO-sender@pokesniper.app>`. |
+| `CARD_FLOW_EMAIL_FROM` | Required with `resend`: a verified sender, e.g. `PokeSniper <TODO-sender@pokesniper.app>`. |
 
 In production, the API refuses to start if `CARD_FLOW_EMAIL_SENDER` is set but incomplete or unknown.
 
