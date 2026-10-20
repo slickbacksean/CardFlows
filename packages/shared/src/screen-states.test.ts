@@ -73,7 +73,7 @@ describe("P5 screen states: error classification", () => {
     expect(actionErrorMessage(httpError(502), "Couldn't save.")).toBe("Something went wrong on our end. Try again in a moment.");
     // Community review 3 / UX P0-3: unknown server text never passes through...
     expect(actionErrorMessage(httpError(400, "That email is already in use."), "Couldn't save.")).toBe("Couldn't save.");
-    // ...only allowlisted CardFlow copy, or text the API marked user-facing.
+    // ...only allowlisted PokeSniper copy, or text the API marked user-facing.
     expect(actionErrorMessage(httpError(401, ACCOUNT_AUTH_COPY.signInFailed), "x")).toBe(SCREEN_STATE_COPY.authBody);
     expect(actionErrorMessage(httpError(400, ACCOUNT_AUTH_COPY.badEmail), "x")).toBe(ACCOUNT_AUTH_COPY.badEmail);
     expect(
@@ -280,7 +280,7 @@ describe("UX review: data, stale banner, slow loading", () => {
     expect(settings).toContain("accessibilityLabel={SETTINGS_STATUS_COPY.retryLabel}");
     expect(settings).toContain("SCREEN_LOADING_LABELS.settings");
     expect(settings).not.toContain("<InlineError");
-    expect(SETTINGS_STATUS_COPY.checkFailed).toBe("Couldn't check CardFlow's status. Try again.");
+    expect(SETTINGS_STATUS_COPY.checkFailed).toBe("Couldn't check PokeSniper's status. Try again.");
     expect(SCREEN_LOADING_LABELS.settings).toBe("Checking connection");
   });
 
@@ -314,7 +314,7 @@ describe("UX review: data, stale banner, slow loading", () => {
     expect(SCREEN_EMPTY_COPY.gradeReturned.body).toBe("Copies you mark Returned show up here.");
     expect(SCREEN_EMPTY_COPY.gradePrepare.action).toBe(`Open ${COLLECTION_DESTINATION_NAME}`);
     expect(SCREEN_ERROR_WHAT.collection).toBe(COLLECTION_DESTINATION_NAME);
-    expect(SCREEN_STATE_COPY.unknownBody).toBe("Try again. If it keeps happening, check Settings for CardFlow's status.");
+    expect(SCREEN_STATE_COPY.unknownBody).toBe("Try again. If it keeps happening, check Settings for PokeSniper's status.");
     const component = read("components/ui/screen-state.tsx");
     // P1-10: empty-state actions are primary; P1-3: focus moves to the title; P2-5: busy state.
     expect(component).toMatch(/\{action \? <PrimaryButton label=\{action\.label\} onPress=\{action\.onPress\} \/>/);

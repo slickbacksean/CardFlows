@@ -1,7 +1,7 @@
-# Card ID Mapping Plan — CardSight → TCGdex → CardFlow
+# Card ID Mapping Plan — CardSight → TCGdex → PokeSniper
 
 **Status:** Spike plan for review. **No production tables.**  
-**Decision:** CardFlow owns the internal card ID. TCGdex is the official catalog id. CardSight UUIDs are recognition refs only. **Do not assume CardSight IDs match TCGdex IDs.**
+**Decision:** PokeSniper owns the internal card ID. TCGdex is the official catalog id. CardSight UUIDs are recognition refs only. **Do not assume CardSight IDs match TCGdex IDs.**
 
 Related: `CARDSIGHT_INTEGRATION_RECOMMENDATION.md` §11 (mapping table sketch), `TCGDEX_ARCHITECTURE.md`, `PRODUCT_OVERVIEW.md`.
 
@@ -11,21 +11,21 @@ Related: `CARDSIGHT_INTEGRATION_RECOMMENDATION.md` §11 (mapping table sketch), 
 
 | ID | Owner | Example | Used for |
 |----|-------|---------|----------|
-| `cardflow_card_id` | CardFlow | UUID `7c2e1a90-4b3d-4f6a-9c11-2e8f0a1b3c58` | Inventory, purchases, watchlist, snapshots, drafts, URLs |
+| `cardflow_card_id` | PokeSniper | UUID `7c2e1a90-4b3d-4f6a-9c11-2e8f0a1b3c58` | Inventory, purchases, watchlist, snapshots, drafts, URLs |
 | `tcgdex_id` | TCGdex | `base1-58`, `swsh3-136` | Official catalog row (`{setId}-{localId}` pattern) |
 | `cardsight_card_id` | CardSight | UUID or `null` | Last recognition candidate only |
 
 Rules:
 
-1. **Never** use a CardSight UUID as a CardFlow primary key or deep link.  
-2. **Never** use a TCGdex `id` as the CardFlow primary key (providers can correct `localId`; CardFlow history must stay stable).  
+1. **Never** use a CardSight UUID as a PokeSniper primary key or deep link.  
+2. **Never** use a TCGdex `id` as the PokeSniper primary key (providers can correct `localId`; PokeSniper history must stay stable).  
 3. **Never** assume `cardsight_card_id === tcgdex_id` (different issuers, different formats).  
-4. One CardFlow card may gain or change a CardSight ref over time without changing `cardflow_card_id`.  
+4. One PokeSniper card may gain or change a CardSight ref over time without changing `cardflow_card_id`.  
 5. Language is **not** inside TCGdex `id`. Store `language` (`en` for MVP) next to `tcgdex_id`.
 
 ---
 
-## 2. CardFlow internal card ID structure
+## 2. PokeSniper internal card ID structure
 
 **Assumption** (issue requirement; exact encoding is a founder/engineering convention):
 
@@ -46,7 +46,7 @@ mapping_status          = matched | ambiguous | no_match | provider_conflict | c
 
 `catalog_fingerprint` (`en:base1-58`) is a deterministic **lookup key** so the mapper can reuse an existing canonical row after confirm. It is not shown as the user-facing id.
 
-**Variant vs catalog card:** Official TCGdex `variants` flags printings on **one** `id`. CardFlow does **not** mint a new `cardflow_card_id` per foil unless the founder decides inventory is “one row per printing.” Default Assumption: **one canonical catalog card per `{language, tcgdex_id}`**; `selected_variant` lives on the inventory/scan line.
+**Variant vs catalog card:** Official TCGdex `variants` flags printings on **one** `id`. PokeSniper does **not** mint a new `cardflow_card_id` per foil unless the founder decides inventory is “one row per printing.” Default Assumption: **one canonical catalog card per `{language, tcgdex_id}`**; `selected_variant` lives on the inventory/scan line.
 
 **MVP scope:** English raw singles only. Reject auto-map when language ≠ `en`.
 
@@ -60,7 +60,7 @@ When a later issue adds tables, use this sketch. **This spike does not create it
 
 | Column | Purpose |
 |--------|---------|
-| `cardflow_card_id` | PK, CardFlow UUID |
+| `cardflow_card_id` | PK, PokeSniper UUID |
 | `language` | TCGdex lang (`en`) |
 | `tcgdex_id` | Official catalog id |
 | `tcgdex_set_id` | Set id |
@@ -71,7 +71,7 @@ When a later issue adds tables, use this sketch. **This spike does not create it
 | `variants_json` | Documented booleans only |
 | `image_base_url` | Extension-less TCGdex asset URL |
 | `image_source` | `tcgdex_assets` |
-| `updated_at` | CardFlow cache time |
+| `updated_at` | PokeSniper cache time |
 
 Unique: `(language, tcgdex_id)`.
 
@@ -114,7 +114,7 @@ Match with **language + set + card number/localId + name + variant when availabl
 | Step | Action |
 |------|--------|
 | 1 | Normalize language. MVP: only `en` continues. Missing language → treat as `en` **only if** founder accepts that default; otherwise `Unresolved`. |
-| 2 | Resolve set: `GET /v2/en/sets?name=eq:{setName}` (strict). 0 sets → try CardFlow **alias list** (Assumption: “Base Set” → `base1`). 2+ sets → `ambiguous`. |
+| 2 | Resolve set: `GET /v2/en/sets?name=eq:{setName}` (strict). 0 sets → try PokeSniper **alias list** (Assumption: “Base Set” → `base1`). 2+ sets → `ambiguous`. |
 | 3 | If `setId` **and** `number`/`localId` exist: `GET /v2/en/sets/{setId}/{localId}` (**Confirmed** endpoint). |
 | 4 | Compare returned `name` to CardSight `name` with Unicode case-fold + trimmed punctuation. Exact → identity match. |
 | 5 | If variant hint exists, check the corresponding `variants.*` boolean is `true`. If `false` → do not High-map; offer picker. |
@@ -146,7 +146,7 @@ Do not guess undocumented set ids. If alias + `eq:` name both fail → `Unresolv
 
 ## 5. Mapping confidence levels
 
-These bands are **CardFlow mapper** confidence. They are **not** CardSight High/Medium/Low (those are visual identify bands).
+These bands are **PokeSniper mapper** confidence. They are **not** CardSight High/Medium/Low (those are visual identify bands).
 
 | Level | When | Auto-write canonical link? | UX |
 |-------|------|----------------------------|----|
@@ -246,7 +246,7 @@ Recognition keys that do not resolve (unknown set alias, 404 on set+localId, or 
 
 Prefer `getCardBySetAndLocalId` then `getCardById`. Cache those GETs per `TCGDEX_ARCHITECTURE.md` §6. Do **not** cache a name-only list as a confirmed mapping.
 
-On catalog outage: if `(language, tcgdex_id)` is already in CardFlow cache / prior confirm, show that card as a **cached catalog** candidate and say it may be stale. Do not mint new ids from CardSight alone.
+On catalog outage: if `(language, tcgdex_id)` is already in PokeSniper cache / prior confirm, show that card as a **cached catalog** candidate and say it may be stale. Do not mint new ids from CardSight alone.
 
 ---
 

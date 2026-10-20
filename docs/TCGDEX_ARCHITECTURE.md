@@ -1,4 +1,4 @@
-# TCGdex Architecture — CardFlow
+# TCGdex Architecture — PokeSniper
 
 **Status:** Recommendation draft (docs + mock fixtures only).  
 **MVP:** Public TCGdex REST API + official TypeScript SDK as the Pokémon catalog.  
@@ -10,8 +10,8 @@
 
 1. TCGdex is the **only** official Pokémon catalog/metadata source for identity display and confirm.  
 2. CardSight remains **recognition-only**; its UUIDs are opaque external refs.  
-3. CardFlow owns the **internal card ID** and all CRM rows (scans, confirmations, inventory, costs, snapshots, drafts).  
-4. Swap-friendly catalog behind a CardFlow interface (`TcgdexCatalogAdapter` vs mock).  
+3. PokeSniper owns the **internal card ID** and all CRM rows (scans, confirmations, inventory, costs, snapshots, drafts).  
+4. Swap-friendly catalog behind a PokeSniper interface (`TcgdexCatalogAdapter` vs mock).  
 5. Fail soft: catalog miss / outage → manual search; never invent a TCGdex id.  
 6. Ignore TCGdex `pricing` completely.
 
@@ -21,7 +21,7 @@
 
 ```
 RN app
-  └─ CardFlow BFF / API (auth'd user)
+  └─ PokeSniper BFF / API (auth'd user)
         ├─ Zod request validation
         ├─ Feature flags + quota (CardSight) + catalog flag (TCGdex)
         ├─ CardRecognitionProvider          ← CardSight / mock (still-image only)
@@ -33,10 +33,10 @@ RN app
         │       → language + set + localId + name + variant
         │       → TCGdex card(s)
         │       → mapping confidence
-        │       → optional CardFlow canonical id (after confirm)
+        │       → optional PokeSniper canonical id (after confirm)
         └─ Safe mobile DTO (catalog fields, no pricing, no secrets)
 
-CardFlow CRM (first-party)
+PokeSniper CRM (first-party)
   └─ inventory / purchases / watchlist / snapshots / drafts
         keyed by cardflow_card_id — never by CardSight UUID or TCGdex id alone
 
@@ -234,7 +234,7 @@ export interface CardFlowNormalizedMappingResult {
 | `tcgdex_self_hosted` | **`false`** | Must stay false until founder-approved self-host |
 | `tcgdex_pricing_ignored` | **`true`** (not optional) | Adapter drops TCGdex `pricing` |
 
-When catalog flag is off → `FEATURE_DISABLED`, instruct client to **Search manually**. Already-confirmed inventory remains readable from CardFlow CRM.
+When catalog flag is off → `FEATURE_DISABLED`, instruct client to **Search manually**. Already-confirmed inventory remains readable from PokeSniper CRM.
 
 CardSight flags stay as documented in `CARDSIGHT_INTEGRATION_RECOMMENDATION.md`. Recognition down does not imply catalog down, and vice versa.
 
@@ -253,13 +253,13 @@ CardSight flags stay as documented in `CARDSIGHT_INTEGRATION_RECOMMENDATION.md`.
 | Never retry | `404` (unknown id or invalid language), malformed client query | Confirmed 404 semantics |
 | Rate limits | None published; still debounce identical lookups; no full-catalog crawl | Confirmed FAQ + spike rule |
 | Outage | Return `PROVIDER_UNAVAILABLE` / `catalog_unavailable`; serve **last good cached** card if key hits; UI → manual search | Assumption |
-| Confirmed inventory | Readable from CardFlow CRM without a live TCGdex call | Assumption |
+| Confirmed inventory | Readable from PokeSniper CRM without a live TCGdex call | Assumption |
 
-**Never** treat a cache miss + 404 as “create a new TCGdex card.” CardFlow does not author catalog rows.
+**Never** treat a cache miss + 404 as “create a new TCGdex card.” PokeSniper does not author catalog rows.
 
 Error mapping (Assumption; align names with CardSight codes where they mean the same thing):
 
-| Condition | CardFlow `error.code` | `retryable` |
+| Condition | PokeSniper `error.code` | `retryable` |
 |-----------|----------------------|-------------|
 | Timeout | `PROVIDER_TIMEOUT` | true |
 | 5xx / network | `PROVIDER_UNAVAILABLE` | true |
@@ -279,8 +279,8 @@ Surface a short user-safe message; keep RFC 9457 bodies in server logs only.
 4. Provenance string example: `tcgdex assets.tcgdex.net; card id swsh3-136; lang en; not affiliated with Nintendo or The Pokémon Company`.  
 5. If `image` is omitted (**Confirmed** possible), show a generic placeholder. **Do not** use the user’s scan or CardSight bytes as official catalog art.  
 6. Do not download/rehost the entire assets tree in MVP.  
-7. Do not claim CardFlow or TCGdex owns Pokémon card artwork.  
-8. Recognition photos stay on the scan record (CardFlow CRM), separate from catalog `image`.  
+7. Do not claim PokeSniper or TCGdex owns Pokémon card artwork.  
+8. Recognition photos stay on the scan record (PokeSniper CRM), separate from catalog `image`.  
 9. MIT license covers the **database/software**, not a grant of Pokémon IP — see `TCGDEX_VALIDATION.md` §7.
 
 ---
@@ -336,7 +336,7 @@ Do **not** create production tables in this step. When a later issue adds persis
 | Card/set/variant/image/language fields listed in validation | **Confirmed** |
 | Docker self-host image/port | **Confirmed** path; **out of MVP** |
 | 5–8s timeout, 1–24h cache, flag names, strip pricing | **Assumption** / product rule |
-| CardFlow UUID as PK | **Assumption** (required by issue; exact UUID format is product) |
+| PokeSniper UUID as PK | **Assumption** (required by issue; exact UUID format is product) |
 
 ---
 

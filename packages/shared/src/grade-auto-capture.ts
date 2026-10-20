@@ -62,7 +62,7 @@ export const GRADE_AUTO_TOGGLE_DEFAULT = true;
 /** One-time explainer the first time the Grade camera opens with Auto on (Mobile Tech Lead review 8). */
 export const GRADE_AUTO_EXPLAINER = {
   title: "Auto-capture is on",
-  body: "CardFlow takes the photo by itself when all 4 corners are in the frame and the phone is flat and still. You can still tap the shutter, or turn off Auto at the bottom right.",
+  body: "PokeSniper takes the photo by itself when all 4 corners are in the frame and the phone is flat and still. You can still tap the shutter, or turn off Auto at the bottom right.",
   ok: "Got it",
 } as const;
 
@@ -86,7 +86,7 @@ export const GRADE_AUTO_COPY = {
   unavailable: "Auto-capture isn't available on this phone. Tap the shutter.",
   motionDenied: "Motion access is off, so auto-capture can't tell when the phone is still. Tap the shutter, or allow Motion in Settings.",
   manualHint: "Or tap the shutter any time",
-  guideline: "CardFlow takes the photo by itself when the card is lined up. Turn off Auto at the bottom right.",
+  guideline: "PokeSniper takes the photo by itself when the card is lined up. Turn off Auto at the bottom right.",
 } as const;
 
 /** UX review P0-2: level is entered at ≤ 2.0° and left only above 2.5°, so the hint doesn't flicker. */

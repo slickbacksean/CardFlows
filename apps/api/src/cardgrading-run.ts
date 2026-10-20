@@ -8,7 +8,7 @@ import { GRADE_ENGINE_STILL_RUNNING, type GradeEngineHealth } from "@cardflow/sh
 
 /**
  * Runs the vendored, offline cardgrading library (apps/api/vendor/cardgrading,
- * see NOTICE.md) through its CardFlow adapters. Same contract as GitHub
+ * see NOTICE.md) through its PokeSniper adapters. Same contract as GitHub
  * packages/api/src/grading/run-grade-card.ts and run-detect-card.ts.
  *
  * No model call: the grade adapter stubs card identification before

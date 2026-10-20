@@ -33,7 +33,7 @@ export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
     <SafeAreaView style={styles.safe}>
       <View style={styles.stack}>
         <Text style={styles.title}>Something went wrong.</Text>
-        <Text style={styles.body}>CardFlow hit an unexpected error.</Text>
+        <Text style={styles.body}>PokeSniper hit an unexpected error.</Text>
         {__DEV__ ? <Text style={styles.detail}>{error.message}</Text> : null}
         <PrimaryButton label="Try again" onPress={retry} />
         <Link href="/(tabs)/collection" style={styles.link}>

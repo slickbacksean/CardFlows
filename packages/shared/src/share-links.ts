@@ -1,6 +1,6 @@
 /**
  * D12 / P2-05: sharing with **no reward and no referral code**. A share is a short text line
- * plus a deep link that opens the card in CardFlow. No personal data, no prices beyond what
+ * plus a deep link that opens the card in PokeSniper. No personal data, no prices beyond what
  * the user chose to share (a flip they recorded), never an estimate presented as a sale.
  */
 import { shareCardFlipLine } from "./share-card-copy";
@@ -29,7 +29,7 @@ export function shareCardMessage(card: { name: string; number?: string | null; s
   const title = [card.name.trim(), card.number ? `#${card.number}` : null].filter(Boolean).join(" ");
   const line = card.setName ? `${title} · ${card.setName}` : title;
   const link = cardDeepLink(card.tcgdexId);
-  return link ? `${line}\nOpen in CardFlow: ${link}` : line;
+  return link ? `${line}\nOpen in PokeSniper: ${link}` : line;
 }
 
 function dollars(cents: number): string {
@@ -47,5 +47,5 @@ export function shareFlipMessage(input: {
   if (!input.realized || input.costCents === null || input.saleCents === null) return null;
   const line = `${input.name.trim()}: ${shareCardFlipLine(dollars(input.costCents), dollars(input.saleCents))}`;
   const link = cardDeepLink(input.tcgdexId);
-  return link ? `${line}\nOpen in CardFlow: ${link}` : line;
+  return link ? `${line}\nOpen in PokeSniper: ${link}` : line;
 }

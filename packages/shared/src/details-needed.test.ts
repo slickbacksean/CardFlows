@@ -158,7 +158,7 @@ describe("details-needed Purchased state", () => {
     expect(overlay).not.toContain("I bought this");
     expect(overlay).not.toContain("Add details");
     expect(overlay).not.toContain("PurchaseSheet");
-    expect(bubble).toContain("Drag CardFlow overlay");
+    expect(bubble).toContain("Drag PokeSniper overlay");
     expect(bubble).not.toContain("live-hud-bubble");
     expect(collection).toContain("PurchaseSheet");
     expect(collection).toContain("DETAILS_NEEDED_LABEL");

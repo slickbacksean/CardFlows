@@ -7,7 +7,7 @@ Session replay is off. Photos, image bytes, and emails are stripped before an ev
 ## Create the Sentry projects
 
 1. Sign in at [sentry.io](https://sentry.io) (free or team tier).
-2. Create **two** projects in the CardFlow org:
+2. Create **two** projects in the PokeSniper org:
    - **cardflow-api** — platform **Node.js / Express** (or generic Node).
    - **cardflow-mobile** — platform **React Native**.
 3. Open each project → **Settings → Client Keys (DSN)** and copy the DSN.

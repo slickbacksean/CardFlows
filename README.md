@@ -1,4 +1,4 @@
-# CardFlow
+# PokeSniper
 
 Private-beta monorepo for Pokémon card flipping: scan → confirm → Max Buy →
 inventory → grade (Pre-grade estimate) → collection.
@@ -30,7 +30,7 @@ pnpm install
 pnpm test          # shared + API tests (mocks; no Docker / PokéCollector)
 pnpm test:legacy   # legacy/cardflows-shared + legacy/api
 pnpm typecheck
-pnpm dev:api       # CardFlow API on :3001
+pnpm dev:api       # PokeSniper API on :3001
 pnpm dev:mobile    # Expo (Metro on :8081)
 ```
 

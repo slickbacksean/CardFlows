@@ -195,7 +195,7 @@ export function useConnected(): boolean | null {
 }
 
 /**
- * Full-screen load error: offline, can't reach CardFlow, timeout, busy, out of
+ * Full-screen load error: offline, can't reach PokeSniper, timeout, busy, out of
  * allowance, server error, a known account step, or a plain "Couldn't load …".
  * Errors with a real fix (sign in, verify email, sign up) lead with that action
  * and keep "Try again" second (UX review P1-4).

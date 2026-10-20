@@ -1,4 +1,4 @@
-# CardFlow livestream HUD (HUDS). Scanner off until the app posts an event.
+# PokeSniper livestream HUD (HUDS). Scanner off until the app posts an event.
 overlay:
-  title: CardFlow overlay
-  caption: CardFlow overlay · not a market
+  title: PokeSniper overlay
+  caption: PokeSniper overlay · not a market

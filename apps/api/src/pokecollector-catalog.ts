@@ -182,7 +182,7 @@ async function sdkCall<T>(run: () => Promise<T>): Promise<T> {
 
 /**
  * Server-only PokéCollector catalog. English GET, constructed TCGdex art,
- * vendor `pricing` / `price_*` fields stripped from the CardFlow DTO.
+ * vendor `pricing` / `price_*` fields stripped from the PokeSniper DTO.
  */
 export function createPokecollectorCatalogProvider(
   options: PokecollectorHttpOptions,

@@ -286,7 +286,7 @@ export function deletePokecollectorUserMapping(userId: string): boolean {
   return store.pokecollectorUsers.delete(userId);
 }
 
-/** CardFlow users linked to this PokéCollector user (a remote user must never be shared). */
+/** PokeSniper users linked to this PokéCollector user (a remote user must never be shared). */
 export function countPokecollectorLinks(pokecollectorUserId: string): number {
   let n = 0;
   for (const mapping of store.pokecollectorUsers.values()) if (mapping.pokecollectorUserId === pokecollectorUserId) n += 1;

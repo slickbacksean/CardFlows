@@ -16,7 +16,7 @@ export type SignupReason = "scan" | "grade" | "cardsight" | "save";
 
 export const GUEST_SIGNUP_COPY = {
   title: "Create a free account",
-  body: "Create a free account to use CardFlow.",
+  body: "Create a free account to use PokeSniper.",
   action: "Sign up",
   dismiss: "Cancel",
 } as const;

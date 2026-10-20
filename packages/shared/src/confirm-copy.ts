@@ -79,7 +79,7 @@ export function confirmFailSoftTitle(frame: ConfirmFrame): string {
 
 export function confirmFailSoftBody(frame: ConfirmFrame): string {
   if (frame === "timeout") return "Retryable. Nothing was confirmed.";
-  if (frame === "rate-limit") return "Wait and retry. CardFlow did not save this card.";
+  if (frame === "rate-limit") return "Wait and retry. PokeSniper did not save this card.";
   return CONFIRM_COULD_NOT_CONFIRM_MESSAGE;
 }
 

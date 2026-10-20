@@ -2,7 +2,7 @@
 
 Do these **in order**. One task at a time. Check the box when the “Done when” line is true.
 
-**Job:** On Grading → Prepare, a purchased copy can show a **rough grade if submitted** (photo estimate). Submitted / Returned stay a mail-in log. CardFlow is not a grading company.
+**Job:** On Grading → Prepare, a purchased copy can show a **rough grade if submitted** (photo estimate). Submitted / Returned stay a mail-in log. PokeSniper is not a grading company.
 
 **Layout:** [TAB_LAYOUT_PLAN.md](./TAB_LAYOUT_PLAN.md) §4a.
 

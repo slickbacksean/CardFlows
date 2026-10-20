@@ -11,8 +11,8 @@ import { isOpaquePokecollectorUsername } from "./pokecollector-link-secrets";
 import type { StorePort } from "./store";
 
 /**
- * Ops: move every CardFlow user off legacy / shared PokéCollector users onto their own opaque
- * user, rebuilt from CardFlow's own inventory, and freeze the old remote users.
+ * Ops: move every PokeSniper user off legacy / shared PokéCollector users onto their own opaque
+ * user, rebuilt from PokeSniper's own inventory, and freeze the old remote users.
  *
  * Why: before opaque accounts, usernames came from the email local part (`cardflow-sean` for both
  * sean@gmail.com and sean@yahoo.com, and `cardflow-sean-h` for both sean.h and sean_h), and every
@@ -26,7 +26,7 @@ import type { StorePort } from "./store";
  * that isn't opaque and isn't linked (admin GET /api/auth/users), e.g. one whose link row was lost.
  *
  * Delete vs freeze (Backend final review R1): a remote user held by an account deletion (PR 96
- * "hold" row) that no CardFlow account links to any more is admin-DELETEd, so the deletion copy
+ * "hold" row) that no PokeSniper account links to any more is admin-DELETEd, so the deletion copy
  * stays true. Only remote users still shared with a live account are frozen, after every live
  * account on them has moved to its own opaque user. Strays (no link, owner unknown) are frozen.
  *
@@ -46,16 +46,16 @@ export interface RelinkFreezeEntry {
   /** Why it's on the list: an old link, or a "hold" row left by an account deletion (PR 96). */
   source: "link" | "deletion_hold" | "state";
   /**
-   * Final review R1: "delete" when no live CardFlow account links to it (only deleted accounts
+   * Final review R1: "delete" when no live PokeSniper account links to it (only deleted accounts
    * owned it), "freeze" when a live account still shares it. Missing (older state file) = freeze.
    */
   action?: "delete" | "freeze";
 }
 
 export interface RelinkPlan {
-  /** Old remote users to delete or freeze (see `action`). No CardFlow user IDs. */
+  /** Old remote users to delete or freeze (see `action`). No PokeSniper user IDs. */
   freeze: RelinkFreezeEntry[];
-  /** CardFlow users who get a fresh opaque remote user rebuilt from their inventory. */
+  /** PokeSniper users who get a fresh opaque remote user rebuilt from their inventory. */
   relink: Array<{ userId: string; reason: RelinkReason; purchased: number; watchlist: number }>;
   /** Guest link rows to drop (guests are never linked). */
   dropGuestLinks: string[];
@@ -67,7 +67,7 @@ export interface RelinkProgress {
   done: boolean;
 }
 
-/** Saved to a 0600 file. Holds CardFlow user IDs and old remote usernames: keep it private. */
+/** Saved to a 0600 file. Holds PokeSniper user IDs and old remote usernames: keep it private. */
 export interface RelinkState {
   version: 1;
   freeze: RelinkFreezeEntry[];
@@ -155,7 +155,7 @@ export function fileRelinkState(filePath: string): RelinkStateStore {
   };
 }
 
-/** Re-review L3: what stdout may show instead of a CardFlow or PokéCollector ID. */
+/** Re-review L3: what stdout may show instead of a PokeSniper or PokéCollector ID. */
 export function hashRelinkId(id: string): string {
   return createHash("sha256").update(`cardflow-relink\0${id}`).digest("hex").slice(0, 12);
 }
@@ -266,7 +266,7 @@ export function planPokecollectorRelink(store: RelinkStore, state: RelinkState |
   for (const [userId, progress] of Object.entries(state?.progress ?? {})) {
     if (!progress.done) addRelink(userId, "resume_copies");
   }
-  // Users with CardFlow inventory but no usable link (e.g. their writes went to a shared user
+  // Users with PokeSniper inventory but no usable link (e.g. their writes went to a shared user
   // under someone else's link, or were made while accounts were off).
   const linked = new Set(mappings.filter((m) => isReadyLink(m)).map((m) => m.userId));
   const users = new Set([...store.listInvitedUsers().map((u) => u.userId), ...store.accounts.listAccountUserIds()]);
@@ -414,7 +414,7 @@ export async function runPokecollectorRelink(input: {
       result.freezeFailed.push(old.pokecollectorUserId);
     }
   }
-  // Re-review H2: any old-style CardFlow remote user nobody is linked to (e.g. its link row was
+  // Re-review H2: any old-style PokeSniper remote user nobody is linked to (e.g. its link row was
   // lost or overwritten before the freeze list existed) is frozen too.
   const remoteUsers = await accounts.listRemoteUsers();
   if (!remoteUsers) {

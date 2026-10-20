@@ -302,5 +302,5 @@ Blocked on obtaining/training `phase2_best.pth` (upstream [PSAGradePredictor](ht
 ## Out of scope
 
 - New feature code for Capture/CRM (already operational).
-- Vendoring PSAGradePredictor into CardFlow source.
+- Vendoring PSAGradePredictor into PokeSniper source.
 - Committing checkpoints, compose secrets, or API keys.

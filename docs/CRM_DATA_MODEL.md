@@ -1,4 +1,4 @@
-# CardFlow CRM / Inventory Data Model
+# PokeSniper CRM / Inventory Data Model
 
 **Status:** Spike plan for review. **No production tables. No migrations.**  
 **MVP:** English raw Pokémon singles. Human confirmation before Purchased / Watchlist / inventory write.  
@@ -12,7 +12,7 @@ Related: `MVP_SCOPE.md`, `NON_GOALS.md`, `PRODUCT_OVERVIEW.md`, `CARD_ID_MAPPING
 
 | Label | Meaning |
 |-------|---------|
-| **Confirmed** | Already decided in CardFlow product / mapping docs on `main`. |
+| **Confirmed** | Already decided in PokeSniper product / mapping docs on `main`. |
 | **Unconfirmed** | Depends on a later provider, legal review, or missing product spec. Do not invent. |
 | **Assumption** | CRM recommendation in this spike, pending founder decision. |
 
@@ -20,8 +20,8 @@ Related: `MVP_SCOPE.md`, `NON_GOALS.md`, `PRODUCT_OVERVIEW.md`, `CARD_ID_MAPPING
 
 ## 1. Goals
 
-1. CardFlow CRM is the **system of record** for scans, confirmations, purchases, watchlist, costs, locations, listing drafts, price snapshots, workflow status, and user Max Buy preferences.  
-2. Every durable CRM row that represents a card identity or inventory action keys off **`cardflow_card_id`** (CardFlow UUID).  
+1. PokeSniper CRM is the **system of record** for scans, confirmations, purchases, watchlist, costs, locations, listing drafts, price snapshots, workflow status, and user Max Buy preferences.  
+2. Every durable CRM row that represents a card identity or inventory action keys off **`cardflow_card_id`** (PokeSniper UUID).  
 3. CardSight UUIDs and TCGdex ids are **external refs only**. Never key inventory, purchases, drafts, or URLs on either alone.  
 4. Do **not** assume a CardSight UUID equals a TCGdex id.  
 5. Human **Confirm** is required before Purchased / Watchlist / inventory write.  
@@ -39,9 +39,9 @@ CardSight          recognition candidates only
 TCGdex             official Pokémon catalog / metadata
                    tcgdex_id = catalog ref
                    catalog art URL + documented card fields
-                   NEVER market pricing for CardFlow
+                   NEVER market pricing for PokeSniper
 
-CardFlow CRM       cardflow_card_id (internal PK)
+PokeSniper CRM       cardflow_card_id (internal PK)
                    scans, confirmations, inventory items
                    purchases, watchlist, all-in cost
                    storage locations, price snapshots
@@ -73,7 +73,7 @@ This matches `PRODUCT_OVERVIEW.md` and `CARD_ID_MAPPING_PLAN.md`.
 
 ---
 
-## 4. Field ownership (CardFlow vs cache vs external ref)
+## 4. Field ownership (PokeSniper vs cache vs external ref)
 
 | Kind | Examples | Persistence rule |
 |------|----------|------------------|
@@ -98,7 +98,7 @@ This matches `PRODUCT_OVERVIEW.md` and `CARD_ID_MAPPING_PLAN.md`.
 | Catalog no-match / outage | **No.** Do not mint from CardSight alone. |
 | Purchased / Watchlist | **No new mint.** Requires an already-confirmed `cardflow_card_id`. |
 
-Scan and mapping fixtures may show a *preview* candidate without a persisted CardFlow UUID. Inventory, purchases, drafts, and URLs must not use a preview id.
+Scan and mapping fixtures may show a *preview* candidate without a persisted PokeSniper UUID. Inventory, purchases, drafts, and URLs must not use a preview id.
 
 ---
 
@@ -210,7 +210,7 @@ Rules (aligned with `TCGDEX_ARCHITECTURE.md` §7):
 
 1. If TCGdex `image` is missing, show a placeholder — do not substitute the scan.  
 2. Do not rehost the TCGdex assets tree in MVP.  
-3. Do not claim CardFlow or TCGdex owns Pokémon artwork.  
+3. Do not claim PokeSniper or TCGdex owns Pokémon artwork.  
 4. Do not send scan bytes to third-party analytics (`MVP_SUCCESS_METRICS.md`).  
 5. **Never** store CardSight raw multipart or API keys next to images.
 
@@ -277,7 +277,7 @@ Audit rows store old/new `tcgdex_id`, old/new `cardsight_card_id`, `match_method
 |-----------|-----|
 | CardSight API keys / `X-API-Key` / `CARDSIGHT_API_KEY` values | Secret. Server env only. |
 | Raw CardSight secrets, full undocumented vendor blobs | Leak + license risk. Store **normalized** recognition DTO only. |
-| TCGdex `pricing` / `variants_detailed` pricing | Not CardFlow market truth. Adapter strips it. |
+| TCGdex `pricing` / `variants_detailed` pricing | Not PokeSniper market truth. Adapter strips it. |
 | Marketplace credentials, cookies, session tokens | Non-goal; account automation forbidden. |
 | Payment credentials / KYC documents | Out of MVP. |
 | eBay / Whatnot / TCGplayer / Shopify listing-publication ids as if posted | Drafts are internal (`CRM_LISTING_DRAFT_FIELDS.md`). |
@@ -296,8 +296,8 @@ Same unique grain as `CARD_ID_MAPPING_PLAN.md` §3.1: `(language, tcgdex_id)`.
 
 | Column | Owner | Purpose |
 |--------|-------|---------|
-| `cardflow_card_id` | CardFlow | PK, UUID |
-| `language` | CardFlow + catalog | TCGdex lang (`en`) |
+| `cardflow_card_id` | PokeSniper | PK, UUID |
+| `language` | PokeSniper + catalog | TCGdex lang (`en`) |
 | `tcgdex_id` | External ref | Official catalog id |
 | `tcgdex_set_id` | Cache | Set id |
 | `local_id` | Cache | Set number as text |
@@ -306,8 +306,8 @@ Same unique grain as `CARD_ID_MAPPING_PLAN.md` §3.1: `(language, tcgdex_id)`.
 | `category` | Cache | Pokemon / Energy / Trainer |
 | `variants_json` | Cache | Documented booleans only |
 | `image_base_url` | Cache | Extension-less TCGdex asset URL |
-| `image_source` | CardFlow | `tcgdex_assets` |
-| `updated_at` | CardFlow | Cache time |
+| `image_source` | PokeSniper | `tcgdex_assets` |
+| `updated_at` | PokeSniper | Cache time |
 
 ### 14.2 `card_external_ids`
 
@@ -469,7 +469,7 @@ See `CRM_LISTING_DRAFT_FIELDS.md`. Internal document only. FK to a **purchased**
 
 Return to the app:
 
-- CardFlow ids (`cardflow_card_id`, `scan_id`, `inventory_item_id`, `draft_id`)  
+- PokeSniper ids (`cardflow_card_id`, `scan_id`, `inventory_item_id`, `draft_id`)  
 - Display catalog cache (name, set, localId, variant, constructed image + provenance)  
 - Intent, workflow, condition, location name, costs, Max Buy guidance  
 - Draft fields in `CRM_LISTING_DRAFT_FIELDS.md`

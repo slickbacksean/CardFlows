@@ -12,7 +12,7 @@
 
 Collection is the default tab. Capture is still a still photo from Collection. Center Livestream is a disabled layout, not a scanner.
 
-Reference apps are **structure and job-to-be-done only**. CardFlow does not copy their product promises.
+Reference apps are **structure and job-to-be-done only**. PokeSniper does not copy their product promises.
 
 | App | Borrow | Leave behind |
 |-----|--------|----------------|
@@ -21,7 +21,7 @@ Reference apps are **structure and job-to-be-done only**. CardFlow does not copy
 | **TCG Grading** | Four inspection pillars (centering, corners, edges, surface) as a **layout**. Front + back photo slots. “Is this worth sending?” as the Prepare job. | PDF certificates / QR certs. Leaderboards and streaks. Multi-TCG. CardFlow-as-grader / official cert. |
 | **[casecomp](https://github.com/Pyronewbic/casecomp)** | **Pipeline only** for the photo estimate: detect the card, straighten, crop corners, eight subgrades (centering / corners / edges / surface × front / back), weighted overall. Static typical fee table as a label, not a live schedule. | Do **not** copy source. No magi / Yahoo / SNKRDUNK scrape. No eBay HTML. No drop-queue extension. No Commons Clause code in `apps/` or `packages/`. No `api.casecomp.xyz`. |
 | **[PokeTrace](https://poketrace.com/)** | **Later.** Licensed slab market **estimates** (PSA / BGS / CGC / TAG) for Prepare. USD. Fail soft. Server-only key. Shared DTO lives in `packages/shared/src/slab-pricing.ts`. | Not in the app now. Raw TCGPlayer/Cardmarket (PokéCollector already owns that). Listing drafts. Overlay. “This is what it will sell for.” |
-| **PSA** | Submission as a **pipeline** (prepare → sent → at grader → returned). User-typed order / cert fields. Status the user sets. Cert number as an identifier they own. | Live PSA account, order API, or pop report. Grade-reveal animation. eBay consign / vault. Scan-label verification as a live network call. Official grader branding as if CardFlow were PSA. |
+| **PSA** | Submission as a **pipeline** (prepare → sent → at grader → returned). User-typed order / cert fields. Status the user sets. Cert number as an identifier they own. | Live PSA account, order API, or pop report. Grade-reveal animation. eBay consign / vault. Scan-label verification as a live network call. Official grader branding as if PokeSniper were PSA. |
 
 UX rule for every tab: one primary job, one primary action, honest empty state. Do not draw a control that looks tappable if it cannot complete the job.
 
@@ -33,7 +33,7 @@ UX rule for every tab: one primary job, one primary action, honest empty state. 
 
 ```
 +------------------------------------+
-| CardFlow          USD  (bell) (me) |
+| PokeSniper          USD  (bell) (me) |
 +------------------------------------+
 |           [ tab body ]             |
 +------------------------------------+
@@ -66,7 +66,7 @@ UX rule for every tab: one primary job, one primary action, honest empty state. 
 
 ```
 +------------------------------------+
-| CardFlow          USD  (bell) (me) |
+| PokeSniper          USD  (bell) (me) |
 +------------------------------------+
 | [Scan a card]                   >  |
 | Still photo · one English raw      |
@@ -92,7 +92,7 @@ UX rule for every tab: one primary job, one primary action, honest empty state. 
 
 **Layout status:** chrome in this section was the screenshot-era strip. **Identify rules:** [ROADMAP.md](./ROADMAP.md) — live video, YOLO + card-identity, PokéCollector estimates. Do not identify from a screenshot or Capture still.
 
-**Job:** Watch a **Whatnot** or **eBay** live show inside CardFlow. Scanner ON identifies the exact card from the **live video** and overlays CardFlow guidance (estimate + Max Buy). Not to bid, not to scrape.
+**Job:** Watch a **Whatnot** or **eBay** live show inside PokeSniper. Scanner ON identifies the exact card from the **live video** and overlays PokeSniper guidance (estimate + Max Buy). Not to bid, not to scrape.
 
 **Primary action:** Turn the scanner on (and switch Whatnot | eBay). X closes to Collection. Capture is **not** an entry from this tab.
 
@@ -105,11 +105,11 @@ UX rule for every tab: one primary job, one primary action, honest empty state. 
 
 | Layer | Owner | What it is |
 |-------|--------|------------|
-| 1. Embedded live page | Whatnot or eBay (WebView) | Video, chat, giveaway, listing title, bid/timer — **their** UI. CardFlow does not rebuild it. |
-| 2. Screener strip | CardFlow | Brickify-style band **under the browser bar**: catalog thumb, name, two stacked CardFlow figures. |
-| 3. Browser chrome | CardFlow | Close, back/forward, URL, live ON, **Whatnot \| eBay** switch. |
+| 1. Embedded live page | Whatnot or eBay (WebView) | Video, chat, giveaway, listing title, bid/timer — **their** UI. PokeSniper does not rebuild it. |
+| 2. Screener strip | PokeSniper | Brickify-style band **under the browser bar**: catalog thumb, name, two stacked PokeSniper figures. |
+| 3. Browser chrome | PokeSniper | Close, back/forward, URL, live ON, **Whatnot \| eBay** switch. |
 
-CardFlow tab bar is **hidden** while a show is open (same as Capture). `(X)` → Collection.
+PokeSniper tab bar is **hidden** while a show is open (same as Capture). `(X)` → Collection.
 
 ### 2a. Whatnot (default)
 
@@ -124,7 +124,7 @@ Matches the screenshot’s **structure**, not Brickify’s PSA comps.
 |        Reference     Max Buy       |
 |        $8.00         $5.57         |
 |        you typed     guidance      |
-| CardFlow overlay · not a market    |
+| PokeSniper overlay · not a market    |
 +------------------------------------+
 |                                    |
 |   [ WebView: Whatnot live page ]   |
@@ -135,17 +135,17 @@ Matches the screenshot’s **structure**, not Brickify’s PSA comps.
 
 Spatial mapping from the screenshot:
 
-| Screenshot | CardFlow slot |
+| Screenshot | PokeSniper slot |
 |------------|----------------|
 | In-app browser (X, site icon, URL, ON) | Same. Site icon follows the switch (W or eBay). |
 | Brickify thumb + name | Catalog thumb + confirmed name (empty until Confirm). |
 | Raw $ live | **Reference (you typed)** or `Enter a reference`. |
 | PSA 9 / PSA 10 live | **One stacked pair only:** Max Buy (guidance). Do **not** add PSA 9 / PSA 10 comps. Pricing provider is ON by default (server flag `CARD_FLOW_PRICING_ENABLED`), but no PSA comps here. |
-| Giveaway, chat, “Say something”, listing, Custom / Bid | Stay **inside the WebView**. CardFlow does not draw bid buttons and does not place bids. |
+| Giveaway, chat, “Say something”, listing, Custom / Bid | Stay **inside the WebView**. PokeSniper does not draw bid buttons and does not place bids. |
 
 ### 2b. eBay live
 
-Same CardFlow chrome and overlay. Only the WebView URL / site badge change.
+Same PokeSniper chrome and overlay. Only the WebView URL / site badge change.
 
 ```
 +------------------------------------+
@@ -196,13 +196,13 @@ Do **not** use “Scan a still photo” or “Overlay is not live ID.” Overlay
 - `ON` in the URL bar means the embedded live page is loaded. Scanner ON (separate control) means in-stream YOLO + identity is running — not a screenshot, not CardSight.
 - Overlay never writes inventory. Watchlist / Purchased still happen after Confirm on Detail.
 
-**Do not:** Live video identification. Brickify/PSA 9/10 (or any live comps) as truth. Auto-bid, bid interception, or CardFlow-drawn Custom/Bid bars. Scraping chat or lot titles into inventory. Login/session automation. A third marketplace. Recreating Whatnot/eBay chat or checkout in CardFlow UI.
+**Do not:** Live video identification. Brickify/PSA 9/10 (or any live comps) as truth. Auto-bid, bid interception, or CardFlow-drawn Custom/Bid bars. Scraping chat or lot titles into inventory. Login/session automation. A third marketplace. Recreating Whatnot/eBay chat or checkout in PokeSniper UI.
 
 ---
 
 ## 3. Shop
 
-**Job:** Be honest that CardFlow is not a marketplace, then route the actual jobs (buy → scan, sell → draft copy).
+**Job:** Be honest that PokeSniper is not a marketplace, then route the actual jobs (buy → scan, sell → draft copy).
 
 **Primary action:** `Open Collection` (or `Copy a listing draft` if any purchased drafts exist).
 
@@ -239,7 +239,7 @@ Do **not** use “Scan a still photo” or “Overlay is not live ID.” Overlay
 
 ## 4. Grading
 
-**Job:** Help a flipper **decide whether to send** a purchased raw copy (rough grade if submitted), then **log** a mail-in they already did. CardFlow is not a grading company.
+**Job:** Help a flipper **decide whether to send** a purchased raw copy (rough grade if submitted), then **log** a mail-in they already did. PokeSniper is not a grading company.
 
 **Primary action:** `Prepare a submission` (from purchased copies only).
 
@@ -303,13 +303,13 @@ The returned grade the user types is the **actual** cert result. Do not overwrit
 +------------------------------------+
 ```
 
-**Do not:** “Gem Mint” as CardFlow output. PDF/QR certificates. Leaderboards. Live PSA pop / cert verify. Watchlist submissions. eBay consign. Copy [casecomp](https://github.com/Pyronewbic/casecomp) or [tcg-oracle-app](https://github.com/sailorpepe/tcg-oracle-app) source. Put an Anthropic key on the device. Write the estimate onto listing drafts. Claim profit. Ship PokeTrace slab rows in this pass.
+**Do not:** “Gem Mint” as PokeSniper output. PDF/QR certificates. Leaderboards. Live PSA pop / cert verify. Watchlist submissions. eBay consign. Copy [casecomp](https://github.com/Pyronewbic/casecomp) or [tcg-oracle-app](https://github.com/sailorpepe/tcg-oracle-app) source. Put an Anthropic key on the device. Write the estimate onto listing drafts. Claim profit. Ship PokeTrace slab rows in this pass.
 
 ---
 
 ## 5. Export
 
-**Job:** Get listing text out of CardFlow. Clipboard only for private beta.
+**Job:** Get listing text out of PokeSniper. Clipboard only for private beta.
 
 **Primary action:** Open a purchased draft that can Copy.
 
@@ -318,7 +318,7 @@ The returned grade the user types is the **actual** cert result. Do not overwrit
 ### Layout
 
 1. Title: `Export`.
-2. Constraint: `Clipboard copy omits private notes. CardFlow did not publish this.`
+2. Constraint: `Clipboard copy omits private notes. PokeSniper did not publish this.`
 3. **Destination list:**
 
 | Row | State | Tap |
@@ -347,9 +347,9 @@ The returned grade the user types is the **actual** cert result. Do not overwrit
 
 ---
 
-## Cross-tab UX (how the four apps map to CardFlow)
+## Cross-tab UX (how the four apps map to PokeSniper)
 
-| User job | Collectr / HoloDex / TCG Grading / PSA | CardFlow |
+| User job | Collectr / HoloDex / TCG Grading / PSA | PokeSniper |
 |----------|----------------------------------------|----------|
 | Add what I just bought | Scan → instant collect | Collection Scan → Confirm → Purchased |
 | Remember a card I did not buy | Wishlist | Watchlist segment · no draft |

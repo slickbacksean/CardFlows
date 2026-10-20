@@ -40,7 +40,7 @@ export function emailSenderProblems(env: Env): string[] {
   const problems: string[] = [];
   if (!env.RESEND_API_KEY?.trim()) problems.push("RESEND_API_KEY is required when CARD_FLOW_EMAIL_SENDER=resend.");
   if (!env.CARD_FLOW_EMAIL_FROM?.trim()) {
-    problems.push('CARD_FLOW_EMAIL_FROM is required when CARD_FLOW_EMAIL_SENDER=resend (e.g. "CardFlow <no-reply@yourdomain>").');
+    problems.push('CARD_FLOW_EMAIL_FROM is required when CARD_FLOW_EMAIL_SENDER=resend (e.g. "PokeSniper <TODO-sender@pokesniper.app>").');
   }
   return problems;
 }

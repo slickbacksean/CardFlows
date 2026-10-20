@@ -352,7 +352,7 @@ async function mapRecognitionToCatalogUnchecked(
       recommendedUx:
         recognition.error?.code === "BAD_REQUEST"
           ? CONFIRM_COULD_NOT_CONFIRM_MESSAGE
-          : "Retry scan. Do not mint a CardFlow id from a failed identify.",
+          : "Retry scan. Do not mint a PokeSniper id from a failed identify.",
     });
   }
 
@@ -492,7 +492,7 @@ async function mapRecognitionToCatalogUnchecked(
         localId: primaryKeys.localId,
         method: primaryMap.resolvedSetId
           ? "set resolved; set+localId miss"
-          : "set name eq: failed; no CardFlow alias; set+localId not attempted",
+          : "set name eq: failed; no PokeSniper alias; set+localId not attempted",
         nameVerified: false,
         nameOnlySearchForbiddenForAutoMap: true,
       },

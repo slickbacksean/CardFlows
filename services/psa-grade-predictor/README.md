@@ -1,11 +1,11 @@
-# CardFlow Prepare — dual-branch PSA CNN sidecar
+# PokeSniper Prepare — dual-branch PSA CNN sidecar
 #
 # Upstream training repo (clone separately; no license / no public weights):
 #   https://github.com/jshan9078/PSAGradePredictor
 #
 # Priority / full checklist: docs/RUNTIME_CONFIG_PRIORITY.md
 #
-# This service imports that clone at runtime. CardFlow does not vendor its source.
+# This service imports that clone at runtime. PokeSniper does not vendor its source.
 
 ## Setup
 
@@ -28,7 +28,7 @@ python serve.py
 Health: `GET http://127.0.0.1:8091/health`  
 Estimate: `POST http://127.0.0.1:8091/v1/estimate` multipart `front` + `back`
 
-## Wire into CardFlow API
+## Wire into PokeSniper API
 
 ```bash
 # apps/api/.env

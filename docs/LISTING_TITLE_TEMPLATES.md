@@ -1,6 +1,6 @@
-# CardFlow Listing Title Templates
+# PokeSniper Listing Title Templates
 
-**Status:** Spike recommendation for review. **Internal CardFlow document only.**  
+**Status:** Spike recommendation for review. **Internal PokeSniper document only.**  
 **Related:** `CRM_LISTING_DRAFT_FIELDS.md` §3, `LISTING_DRAFT_BUILDER.md`.
 
 ---
@@ -97,7 +97,7 @@ User picks the template (or edits freely). Reset-from-template should warn befor
 | Forbidden auto-title behavior | Why |
 |-------------------------------|-----|
 | Marketplace SEO spam (“PSA 10 GEM MINT HOLY GRAIL BUY NOW”) | Invents grade / hype; not factual catalog data |
-| Fake grades (PSA, BGS, CGC, ACE) | CardFlow does not grade; MVP is raw singles |
+| Fake grades (PSA, BGS, CGC, ACE) | PokeSniper does not grade; MVP is raw singles |
 | Scraped sold comps or “market $X” in the title | No scrape; asking price is separate user estimate |
 | Venue-specific keyword stuffing for eBay/Whatnot ranking | Not a publisher |
 | Multi-language spam for non-EN copies | MVP is English raw Pokémon singles only |

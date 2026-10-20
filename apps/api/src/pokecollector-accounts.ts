@@ -83,7 +83,7 @@ export interface PokecollectorCollectionWrite {
 export interface PokecollectorAccounts {
   readonly name: "pokecollector" | "mock" | "off";
   /**
-   * Step 1 of linking: a pending link for this CardFlow user with the opaque username and a fresh
+   * Step 1 of linking: a pending link for this PokeSniper user with the opaque username and a fresh
    * random password (encrypted). The caller saves it before step 2. Null when accounts are off.
    */
   newPendingLink(userId: string): PokecollectorUserMapping | null;
@@ -277,7 +277,7 @@ export interface MockPokecollectorAccounts extends PokecollectorAccounts {
   seedWishlist(pokecollectorUserId: string, items: PokecollectorCollectionCopy[]): void;
   /** Remote users by username (tests check that nothing is shared). */
   readonly remoteUsers: ReadonlyMap<string, { id: string; frozen: boolean }>;
-  /** Tests: a remote user CardFlow created before opaque accounts (e.g. `cardflow-sean`). */
+  /** Tests: a remote user PokeSniper created before opaque accounts (e.g. `cardflow-sean`). */
   seedRemoteUser(username: string, options?: { role?: string }): string;
 }
 
@@ -391,7 +391,7 @@ export function createPokecollectorAccounts(
   options: PokecollectorHttpOptions & {
     secrets: PokecollectorLinkSecrets;
     /**
-     * Re-review M2: PokéCollector JWTs last 7 days. With the admin's credentials CardFlow mints
+     * Re-review M2: PokéCollector JWTs last 7 days. With the admin's credentials PokeSniper mints
      * an admin token at first use and again on a 401, so the env token can't silently expire.
      */
     adminCredentials?: PokecollectorAdminCredentials | null;
@@ -408,7 +408,7 @@ export function createPokecollectorAccounts(
   const defaultPacer = options.pacer ?? unpacedPokecollector;
   let adminToken: string | null = options.token?.trim() || null;
   const anonymousHttp = createPokecollectorFetcher({ ...options, token: null });
-  /** Access tokens by CardFlow user ID (memory only). */
+  /** Access tokens by PokeSniper user ID (memory only). */
   const tokenByUserId = new Map<string, string>();
 
   const passwordFor = (mapping: PokecollectorUserMapping) =>

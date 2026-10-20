@@ -11,7 +11,7 @@ import {
   priceEstimateFromUsdDollars,
 } from "./pricing";
 
-describe("CardFlow price estimate DTO", () => {
+describe("PokeSniper price estimate DTO", () => {
   it("labels USD cents as an estimate, never a market or a bid", () => {
     const estimate = priceEstimateFromUsdDollars("base1-58", 8.25, "tcgplayer_usd");
     expect(estimate).toMatchObject({

@@ -1,10 +1,10 @@
 /** WIREFRAMES.md §10b. Product About copy — no extra guarantees. */
 export const ABOUT_PARAGRAPHS = [
-  "CardFlow isn't affiliated with or endorsed by Nintendo, The Pokémon Company, or Game Freak.",
+  "PokeSniper isn't affiliated with or endorsed by Nintendo, The Pokémon Company, or Game Freak.",
   "Catalog is TCGdex (via PokéCollector for collection and prices). Capture identify is YOLO OBB + pHash on a still. Livestream is YOLO + card-identity on live video. Grading Prepare may show a photo estimate, not a cert. No marketplace publish.",
   "Catalog images: TCGdex assets (display only). Capture approach: Pokemon-TCGP-Card-Scanner (pipeline only).",
   "PokéCollector AGPL source: https://github.com/Git-Romer/pokecollector",
-  "Layout inspired by collector-app chrome (HoloDex); CardFlow is a separate product.",
+  "Layout inspired by collector-app chrome (HoloDex); PokeSniper is a separate product.",
 ] as const;
 
 export const ABOUT_POKECOLLECTOR_SOURCE_URL = "https://github.com/Git-Romer/pokecollector";
@@ -13,7 +13,7 @@ export const ABOUT_POKECOLLECTOR_SOURCE_LABEL = "PokéCollector AGPL source";
 
 /** WIREFRAMES.md §10b ownership line. Not a bid, cert, or accuracy claim. */
 export const ABOUT_LEGAL_REVIEW_NOTE =
-  "Recognition is a provider. CardFlow owns inventory and drafts.";
+  "Recognition is a provider. PokeSniper owns inventory and drafts.";
 
 /**
  * In-app MIT/TCGdex attribution. Catalog docs confirm MIT for redistributed

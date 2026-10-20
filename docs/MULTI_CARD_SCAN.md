@@ -8,7 +8,7 @@ Sean (Oct 18): the **scan** screen may identify several raw Pokémon cards in on
 - OpenAPI (`IdentifyCardResponseInput`): `detections` is an **array** — multiple cards per image.
 - Plan limits are counted in **API calls** (`SubscriptionInfoInput.calls`). Free endpoints are tagged “free” in the OpenAPI (e.g. identifiable-sets list); **identify is not**.
 - cardsightai npm README: “Identify multiple cards in a single image with confidence scores” / one `identify.card()` call.
-- **Conclusion:** CardFlow counts **one CardSight budget call per identify request**, not per card in the photo.
+- **Conclusion:** PokeSniper counts **one CardSight budget call per identify request**, not per card in the photo.
 
 CardSight identify does **not** return crop/bounding boxes today (IdentificationData = confidence, card, grading). `cropBox` on our detections is always `null` from CardSight.
 

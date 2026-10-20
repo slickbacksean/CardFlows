@@ -1,4 +1,4 @@
-# CardFlow Inventory Grain
+# PokeSniper Inventory Grain
 
 **Status:** Spike recommendation for review. **No production tables.**  
 **Related:** `CRM_DATA_MODEL.md`, `CARD_ID_MAPPING_PLAN.md` §2 (canonical card vs `selected_variant`).
@@ -15,7 +15,7 @@
 
 `selected_variant` (`normal` \| `reverse` \| `holo` \| `firstEdition` \| null) lives on the **inventory / confirm line**, not as a new `cardflow_card_id`. That is the default in `CARD_ID_MAPPING_PLAN.md` §2.
 
-TCGdex documents multiple printings as booleans on **one** card `id`. CardFlow must not mint a new canonical id per foil unless the founder later changes catalog grain.
+TCGdex documents multiple printings as booleans on **one** card `id`. PokeSniper must not mint a new canonical id per foil unless the founder later changes catalog grain.
 
 ---
 

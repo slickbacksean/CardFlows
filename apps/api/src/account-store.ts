@@ -99,7 +99,7 @@ export interface AccountStore {
 
 /**
  * "delete": the background queue deletes this remote user. "hold": never deleted here (shared with
- * other CardFlow users, a guest's shared user, or a legacy link); the relink script handles it.
+ * other PokeSniper users, a guest's shared user, or a legacy link); the relink script handles it.
  * "failed" (Backend final review R3): gave up after POKECOLLECTOR_DELETION_MAX_ATTEMPTS; needs ops
  * (see /ops/pokecollector-deletions and RELEASE_ENV).
  */
@@ -122,7 +122,7 @@ export interface DeleteAllUserRowsOptions {
   northStarTotals?: readonly NorthStarWeekTotal[] | (() => readonly NorthStarWeekTotal[]);
   /**
    * Backend re-review H1 (P4): queue the user's PokéCollector user for deletion in the same
-   * transaction the link row goes in. `hold` forces "hold"; so does any other CardFlow user still
+   * transaction the link row goes in. `hold` forces "hold"; so does any other PokeSniper user still
    * linked to that remote user after this user's row is deleted.
    */
   pokecollectorRemote?: { remoteUserId: string; hold: boolean; at: string };

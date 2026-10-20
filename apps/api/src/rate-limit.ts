@@ -162,7 +162,7 @@ export function globalDailyCapMiddleware(cap: number | null, now: () => number =
     const result = limiter("global");
     if (!result.allowed) {
       c.header("Retry-After", String(result.retryAfterSeconds));
-      return c.json({ ok: false, error: "CardFlow is busy today. Try again later." }, 429);
+      return c.json({ ok: false, error: "PokeSniper is busy today. Try again later." }, 429);
     }
     return next();
   };

@@ -239,7 +239,7 @@ export function buildClipboardExport(input: {
     trigger: "user_tap_copy",
     autoCopyOnSave: false,
     disclaimer:
-      "CardFlow clipboard export only. CardFlow did not publish this listing to any marketplace.",
+      "PokeSniper clipboard export only. PokeSniper did not publish this listing to any marketplace.",
     plainText: formatClipboardPlainText(input),
     includedFields: ["title", "description", "condition", "asking_price", "currency"],
     omittedPrivateNotes: true,

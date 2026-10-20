@@ -131,7 +131,7 @@ function SubmittedSheetForm({
                 )}
               </View>
 
-              <Text style={styles.body}>You set this. CardFlow does not track the order.</Text>
+              <Text style={styles.body}>You set this. PokeSniper does not track the order.</Text>
 
               <Text style={styles.label}>Order #</Text>
               <TextInput

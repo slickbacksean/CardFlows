@@ -19,7 +19,7 @@
 Only counts are returned, never user IDs or card data.
 
 ## Weekly board update
-Every Monday, the TPM copies last week's row onto the CardFlow MVP board next to `docs/MVP_SUCCESS_METRICS.md`. Once PostHog is live (D7), the same number can be cross-checked against `purchased` events from opted-in users. The server number is the source of truth, because events are opt-in.
+Every Monday, the TPM copies last week's row onto the PokeSniper MVP board next to `docs/MVP_SUCCESS_METRICS.md`. Once PostHog is live (D7), the same number can be cross-checked against `purchased` events from opted-in users. The server number is the source of truth, because events are opt-in.
 
 ## Notes
 - Today the account list is the invited beta testers and open sign-up accounts. Guest look-around is removed (Sean, Oct 18).

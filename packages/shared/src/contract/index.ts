@@ -1,5 +1,5 @@
 /**
- * The CardFlow API contract (P1-01). One file per route group; `apiContract`
+ * The PokeSniper API contract (P1-01). One file per route group; `apiContract`
  * is the full registry the API checks against and the phone client calls.
  * Add a route here first, then register it on the API, then call it from
  * the phone through `callApi`.

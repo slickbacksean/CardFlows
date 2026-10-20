@@ -43,7 +43,7 @@ Touch: [apps/mobile/app/settings.tsx](../apps/mobile/app/settings.tsx).
 
 - Avatar still opens Settings. Tab bar stays hidden (stack screen).
 - Kicker still `Private beta · invited user` until identity tasks replace it with the current invited label.
-- Rows: Max Buy rules, Research (off), About CardFlow.
+- Rows: Max Buy rules, Research (off), About PokeSniper.
 - Bell on the app header stays a no-op (no pricing alerts).
 
 **Done when:** Settings matches §10a jobs. No Pro badge, no portfolio total, no subscription row.
@@ -159,12 +159,12 @@ Touch: [apps/mobile/app/about.tsx](../apps/mobile/app/about.tsx).
 Follow: [WIREFRAMES.md](./WIREFRAMES.md) §10b.
 
 - Non-affiliation (Nintendo / Pokémon Company / Game Freak).
-- Recognition is a provider. Catalog is TCGdex. CardFlow owns inventory and drafts. No marketplace publish.
+- Recognition is a provider. Catalog is TCGdex. PokeSniper owns inventory and drafts. No marketplace publish.
 - Catalog images: TCGdex assets (display only).
 - HoloDex is layout inspiration, not affiliation.
 - Final legal wording stays a founder/legal review item — do not invent extra guarantees.
 
-**Done when:** About matches the frame. No “CardFlow verified authentic,” no accuracy claims.
+**Done when:** About matches the frame. No “PokeSniper verified authentic,” no accuracy claims.
 
 ---
 

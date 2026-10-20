@@ -27,7 +27,7 @@ Repeat for `preview`, and for `development` if wanted. `apps/mobile/.env.example
 - `EXPO_PUBLIC_CARD_FLOW_LIVESTREAM_TIMING` set in a production build fails the build.
 - `extra.release` holds only booleans and key names (`apiUrlSet`, `crashReportingConfigured`, `analyticsConfigured`, `missingForRelease`, `optionalUnset`), never the values.
 
-**Runtime backstop:** a build with `!__DEV__` and no usable API URL shows a "CardFlow can't connect" screen instead of the app. It never falls back to `127.0.0.1` or `10.0.2.2` (`releaseApiUrlProblem`, `resolveClientApiUrl` in `packages/shared/src/client-api-url.ts`). Dev builds keep using the local API.
+**Runtime backstop:** a build with `!__DEV__` and no usable API URL shows a "PokeSniper can't connect" screen instead of the app. It never falls back to `127.0.0.1` or `10.0.2.2` (`releaseApiUrlProblem`, `resolveClientApiUrl` in `packages/shared/src/client-api-url.ts`). Dev builds keep using the local API.
 
 ## Every `EXPO_PUBLIC_*` variable
 **All of them are public and in the bundle.** Metro inlines every `EXPO_PUBLIC_*` value into the JS that ships in the app, so none may hold a secret. The table matches `PUBLIC_ENV_VARS` in `app.config.ts`, and a test fails if the app reads one that isn't listed.
@@ -35,7 +35,7 @@ Repeat for `preview`, and for `development` if wanted. `apps/mobile/.env.example
 | Variable | What it does | Profiles that may set it | Unset means |
 |---|---|---|---|
 | `EXPO_PUBLIC_APP_ENV` | Profile name (set by eas.json) | all | development |
-| `EXPO_PUBLIC_API_URL` | CardFlow API base URL | all (**required** in preview/production) | local dev API (dev only) |
+| `EXPO_PUBLIC_API_URL` | PokeSniper API base URL | all (**required** in preview/production) | local dev API (dev only) |
 | `EXPO_PUBLIC_SENTRY_DSN` | Sentry crash reports | all | crash reporting off |
 | `EXPO_PUBLIC_POSTHOG_KEY` | PostHog project key | all | analytics off. Even when set, events also need the user's opt-in, which is off by default. |
 | `EXPO_PUBLIC_POSTHOG_HOST` | PostHog host | all (default in `base`) | `https://us.i.posthog.com` |
@@ -60,7 +60,7 @@ Repeat for `preview`, and for `development` if wanted. `apps/mobile/.env.example
 
 ## Sentry
 - **Off without a DSN:** `initMobileSentry()` returns before `require("@sentry/react-native")`. It also returns when Settings > **Send crash reports** is off (off by default; opt-in; turning it off closes the client right away).
-- Dev builds never send (`enabled: !__DEV__`). Events carry `environment` (from `EXPO_PUBLIC_APP_ENV`), `release` (`app.cardflow.mobile@<version>`) and `dist` (build number).
+- Dev builds never send (`enabled: !__DEV__`). Events carry `environment` (from `EXPO_PUBLIC_APP_ENV`), `release` (`app.pokesniper.mobile@<version>`) and `dist` (build number).
 - **Scrubbing:** `sendDefaultPii: false`; no screenshots, view hierarchy, replay, tracing or failed-request capture. `beforeSend` runs `scrubSentryEvent`, which drops:
   - request bodies, cookies, and the `Authorization` and `X-CardFlow-App-Key` headers;
   - emails, IP addresses, bearer tokens, and JWT-like or long base64 blobs, including ones embedded in longer strings;
@@ -75,10 +75,10 @@ Repeat for `preview`, and for `development` if wanted. `apps/mobile/.env.example
 4. Organization Settings > Legal & Compliance: accept Sentry's **Data Processing Addendum** (DPA), which includes the SCCs, and keep a copy for counsel.
 
 ## Account deletion (checked in P4)
-- **API:** `POST /v1/account/delete` deletes, in one transaction, every `user_id` row, including the PokéCollector link (`crm_pokecollector_users`). It then deletes the user's photos and staged uploads, signs out every session, and queues what CardFlow stored on PokéCollector for deletion (below). The response never waits on PokéCollector.
+- **API:** `POST /v1/account/delete` deletes, in one transaction, every `user_id` row, including the PokéCollector link (`crm_pokecollector_users`). It then deletes the user's photos and staged uploads, signs out every session, and queues what PokeSniper stored on PokéCollector for deletion (below). The response never waits on PokéCollector.
   - North Star (H2): in the same transaction, the user's weekly counts (purchases, scans, active weeks) are added to `north_star_weekly_totals` (week, counts; no IDs), and their `purchase_events` rows are hard-deleted. `/ops/north-star` adds the totals to the live rows, so past weeks don't change. Older `deleted_<uuid>` ledger buckets are folded into the totals when the API starts.
-  - PokéCollector (Backend re-review H1/M1): the remote user ID (only that: no CardFlow ID, email or username) goes into `pokecollector_pending_deletions` in the same transaction as the rows. A background queue (every minute, and after each orphan sweep) runs `DELETE /api/auth/users/{id}` with the admin token, the strongest option: PokéCollector deletes the user and every row it owns. A 404 counts as done only when the body is `{"detail": "User not found"}`. If the admin delete is refused and the process still has the link in memory, CardFlow signs in as the user, deletes every collection and wishlist item, then rotates the password (admin `PUT /api/auth/users/{id}` with `is_active: false`, else `PUT /api/auth/me/password`). After a restart only the admin delete is possible, so **the admin token must stay valid** (PokéCollector JWTs last 7 days). Failures retry with backoff (1 min, 5 min, 30 min, 2 h, 6 h, 12 h, then daily). Calls are paced at 30 requests and 2 logins a minute, under PokéCollector's per-IP 60 and 5. A remote user still linked to another CardFlow user, or a guest's shared user, is queued as `hold` and not deleted by the queue; the opaque-accounts relink then admin-deletes it if no live account links to it any more, or freezes it if one still does (final review R1). Keep PokéCollector accounts off until the opaque per-user accounts PR is merged (see that PR).
-  - **Limit and alerts (Backend final review R3):** after 14 failed attempts (about 9 days with the backoff) a row becomes `failed` and the queue stops trying. That logs `[pokecollector-deletion] gave up on remote user <PokéCollector ID> …` (no CardFlow ID or email), counts `pokecollectorDeletionsFailed` in `/ops/metrics`, and sends a `pokecollector_deletion_failed` alert to Sentry or the webhook. `GET /ops/pokecollector-deletions` (ops token) returns counts only: `pending`, `held`, `failed`, `stuck` (pending for over 3 days) and `oldestPendingAt`. To fix a failed row: repair PokéCollector or the admin token, then `UPDATE pokecollector_pending_deletions SET mode = 'delete', attempts = 0, next_attempt_at = '<now>' WHERE mode = 'failed';`, or delete the user in PokéCollector by hand and remove the row.
+  - PokéCollector (Backend re-review H1/M1): the remote user ID (only that: no PokeSniper ID, email or username) goes into `pokecollector_pending_deletions` in the same transaction as the rows. A background queue (every minute, and after each orphan sweep) runs `DELETE /api/auth/users/{id}` with the admin token, the strongest option: PokéCollector deletes the user and every row it owns. A 404 counts as done only when the body is `{"detail": "User not found"}`. If the admin delete is refused and the process still has the link in memory, PokeSniper signs in as the user, deletes every collection and wishlist item, then rotates the password (admin `PUT /api/auth/users/{id}` with `is_active: false`, else `PUT /api/auth/me/password`). After a restart only the admin delete is possible, so **the admin token must stay valid** (PokéCollector JWTs last 7 days). Failures retry with backoff (1 min, 5 min, 30 min, 2 h, 6 h, 12 h, then daily). Calls are paced at 30 requests and 2 logins a minute, under PokéCollector's per-IP 60 and 5. A remote user still linked to another PokeSniper user, or a guest's shared user, is queued as `hold` and not deleted by the queue; the opaque-accounts relink then admin-deletes it if no live account links to it any more, or freezes it if one still does (final review R1). Keep PokéCollector accounts off until the opaque per-user accounts PR is merged (see that PR).
+  - **Limit and alerts (Backend final review R3):** after 14 failed attempts (about 9 days with the backoff) a row becomes `failed` and the queue stops trying. That logs `[pokecollector-deletion] gave up on remote user <PokéCollector ID> …` (no PokeSniper ID or email), counts `pokecollectorDeletionsFailed` in `/ops/metrics`, and sends a `pokecollector_deletion_failed` alert to Sentry or the webhook. `GET /ops/pokecollector-deletions` (ops token) returns counts only: `pending`, `held`, `failed`, `stuck` (pending for over 3 days) and `oldestPendingAt`. To fix a failed row: repair PokéCollector or the admin token, then `UPDATE pokecollector_pending_deletions SET mode = 'delete', attempts = 0, next_attempt_at = '<now>' WHERE mode = 'failed';`, or delete the user in PokéCollector by hand and remove the row.
   - **Pacing is per process:** the 30 requests and 2 logins a minute are counted inside one API process. Two API processes, or the API plus the relink script, share PokéCollector's per-IP limit (60 and 5) without coordinating. Run one API process against PokéCollector and don't run the relink while the deletion queue is busy.
   - Ops check: `SELECT mode, attempts, last_result, next_attempt_at FROM pokecollector_pending_deletions;` (no personal data).
   - `email_send_counts` keys are HMAC-SHA256 with `CARD_FLOW_SERVER_PEPPER` (required in production, 32+ random characters; the API refuses to start without it).
@@ -111,14 +111,14 @@ these are true:
    pnpm --filter @cardflow/api pokecollector:relink                      # dry run: no network call, no DB write
    pnpm --filter @cardflow/api pokecollector:relink -- --apply --confirm-url="$CARD_FLOW_POKECOLLECTOR_URL"
    ```
-   It gives every CardFlow user with a legacy (email-derived or shared) link, or with CardFlow
-   inventory and no link, a fresh opaque PokéCollector user rebuilt from CardFlow's own
+   It gives every PokeSniper user with a legacy (email-derived or shared) link, or with PokeSniper
+   inventory and no link, a fresh opaque PokéCollector user rebuilt from PokeSniper's own
    inventory, drops guest links, freezes each old remote user (random password,
    `is_active: false`) once nothing points at it, and ends by freezing every remote `cardflow-*`
    user that isn't opaque and isn't linked (admin `GET /api/auth/users`). Review the dry-run plan
    with Sean before `--apply`.
    - **Delete vs freeze (Backend final review R1):** a `hold` row in
-     `pokecollector_pending_deletions` whose remote user no live CardFlow account links to (every
+     `pokecollector_pending_deletions` whose remote user no live PokeSniper account links to (every
      owner deleted their account) is **admin-DELETEd** (`DELETE /api/auth/users/{id}`), so the
      account-deletion copy stays true. Only remote users still shared with a live account are
      frozen, after each live account on them has its own opaque user. A failed delete is never
@@ -133,7 +133,7 @@ these are true:
      their passwords and resumes copies where they stopped (a crash right after a remote write can
      leave one duplicate card). Delete both files when the relink is done.
    - **Resume caveat:** copy progress is saved as a count into each user's inventory order, not
-     per item. If a user's CardFlow inventory changes between a crash and the rerun (a purchase,
+     per item. If a user's PokeSniper inventory changes between a crash and the rerun (a purchase,
      a removal, a closed watchlist item), the resume can skip or repeat items for that user. Rerun
      soon after a crash, keep the API's PokéCollector accounts off while the relink runs (they are
      off until step 3 anyway), and spot-check any user whose inventory changed.
@@ -155,7 +155,7 @@ Required to turn accounts on (fail closed, no fallback values):
 | `CARD_FLOW_POKECOLLECTOR_ACCOUNTS` | `true` to turn accounts on. Anything else is off. |
 | `CARD_FLOW_POKECOLLECTOR_URL` | PokéCollector backend (loopback or private network only). |
 | `CARD_FLOW_POKECOLLECTOR_TOKEN` | Admin JWT; used only to create, freeze and delete users. **Expires after 7 days** (PokéCollector `ACCESS_TOKEN_EXPIRE_MINUTES`). Either refresh it by hand (sign in as the admin, copy the new `access_token`, redeploy) or set the two variables below instead. |
-| `CARD_FLOW_POKECOLLECTOR_ADMIN_USERNAME` / `CARD_FLOW_POKECOLLECTOR_ADMIN_PASSWORD` | Optional (re-review M2). CardFlow mints its admin token at first use and again on a 401, so the token can't silently expire. Treat as the PokéCollector admin password. |
+| `CARD_FLOW_POKECOLLECTOR_ADMIN_USERNAME` / `CARD_FLOW_POKECOLLECTOR_ADMIN_PASSWORD` | Optional (re-review M2). PokeSniper mints its admin token at first use and again on a 401, so the token can't silently expire. Treat as the PokéCollector admin password. |
 | `CARD_FLOW_POKECOLLECTOR_USER_PEPPER` | 32+ random chars. HMAC key for usernames `cardflow-u-<base32(HMAC-SHA256(userId))[:20]>`. Never change it. |
 | `CARD_FLOW_POKECOLLECTOR_LINK_KEY` | 32-byte AES-256-GCM key (base64 or hex). Encrypts each link's random password at rest (`v2:<key id>:…`). Back it up with the database; losing it loses every link. |
 | `CARD_FLOW_POKECOLLECTOR_PREVIOUS_LINK_KEYS` | Optional, comma-separated (re-review L2). To rotate: put the old key here, a new one in `LINK_KEY`, deploy, then run the re-encrypt below. Old links still decrypt (by key ID). **An old key must stay here until the re-encrypt has run** (final review R4): removing it earlier makes every link still under it unreadable. |
@@ -224,10 +224,10 @@ Read from the pinned `ghcr.io/git-romer/pokecollector-backend:1.51.0` source (un
 1.51.2); confirm each one against a running server:
 
 - **Duplicate `POST /api/auth/users`:** the source answers `400 {"detail": "Username already exists"}`.
-  CardFlow treats 400/409 as "maybe ours" and binds only if this link's own password signs in.
+  PokeSniper treats 400/409 as "maybe ours" and binds only if this link's own password signs in.
   Confirm the status and that no other status is used.
 - **Rate limits:** 60 requests/minute per client IP for every route (slowapi), and **5 logins per
-  minute per IP** on `/api/auth/login`. CardFlow calls from one IP, so at most 5 user sign-ins a
+  minute per IP** on `/api/auth/login`. PokeSniper calls from one IP, so at most 5 user sign-ins a
   minute across all users (tokens are cached in memory per user, lost on restart). JWTs last 7
   days in the source. Background work (deletion queue, relink) is paced at 30 requests and 2
   logins a minute. Check whether `X-Forwarded-For` changes the key and that the limits match.
@@ -236,10 +236,10 @@ Read from the pinned `ghcr.io/git-romer/pokecollector-backend:1.51.0` source (un
   10) and manual backups. Those keep frozen and deleted users' cards until they rotate out;
   size `PRE_UPGRADE_BACKUP_KEEP` so that fits the 90-day backup window in the privacy policy.
 - **`GET /api/collection/user/{user_id}` exposes other users:** yes, in the source any signed-in
-  user can read any active user's (non-custom) collection by numeric ID. CardFlow never calls it
+  user can read any active user's (non-custom) collection by numeric ID. PokeSniper never calls it
   and never gives users a PokéCollector token, but a leaked per-user token could enumerate others.
   Freezing (`is_active: false`) hides an old user from it.
-- Also confirm: the login response carries `user.id` (CardFlow checks it matches the link), admin
+- Also confirm: the login response carries `user.id` (PokeSniper checks it matches the link), admin
   `PUT /api/auth/users/{id}` accepts `{password, is_active}` for freezing, admin
   `GET /api/auth/users` returns `[{id, username, role, is_active}]`, and admin
   `DELETE /api/auth/users/{id}` answers `404 {"detail": "User not found"}` for a missing user.

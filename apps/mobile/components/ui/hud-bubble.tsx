@@ -159,7 +159,7 @@ export function HudBubble({ children, title, subtitle, live = false }: HudBubble
             <View style={styles.header}>
               <View
                 accessibilityHint="Drag to move the overlay"
-                accessibilityLabel="Drag CardFlow overlay"
+                accessibilityLabel="Drag PokeSniper overlay"
                 accessibilityRole="adjustable"
                 style={styles.grip}
                 {...pan.panHandlers}
@@ -184,7 +184,7 @@ export function HudBubble({ children, title, subtitle, live = false }: HudBubble
         ) : (
           <View
             accessibilityHint="Drag to move. Tap to open the overlay."
-            accessibilityLabel={`${title}. CardFlow overlay`}
+            accessibilityLabel={`${title}. PokeSniper overlay`}
             accessibilityRole="button"
             style={styles.pill}
             {...pan.panHandlers}
