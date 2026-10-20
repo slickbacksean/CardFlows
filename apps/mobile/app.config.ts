@@ -41,6 +41,8 @@ export const PUBLIC_ENV_VARS: ReadonlyArray<{
   { name: "EXPO_PUBLIC_HUDS_URL", purpose: "Livestream HUD helper URL (local tooling)", profiles: ["development", "preview"] },
   { name: "EXPO_PUBLIC_CARD_FLOW_GRADE_JOBS", purpose: "Async pre-grade jobs (=1)", profiles: APP_ENVS },
   { name: "EXPO_PUBLIC_CARD_FLOW_LIVESTREAM_TIMING", purpose: "Livestream timing logs (=1)", profiles: ["development", "preview"], enforced: true },
+  { name: "EXPO_PUBLIC_CARD_FLOW_LIVESTREAM_PRICE_SNAPSHOT", purpose: "Bulk livestream price snapshot (=1; default off, Policy risk)", profiles: ["development", "preview"], enforced: true },
+  { name: "EXPO_PUBLIC_CARD_FLOW_LIVESTREAM_TCGPLAYER_LINK", purpose: "HUD shows See prices on TCGplayer instead of estimate (=1)", profiles: APP_ENVS },
 ];
 
 type Env = Record<string, string | undefined>;

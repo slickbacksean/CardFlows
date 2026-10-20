@@ -18,9 +18,13 @@ export interface GradeCardMagicGate {
    * (used >= cap − CARD_FLOW_CARDMAGIC_ID_RESERVE). Skips without consuming budget.
    */
   mayUseIdReserve?: () => boolean;
-  /** Take one from the per-user monthly CardSight cap; false when exhausted. */
+  /** Peek: false when the per-user monthly CardSight cap is exhausted (no call). */
+  userCapRemaining?: () => boolean;
+  /** Peek: false when the global monthly budget is used up (no call). */
+  budgetRemaining?: () => boolean;
+  /** Charge one from the per-user monthly CardSight cap — only after a successful CardMagic response. */
   takeUse?: () => boolean;
-  /** Optional global budget gate (same as identify). */
+  /** Charge the global budget — only after a successful CardMagic response. */
   consumeBudget?: () => boolean;
 }
 
@@ -68,11 +72,12 @@ export async function tryCardMagicForGrade(input: {
     console.info(`grade-cardmagic side=${side} path=local reason=id_reserve`);
     return { path: "local", reason: "id_reserve" };
   }
-  if (gate.consumeBudget && !gate.consumeBudget()) {
+  // Peek only — charge after a successful CardMagic response (same rule as identify).
+  if (gate.budgetRemaining && !gate.budgetRemaining()) {
     console.info(`grade-cardmagic side=${side} path=local reason=budget`);
     return { path: "local", reason: "budget" };
   }
-  if (gate.takeUse && !gate.takeUse()) {
+  if (gate.userCapRemaining && !gate.userCapRemaining()) {
     console.info(`grade-cardmagic side=${side} path=local reason=user_cap`);
     return { path: "local", reason: "user_cap" };
   }
@@ -93,6 +98,9 @@ export async function tryCardMagicForGrade(input: {
     console.info(`grade-cardmagic side=${side} path=local reason=empty ms=${result.elapsedMs}`);
     return { path: "local", reason: "empty", result };
   }
+  // Successful billable CardMagic response — charge now (not before the call).
+  gate.consumeBudget?.();
+  gate.takeUse?.();
   const cleanedCard = stripImageMetadata(first.cardJpeg, "image/jpeg");
   console.info(
     `grade-cardmagic side=${side} path=cardmagic cards=${result.count} corners=${Object.keys(first.corners).length} ms=${result.elapsedMs}`,

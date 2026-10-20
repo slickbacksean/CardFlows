@@ -43,6 +43,8 @@ Repeat for `preview`, and for `development` if wanted. `apps/mobile/.env.example
 | `EXPO_PUBLIC_HUDS_URL` | Livestream HUD helper URL (local tooling) | development, preview (guidance) | platform default |
 | `EXPO_PUBLIC_CARD_FLOW_GRADE_JOBS` | Async pre-grade jobs (`=1`) | all | off |
 | `EXPO_PUBLIC_CARD_FLOW_LIVESTREAM_TIMING` | Livestream timing logs (`=1`) | development, preview (**enforced**: a production build fails) | off |
+| `EXPO_PUBLIC_CARD_FLOW_LIVESTREAM_PRICE_SNAPSHOT` | Bulk livestream price snapshot (`=1`) | development, preview (**enforced**: production fails). Default **off** — TCGplayer on-device cache is under Policy review. | off |
+| `EXPO_PUBLIC_CARD_FLOW_LIVESTREAM_TCGPLAYER_LINK` | HUD link-out “See prices on TCGplayer” (`=1`) | all | off |
 
 ## API env (staging and production)
 - **`CARD_FLOW_ULTRALYTICS_AGPL_ACCEPTED` must stay unset** on the staging and production API until Sean makes the license decision (Ultralytics YOLO is AGPL-3.0). While it's unset, live-video YOLO is off and the weights are never loaded.

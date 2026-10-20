@@ -642,6 +642,7 @@ export const ageConfirmations = sqliteTable(
   (table) => [check("age_confirmations_true_chk", sql`${table.ageConfirmed18Plus} = 1`)],
 );
 
+
 export const schema = {
   ageConfirmations,
   cardflowCards,

@@ -22,6 +22,13 @@ interface CardFlowLiveVideoNative {
   setScannerSession?: (active: boolean) => Promise<void>;
   setPlaybackUrl?: (url: string | null) => Promise<void>;
   setYoloDetect?: (active: boolean) => Promise<void>;
+  /**
+   * TODO(P1 deferred): native push of frames/events so JS can drop the 250 ms
+   * setInterval poll in live-identify.ts. Not wired in this PR — needs a
+   * carefully scoped Expo module event emitter and an EAS/dev build to measure.
+   * Tracker / vote / replay stay frame-source agnostic either way.
+   */
+  // addListener?: (event: "frame", listener: (frame: unknown) => void) => { remove: () => void };
 }
 
 /** Custom native modules that are not compiled into Expo Go. */

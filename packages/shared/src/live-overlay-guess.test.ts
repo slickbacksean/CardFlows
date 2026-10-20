@@ -118,7 +118,8 @@ describe("live overlay guess from catalog + estimate", () => {
     expect(client).toContain("/v1/livestream/identify");
     expect(client).toContain("identifyLivestreamFrame");
     expect(client).toContain("identityHash");
-    expect(overlay).toContain("getLiveOverlayGuess");
+    expect(overlay).toContain("getCachedLiveOverlayGuess");
+    expect(overlay).toContain("getLiveIdentityVote");
     expect(overlay).not.toContain("savePurchased");
     expect(overlay).toContain("Purchased");
     expect(scanTab).toMatch(/saveLivestreamPurchase\(|runQueueableWrite\("livestream_purchase"/);

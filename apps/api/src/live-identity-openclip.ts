@@ -10,6 +10,8 @@ export interface LiveIdentityOpenclipMatch {
   pipeline: "openclip_hnsw";
   /** Sidecar straightened the crop from the 4 corners before embedding. */
   warped?: boolean;
+  /** Top-k runners-up for the P1 pick-one HUD. */
+  candidates?: { tcgdexId: string; similarity: number }[];
   /** Sidecar stage timings in ms (decode, warp, embed, search, orb, total). */
   timings?: Partial<Record<"decodeMs" | "warpMs" | "embedMs" | "searchMs" | "orbMs" | "totalMs", number>>;
 }
@@ -87,6 +89,7 @@ export function createLiveIdentityOpenclipClient(options: LiveIdentityOpenclipOp
           pipeline?: unknown;
           warped?: unknown;
           timings?: unknown;
+          candidates?: unknown;
         };
         const timings: NonNullable<LiveIdentityOpenclipMatch["timings"]> = {};
         if (body.timings && typeof body.timings === "object") {
@@ -102,12 +105,25 @@ export function createLiveIdentityOpenclipClient(options: LiveIdentityOpenclipOp
         }
         const tcgdexId =
           typeof body.tcgdexId === "string" && body.tcgdexId.trim() ? body.tcgdexId.trim() : null;
+        const candidates: { tcgdexId: string; similarity: number }[] = [];
+        if (Array.isArray(body.candidates)) {
+          for (const row of body.candidates) {
+            if (!row || typeof row !== "object") continue;
+            const id = (row as { tcgdexId?: unknown }).tcgdexId;
+            const sim = (row as { similarity?: unknown }).similarity;
+            if (typeof id === "string" && id.trim() && typeof sim === "number" && Number.isFinite(sim)) {
+              candidates.push({ tcgdexId: id.trim(), similarity: sim });
+            }
+            if (candidates.length >= 3) break;
+          }
+        }
         return {
           pipeline: "openclip_hnsw",
           accepted: body.accepted === true && Boolean(tcgdexId),
           tcgdexId: body.accepted === true ? tcgdexId : null,
           similarity: typeof body.similarity === "number" ? body.similarity : null,
           ...(typeof body.warped === "boolean" ? { warped: body.warped } : {}),
+          ...(candidates.length ? { candidates } : {}),
           ...(Object.keys(timings).length ? { timings } : {}),
         };
       } catch {

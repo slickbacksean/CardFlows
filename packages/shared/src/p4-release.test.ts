@@ -55,7 +55,7 @@ beforeAll(async () => {
 
 function withEnv<T>(env: Record<string, string>, run: () => T): T {
   const before = { ...process.env };
-  for (const key of ["APP_ENV", "EXPO_PUBLIC_APP_ENV", ...Object.values(RELEASE_ENV_KEYS), "EXPO_PUBLIC_CARD_FLOW_LIVESTREAM_TIMING"]) delete process.env[key];
+  for (const key of ["APP_ENV", "EXPO_PUBLIC_APP_ENV", ...Object.values(RELEASE_ENV_KEYS), "EXPO_PUBLIC_CARD_FLOW_LIVESTREAM_TIMING", "EXPO_PUBLIC_CARD_FLOW_LIVESTREAM_PRICE_SNAPSHOT", "EXPO_PUBLIC_CARD_FLOW_LIVESTREAM_TCGPLAYER_LINK"]) delete process.env[key];
   Object.assign(process.env, env);
   try {
     return run();

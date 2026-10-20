@@ -43,6 +43,8 @@ CardMagic and identify share one CardSight plan counter (`vendor_quota_usage` pr
 
 CardMagic also counts against the same per-user monthly CardSight cap as identify.
 
+**Charge-on-success (Sean, Oct 18):** both the global budget and the per-user cap are charged only after a successful CardMagic (or identify) response. Errors, timeouts and 4xx/5xx do not consume a call (CardSight billing on failures is unconfirmed).
+
 ## User copy
 
 Grade guidelines ask users to take the card out of any slab or toploader before grading. CardSight disclosure (version `2026-10-18.2`) says photos may be sent to identify cards and to crop/straighten grade photos, and that CardSight may use photos you send to improve its card recognition service.

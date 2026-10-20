@@ -261,7 +261,8 @@ describe("combined YOLO + card-identity on live video", () => {
     expect(scanTab).toContain("SCANNER ON");
     expect(scanTab).not.toMatch(/Scan a still photo/i);
     expect(overlay).toContain("liveGuess");
-    expect(overlay).toContain("getLiveOverlayGuess");
+    expect(overlay).toContain("getCachedLiveOverlayGuess");
+    expect(overlay).toContain("getLiveIdentityVote");
     expect(overlay).not.toMatch(SCREENSHOT_APIS);
     expect(pipeline).toContain("live_video");
     expect(pipeline).toContain("Ultralytics AGPL");

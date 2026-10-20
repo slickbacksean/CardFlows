@@ -7,7 +7,9 @@
  */
 import { Platform } from "react-native";
 import {
+  createLiveAnnounceDedupe,
   createLiveCardTracker,
+  createLiveIdentityVoter,
   createLiveScanTimingLog,
   identifyLiveVideo,
   LIVE_IDENTITY_STABLE_HITS,
@@ -19,6 +21,7 @@ import {
   type LiveVideoFrame,
   type LiveVideoIdentityPlatform,
   type LiveVideoIdentityResult,
+  type LiveVoteResult,
 } from "@cardflow/shared";
 import { getHealth, identifyLivestreamFrame } from "./api";
 import { recordPerfStage } from "./perf-telemetry";
@@ -33,8 +36,10 @@ import {
 
 // Capture stays ahead of the match. OpenCLIP is ~630 ms, and a Whatnot lot
 // often sells in about 7 seconds, so the next frame is not queued behind it.
-// An IoU track + crop-hash gate (below) matches once per tracked card, so the
-// faster poll does not add server load.
+// An IoU track + crop-hash gate (below) matches once per tracked card until a
+// recheck is due, so the faster poll does not add server load.
+// TODO(P1/P2): prefer native push frames from cardflow-live-video when available
+// instead of this 250 ms JS poll (see live-video-native.ts).
 const FRAME_POLL_MS = 250;
 
 /**
@@ -43,8 +48,13 @@ const FRAME_POLL_MS = 250;
  */
 const TIMING_ENABLED = process.env.EXPO_PUBLIC_CARD_FLOW_LIVESTREAM_TIMING === "1";
 const timingLog = createLiveScanTimingLog(300);
-/** One IoU track; one vendor/model match per tracked card, with crop-hash dedupe. */
+/** Up to 3 IoU tracks; one vendor/model match per tracked card until recheck. */
 const tracker = createLiveCardTracker();
+/** Vote across 3 sharp identify results before auto-showing a match. */
+const voter = createLiveIdentityVoter();
+/** Do not re-announce the same card within 60 s. */
+const announceDedupe = createLiveAnnounceDedupe();
+let latestVote: LiveVoteResult | null = null;
 
 function nowMs(): number {
   return globalThis.performance?.now?.() ?? Date.now();
@@ -59,6 +69,11 @@ function noteTiming(sample: LiveScanSample) {
 /** Debug: p50/p95 per stage of this session's frames (empty unless timing is on). */
 export function getLiveScanTimingSummary(): LiveScanSummary {
   return timingLog.summary();
+}
+
+/** Latest vote tier (auto_show / pick_one / waiting) for the HUD. */
+export function getLiveIdentityVote(): LiveVoteResult | null {
+  return latestVote;
 }
 
 let running = false;
@@ -96,9 +111,24 @@ function classifier() {
   return __DEV__ ? "mock" : "none";
 }
 
-function publishResult(raw: LiveVideoIdentityResult) {
+function publishResult(raw: LiveVideoIdentityResult, vote?: LiveVoteResult | null) {
+  if (vote) latestVote = vote;
   recentHits = [...recentHits, raw].slice(-LIVE_IDENTITY_STABLE_HITS);
-  latest = stabilizeLiveIdentity(recentHits);
+  const stabilized = stabilizeLiveIdentity(recentHits);
+  if (
+    stabilized.reason === "identified" &&
+    stabilized.tcgdexId &&
+    !announceDedupe.shouldAnnounce(stabilized.tcgdexId, Date.now())
+  ) {
+    // Same card within 60 s: keep HUD quiet (still update listeners for state).
+    latest = stabilized;
+    for (const listener of listeners) listener(latest);
+    return;
+  }
+  if (stabilized.reason === "identified" && stabilized.tcgdexId) {
+    announceDedupe.noteAnnounced(stabilized.tcgdexId, Date.now());
+  }
+  latest = stabilized;
   for (const listener of listeners) listener(latest);
   void publishLivestreamHud({ scannerOn: running, identity: latest });
 }
@@ -213,6 +243,14 @@ async function identifyFrame(frame: LiveVideoFrame, key: string, pullMs: number)
       });
     }
     const server = response.timing?.stages ?? {};
+    const matchMs =
+      typeof server.match === "number"
+        ? server.match
+        : typeof server.search === "number"
+          ? server.search
+          : typeof server.sidecar === "number"
+            ? server.sidecar
+            : undefined;
     noteTiming({
       stages: {
         ...server,
@@ -220,16 +258,54 @@ async function identifyFrame(frame: LiveVideoFrame, key: string, pullMs: number)
         pull: pullMs,
         // Network + JSON both ways: the round trip minus server time.
         upload: typeof server.server === "number" ? Math.max(0, roundTripMs - server.server) : undefined,
+        match: matchMs,
         total: pullMs + roundTripMs,
       },
       outcome: response.identity.reason === "identified" ? "accepted" : "rejected",
       warped: response.timing?.warped,
     });
-    if (response.identity.reason === "identified") {
-      missedCards = 0;
-      settledKey = key;
-      publishResult(response.identity);
-      return;
+    if (response.identity.reason === "identified" || response.identity.reason === "unidentified") {
+      const extra = response as {
+        candidates?: { tcgdexId: string; similarity?: number }[];
+        similarity?: number | null;
+      };
+      const vote = voter.add({
+        tcgdexId: response.identity.reason === "identified" ? response.identity.tcgdexId : null,
+        similarity: typeof extra.similarity === "number" ? extra.similarity : null,
+        candidates: Array.isArray(extra.candidates) ? extra.candidates : null,
+      });
+      latestVote = vote;
+      if (vote.tier === "auto_show" && vote.tcgdexId) {
+        missedCards = 0;
+        settledKey = key;
+        publishResult(
+          {
+            ...response.identity,
+            tcgdexId: vote.tcgdexId,
+            reason: "identified",
+            confidence: response.identity.confidence ?? "High",
+          },
+          vote,
+        );
+        return;
+      }
+      if (vote.tier === "pick_one" || vote.tier === "waiting") {
+        // Keep looking; HUD reads vote via getLiveIdentityVote().
+        publishResult(
+          {
+            tcgdexId: null,
+            confidence: null,
+            reason: "unidentified",
+            pipeline: response.identity.pipeline,
+          },
+          vote,
+        );
+        if (response.identity.reason === "identified") {
+          // Still remember the server hit for the track lock, but do not auto-show yet.
+          settledKey = key;
+        }
+        return;
+      }
     }
     if (response.identity.reason === "no_card" && latest.reason === "identified") {
       missedCards += 1;
@@ -297,6 +373,36 @@ async function pollNativeFrame() {
     if (decision.action === "skip") {
       // Same tracked card, already matched, or a crop hash we already sent: no vendor/model call.
       noteTiming({ stages: { detect: frame.detectMs ?? undefined, pull: pullMs }, outcome: "skipped" });
+      const current = tracker.current();
+      if (
+        decision.reason === "same_crop" &&
+        decision.tcgdexId &&
+        current &&
+        !current.locked
+      ) {
+        // Static card: reuse the known id as another sharp-frame vote without a network call.
+        const vote = voter.add({ tcgdexId: decision.tcgdexId, similarity: null });
+        tracker.noteMatch({
+          hash: frame.identityHash ?? null,
+          tcgdexId: decision.tcgdexId,
+          nowMs: Date.now(),
+        });
+        latestVote = vote;
+        if (vote.tier === "auto_show" && vote.tcgdexId) {
+          publishKnownIdentity(vote.tcgdexId);
+        } else {
+          publishResult(
+            {
+              tcgdexId: null,
+              confidence: null,
+              reason: "unidentified",
+              pipeline: latest.pipeline,
+            },
+            vote,
+          );
+        }
+        return;
+      }
       if (decision.reason === "same_crop") publishKnownIdentity(decision.tcgdexId);
       else if (latest.reason === "identified") publishResult(latest);
       return;
@@ -363,6 +469,9 @@ export function startLiveVideoIdentify(): void {
   missedCards = 0;
   identifyInFlight = false;
   tracker.reset();
+  voter.reset();
+  announceDedupe.clear();
+  latestVote = null;
   timingLog.clear();
   void setLiveVideoScannerSession(true);
   void refreshYoloDetect();
@@ -386,6 +495,9 @@ export function stopLiveVideoIdentify(): void {
   yoloDetect = false;
   identifyInFlight = false;
   tracker.reset();
+  voter.reset();
+  announceDedupe.clear();
+  latestVote = null;
   if (yoloTimer) {
     clearInterval(yoloTimer);
     yoloTimer = null;
