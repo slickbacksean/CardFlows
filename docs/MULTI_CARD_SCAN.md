@@ -43,3 +43,12 @@ After every card in a multi-card photo is confirmed or skipped, the phone opens 
 when cached, Purchased state) and a skipped count. Each confirmed row opens Decide.
 **Done** returns to MyDEX; **Scan another** returns to capture. Single-card scans
 still go straight to Decide.
+
+## MyDEX ownership (Sean, Oct 19)
+
+A card shows in full color in MyDEX only when it was confirmed through Scan a Card
+(single or multi-card, camera or photo library) or the user tapped Purchased in the
+livestream scanner HUD. Watchlist entries, grading runs, manual Purchased saves and
+Watchlist → Purchased never mark a card owned. The HUD's hidden helper scan uses
+`captureMethod: "livestream_hud"` so it is not mistaken for Scan a Card; undoing the
+HUD purchase clears ownership.

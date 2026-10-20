@@ -19,6 +19,22 @@ async function json<T>(
   return { status: response.status, body: (await response.json()) as T };
 }
 
+async function confirmedScan(app: App, captureMethod: string, tcgdexId: string): Promise<string> {
+  const scan = await json<{ scan: { scanId: string } }>(app, "/v1/scans", {
+    method: "POST",
+    body: JSON.stringify({ captureMethod, scenario: "high-confidence" }),
+  });
+  const confirmed = await json<{ confirmation: { confirmationId: string } }>(app, `/v1/scans/${scan.body.scan.scanId}/confirm`, {
+    method: "POST",
+    body: JSON.stringify({ tcgdexId }),
+  });
+  return confirmed.body.confirmation.confirmationId;
+}
+
+async function ownedIn(app: App, setId: string): Promise<string[]> {
+  const view = await json<{ set: { cards: Array<{ tcgdexId: string; owned: boolean }> } }>(app, `/v1/dex/sets/${setId}`);
+  return view.body.set.cards.filter((card) => card.owned).map((card) => card.tcgdexId);
+}
 
 describe("MyDEX set view", () => {
   it("lists every card in a set from catalog art, owned in color after a confirmed scan", async () => {
@@ -56,5 +72,47 @@ describe("MyDEX set view", () => {
     const app = createApp(createMemoryStore());
     expect((await app.request("/v1/dex/sets/nope-set")).status).toBe(404);
     expect((await app.request("/v1/dex/sets/bad%20id!")).status).toBe(404);
+  });
+});
+
+// The memory store is shared module state, so these steps run in order after the set view test
+// (which already owns base1-58 through a camera Scan a Card confirmation).
+describe("MyDEX ownership sources", () => {
+  it("only Scan a Card confirmations and livestream HUD Purchased taps mark owned", async () => {
+    const app = createApp(createMemoryStore());
+    expect(await ownedIn(app, "base1")).toEqual(["base1-58"]);
+
+    // Watchlist and a manual (non-livestream) Purchased save never mark owned.
+    const watchId = await confirmedScan(app, "livestream_hud", "base1-4");
+    const w = await app.request("/v1/inventory/watchlist", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ confirmationId: watchId }),
+    });
+    expect(w.status).toBeLessThan(300);
+    const buyId = await confirmedScan(app, "livestream_hud", "base1-4");
+    const p = await app.request("/v1/inventory/purchased", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ confirmationId: buyId, purchasePrice: "5.00", purchasedAt: "2026-10-01T12:00:00.000Z" }),
+    });
+    expect(p.status).toBeLessThan(300);
+    expect(await ownedIn(app, "base1")).toEqual(["base1-58"]);
+
+    // Livestream HUD Purchased tap marks owned; undo clears it.
+    const hudId = await confirmedScan(app, "livestream_hud", "base1-4");
+    const saved = await json<{ item: { inventoryItemId: string } }>(app, "/v1/inventory/purchased", {
+      method: "POST",
+      body: JSON.stringify({ confirmationId: hudId, detailsNeeded: true, platform: "whatnot" }),
+    });
+    expect(saved.status).toBeLessThan(300);
+    expect((await ownedIn(app, "base1")).sort()).toEqual(["base1-4", "base1-58"]);
+    const undo = await app.request(`/v1/inventory/${saved.body.item.inventoryItemId}`, { method: "DELETE" });
+    expect(undo.status).toBeLessThan(300);
+    expect(await ownedIn(app, "base1")).toEqual(["base1-58"]);
+
+    // A photo-library Scan a Card confirmation (manual_scan) counts.
+    await confirmedScan(app, "manual_scan", "base1-4");
+    expect((await ownedIn(app, "base1")).sort()).toEqual(["base1-4", "base1-58"]);
   });
 });

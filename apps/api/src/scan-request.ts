@@ -48,7 +48,7 @@ export interface ScanCreateRequestError {
 }
 
 function isCaptureMethod(value: unknown): value is CaptureMethod {
-  return value === "camera_photo" || value === "manual_scan";
+  return value === "camera_photo" || value === "manual_scan" || value === "livestream_hud";
 }
 
 function captureMethodFrom(value: unknown): CaptureMethod {
