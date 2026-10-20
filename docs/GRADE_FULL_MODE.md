@@ -29,7 +29,7 @@ out midway, Try again sends the same flat photos as a quick grade.
 
 ## What the grader uses from the extras
 
-Stored under `apps/api/data/grade-extras/<user>/<sessionId>/` as `<side>-<shot>.jpg` + `meta.json`.
+Stored on the data volume under `<dataDir>/grade/extras/<user>/<sessionId>/` (`/data/grade/extras/...` on Railway; the folder of `CARD_FLOW_SQLITE_PATH`) as `<side>-<shot>.jpg` + `meta.json`.
 Server blur-check: Laplacian variance ≥ 60. **30-day** purge with graded photos; account delete wipes extras.
 
 When `sessionId` is on pregrade, `cardflow_adapter.py --extras-dir` runs:

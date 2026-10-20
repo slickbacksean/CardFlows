@@ -15,7 +15,9 @@ export type OpsAlertKind =
   | "vendor_5xx"
   | "server_5xx_spike"
   | "pokecollector_deletion_failed"
-  | "cardsight_budget_80";
+  | "cardsight_budget_80"
+  | "volume_disk_70"
+  | "volume_disk_85";
 
 export interface OpsAlert {
   kind: OpsAlertKind;
@@ -104,6 +106,28 @@ export class OpsMetrics {
       "cardsight_budget_80",
       `CardSight monthly usage is at ${used}/${cap} (~${pct}%). Free plan hard-stops at the cap.`,
     );
+  }
+
+  /**
+   * Dev Ops (Oct 19): data volume fill alerts at 70% and 85%. Each level alerts once when it is
+   * crossed (not on every check) and re-arms after usage drops back below it.
+   */
+  private diskLevel = 0;
+  recordDiskUsage(usedBytes: number, totalBytes: number) {
+    if (!(totalBytes > 0)) return;
+    const fraction = usedBytes / totalBytes;
+    const level = fraction >= 0.85 ? 85 : fraction >= 0.7 ? 70 : 0;
+    const previous = this.diskLevel;
+    this.diskLevel = level;
+    if (level === 0 || level <= previous) return;
+    const pct = Math.round(fraction * 100);
+    const gb = (n: number) => (n / 1024 ** 3).toFixed(1);
+    const detail = `Data volume is ${pct}% full (${gb(usedBytes)} of ${gb(totalBytes)} GB).`;
+    if (level === 85) {
+      this.alert("volume_disk_85", "volume_disk_85", `${detail} Grow the volume or free space now.`);
+    } else {
+      this.alert("volume_disk_70", "volume_disk_70", `${detail} Plan to grow the volume.`);
+    }
   }
 
   recordDeviceStage(stage: string, deviceClass: string, ms: number, hot: boolean) {

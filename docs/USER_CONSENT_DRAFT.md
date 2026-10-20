@@ -76,11 +76,13 @@ Suggestions can be wrong. You must confirm the card yourself before you buy, sel
 
 **Settings copy (draft):**
 
-**Saved scan photos**
+**Card photos**
 
-When this is on, PokeSniper stores the photos you choose with your account so you can see past scans. Photos are stored privately and are not a public gallery.
+PokeSniper doesn't keep your card photos.
 
-**Proposal displayed to the user (founder must pick a number):** We keep a saved photo until you delete that scan or your account. [Optional alternative:] We automatically delete unused scan photos after 30 days.
+Your card photos are used only to identify or grade the card and are deleted right after, within 24 hours at most. Grade results are kept; the photos aren't. <!-- in-app: PHOTO_RETENTION_LINE -->
+
+**Decided (Sean, Oct 19):** PokeSniper uses your photos only to identify or grade the card and deletes them right after, within 24 hours at most. We don't keep a gallery of your photos; MyDEX shows the card's official catalog image. Grade results (numbers and text) are kept.
 
 **Open:** Counsel must replace “privately” with accurate technical language after the storage design is fixed.
 
@@ -108,7 +110,7 @@ Account deletion is not the same as turning the app off or “freezing” the ac
 
 **Privacy policy draft: deleting your account (P4, Policy Reviewer)**
 
-Settings > Delete account deletes your PokeSniper account and everything in it right away: your sign-in, email and password, MyDEX, your Watchlist and purchase details, scans and card photos, pre-grade estimate history, sales, listing drafts, Max Buy rules, your CardSight choice and your 18+ confirmation.
+Settings > Delete account deletes your PokeSniper account and everything in it right away: your sign-in, email and password, MyDEX, your Watchlist and purchase details, scan history and any card photo not yet deleted, pre-grade estimate history, sales, listing drafts, Max Buy rules, your CardSight choice and your 18+ confirmation.
 
 If your account was linked to PokéCollector, PokeSniper removes the link and deletes the cards and wishlist it stored there. This can take up to 2 weeks, and PokéCollector's own backups may keep a copy for a while.
 
@@ -116,9 +118,9 @@ PokeSniper keeps only anonymous totals that can't identify you. Purchases you ma
 
 When you delete your account we keep a one-way scrambled version of your email for 90 days, only to prevent free-allowance resets.
 
-Deleted data is removed from backups within 90 days.
+Deleted data is removed from backups within 14 days.
 
-**Decided (Sean):** backup retention window is 90 days. PokéCollector pre-upgrade SQL dumps (`/app/backups`, newest `PRE_UPGRADE_BACKUP_KEEP`) must be sized so deleted users' cards rotate out within that window.
+**Decided (Sean, Oct 19):** backup retention window is 14 days (was 90). PokéCollector pre-upgrade SQL dumps (`/app/backups`, newest `PRE_UPGRADE_BACKUP_KEEP`) must be sized so deleted users' cards rotate out within that window.
 
 ---
 

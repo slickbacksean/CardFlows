@@ -12,6 +12,10 @@ export const POKECOLLECTOR_DELETION_LINE =
 export const ANONYMOUS_LEDGER_LINE =
   "PokeSniper keeps only anonymous totals that can't identify you. Purchases you made on a marketplace aren't affected.";
 
+/** Sean (Oct 19): photos are not stored. Shown in the app and used in the privacy policy draft. */
+export const PHOTO_RETENTION_LINE =
+  "Your card photos are used only to identify or grade the card and are deleted right after, within 24 hours at most. Grade results are kept; the photos aren't.";
+
 export const ACCOUNT_DELETION_COPY = {
   settingsRow: "Delete account",
   title: "Delete your account",
@@ -19,12 +23,13 @@ export const ACCOUNT_DELETION_COPY = {
   deletes: [
     "Your sign-in, email and password",
     "Every card in MyDEX, your Watchlist and your purchase details",
-    "Your scans and card photos, including pre-grade estimate photos",
+    "Your scan history and any card photo not yet deleted (photos are deleted within 24 hours anyway)",
     "Pre-grade estimate history, sales, listing drafts and Max Buy rules",
     "Your CardSight choice and your 18+ confirmation",
     POKECOLLECTOR_DELETION_LINE,
   ],
   keeps: ANONYMOUS_LEDGER_LINE,
+  photos: PHOTO_RETENTION_LINE,
   /** Backend review M3 (P4): exact wording. */
   subscription: "Deleting your account doesn't cancel an App Store or Google Play subscription. Cancel it in your store settings.",
   credits: "Unused grading credits are lost and can't be refunded or restored.",

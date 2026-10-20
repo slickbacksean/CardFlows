@@ -31,6 +31,7 @@ import { OUT_OF_FULL_GRADES_CODE, GRADE_FULL_COPY, gradeFullAllowance, gradeFull
 import {
   checkExtraBlur,
   deleteUserGradeExtras,
+  deleteGradeExtrasSession,
   gradeExtrasSessionPath,
   purgeExpiredGradeExtras,
   saveGradeExtraShot,
@@ -186,7 +187,7 @@ import {
   GRADE_ROUTE_BODY_MAX_BYTES,
 } from "./request-limits";
 import { unmappedSetNameCounts } from "./tcgdex-catalog";
-import { createMemoryStore, type InventoryItemRecord, type StorePort } from "./store";
+import { createMemoryStore, type InventoryItemRecord, type ScanRecord, type StorePort } from "./store";
 import {
   offPokecollectorAccounts,
   isLegacyLink,
@@ -544,6 +545,11 @@ export function createApp(
   store: StorePort = createMemoryStore(),
   options: CreateAppOptions = {},
 ) {
+  /** Sean (Oct 19): a scan's photo is deleted once identification and every confirm are done. */
+  function deleteScanPhotoWhenSettled(userId: string, scan: ScanRecord): void {
+    const pending = scan.cardResults?.some((row) => row.state !== "confirmed" && row.state !== "skipped");
+    if (!pending) store.deleteScanImage(userId, scan.scanId);
+  }
   const {
     saveConfirmEvent,
     listConfirmEvents,
@@ -2837,6 +2843,8 @@ export function createApp(
         recognitionProvider: mappingForConfirm.provider,
       });
       if (correction) recordScanCorrection(correction);
+      // Sean (Oct 19): scan photos are not kept. Delete the still once every card on it is done.
+      deleteScanPhotoWhenSettled(userId, result.scan);
       const shown = mappingForConfirm.candidates.map((card) => card.tcgdexId);
       const predicted = mappingForConfirm.tcgdexId ?? mappingForConfirm.canonicalCard?.tcgdexId ?? null;
       saveConfirmEvent(
@@ -2891,6 +2899,7 @@ export function createApp(
     if (!rejected) {
       return c.json({ ok: false, error: "Scan is already confirmed" }, 409);
     }
+    store.deleteScanImage(c.get("userId"), scan.scanId);
     return c.json({ ok: true, scan: rejected });
   });
 
@@ -2906,6 +2915,7 @@ export function createApp(
     if (!skipped) {
       return c.json({ ok: false, error: "That card can't be skipped" }, 409);
     }
+    deleteScanPhotoWhenSettled(c.get("userId"), skipped);
     return c.json({ ok: true, scan: skipped });
   });
 
@@ -3188,6 +3198,8 @@ export function createApp(
       });
       if (parsed.frontUploadId) gradeUploads.release(userId, parsed.frontUploadId);
       if (parsed.backUploadId) gradeUploads.release(userId, parsed.backUploadId);
+      // Sean (Oct 19): photos are not kept. The angled extras go once the result is back.
+      if (extrasDir && parsed.sessionId) deleteGradeExtrasSession(userId, parsed.sessionId);
       return c.json({ ...result, quota: taken.quota });
     },
   );
@@ -3290,8 +3302,16 @@ export function createApp(
         // A crashed or timed-out grader is "unavailable", never a silent empty estimate.
         estimate = unavailableGradeEstimate();
       }
+      // Sean (Oct 19): grade photos are not kept. Once a real result is saved, delete the stored
+      // front/back stills; only the numbers and text stay. A failed run keeps them for a retry,
+      // and the hourly sweep removes anything left after 24 h.
+      const gradeSaved = estimate.overall != null && estimate.overall >= 1;
+      if (gradeSaved) {
+        store.deleteGradeImage(userId, item.inventoryItemId, "front");
+        store.deleteGradeImage(userId, item.inventoryItemId, "back");
+      }
       // Cache only a real 1.0–10.0 number. Retake / unavailable / 0 must re-run.
-      if (photoHash && estimate.overall != null && estimate.overall >= 1) {
+      if (photoHash && gradeSaved) {
         saveGradeEstimateCache(userId, item.inventoryItemId, {
           photoHash,
           estimateJson: JSON.stringify(estimate),

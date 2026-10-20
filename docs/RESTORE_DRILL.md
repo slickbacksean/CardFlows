@@ -56,8 +56,8 @@ On Sean's Mac (not a shared machine): `litestream restore -integrity-check full 
 
 | Copy | Holds deleted users' data for at most |
 |---|---|
-| Litestream (snapshot.retention 2160 h) | 90 days |
-| Nightly DB snapshots | 90 days (`CARD_FLOW_BACKUP_RETENTION_DAYS`) |
+| Litestream (snapshot.retention 336 h) | 14 days |
+| Nightly DB snapshots | 14 days (`CARD_FLOW_BACKUP_RETENTION_DAYS`, max 14) |
 | Photo mirror | ~24 h after local deletion |
 | Railway volume backups (Daily only) | 6 days |
 | `/data/pre-migrate/` (keep 3) | until 3 newer migration deploys; also add a 14-day age prune in `apply-migration.ts` |
