@@ -9,7 +9,7 @@
     "userInterfaceStyle": "dark",
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "app.cardflow.mobile",
+      "bundleIdentifier": "app.pokesniper.mobile",
       "infoPlist": {
         "NSCameraUsageDescription": "PokeSniper uses the camera to photograph your Pok\u00e9mon cards. Photos are uploaded to PokeSniper, and to our card-recognition provider if you allow it, to identify your cards and prepare grade photos.",
         "NSMotionUsageDescription": "PokeSniper uses motion to help you hold your phone level over a card."
@@ -20,7 +20,7 @@
       }
     },
     "android": {
-      "package": "app.cardflow.mobile",
+      "package": "app.pokesniper.mobile",
       "adaptiveIcon": {
         "backgroundColor": "#0B0B0D",
         "foregroundImage": "./assets/images/android-icon-foreground.png",

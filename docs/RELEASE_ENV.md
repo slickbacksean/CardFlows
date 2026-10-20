@@ -58,7 +58,7 @@ Repeat for `preview`, and for `development` if wanted. `apps/mobile/.env.example
 
 ## Sentry
 - **Off without a DSN:** `initMobileSentry()` returns before `require("@sentry/react-native")`. It also returns when Settings > **Send crash reports** is off (off by default; opt-in; turning it off closes the client right away).
-- Dev builds never send (`enabled: !__DEV__`). Events carry `environment` (from `EXPO_PUBLIC_APP_ENV`), `release` (`app.cardflow.mobile@<version>`) and `dist` (build number).
+- Dev builds never send (`enabled: !__DEV__`). Events carry `environment` (from `EXPO_PUBLIC_APP_ENV`), `release` (`app.pokesniper.mobile@<version>`) and `dist` (build number).
 - **Scrubbing:** `sendDefaultPii: false`; no screenshots, view hierarchy, replay, tracing or failed-request capture. `beforeSend` runs `scrubSentryEvent`, which drops:
   - request bodies, cookies, and the `Authorization` and `X-CardFlow-App-Key` headers;
   - emails, IP addresses, bearer tokens, and JWT-like or long base64 blobs, including ones embedded in longer strings;

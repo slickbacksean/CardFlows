@@ -9,7 +9,7 @@ App Review Guideline 4.8 requires Sign in with Apple only when an app offers a t
 
 ## What Sean needs to provide
 1. Apple Developer Program membership.
-2. The **Sign in with Apple** capability on the App ID `app.cardflow.mobile`.
+2. The **Sign in with Apple** capability on the App ID `app.pokesniper.mobile`.
 3. A **Services ID** and a **Sign in with Apple key** (`.p8`, Key ID, Team ID) for the API, so it can verify identity tokens.
 
 ## Plan once unblocked
