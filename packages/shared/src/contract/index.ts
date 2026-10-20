@@ -6,6 +6,7 @@
  */
 import { accountRoutes } from "./account";
 import { catalogRoutes } from "./catalog";
+import { dexRoutes } from "./dex";
 import type { ApiRoute } from "./core";
 import { gradeRoutes } from "./grade";
 import { gradeJobRoutes } from "./grade-jobs";
@@ -23,6 +24,7 @@ export const apiContract = {
   ...healthRoutes,
   ...accountRoutes,
   ...catalogRoutes,
+  ...dexRoutes,
   ...scanRoutes,
   ...inventoryRoutes,
   ...gradeRoutes,

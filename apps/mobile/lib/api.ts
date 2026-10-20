@@ -1168,3 +1168,12 @@ export type InventoryList = InventoryItem[];
 export function postPerfTelemetry(batch: import("@cardflow/shared").PerfBatch) {
   return callApi(apiContract.postPerfTelemetry, { body: batch });
 }
+
+/** MyDEX set view (Sean, Oct 19): catalog art only, owned vs total per set. */
+export function listDexSets() {
+  return callApi(apiContract.listDexSets);
+}
+
+export function getDexSet(setId: string) {
+  return callApi(apiContract.getDexSet, { params: { setId } });
+}

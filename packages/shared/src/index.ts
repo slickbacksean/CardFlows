@@ -888,3 +888,4 @@ export * from "./crash-reports";
 export * from "./english-cards";
 export * from "./multi-card-scan";
 export * from "./scan-quota";
+export * from "./dex";

@@ -1,3 +1,4 @@
+import { buildDexSet, dexOwnedCountsBySet, type DexCatalogCard, type DexSetSummary, type TcgdexSetBrief } from "@cardflow/shared";
 import { createHash, randomBytes, randomInt, timingSafeEqual } from "node:crypto";
 import { emailSenderFromEnv, type EmailSender } from "./email-sender";
 import { cardSightMonthKey, consentState, hasActiveConsent } from "./consent-store";
@@ -2923,6 +2924,74 @@ export function createApp(
     const card = getCanonical(c.req.param("cardflowCardId"));
     if (!card) return c.json({ ok: false, error: "Card not found" }, 404);
     return c.json({ ok: true, canonicalCard: card });
+  });
+
+  // MyDEX set view (Sean, Oct 19): catalog art only, owned = confirmed scan or purchased card.
+  const DEX_CACHE_MS = 24 * 60 * 60 * 1000;
+  const dexSetCardsCache = new Map<string, { at: number; cards: DexCatalogCard[] }>();
+  const dexSetsCache: { at: number; sets: TcgdexSetBrief[] } = { at: 0, sets: [] };
+  async function dexSets(): Promise<TcgdexSetBrief[]> {
+    if (now().getTime() - dexSetsCache.at < DEX_CACHE_MS && dexSetsCache.sets.length > 0) return dexSetsCache.sets;
+    const sets = (await catalog.listSets?.("en")) ?? [];
+    dexSetsCache.at = now().getTime();
+    dexSetsCache.sets = sets;
+    return sets;
+  }
+  async function dexSetCards(setId: string): Promise<DexCatalogCard[]> {
+    const hit = dexSetCardsCache.get(setId);
+    if (hit && now().getTime() - hit.at < DEX_CACHE_MS) return hit.cards;
+    const cards = (await catalog.listSetCards?.(setId, "en")) ?? [];
+    dexSetCardsCache.set(setId, { at: now().getTime(), cards });
+    if (dexSetCardsCache.size > 500) dexSetCardsCache.delete(dexSetCardsCache.keys().next().value as string);
+    return cards;
+  }
+  function dexOwnedIds(userId: string): Set<string> {
+    const owned = new Set<string>();
+    for (const item of listInventory(userId)) {
+      if (item.intent !== "purchased") continue;
+      const id = getCanonical(item.cardflowCardId)?.tcgdexId;
+      if (id) owned.add(id);
+    }
+    for (const scan of listScans(userId)) {
+      const ids = new Set<string>();
+      if (scan.confirmationId) ids.add(scan.confirmationId);
+      for (const row of scan.cardResults ?? []) if (row.confirmationId) ids.add(row.confirmationId);
+      for (const id of ids) {
+        const tcgdexId = getConfirmation(userId, id)?.tcgdexId;
+        if (tcgdexId) owned.add(tcgdexId);
+      }
+    }
+    return owned;
+  }
+
+  app.get("/v1/dex/sets", async (c) => {
+    try {
+      const counts = dexOwnedCountsBySet(dexOwnedIds(c.get("userId")));
+      const sets: DexSetSummary[] = (await dexSets()).map((set) => ({
+        setId: set.id,
+        name: set.name,
+        logo: set.logo ?? null,
+        owned: counts.get(set.id) ?? 0,
+        total: set.cardCount?.total ?? 0,
+      }));
+      return c.json({ ok: true, sets });
+    } catch {
+      return c.json({ ok: false, error: "Couldn't load sets. Try again." }, 502);
+    }
+  });
+
+  app.get("/v1/dex/sets/:setId", async (c) => {
+    const setId = c.req.param("setId");
+    if (!/^[a-zA-Z0-9._-]{1,40}$/.test(setId)) return c.json({ ok: false, error: "Set not found" }, 404);
+    try {
+      const cards = await dexSetCards(setId);
+      if (cards.length === 0) return c.json({ ok: false, error: "Set not found" }, 404);
+      const brief = (await dexSets()).find((set) => set.id === setId);
+      const view = buildDexSet({ setId, name: brief?.name ?? setId, logo: brief?.logo ?? null }, cards, dexOwnedIds(c.get("userId")));
+      return c.json({ ok: true, set: view });
+    } catch {
+      return c.json({ ok: false, error: "Couldn't load this set. Try again." }, 502);
+    }
   });
 
   app.get("/v1/inventory", async (c) => {
