@@ -30,14 +30,14 @@ function readAboutScreen(): string {
 describe("About copy (WIREFRAMES.md §10b)", () => {
   it("matches WIREFRAMES.md §10b without extra guarantees", () => {
     expect(ABOUT_PARAGRAPHS).toEqual([
-      "CardFlow isn't affiliated with or endorsed by Nintendo, The Pokémon Company, or Game Freak.",
+      "PokeSniper isn't affiliated with or endorsed by Nintendo, The Pokémon Company, or Game Freak.",
       "Catalog is TCGdex (via PokéCollector for collection and prices). Capture identify is YOLO OBB + pHash on a still. Livestream is YOLO + card-identity on live video. Grading Prepare may show a photo estimate, not a cert. No marketplace publish.",
       "Catalog images: TCGdex assets (display only). Capture approach: Pokemon-TCGP-Card-Scanner (pipeline only).",
       "PokéCollector AGPL source: https://github.com/Git-Romer/pokecollector",
-      "Layout inspired by collector-app chrome (HoloDex); CardFlow is a separate product.",
+      "Layout inspired by collector-app chrome (HoloDex); PokeSniper is a separate product.",
     ]);
     expect(ABOUT_LEGAL_REVIEW_NOTE).toBe(
-      "Recognition is a provider. CardFlow owns inventory and drafts.",
+      "Recognition is a provider. PokeSniper owns inventory and drafts.",
     );
     expect(ABOUT_PARAGRAPHS.join(" ")).toMatch(/Nintendo/);
     expect(ABOUT_PARAGRAPHS.join(" ")).toMatch(/Pokémon Company/);
@@ -57,10 +57,10 @@ describe("About copy (WIREFRAMES.md §10b)", () => {
     expect(aboutVisibleCopy()).not.toMatch(/anthropic/i);
   });
 
-  it("does not claim CardFlow verified authentic or accuracy", () => {
+  it("does not claim PokeSniper verified authentic or accuracy", () => {
     expect(forbiddenAboutClaim(aboutVisibleCopy())).toBeNull();
     expect(aboutVisibleCopy()).not.toMatch(/CardFlow verified authentic/i);
-    expect(forbiddenAboutClaim("CardFlow verified authentic")).toBe("verified_authentic");
+    expect(forbiddenAboutClaim("PokeSniper verified authentic")).toBe("verified_authentic");
     expect(forbiddenAboutClaim("Industry-leading identification accuracy")).toBe(
       "accuracy_claim",
     );

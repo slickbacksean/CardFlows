@@ -777,7 +777,7 @@ export function createApp(
   const gradeCapacity = async (c: Context, next: () => Promise<void>) => {
     if (gradeGate?.isFull()) {
       c.header("Retry-After", "15");
-      return c.json({ ok: false, error: "CardFlow is busy. Try again in a moment." }, 503);
+      return c.json({ ok: false, error: "PokeSniper is busy. Try again in a moment." }, 503);
     }
     return next();
   };
@@ -802,10 +802,10 @@ export function createApp(
   const gradeUploads = options.gradeUploads ?? defaultGradeUploadCache;
 
   /**
-   * Opaque per-user PokéCollector accounts: every CardFlow user gets their own remote user
+   * Opaque per-user PokéCollector accounts: every PokeSniper user gets their own remote user
    * (`cardflow-u-<HMAC>`), created fresh and never looked up by name or derived from the email or
    * label. Guests are never bound. Legacy (email-derived) links are never used; the relink script
-   * moves them to an opaque user rebuilt from CardFlow's inventory.
+   * moves them to an opaque user rebuilt from PokeSniper's inventory.
    */
   async function bindPokecollectorUser(identity: InvitedIdentity) {
     const userId = identity.userId;
@@ -985,7 +985,7 @@ export function createApp(
       purchasePrice?: string | number | null;
     },
   ) {
-    // Guests are never linked to PokéCollector: their cards stay in CardFlow only.
+    // Guests are never linked to PokéCollector: their cards stay in PokeSniper only.
     if (pokecollectorAccounts.name === "off" || isGuestUserId(userId)) return { ok: true as const };
     try {
       const mapping = await mappedPokecollectorUser(userId);
@@ -1144,7 +1144,7 @@ export function createApp(
     if (!appApiKey || c.get("internalOwner")) return next();
     const presented = c.req.header(APP_API_KEY_HEADER) ?? "";
     if (presented !== appApiKey) {
-      return c.json({ ok: false, error: "CardFlow couldn't authorize that request." }, 401);
+      return c.json({ ok: false, error: "PokeSniper couldn't authorize that request." }, 401);
     }
     return next();
   });
@@ -2169,7 +2169,7 @@ export function createApp(
   });
 
   /**
-   * Backend re-review H1/M1 (P4): what CardFlow stored on PokéCollector is deleted by a
+   * Backend re-review H1/M1 (P4): what PokeSniper stored on PokéCollector is deleted by a
    * background queue (pokecollector-deletion-queue.ts): the remote user ID is queued in the same
    * transaction as the account's rows, retried with backoff, paced under PokéCollector's limits,
    * and the delete response never waits on PokéCollector. Guests and shared remote users are
@@ -2182,7 +2182,7 @@ export function createApp(
     now,
     pacer: options.pokecollectorPacer,
     // Backend final review R3: gave up after the max attempts. Logged (PokéCollector's numeric ID
-    // only, never a CardFlow user ID or email) and alerted.
+    // only, never a PokeSniper user ID or email) and alerted.
     onGaveUp: ({ remoteUserId, attempts, lastResult }) => {
       console.warn(`[pokecollector-deletion] gave up on remote user ${remoteUserId} after ${attempts} attempts (${lastResult})`);
       metrics.recordPokecollectorDeletionFailed();

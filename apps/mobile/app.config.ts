@@ -33,7 +33,7 @@ export const PUBLIC_ENV_VARS: ReadonlyArray<{
   enforced?: true;
 }> = [
   { name: "EXPO_PUBLIC_APP_ENV", purpose: "Profile name (set by eas.json)", profiles: APP_ENVS },
-  { name: "EXPO_PUBLIC_API_URL", purpose: "CardFlow API base URL (required for preview and production)", profiles: APP_ENVS },
+  { name: "EXPO_PUBLIC_API_URL", purpose: "PokeSniper API base URL (required for preview and production)", profiles: APP_ENVS },
   { name: "EXPO_PUBLIC_SENTRY_DSN", purpose: "Sentry crash reports (optional)", profiles: APP_ENVS },
   { name: "EXPO_PUBLIC_POSTHOG_KEY", purpose: "PostHog project key (optional, plus user opt-in)", profiles: APP_ENVS },
   { name: "EXPO_PUBLIC_POSTHOG_HOST", purpose: "PostHog host (default in eas.json base)", profiles: APP_ENVS },

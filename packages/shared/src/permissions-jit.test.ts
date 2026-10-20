@@ -171,7 +171,7 @@ describe("P0-06 just-in-time permissions", () => {
     expect(imagePicker.photosPermission).toBe(false);
     expect(imagePicker.microphonePermission).toBe(false);
     expect(MOTION_USAGE_DESCRIPTION).toBe(
-      "CardFlow uses motion to help you hold your phone level over a card.",
+      "PokeSniper uses motion to help you hold your phone level over a card.",
     );
   });
 

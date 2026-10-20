@@ -1,4 +1,4 @@
-# CardFlow Workflow States
+# PokeSniper Workflow States
 
 **Status:** Spike recommendation for review. **No production state machine code.**  
 **Related:** `CRM_DATA_MODEL.md`, `CRM_LISTING_DRAFT_FIELDS.md`, `MVP_SCOPE.md`, `NON_GOALS.md`.
@@ -15,7 +15,7 @@ The issue’s warehouse-style list is:
 
 `acquired → photographed → priced → drafted → listed → sold → shipped → paid out`
 
-CardFlow MVP **does not publish** to eBay / Whatnot / TCGplayer / Shopify. Several of those states imply a marketplace or payout system that is a **non-goal**. This document splits **MVP** vs **later** and keeps photographed / priced as **flags**, not required sequential gates.
+PokeSniper MVP **does not publish** to eBay / Whatnot / TCGplayer / Shopify. Several of those states imply a marketplace or payout system that is a **non-goal**. This document splits **MVP** vs **later** and keeps photographed / priced as **flags**, not required sequential gates.
 
 ---
 
@@ -89,7 +89,7 @@ Optional **attributes** (not extra required states):
 
 | State | Why later |
 |-------|-----------|
-| `listed` | Automatic (and even assisted) marketplace publication is a non-goal. A text note “I listed this on eBay” is **not** `listed` as a system state. If the founder wants a checkbox, store `intended_channel_note` / `user_marked_externally_listed_at` as a **later** optional field — do not treat it as CardFlow having listed the card. |
+| `listed` | Automatic (and even assisted) marketplace publication is a non-goal. A text note “I listed this on eBay” is **not** `listed` as a system state. If the founder wants a checkbox, store `intended_channel_note` / `user_marked_externally_listed_at` as a **later** optional field — do not treat it as PokeSniper having listed the card. |
 | `sold` | No sold-price feed. Manual “mark sold” is a founder add-on, not required to validate the MVP loop. |
 | `shipped` | Shipping UX and carriers are out of scope. |
 | `paid_out` | Payouts / payment tokens are forbidden in MVP. |

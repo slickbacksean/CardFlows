@@ -1,4 +1,4 @@
-# CardSight API Validation — CardFlow
+# CardSight API Validation — PokeSniper
 
 **Status:** Spike deliverable for review  
 **Scope:** Documentation + fixtures only. No live keys, no live API calls, no production code.  
@@ -9,11 +9,11 @@
 
 ## Purpose
 
-Validate CardSight API feasibility for CardFlow MVP card recognition by:
+Validate CardSight API feasibility for PokeSniper MVP card recognition by:
 
 1. Documenting **Confirmed** facts from public OpenAPI spec and marketing materials.
 2. Identifying **Unconfirmed** gaps requiring vendor clarification before production.
-3. Recording **Assumptions** for CardFlow product decisions and implementation defaults.
+3. Recording **Assumptions** for PokeSniper product decisions and implementation defaults.
 4. Providing typed fixtures for mock provider development and CI.
 
 ---
@@ -24,7 +24,7 @@ Validate CardSight API feasibility for CardFlow MVP card recognition by:
 |-------|---------|
 | **Confirmed** | Documented in CardSight OpenAPI 3.1.0 spec or official SDK README / marketing (as of 2026-09-12). |
 | **Unconfirmed** | Not explicitly documented; requires written vendor answer or updated public docs. |
-| **Assumption** | CardFlow product decision or reasonable default pending vendor/founder guidance. |
+| **Assumption** | PokeSniper product decision or reasonable default pending vendor/founder guidance. |
 
 ---
 
@@ -34,7 +34,7 @@ Validate CardSight API feasibility for CardFlow MVP card recognition by:
 |------|--------|--------|
 | Auth method | **Confirmed** | HTTP header: `X-API-Key: <secret>` (OpenAPI `securitySchemes.apiKey`) |
 | Base URL | **Confirmed** | `https://api.cardsight.ai` (OpenAPI `servers`) |
-| Environment variable | **Assumption** | Use `CARDSIGHT_API_KEY` for CardFlow (SDK uses `CARDSIGHTAI_API_KEY`) |
+| Environment variable | **Assumption** | Use `CARDSIGHT_API_KEY` for PokeSniper (SDK uses `CARDSIGHTAI_API_KEY`) |
 | Key rotation process | **Unconfirmed** | Multi-key support, grace period, revocation SLA unknown |
 | Key scoping | **Unconfirmed** | Are keys scoped to identify-only vs pricing vs catalog? |
 | Compromised key detection | **Unconfirmed** | Monitoring, alerts, audit logs not documented |
@@ -140,7 +140,7 @@ Validate CardSight API feasibility for CardFlow MVP card recognition by:
 
 ## 3. Confidence Bands & Match Levels
 
-| Confidence | Meaning | CardFlow behavior |
+| Confidence | Meaning | PokeSniper behavior |
 |------------|---------|-------------------|
 | **High** | Exact match; single `card.id` | Auto-link to canonical ID if TCGdex mapping succeeds |
 | **Medium** | Likely match; `suggestions[]` present | Show picker with top N candidates + "Search manually" |
@@ -148,7 +148,7 @@ Validate CardSight API feasibility for CardFlow MVP card recognition by:
 | **None** (empty `detections`) | No card detected | Prompt: "No card detected — try better lighting or manual search" |
 
 **Confirmed:** Three-tier confidence from OpenAPI enum.  
-**Assumption:** CardFlow UI/UX thresholds (auto-link vs picker vs manual).
+**Assumption:** PokeSniper UI/UX thresholds (auto-link vs picker vs manual).
 
 ---
 
@@ -160,7 +160,7 @@ Validate CardSight API feasibility for CardFlow MVP card recognition by:
 **Unconfirmed:** Pokémon-specific segment shortnames/IDs to use.
 
 **Question for vendor (see `CARDSIGHT_QUESTIONS_FOR_VENDOR.md` C8):**  
-Which segment should CardFlow pass for Pokémon? e.g. `"pokemon"`, `"pkm"`, UUID?
+Which segment should PokeSniper pass for Pokémon? e.g. `"pokemon"`, `"pkm"`, UUID?
 
 ### 4.2 Language Field
 
@@ -177,9 +177,9 @@ Which segment should CardFlow pass for Pokémon? e.g. `"pokemon"`, `"pkm"`, UUID
 - `GET /v1/identify/list/sets` — list all identifiable sets (free, no quota)
 - `GET /v1/identify/check/set/{set_id}` — check if set is identifiable (free, no quota)
 
-**Use case:** Optionally disable identify button in CardFlow UI for sets not yet supported by CardSight.
+**Use case:** Optionally disable identify button in PokeSniper UI for sets not yet supported by CardSight.
 
-**Assumption:** CardFlow may call these endpoints without consuming monthly identify quota.
+**Assumption:** PokeSniper may call these endpoints without consuming monthly identify quota.
 
 ---
 
@@ -221,7 +221,7 @@ Which segment should CardFlow pass for Pokémon? e.g. `"pokemon"`, `"pkm"`, UUID
 - React Native gRPC-Web feasibility (custom bridge requirements?)
 - Sample client SDKs for mobile
 
-**CardFlow decision:** Live video is **OUT OF MVP**. Feature flag `cardsight_live_video_enabled` must default to `false` unless founder-approved. See `CARDSIGHT_INTEGRATION_RECOMMENDATION.md` section 6.
+**PokeSniper decision:** Live video is **OUT OF MVP**. Feature flag `cardsight_live_video_enabled` must default to `false` unless founder-approved. See `CARDSIGHT_INTEGRATION_RECOMMENDATION.md` section 6.
 
 ---
 
@@ -257,7 +257,7 @@ Which segment should CardFlow pass for Pokémon? e.g. `"pokemon"`, `"pkm"`, UUID
 **Question for vendor (see `CARDSIGHT_QUESTIONS_FOR_VENDOR.md` D14–D16):**  
 Confirm `429` behavior, response shape, and recommended backoff strategy.
 
-**Assumption:** Map `429` → CardFlow `RATE_LIMITED` error code; retry with exponential backoff if `Retry-After` header present.
+**Assumption:** Map `429` → PokeSniper `RATE_LIMITED` error code; retry with exponential backoff if `Retry-After` header present.
 
 ### 8.3 Request Rate (RPS)
 
@@ -293,11 +293,11 @@ Confirm `429` behavior, response shape, and recommended backoff strategy.
 }
 ```
 
-### 9.2 CardFlow Error Mapping (Assumption)
+### 9.2 PokeSniper Error Mapping (Assumption)
 
 See `CARDSIGHT_INTEGRATION_RECOMMENDATION.md` section 7 for full mapping table.
 
-| CardSight HTTP | CardFlow code | Retryable |
+| CardSight HTTP | PokeSniper code | Retryable |
 |----------------|---------------|-----------|
 | `408` | `PROVIDER_TIMEOUT` | Yes |
 | `500`, `503` | `PROVIDER_UNAVAILABLE` | Yes |
@@ -305,7 +305,7 @@ See `CARDSIGHT_INTEGRATION_RECOMMENDATION.md` section 7 for full mapping table.
 | `401` | `PROVIDER_AUTH` | No |
 | `400` | `BAD_REQUEST` | No |
 | `404` | `NOT_FOUND` | No |
-| CardFlow quota exceeded | `QUOTA_EXCEEDED` | No (until reset) |
+| PokeSniper quota exceeded | `QUOTA_EXCEEDED` | No (until reset) |
 | Feature flag off | `FEATURE_DISABLED` | No |
 
 **Never expose vendor error details to mobile client.** Surface user-safe messages; log full vendor responses server-side only.
@@ -321,9 +321,9 @@ See `CARDSIGHT_INTEGRATION_RECOMMENDATION.md` section 7 for full mapping table.
 - Are images used to train ML models? Opt-out available?
 
 **Question for vendor (see `CARDSIGHT_QUESTIONS_FOR_VENDOR.md` E18–E21):**  
-Confirm image retention policy, model training opt-out, and cache retention limits for CardFlow End User Application.
+Confirm image retention policy, model training opt-out, and cache retention limits for PokeSniper End User Application.
 
-**CardFlow assumption:** Never log raw image bytes in CardFlow application logs. HTTPS-only API communication.
+**PokeSniper assumption:** Never log raw image bytes in PokeSniper application logs. HTTPS-only API communication.
 
 ---
 
@@ -377,15 +377,15 @@ See full list in `CARDSIGHT_QUESTIONS_FOR_VENDOR.md`.
 
 ---
 
-## 14. Assumptions (CardFlow Product Decisions)
+## 14. Assumptions (PokeSniper Product Decisions)
 
 1. **Timeout:** 10–15 seconds for identify calls (section 2.1).
 2. **Feature flags:** `cardsight_identify_enabled` (default true in staging), `cardsight_pricing_enabled` (default false), `cardsight_live_video_enabled` (default **false** — Enterprise-only).
-3. **Error mapping:** CardFlow normalized error codes (`PROVIDER_TIMEOUT`, `RATE_LIMITED`, etc.) — see section 9.2.
+3. **Error mapping:** PokeSniper normalized error codes (`PROVIDER_TIMEOUT`, `RATE_LIMITED`, etc.) — see section 9.2.
 4. **Retry logic:** Exponential backoff + jitter for `408`, `5xx`, `429`; never retry `400`, `401` (Integration Recommendation section 5).
 5. **Manual fallback:** Always available; ambiguous matches show picker + "Search manually" (Integration Recommendation section 9).
 6. **Separate pricing provider:** Keep `MarketPricingProvider` decoupled from `CardRecognitionProvider` (Integration Recommendation section 10).
-7. **Canonical IDs:** Prefer internal CardFlow + TCGdex IDs; treat CardSight UUIDs as external refs only (Integration Recommendation section 11).
+7. **Canonical IDs:** Prefer internal PokeSniper + TCGdex IDs; treat CardSight UUIDs as external refs only (Integration Recommendation section 11).
 
 ---
 
@@ -407,7 +407,7 @@ See full list in `CARDSIGHT_QUESTIONS_FOR_VENDOR.md`.
 |------|------------|
 | `429` discrepancy (marketing vs OpenAPI) | Implement `RATE_LIMITED` handler anyway; verify with vendor |
 | Pokémon segment unknown | Ask vendor C8; fall back to segment-less `/v1/identify/card` if needed |
-| Image retention unclear | Ask vendor E18; assume HTTPS-only, never log images in CardFlow |
+| Image retention unclear | Ask vendor E18; assume HTTPS-only, never log images in PokeSniper |
 | Cache retention unknown | Ask vendor E19; conservative: cache identify results ≤24h, pricing ≤1h until confirmed |
 | Live video Enterprise cost | OUT OF MVP; requires founder approval + Enterprise contract |
 | TCGdex mapping gaps | Separate spike (recommended next issue); ambiguous → picker UX |

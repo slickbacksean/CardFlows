@@ -1,6 +1,6 @@
 /**
  * User-owned spreadsheets for pasting into a marketplace.
- * CardFlow does not upload, log in, or publish these rows.
+ * PokeSniper does not upload, log in, or publish these rows.
  */
 
 export interface EbayListingExportRow {

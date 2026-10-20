@@ -7,7 +7,7 @@ import { ensureAccountAgeConfirmed } from "@/lib/age-confirmation";
 import { saveCardSightConsent } from "@/lib/cardsight-consent";
 import { colors, space } from "@/lib/theme";
 
-/** Sean: turn CardSight on or off (withdraw consent). Off means CardFlow's own matcher only. */
+/** Sean: turn CardSight on or off (withdraw consent). Off means PokeSniper's own matcher only. */
 export default function CardRecognitionScreen() {
   const [enabled, setEnabled] = useState(false);
   const [loaded, setLoaded] = useState(false);

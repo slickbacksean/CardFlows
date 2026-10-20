@@ -1,8 +1,8 @@
-/** Client wait for a CardFlow HTTP call. */
+/** Client wait for a PokeSniper HTTP call. */
 export const CARD_FLOW_REQUEST_TIMEOUT_MS = 15_000;
 
 /** Shown when the phone cannot complete the request. */
-export const CARD_FLOW_UNREACHABLE_MESSAGE = "Can't reach CardFlow.";
+export const CARD_FLOW_UNREACHABLE_MESSAGE = "Can't reach PokeSniper.";
 
 const JSON_PARSE_ERROR = /unexpected token|json parse|syntaxerror|unexpected end of (json|input)/i;
 
@@ -20,10 +20,10 @@ export function cardFlowHttpErrorMessage(status: number, serverError?: string | 
   const server = typeof serverError === "string" ? serverError.trim() : "";
   if (server && !JSON_PARSE_ERROR.test(server)) return server;
   if (status === 400) return "That request was not valid.";
-  if (status === 401 || status === 403) return "CardFlow couldn't authorize that request.";
+  if (status === 401 || status === 403) return "PokeSniper couldn't authorize that request.";
   if (status === 404) return "That item was not found.";
-  if (status === 408 || status === 504) return "CardFlow took too long to answer.";
-  if (status === 429) return "CardFlow is busy. Try again in a moment.";
-  if (status >= 500) return "CardFlow couldn't finish that request.";
-  return "CardFlow couldn't finish that request.";
+  if (status === 408 || status === 504) return "PokeSniper took too long to answer.";
+  if (status === 429) return "PokeSniper is busy. Try again in a moment.";
+  if (status >= 500) return "PokeSniper couldn't finish that request.";
+  return "PokeSniper couldn't finish that request.";
 }

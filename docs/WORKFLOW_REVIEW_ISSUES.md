@@ -1,4 +1,4 @@
-# CardFlow workflow review: issues and fixes
+# PokeSniper workflow review: issues and fixes
 
 **Reviewed:** 2026-09-30. Every workflow in `apps/mobile`, `apps/api`, and `packages/shared` was checked against [ROADMAP.md](./ROADMAP.md), [NON_GOALS.md](./NON_GOALS.md), and [WIREFRAMES.md](./WIREFRAMES.md). No code was changed while writing this report.
 
@@ -59,7 +59,7 @@
   - `POST /v1/max-buy`: lines 858-869
   - Draft view: `apps/api/src/listing.ts` line 123
 - **Observed (curl against the test API):**
-  - `POST /v1/inventory/purchased` with `purchasePrice: "abc"` returns **500**. With PokéCollector enabled, the remote copy is written first and the local write then throws, so the remote has a copy that CardFlow doesn't.
+  - `POST /v1/inventory/purchased` with `purchasePrice: "abc"` returns **500**. With PokéCollector enabled, the remote copy is written first and the local write then throws, so the remote has a copy that PokeSniper doesn't.
   - `PATCH /v1/drafts/:id` with `askingPrice: "abc"` returns **500**, but the value is **already saved**. Every later `GET /v1/drafts/:id` also returns **500**, so the draft can't be opened again.
   - `POST /v1/max-buy` with `referencePriceAmount: "abc"` returns **500**.
 - **Expected:** A 400 with a field error, and nothing written locally or remotely.
@@ -227,7 +227,7 @@
   - Network failures show: "Cannot reach the mock API at http://127.0.0.1:3001. Start it with pnpm dev:api."
   - When the API returns a plain-text 500, as it does in P0-2, `response.json()` throws and the user sees a raw JSON parse error.
   - Requests have no timeout.
-- **Expected:** Plain-language messages ("Can't reach CardFlow. Check your connection.") and a bounded wait.
+- **Expected:** Plain-language messages ("Can't reach PokeSniper. Check your connection.") and a bounded wait.
 - **Solution:**
   - Wrap `response.json()` in a try/catch.
   - Map status codes to friendly messages.

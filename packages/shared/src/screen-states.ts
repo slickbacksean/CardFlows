@@ -31,18 +31,18 @@ export const SCREEN_STATE_COPY = {
   stillWorking: "Still working…",
   offlineTitle: "You're offline",
   offlineBody: "Check your connection, then try again.",
-  unreachableTitle: "Can't reach CardFlow",
-  unreachableBody: "Your connection looks fine. CardFlow may be down for a moment. Try again shortly.",
+  unreachableTitle: "Can't reach PokeSniper",
+  unreachableBody: "Your connection looks fine. PokeSniper may be down for a moment. Try again shortly.",
   timeoutTitle: "That took too long",
-  timeoutBody: "CardFlow didn't answer in time. Try again.",
-  busyTitle: "CardFlow is busy",
+  timeoutBody: "PokeSniper didn't answer in time. Try again.",
+  busyTitle: "PokeSniper is busy",
   busyBody: "Too many requests right now. Try again in a moment.",
   serverTitle: "Something went wrong on our end",
   serverBody: "It's not you. Try again in a moment.",
   authTitle: "Sign in again",
   authBody: "Your session ended. Sign in, then try again.",
   signIn: "Sign in",
-  unknownBody: "Try again. If it keeps happening, check Settings for CardFlow's status.",
+  unknownBody: "Try again. If it keeps happening, check Settings for PokeSniper's status.",
   /** Community review: the Livestream page failing never touches the marketplace. */
   livePageMarketplaceNote: "The marketplace itself isn't affected.",
   /** Community review 2: known 403s get their own copy, never server text. */
@@ -91,8 +91,8 @@ export const SCAN_SESSION_ENDED_COPY = "Your session ended. Sign in, then take t
 
 /** UX review P1-6: a failed status check is information, not a user error. */
 export const SETTINGS_STATUS_COPY = {
-  checkFailed: "Couldn't check CardFlow's status. Try again.",
-  retryLabel: "Check CardFlow's status again",
+  checkFailed: "Couldn't check PokeSniper's status. Try again.",
+  retryLabel: "Check PokeSniper's status again",
 } as const;
 
 export type LoadErrorKind =
@@ -246,7 +246,7 @@ export function errorAction(error: unknown, connected: boolean | null = null): E
 }
 
 /**
- * Messages the app may show as-is because CardFlow wrote them for people. Anything else
+ * Messages the app may show as-is because PokeSniper wrote them for people. Anything else
  * (provider text, "Job not found", "Network request failed", JSON or zod output) is never shown.
  */
 const KNOWN_USER_MESSAGES: ReadonlySet<string> = new Set<string>([

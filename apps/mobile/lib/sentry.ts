@@ -24,7 +24,7 @@ function isExpoGo(): boolean {
 function sentryRelease() {
   const config = Constants.expoConfig;
   const version = config?.version ?? "0.0.0";
-  const bundle = config?.ios?.bundleIdentifier ?? config?.android?.package ?? "app.cardflow.mobile";
+  const bundle = config?.ios?.bundleIdentifier ?? config?.android?.package ?? "app.pokesniper.mobile";
   const build = Platform.OS === "ios" ? config?.ios?.buildNumber : config?.android?.versionCode;
   return {
     environment: process.env.EXPO_PUBLIC_APP_ENV?.trim() || "development",

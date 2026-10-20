@@ -1,4 +1,4 @@
-# CardFlow MVP Non-Goals
+# PokeSniper MVP Non-Goals
 
 This document explicitly **defers** the following. They are not MVP deliverables, must not block private beta, and must not be implied in product promises.
 
@@ -16,7 +16,7 @@ This document explicitly **defers** the following. They are not MVP deliverables
 
 ## Automated bids / purchases
 
-**Deferred / disallowed.** CardFlow calculates user-specific **Max Buy** from user-configured rules. It does **not** place bids, win auctions, or complete purchases on any marketplace.
+**Deferred / disallowed.** PokeSniper calculates user-specific **Max Buy** from user-configured rules. It does **not** place bids, win auctions, or complete purchases on any marketplace.
 
 ## Marketplace account automation
 
@@ -24,7 +24,7 @@ This document explicitly **defers** the following. They are not MVP deliverables
 
 ## Automatic eBay listing publication
 
-**Deferred / disallowed.** Users may create a **reviewed listing draft** inside CardFlow. Drafts are not published automatically to eBay or any other marketplace. No listing-publication automation in MVP.
+**Deferred / disallowed.** Users may create a **reviewed listing draft** inside PokeSniper. Drafts are not published automatically to eBay or any other marketplace. No listing-publication automation in MVP.
 
 ## Sports cards
 
@@ -42,7 +42,7 @@ This document explicitly **defers** the following. They are not MVP deliverables
 
 ## Automatic condition grading
 
-**Deferred as an official grade.** CardFlow does not issue PSA/BGS/CGC/TAG certs and must not promise accuracy.
+**Deferred as an official grade.** PokeSniper does not issue PSA/BGS/CGC/TAG certs and must not promise accuracy.
 
 **Founder exception (Grading → Prepare only):** a photo **estimate** (rough grade if submitted) may show on Prepare. It is labeled an estimate, never listing `condition`, never the Returned cert grade. [PokeTrace](https://poketrace.com/) slab market comps stay a **later** reference — not in the app yet. See [TAB_LAYOUT_PLAN.md](./TAB_LAYOUT_PLAN.md) §4a and [GRADING_PREPARE_TASKS.md](./GRADING_PREPARE_TASKS.md). Do not vendor casecomp or tcg-oracle-app.
 
@@ -52,7 +52,7 @@ This document explicitly **defers** the following. They are not MVP deliverables
 
 ## Full marketplace feed recreation
 
-**Deferred.** CardFlow is not rebuilding a complete eBay/Whatnot/TCGPlayer-style marketplace feed inside the app. CRM + optional estimate snapshots ≠ full market recreation.
+**Deferred.** PokeSniper is not rebuilding a complete eBay/Whatnot/TCGPlayer-style marketplace feed inside the app. CRM + optional estimate snapshots ≠ full market recreation.
 
 ## Paid subscription release before beta validation
 

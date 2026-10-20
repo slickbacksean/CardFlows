@@ -14,9 +14,9 @@ describe("D12 sharing with no reward", () => {
   });
   it("card and flip messages carry no referral code, reward or estimate claim", () => {
     const card = shareCardMessage({ name: "Pikachu", number: "58", setName: "Base Set", tcgdexId: "base1-58" });
-    expect(card).toBe("Pikachu #58 · Base Set\nOpen in CardFlow: cardflow://card/base1-58");
+    expect(card).toBe("Pikachu #58 · Base Set\nOpen in PokeSniper: cardflow://card/base1-58");
     const flip = shareFlipMessage({ name: "Pikachu", costCents: 1050, saleCents: 2500, realized: true, tcgdexId: "base1-58" })!;
-    expect(flip).toBe("Pikachu: Bought $10.50 → sold $25.00\nOpen in CardFlow: cardflow://card/base1-58");
+    expect(flip).toBe("Pikachu: Bought $10.50 → sold $25.00\nOpen in PokeSniper: cardflow://card/base1-58");
     for (const text of [card, flip]) {
       expect(text).not.toMatch(BANNED);
       expect(text).not.toMatch(/[?&](ref|r|code|utm_)/);

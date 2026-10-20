@@ -1,4 +1,4 @@
-# Restore drill and real restore (CardFlow API, Railway + Litestream)
+# Restore drill and real restore (PokeSniper API, Railway + Litestream)
 
 Record every drill in `docs/ops/restore-drills.md`. The `/ops/db-stats` steps need the follow-up endpoint (not in this PR yet); until then compare `sqlite3 ... 'SELECT count(*) FROM <table>'` for the main tables by hand.
 

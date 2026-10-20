@@ -7,10 +7,10 @@
  */
 /** Policy Reviewer (P4): exact wording, also in the privacy policy draft. */
 export const POKECOLLECTOR_DELETION_LINE =
-  "If your account was linked to PokéCollector, CardFlow removes the link and deletes the cards and wishlist it stored there. This can take up to 2 weeks, and PokéCollector's own backups may keep a copy for a while.";
+  "If your account was linked to PokéCollector, PokeSniper removes the link and deletes the cards and wishlist it stored there. This can take up to 2 weeks, and PokéCollector's own backups may keep a copy for a while.";
 /** Policy Reviewer (P4): exact wording for the anonymous North Star totals (Backend H2). */
 export const ANONYMOUS_LEDGER_LINE =
-  "CardFlow keeps only anonymous totals that can't identify you. Purchases you made on a marketplace aren't affected.";
+  "PokeSniper keeps only anonymous totals that can't identify you. Purchases you made on a marketplace aren't affected.";
 
 /** Sean (Oct 19): photos are not stored. Shown in the app and used in the privacy policy draft. */
 export const PHOTO_RETENTION_LINE =
@@ -19,7 +19,7 @@ export const PHOTO_RETENTION_LINE =
 export const ACCOUNT_DELETION_COPY = {
   settingsRow: "Delete account",
   title: "Delete your account",
-  intro: "This permanently deletes your CardFlow account and everything in it. It can't be undone.",
+  intro: "This permanently deletes your PokeSniper account and everything in it. It can't be undone.",
   deletes: [
     "Your sign-in, email and password",
     "Every card in MyDEX, your Watchlist and your purchase details",
@@ -42,11 +42,11 @@ export const ACCOUNT_DELETION_COPY = {
   alreadyDeleted: "Your account was already deleted. This phone has been cleared.",
   /** 401: no session any more (not provably deleted). The phone is still cleared. */
   signedOut:
-    "You're signed out, and CardFlow's data on this phone was cleared. If your account still exists, sign in and delete it again.",
+    "You're signed out, and PokeSniper's data on this phone was cleared. If your account still exists, sign in and delete it again.",
   /** Backend review M2: some on-phone data couldn't be cleared. */
   localFailed:
-    "Your account was deleted, but some data on this phone couldn't be cleared. To remove it, delete and reinstall CardFlow.",
-  guestIntro: "This deletes your guest scans and photos from CardFlow now, instead of after 24 hours.",
+    "Your account was deleted, but some data on this phone couldn't be cleared. To remove it, delete and reinstall PokeSniper.",
+  guestIntro: "This deletes your guest scans and photos from PokeSniper now, instead of after 24 hours.",
   confirmPrompt: "Type DELETE to confirm.",
   confirmWord: "DELETE",
   confirmButton: "Delete account",

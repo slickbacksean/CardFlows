@@ -13,7 +13,7 @@ export function AppHeader() {
     <View style={[styles.root, { paddingTop: insets.top }]}>
       <View style={styles.bar}>
         <Text accessibilityRole="header" style={styles.wordmark}>
-          CardFlow
+          PokeSniper
         </Text>
         <View style={styles.actions}>
           <Text accessibilityLabel={`Currency ${LOCKED_DISPLAY_CURRENCY}`} style={styles.usd}>

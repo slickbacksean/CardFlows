@@ -15,7 +15,7 @@ describe("open sign-up rules", () => {
   });
   it("legacy guest helpers retained; app no longer mints guests (Sean, Oct 18)", () => {
     expect(GUEST_SESSION_TTL_MS).toBe(24 * 60 * 60 * 1000);
-    expect(GUEST_SIGNUP_COPY.body).toBe("Create a free account to use CardFlow.");
+    expect(GUEST_SIGNUP_COPY.body).toBe("Create a free account to use PokeSniper.");
   });
 });
 

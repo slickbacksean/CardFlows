@@ -107,7 +107,7 @@ function ReturnedSheetForm({
               </View>
               <Text style={styles.cardLine}>{localId ? `${name} #${localId}` : name}</Text>
               <Text style={styles.body}>
-                You type the cert # and returned grade. CardFlow does not look them up.
+                You type the cert # and returned grade. PokeSniper does not look them up.
               </Text>
 
               <Text style={styles.label}>Cert #</Text>

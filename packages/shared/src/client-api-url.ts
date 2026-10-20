@@ -48,8 +48,8 @@ export class ReleaseApiUrlError extends Error {
 
 /** Shown by the root layout instead of the app when a release build has no usable API URL. */
 export const RELEASE_API_URL_ERROR_COPY = {
-  title: "CardFlow can't connect",
-  body: "This build isn't set up to reach CardFlow's servers. Install the latest version from the App Store or Google Play.",
+  title: "PokeSniper can't connect",
+  body: "This build isn't set up to reach PokeSniper's servers. Install the latest version from the App Store or Google Play.",
 } as const;
 
 /**

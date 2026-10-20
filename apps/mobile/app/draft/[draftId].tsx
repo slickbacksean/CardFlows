@@ -94,7 +94,7 @@ export default function DraftScreen() {
     setAllInTotal((current) => nextAllIn ?? current);
     setReadyNotice(
       next.status === "ready_for_review"
-        ? "Ready for review. CardFlow did not publish this."
+        ? "Ready for review. PokeSniper did not publish this."
         : null,
     );
   }

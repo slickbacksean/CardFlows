@@ -14,11 +14,11 @@
 
 ## Decision
 
-**Use the pokemon-scanner visual pipeline** (OpenCLIP embeddings + ANN index) as CardFlow’s livestream identity model.
+**Use the pokemon-scanner visual pipeline** (OpenCLIP embeddings + ANN index) as PokeSniper’s livestream identity model.
 
 **Do not** use PokéCollector recognition / Gemini for livestream.
 
-CardFlow owns a sidecar under `services/live-identity-openclip/` that:
+PokeSniper owns a sidecar under `services/live-identity-openclip/` that:
 
 1. Builds an English **TCGdex** art index (`tcgdex_id` keys — not pokemontcg.io ids).
 2. Accepts a **card crop JPEG** from in-stream sample buffers (never a page screenshot).

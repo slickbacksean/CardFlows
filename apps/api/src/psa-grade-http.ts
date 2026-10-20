@@ -75,7 +75,7 @@ export interface CreatePsaGradeHttpProviderOptions {
 /**
  * Dual-branch CNN photo estimate via local/sidecar HTTP.
  * Upstream architecture: https://github.com/jshan9078/PSAGradePredictor
- * CardFlow does not vendor that training repo or ship weights.
+ * PokeSniper does not vendor that training repo or ship weights.
  */
 export function createPsaGradeHttpProvider(
   options: CreatePsaGradeHttpProviderOptions,

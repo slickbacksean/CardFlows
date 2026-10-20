@@ -1,10 +1,10 @@
-# CardFlow MVP Success Metrics
+# PokeSniper MVP Success Metrics
 
 Private-beta targets below are **Assumptions pending founder decision**. They are proposed for validation, not claimed as industry benchmarks. Do not treat them as CardSight accuracy claims or marketplace performance guarantees.
 
 ## Activation (first scan + save first card)
 
-**Definition:** A user is **activated** when they complete **at least one** successful scan/photo flow that yields candidate(s) or a clear retry path, **and** they save **at least one** card via **Purchased** or **Watchlist** into CardFlow CRM/inventory.
+**Definition:** A user is **activated** when they complete **at least one** successful scan/photo flow that yields candidate(s) or a clear retry path, **and** they save **at least one** card via **Purchased** or **Watchlist** into PokeSniper CRM/inventory.
 
 **Proposed target:** **≥ 60%** of invited private-beta users activate within their first session (or within 24 hours of first open).  
 **Label:** Assumption pending founder decision.
@@ -13,7 +13,7 @@ Private-beta targets below are **Assumptions pending founder decision**. They ar
 
 ## Scan result success rate
 
-**Definition:** Share of scan/photo attempts where CardSight returns **at least one actionable candidate** that CardFlow can present for TCGdex match and user review (including single-candidate and multi-candidate cases). Failed uploads, hard provider errors, and empty candidate sets count as unsuccessful for this metric.
+**Definition:** Share of scan/photo attempts where CardSight returns **at least one actionable candidate** that PokeSniper can present for TCGdex match and user review (including single-candidate and multi-candidate cases). Failed uploads, hard provider errors, and empty candidate sets count as unsuccessful for this metric.
 
 **Proposed target:** **≥ 70%** of attempts return ≥1 actionable candidate.  
 **Label:** Assumption pending founder decision.
@@ -33,7 +33,7 @@ Private-beta targets below are **Assumptions pending founder decision**. They ar
 
 ## Purchase-to-inventory completion
 
-**Definition:** Share of **Purchased** taps that result in a **complete inventory record** in CardFlow CRM (confirmed card identity + saved purchase entry, including required all-in cost / price snapshot fields as designed).
+**Definition:** Share of **Purchased** taps that result in a **complete inventory record** in PokeSniper CRM (confirmed card identity + saved purchase entry, including required all-in cost / price snapshot fields as designed).
 
 **Proposed target:** **≥ 80%** of Purchased taps complete to inventory.  
 **Label:** Assumption pending founder decision.
@@ -42,7 +42,7 @@ Private-beta targets below are **Assumptions pending founder decision**. They ar
 
 ## Listing-draft completion
 
-**Definition:** Share of inventory-saved cards (Purchased, and optionally Watchlist if drafts are allowed from watchlist — **Assumption**) for which the user creates a **reviewed listing draft** in CardFlow within **14 days** of save. Draft means an in-app draft only; **not** marketplace publication.
+**Definition:** Share of inventory-saved cards (Purchased, and optionally Watchlist if drafts are allowed from watchlist — **Assumption**) for which the user creates a **reviewed listing draft** in PokeSniper within **14 days** of save. Draft means an in-app draft only; **not** marketplace publication.
 
 **Proposed target:** **≥ 40%** of eligible inventory cards get a draft started within 14 days.  
 **Label:** Assumption pending founder decision.
@@ -67,7 +67,7 @@ Private-beta targets below are **Assumptions pending founder decision**. They ar
 
 **Proposed qualitative / survey targets (Assumptions pending founder decision):**
 
-- **≥ 70%** of active testers (e.g. ≥3 sessions) agree CardFlow is **faster** than their prior multi-app workflow.
+- **≥ 70%** of active testers (e.g. ≥3 sessions) agree PokeSniper is **faster** than their prior multi-app workflow.
 - **≥ 10** pieces of actionable written feedback (bugs, confusion points, Max Buy rule requests) collected before monetization discussion.
 - Net promoter or simple “would continue using” score threshold: **Assumption** — founder to set (e.g. ≥50% “yes, weekly”).
 
@@ -75,7 +75,7 @@ Private-beta targets below are **Assumptions pending founder decision**. They ar
 
 ## What data should never be tracked in analytics
 
-CardFlow analytics for product improvement must **not** track or store the following in third-party analytics tools or open telemetry streams:
+PokeSniper analytics for product improvement must **not** track or store the following in third-party analytics tools or open telemetry streams:
 
 1. **Marketplace credentials** — passwords, session tokens, cookies, API keys for eBay/Whatnot/etc. (MVP should not collect these at all.)
 2. **Payment credentials** — full card numbers, bank accounts, payment tokens, CVV.

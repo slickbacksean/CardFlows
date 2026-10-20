@@ -29,8 +29,8 @@ export const EMAIL_VERIFICATION_COPY = {
   fromPregrade: "Almost there. Verify your email to see your pre-grade estimate.",
   promptTitle: "Verify your email first",
   promptBody: "Pre-grade estimates need a verified email.",
-  emailSubject: "Your CardFlow verification code",
-  resetSubject: "Your CardFlow password reset code",
+  emailSubject: "Your PokeSniper verification code",
+  resetSubject: "Your PokeSniper password reset code",
 } as const;
 
 /** UX review P1-8: what verifying unlocks, and where the code went. */
@@ -44,9 +44,9 @@ export function isEmailCode(value: string): boolean {
 }
 
 export function verificationEmailText(code: string): string {
-  return `Your CardFlow verification code is ${code}. It works once and expires in 15 minutes. If you didn't sign up for CardFlow, ignore this email.`;
+  return `Your PokeSniper verification code is ${code}. It works once and expires in 15 minutes. If you didn't sign up for PokeSniper, ignore this email.`;
 }
 
 export function passwordResetEmailText(code: string): string {
-  return `Your CardFlow password reset code is:\n\n${code}\n\nIt works once and expires in 1 hour. If you didn't ask to reset your password, ignore this email.`;
+  return `Your PokeSniper password reset code is:\n\n${code}\n\nIt works once and expires in 1 hour. If you didn't ask to reset your password, ignore this email.`;
 }

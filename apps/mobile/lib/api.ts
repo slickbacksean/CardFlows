@@ -198,7 +198,7 @@ function unreachableError(error: unknown): Error {
   return wrapped;
 }
 
-/** HTTP status of a failed CardFlow call, or null when the server was never reached. */
+/** HTTP status of a failed PokeSniper call, or null when the server was never reached. */
 export function apiErrorStatus(error: unknown): number | null {
   const status = (error as { status?: unknown } | null)?.status;
   return typeof status === "number" ? status : null;
@@ -264,7 +264,7 @@ async function request<T>(
     } catch {
       throw new Error(
         response.ok
-          ? "CardFlow sent an unexpected response."
+          ? "PokeSniper sent an unexpected response."
           : cardFlowHttpErrorMessage(response.status),
       );
     }
@@ -331,7 +331,7 @@ type CallInput<R extends ApiRoute> = {
 };
 
 /**
- * The typed client (P1-01). Every CardFlow API call goes through here: the
+ * The typed client (P1-01). Every PokeSniper API call goes through here: the
  * path, method and response type come from `apiContract` in @cardflow/shared.
  * The response is checked against the contract in development; a mismatch is
  * logged, never thrown, and the original data is returned unchanged.

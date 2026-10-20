@@ -297,7 +297,7 @@ export default function CaptureScreen() {
         <View style={styles.helpCard}>
           <Text style={styles.helpTitle}>Still photo only</Text>
           <Text style={styles.helpBody}>
-            Fill the frame with one or more English raw singles (up to nine). CardFlow does not identify
+            Fill the frame with one or more English raw singles (up to nine). PokeSniper does not identify
             while you hold the camera. Scan does not create inventory.
           </Text>
         </View>

@@ -6,23 +6,23 @@
  */
 /** Sean: permission text names where photos go (CardSight is named in the consent prompt). */
 export const PHOTO_PERMISSION_PURPOSE =
-  "Photos are uploaded to CardFlow, and to our card-recognition provider if you allow it, to identify your cards and prepare grade photos." as const;
+  "Photos are uploaded to PokeSniper, and to our card-recognition provider if you allow it, to identify your cards and prepare grade photos." as const;
 
 export const CAMERA_USAGE_DESCRIPTION =
-  "CardFlow uses the camera to photograph your Pokémon cards. Photos are uploaded to CardFlow, and to our card-recognition provider if you allow it, to identify your cards and prepare grade photos." as const;
+  "PokeSniper uses the camera to photograph your Pokémon cards. Photos are uploaded to PokeSniper, and to our card-recognition provider if you allow it, to identify your cards and prepare grade photos." as const;
 
 export const MOTION_USAGE_DESCRIPTION =
-  "CardFlow uses motion to help you hold your phone level over a card." as const;
+  "PokeSniper uses motion to help you hold your phone level over a card." as const;
 
 export const CAMERA_PREPROMPT_TITLE = "Take a photo of a card" as const;
 export const CAMERA_PREPROMPT_BODY =
-  "CardFlow uses the camera to photograph one English raw single. You can also pick a photo you already took, or search by name." as const;
+  "PokeSniper uses the camera to photograph one English raw single. You can also pick a photo you already took, or search by name." as const;
 export const CAMERA_PREPROMPT_CONTINUE = "Continue" as const;
 export const CAMERA_ALLOW_LABEL = "Allow camera" as const;
 
 export const GRADE_CAMERA_PREPROMPT_TITLE = "Allow camera" as const;
 export const GRADE_CAMERA_PREPROMPT_BODY =
-  "CardFlow takes a still of the card in a 63×88 frame, then finds the crop. You can also choose a library photo." as const;
+  "PokeSniper takes a still of the card in a 63×88 frame, then finds the crop. You can also choose a library photo." as const;
 
 export const CAMERA_DENIED_TITLE = "Camera access is off." as const;
 export const CAMERA_DENIED_BODY =

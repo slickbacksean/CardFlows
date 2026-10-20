@@ -1,6 +1,6 @@
 /**
  * Backend re-review M1 (P4): PokéCollector rate-limits per client IP (slowapi, v1.51): 60
- * requests a minute on every route and 5 logins a minute on /api/auth/login. CardFlow calls from
+ * requests a minute on every route and 5 logins a minute on /api/auth/login. PokeSniper calls from
  * one IP, so background work (the account-deletion queue, the relink script) is paced well under
  * both, leaving room for live traffic: by default 30 requests and 2 logins a minute.
  */

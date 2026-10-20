@@ -1,4 +1,4 @@
-# CardSight Integration Recommendation — CardFlow
+# CardSight Integration Recommendation — PokeSniper
 
 **Status:** Recommendation draft (no live keys; no live API calls).  
 **MVP:** Manual still-image scan → server-side identify → map to canonical IDs / TCGdex.  
@@ -8,7 +8,7 @@
 
 ## 1. Goals
 
-1. Swap-friendly recognition behind a CardFlow interface.  
+1. Swap-friendly recognition behind a PokeSniper interface.  
 2. Never expose CardSight secrets to React Native.  
 3. Prefer internal canonical card IDs; treat vendor UUIDs as external refs only.  
 4. Fail soft: ambiguous → picker; errors → manual search; flags off → manual search.  
@@ -20,7 +20,7 @@
 
 ```
 RN app
-  └─ CardFlow BFF / API (auth'd user)
+  └─ PokeSniper BFF / API (auth'd user)
         ├─ Zod request validation
         ├─ Feature flags + quota gate
         ├─ CardRecognitionProvider  ←── interface
@@ -37,7 +37,7 @@ MarketPricingProvider (separate)
 
 ## 3. TypeScript `CardRecognitionProvider` interface
 
-**Assumption:** Exact package path follows CardFlow monorepo conventions; shape below is the contract to implement.
+**Assumption:** Exact package path follows PokeSniper monorepo conventions; shape below is the contract to implement.
 
 ```typescript
 /** Confidence bands align with CardSight OpenAPI: High|Medium|Low */
@@ -121,7 +121,7 @@ export interface CardRecognitionProvider {
 
 - Base URL: `https://api.cardsight.ai` (**Confirmed**).  
 - Header: `X-API-Key: <secret>` (**Confirmed**).  
-- Env: `CARDSIGHTAI_API_KEY` (SDK convention) **and/or** CardFlow `CARDSIGHT_API_KEY` — pick one in implementation; document in ops runbook.  
+- Env: `CARDSIGHTAI_API_KEY` (SDK convention) **and/or** PokeSniper `CARDSIGHT_API_KEY` — pick one in implementation; document in ops runbook.  
 - Call `POST /v1/identify/card` or `.../{segment}` with multipart field `image`.  
 - Map wire → `CardFlowNormalizedRecognitionResult` (see fixtures).  
 - **Never** log full API keys or raw image bytes to shared logs.
@@ -136,7 +136,7 @@ export interface CardRecognitionProvider {
 
 ## 4. Zod request validation (BFF)
 
-Validate **client → CardFlow** uploads before calling the provider:
+Validate **client → PokeSniper** uploads before calling the provider:
 
 - `mimeType` enum: `image/jpeg` | `image/png` | `image/webp`.  
 - Max size: **20 MB** (**Confirmed** — OpenAPI documents max file size for identify and detect).  
@@ -153,7 +153,7 @@ Validate **client → CardFlow** uploads before calling the provider:
 | Retry | Only idempotent/safe: `408`, `5xx` with exponential backoff + jitter | Assumption |
 | Never retry | `401`, `400` | Assumption |
 | `429` | Map to `RATE_LIMITED`; honor `Retry-After` if present (**Unconfirmed** header) | Marketing vs OpenAPI discrepancy |
-| Quota gate | Check CardFlow usage + tier before paid identify | Assumption |
+| Quota gate | Check PokeSniper usage + tier before paid identify | Assumption |
 | Pre-flight | Prefer free `list/sets` / `check/set` when relevant | Confirmed free per SDK README |
 
 ---
@@ -170,14 +170,14 @@ When identify flag is off → return `FEATURE_DISABLED` and instruct client to u
 
 ---
 
-## 7. Error mapping → CardFlow codes
+## 7. Error mapping → PokeSniper codes
 
-| HTTP / condition | CardFlow `error.code` | `retryable` |
+| HTTP / condition | PokeSniper `error.code` | `retryable` |
 |------------------|----------------------|-------------|
 | 408 | `PROVIDER_TIMEOUT` | true |
 | 500 / 503 | `PROVIDER_UNAVAILABLE` | true |
 | 429 | `RATE_LIMITED` | true (after delay) |
-| CardFlow quota | `QUOTA_EXCEEDED` | false until reset |
+| PokeSniper quota | `QUOTA_EXCEEDED` | false until reset |
 | 401 | `PROVIDER_AUTH` | false |
 | 400 | `BAD_REQUEST` | false |
 | 404 | `NOT_FOUND` | false |
@@ -192,7 +192,7 @@ Surface a short, user-safe `message` to mobile; keep vendor detail in server log
 
 Return only:
 
-- `ok`, CardFlow error code (if any), `processingTimeMs` (optional).  
+- `ok`, PokeSniper error code (if any), `processingTimeMs` (optional).  
 - Detections / candidates: name, set, number, language, confidence, matchLevel.  
 - **Canonical card id** when mapped; else `null` + candidates for picker.  
 - Optional `vendorCardId` as opaque external ref (not required for client caching as identity).
@@ -222,7 +222,7 @@ Do **not** couple pricing into `CardRecognitionProvider`.
 ```typescript
 export interface MarketPricingProvider {
   readonly name: 'cardsight' | 'mock';
-  getPriceByVendorCardId(cardId: string): Promise</* CardFlow price DTO */ unknown>;
+  getPriceByVendorCardId(cardId: string): Promise</* PokeSniper price DTO */ unknown>;
   // bulk ≤100 when using CardSight POST /v1/pricing/
 }
 ```
@@ -239,7 +239,7 @@ Recommended table (sketch):
 
 | Column | Purpose |
 |--------|---------|
-| `canonical_card_id` | CardFlow UUID (PK) |
+| `canonical_card_id` | PokeSniper UUID (PK) |
 | `tcgdex_id` | Official Pokémon catalog id |
 | `cardsight_card_id` | Vendor UUID (nullable until matched) |
 | `cardsight_set_id` | Optional set-level assist |

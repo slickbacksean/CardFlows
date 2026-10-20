@@ -86,7 +86,7 @@ export default function PnlScreen() {
   async function exportCsv() {
     const csv = pnlCsv(rows);
     try {
-      const result = await Share.share({ message: csv, title: "CardFlow P&L" });
+      const result = await Share.share({ message: csv, title: "PokeSniper P&L" });
       if (result.action !== Share.dismissedAction) setNotice(`Shared ${rows.length} cards.`);
     } catch {
       await Clipboard.setStringAsync(csv);

@@ -1,19 +1,19 @@
-# TCGdex Catalog Validation — CardFlow
+# TCGdex Catalog Validation — PokeSniper
 
 **Status:** Spike deliverable for review  
 **Scope:** Documentation + mock fixtures only. No self-hosting, no full-database import, no production tables, no live API keys, no CardSight integration code.  
-**MVP intent:** TCGdex is CardFlow’s official Pokémon TCG catalog/metadata source. CardSight is recognition-only. CardFlow owns CRM, inventory, costs, price snapshots, and listing drafts.  
+**MVP intent:** TCGdex is PokeSniper’s official Pokémon TCG catalog/metadata source. CardSight is recognition-only. PokeSniper owns CRM, inventory, costs, price snapshots, and listing drafts.  
 **Out of this spike:** Self-hosting TCGdex, downloading the full cards-database, production schema migrations, using TCGdex `pricing` as market data, CardSight adapter implementation.
 
 ---
 
 ## Purpose
 
-Validate TCGdex (cards-database + public API/SDKs) as CardFlow’s official English Pokémon catalog by:
+Validate TCGdex (cards-database + public API/SDKs) as PokeSniper’s official English Pokémon catalog by:
 
 1. Documenting **Confirmed** facts from official TCGdex sources only.
 2. Identifying **Unconfirmed** gaps before production catalog code.
-3. Recording **Assumptions** for CardFlow product and mapping defaults.
+3. Recording **Assumptions** for PokeSniper product and mapping defaults.
 4. Providing mock fixtures for mapper, CI, and RN confirm UX — no live keys.
 
 Official sources used (as of 2026-09-12):
@@ -31,19 +31,19 @@ Official sources used (as of 2026-09-12):
 |-------|---------|
 | **Confirmed** | Documented on tcgdex.dev, the official cards-database README/LICENSE, or official SDK pages (as of 2026-09-12). |
 | **Unconfirmed** | Not explicitly documented; do not invent. Requires official docs update or founder/legal decision. |
-| **Assumption** | CardFlow product decision or reasonable default pending founder guidance. |
+| **Assumption** | PokeSniper product decision or reasonable default pending founder guidance. |
 
 ---
 
-## 1. Role in CardFlow
+## 1. Role in PokeSniper
 
 | System | Role | Must not do |
 |--------|------|-------------|
 | **CardSight** | Still-image recognition candidates only | Own inventory IDs; be the catalog of record |
-| **TCGdex** | Official Pokémon card catalog + metadata | Own CRM rows; supply CardFlow market prices |
-| **CardFlow** | Internal card ID, CRM, inventory, purchases, costs, price snapshots, listing drafts | Assume CardSight UUIDs equal TCGdex IDs |
+| **TCGdex** | Official Pokémon card catalog + metadata | Own CRM rows; supply PokeSniper market prices |
+| **PokeSniper** | Internal card ID, CRM, inventory, purchases, costs, price snapshots, listing drafts | Assume CardSight UUIDs equal TCGdex IDs |
 
-**Confirmed architecture decision (CardFlow product docs):** English raw Pokémon singles for MVP. Human confirmation before CRM commit. Pricing provider is a later Validation item and is **not** TCGdex.
+**Confirmed architecture decision (PokeSniper product docs):** English raw Pokémon singles for MVP. Human confirmation before CRM commit. Pricing provider is a later Validation item and is **not** TCGdex.
 
 ---
 
@@ -79,10 +79,10 @@ List endpoints support filtering, sorting, and optional pagination (**Confirmed*
 
 **Confirmed** official SDKs (https://tcgdex.dev/sdks and cards-database README):
 
-| SDK | Package / repo | CardFlow relevance |
+| SDK | Package / repo | PokeSniper relevance |
 |-----|----------------|--------------------|
-| JavaScript / TypeScript | `@tcgdex/sdk` — https://github.com/tcgdex/javascript-sdk | **Recommended for CardFlow BFF** |
-| Python | `tcgdex-sdk` | Not used in MVP (CardFlow is TypeScript) |
+| JavaScript / TypeScript | `@tcgdex/sdk` — https://github.com/tcgdex/javascript-sdk | **Recommended for PokeSniper BFF** |
+| Python | `tcgdex-sdk` | Not used in MVP (PokeSniper is TypeScript) |
 | PHP | tcgdex/php-sdk | Not used in MVP |
 | Java / Kotlin | tcgdex/java-sdk | Not used in MVP |
 
@@ -106,7 +106,7 @@ card.getImageURL('high', 'png');
 card.getImageURL('low', 'webp');
 ```
 
-**Assumption:** CardFlow implements a server-only `TcgdexCatalogAdapter` wrapping `@tcgdex/sdk`. React Native never calls TCGdex directly.
+**Assumption:** PokeSniper implements a server-only `TcgdexCatalogAdapter` wrapping `@tcgdex/sdk`. React Native never calls TCGdex directly.
 
 ### 2.3 GraphQL
 
@@ -154,7 +154,7 @@ Homepage notes completion varies by language (status: https://api.tcgdex.net/sta
 
 **Confirmed:** Language is a **URL / SDK path parameter**, not a field on the Card object. The same TCGdex `id` (e.g. `swsh3-136`) is fetched per language; localized `name` / text change with `{language}`.
 
-**Assumption (MVP):** CardFlow requests `en` only. Non-English CardSight `CARD_LANGUAGE` values do not auto-map; user is sent to manual search or a “not in MVP” path (see `NON_GOALS.md`).
+**Assumption (MVP):** PokeSniper requests `en` only. Non-English CardSight `CARD_LANGUAGE` values do not auto-map; user is sent to manual search or a “not in MVP” path (see `NON_GOALS.md`).
 
 ---
 
@@ -166,9 +166,9 @@ Only fields documented on official reference/REST pages are listed. Do not inven
 
 **Confirmed** Card object (https://tcgdex.dev/reference/card):
 
-| Field | Type | Required | CardFlow use |
+| Field | Type | Required | PokeSniper use |
 |-------|------|----------|--------------|
-| `id` | string | always | External catalog id, e.g. `swsh3-136`, `base1-58`. **Not** CardFlow’s PK. |
+| `id` | string | always | External catalog id, e.g. `swsh3-136`, `base1-58`. **Not** PokeSniper’s PK. |
 | `localId` | string or number | always | Card number within the set (e.g. `"136"`, `"58"`, `"XY95"`). |
 | `name` | string | always | Official localized name. Never the sole match key. |
 | `image` | string | omitted if none | Extension-less assets URL. See §4.5. |
@@ -178,7 +178,7 @@ Only fields documented on official reference/REST pages are listed. Do not inven
 | `set` | SetBrief | always | Set id + name + counts + optional logo/symbol. |
 | `variants` | object | always | Which printings exist. See §4.4. |
 | `boosters` | array | optional | TCG Pocket / booster metadata. Not required for MVP identity. |
-| `pricing` | object | optional | **Must not be used as CardFlow market pricing.** See §8. |
+| `pricing` | object | optional | **Must not be used as PokeSniper market pricing.** See §8. |
 | `updated` | ISO-8601 string | always (reference) | Catalog freshness, not a price snapshot. |
 
 **Confirmed** CardBrief (list endpoints): `id`, `localId`, `name`, optional `image`.
@@ -189,7 +189,7 @@ Only fields documented on official reference/REST pages are listed. Do not inven
 
 **Confirmed from official REST examples** (not all repeated in the property table): `attacks[]`, `weaknesses[]`, `retreat`, `regulationMark`, `legal.standard`, `legal.expanded`. Official examples also include `variants.wPromo` even though the variants table lists `normal`, `reverse`, `holo`, `firstEdition` only.
 
-**Unconfirmed as first-class documented Card fields:** `variants_detailed` (FAQ says it is in development), `abilities`, `resistances`. Do not require them for mapping. Do not persist them as CardFlow identity.
+**Unconfirmed as first-class documented Card fields:** `variants_detailed` (FAQ says it is in development), `abilities`, `resistances`. Do not require them for mapping. Do not persist them as PokeSniper identity.
 
 ### 4.2 Set fields
 
@@ -223,9 +223,9 @@ This is the preferred lookup once language + set + number are known.
 | `variants.firstEdition` | First-edition printing exists |
 
 **Confirmed (examples):** `variants.wPromo` appears on official card JSON examples.  
-**Confirmed (FAQ):** `variants_detailed` is planned to add richer per-variant / marketplace ids. Treat as **not ready** for CardFlow identity or pricing.
+**Confirmed (FAQ):** `variants_detailed` is planned to add richer per-variant / marketplace ids. Treat as **not ready** for PokeSniper identity or pricing.
 
-**Assumption:** TCGdex `id` identifies the catalog card, not each foil/1st-edition printing. CardFlow stores the user-selected printing as an inventory attribute (`selectedVariant`), not as a second catalog PK. Founder decision: see `CARD_ID_MAPPING_PLAN.md`.
+**Assumption:** TCGdex `id` identifies the catalog card, not each foil/1st-edition printing. PokeSniper stores the user-selected printing as an inventory attribute (`selectedVariant`), not as a second catalog PK. Founder decision: see `CARD_ID_MAPPING_PLAN.md`.
 
 ### 4.5 Images
 
@@ -239,7 +239,7 @@ This is the preferred lookup once language + set + number are known.
 - Set logos/symbols: `{url}.{extension}` (no quality segment).
 - SDK helpers: `getImageURL('high' | 'low', 'png' | 'webp' | 'jpg')`.
 
-**Assumption:** Confirm screen uses `high` + `webp`; lists use `low` + `webp`. If `image` is absent, show a CardFlow placeholder — never a CardSight upload as catalog art.
+**Assumption:** Confirm screen uses `high` + `webp`; lists use `low` + `webp`. If `image` is absent, show a PokeSniper placeholder — never a CardSight upload as catalog art.
 
 ---
 
@@ -257,7 +257,7 @@ This is the preferred lookup once language + set + number are known.
 | `null:` / `notnull:` | Presence |
 | `a\|b` | Multiple values on some fields |
 
-**CardFlow mapping rule:** Auto-map only with **strict** filters (`eq:`) on identity fields. Laxist `name=pikachu` is valid for **manual search**, never for silent canonical write.
+**PokeSniper mapping rule:** Auto-map only with **strict** filters (`eq:`) on identity fields. Laxist `name=pikachu` is valid for **manual search**, never for silent canonical write.
 
 Default list sort: `releaseDate > localId > id`. Override with `sort:field` + `sort:order` (`ASC`\|`DESC`).
 
@@ -279,7 +279,7 @@ Default list sort: `releaseDate > localId > id`. Override with `sort:field` + `s
 
 **Unconfirmed:** Exact 5xx shapes, retry-after, public-API SLA, CDN cache headers, whether hosted `assets.tcgdex.net` has separate limits.
 
-**Assumption (CardFlow):** See `TCGDEX_ARCHITECTURE.md` §6 — timeout 5–8s, retry idempotent GET on 5xx, cache catalog JSON, fail soft to manual search / last good cache.
+**Assumption (PokeSniper):** See `TCGDEX_ARCHITECTURE.md` §6 — timeout 5–8s, retry idempotent GET on 5xx, cache catalog JSON, fail soft to manual search / last good cache.
 
 ---
 
@@ -307,11 +307,11 @@ Default list sort: `releaseDate > localId > id`. Override with `sort:field` + `s
 
 **Confirmed:** Card objects may include `pricing.tcgplayer` and `pricing.cardmarket` (reference + FAQ). FAQ states coverage gaps, known wrong marketplace-id matches, and an upcoming `variants_detailed` fix.
 
-**CardFlow rule (this spike + MVP):**
+**PokeSniper rule (this spike + MVP):**
 
 - Do **not** use TCGdex as market pricing data.
 - Do **not** copy `pricing` into price snapshots, Max Buy, or listing drafts.
-- CardFlow price snapshots come only from a later, separately chosen pricing provider (see `PRODUCT_OVERVIEW.md`).
+- PokeSniper price snapshots come only from a later, separately chosen pricing provider (see `PRODUCT_OVERVIEW.md`).
 - Adapters must strip or ignore `pricing` / `variants_detailed[].pricing` if present on the wire.
 
 ---
@@ -321,8 +321,8 @@ Default list sort: `releaseDate > localId > id`. Override with `sort:field` + `s
 | | Public API + official SDK | Self-host (`tcgdex/server`) |
 |--|---------------------------|-----------------------------|
 | MVP | **Recommended** | **Forbidden for now** |
-| Auth | None | CardFlow ops |
-| Catalog freshness | TCGdex-hosted | CardFlow pins a build |
+| Auth | None | PokeSniper ops |
+| Catalog freshness | TCGdex-hosted | PokeSniper pins a build |
 | Ops cost | Low | Docker, workers, updates, assets |
 | Full DB download | Not required | Implied by running the server image / repo |
 
@@ -359,7 +359,7 @@ Set ids used in mapping fixtures (`base1`, `base4`, `lc`) match official public 
 7. No published hard rate limits; cache bulk/repeated reads.
 8. Database + official JS SDK: MIT. Not affiliated with Nintendo / The Pokémon Company.
 9. Self-host path exists (`Dockerfile`, `docker-compose.yml`, `tcgdex/server:edge`:3000) — **not for this spike**.
-10. `pricing` exists on some cards and **must not** feed CardFlow estimates.
+10. `pricing` exists on some cards and **must not** feed PokeSniper estimates.
 
 ---
 
@@ -376,11 +376,11 @@ Set ids used in mapping fixtures (`base1`, `base4`, `lc`) match official public 
 
 ---
 
-## 13. Assumptions (CardFlow)
+## 13. Assumptions (PokeSniper)
 
 1. Server-only adapter; RN never holds a TCGdex client as a hard dependency.
 2. MVP language = `en`. Timeout 5–8s. Cache catalog metadata ≥1h (SDK example) up to 24h.
-3. Internal PK is a CardFlow UUID; TCGdex `id` + language are external refs only.
+3. Internal PK is a PokeSniper UUID; TCGdex `id` + language are external refs only.
 4. Never auto-map on card name alone.
 5. Human confirm before Purchased / Watchlist / CRM write (`PRODUCT_OVERVIEW.md`).
 6. Ignore TCGdex pricing always (`tcgdex_pricing_ignored`).
@@ -403,7 +403,7 @@ Set ids used in mapping fixtures (`base1`, `base4`, `lc`) match official public 
 | Risk | Mitigation |
 |------|------------|
 | CardSight set/number ≠ TCGdex set/`localId` | Composite match + user confirm; never name-only |
-| CardSight UUID ≠ TCGdex `id` | Separate external-ref columns; CardFlow UUID is PK |
+| CardSight UUID ≠ TCGdex `id` | Separate external-ref columns; PokeSniper UUID is PK |
 | Public API outage | Cache; fail to manual search; already-confirmed inventory stays |
 | Missing images | Placeholder; do not substitute user/CardSight photos as catalog art |
 | Accidental use of `pricing` | Adapter strips field; pricing provider remains TBD |
@@ -429,7 +429,7 @@ Set ids used in mapping fixtures (`base1`, `base4`, `lc`) match official public 
 ## Appendix: Related documents
 
 - `TCGDEX_ARCHITECTURE.md` — layering, interfaces, cache/timeout/retry, images
-- `CARD_ID_MAPPING_PLAN.md` — CardFlow IDs, CardSight → TCGdex match rules
+- `CARD_ID_MAPPING_PLAN.md` — PokeSniper IDs, CardSight → TCGdex match rules
 - `TCGDEX_SELF_HOSTING_FUTURE_PLAN.md` — later self-host triggers only
 - `CARDSIGHT_VALIDATION.md` / `CARDSIGHT_INTEGRATION_RECOMMENDATION.md` — recognition provider
 - `PRODUCT_OVERVIEW.md` / `MVP_SCOPE.md` / `NON_GOALS.md`

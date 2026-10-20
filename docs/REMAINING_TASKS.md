@@ -155,7 +155,7 @@ Validate purchase price, shipping, tax, fees, supplies, and reference price befo
 
 **Founder note (2026-10-04):** A second Confirm on an `identity_confirmed` scan returns the existing confirmation. A second Purchased or Watchlist on that confirmation returns the existing row and does not write PokéCollector again. `anotherCopy: true` is the extra copy. `Idempotency-Key` replays that extra copy. Bad purchase, shipping, tax, fees, supplies, reference, and max-buy amounts return 400 before the remote write.
 
-**Done when:** A second Purchased on the same confirmation returns the existing row. A bad price never creates a PokéCollector card that CardFlow does not have.
+**Done when:** A second Purchased on the same confirmation returns the existing row. A bad price never creates a PokéCollector card that PokeSniper does not have.
 
 ### P2-3 — Max Buy factors and Watchlist condition
 
@@ -189,9 +189,9 @@ Manual, after the code change: one purchased copy, front and back, Prepare shows
 
 - [x] Done.
 
-Network errors say “Can’t reach CardFlow,” not “start the mock API.” Map HTTP status codes. `AbortController` around 15 seconds. Dev hint only under `__DEV__`. Root error boundary with “Try again” and a link to Collection. Unknown routes redirect to Collection.
+Network errors say “Can’t reach PokeSniper,” not “start the mock API.” Map HTTP status codes. `AbortController` around 15 seconds. Dev hint only under `__DEV__`. Root error boundary with “Try again” and a link to Collection. Unknown routes redirect to Collection.
 
-**Founder note (2026-10-04):** A failed request says “Can't reach CardFlow.” A non-JSON 500 is mapped to a status message, so it does not surface a JSON parse error. Calls abort at 15 seconds. The dev URL is appended only under `__DEV__`. The root error boundary offers “Try again” and a Collection link. An unknown route redirects to Collection.
+**Founder note (2026-10-04):** A failed request says “Can't reach PokeSniper.” A non-JSON 500 is mapped to a status message, so it does not surface a JSON parse error. Calls abort at 15 seconds. The dev URL is appended only under `__DEV__`. The root error boundary offers “Try again” and a Collection link. An unknown route redirects to Collection.
 
 **Done when:** Airplane mode and a 500 do not surface a JSON parse error. A bad route lands on Collection.
 

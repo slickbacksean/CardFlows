@@ -1,12 +1,12 @@
-# CardFlow User Consent Draft
+# PokeSniper User Consent Draft
 
 **DOCUMENT STATUS: DRAFT — NOT FINAL LEGAL TEXT**
 
 **Date:** 2026-09-12  
 
-> **This is a working draft for counsel and the founder.** It is **not** a privacy policy, **not** terms of use, and **not** legal advice. Do **not** paste this into the App Store, Google Play, or the production app until a qualified attorney revises and approves it. This draft does **not** make CardFlow compliant with Apple, Google, GDPR, CCPA, COPPA, or any vendor contract.
+> **This is a working draft for counsel and the founder.** It is **not** a privacy policy, **not** terms of use, and **not** legal advice. Do **not** paste this into the App Store, Google Play, or the production app until a qualified attorney revises and approves it. This draft does **not** make PokeSniper compliant with Apple, Google, GDPR, CCPA, COPPA, or any vendor contract.
 
-**Known (product):** MVP uses user-selected manual card photos. Selected images may be sent to CardSight through a CardFlow backend.  
+**Known (product):** MVP uses user-selected manual card photos. Selected images may be sent to CardSight through a PokeSniper backend.  
 **Assumption:** Analytics is off until explicitly approved.  
 **Open:** CardSight may use uploaded images to improve its software and train ML/AI (public ToS theme, August 26, 2026). Counsel must decide how strongly this is stated and whether a separate checkbox is required.  
 **Open:** Age minimum, launch countries, and the official privacy-policy URL.
@@ -28,7 +28,7 @@
 
 **Body (draft):**
 
-You choose the photo. CardFlow does not browse your camera roll or photograph a live marketplace show in the background.
+You choose the photo. PokeSniper does not browse your camera roll or photograph a live marketplace show in the background.
 
 The photo you select can be saved with your scan history so you can confirm the card later.
 
@@ -40,11 +40,11 @@ You can skip saving the photo after the scan if you only want a one-time check. 
 
 ## 2. Sending the selected image to CardSight
 
-**Decided (Sean, Oct 17):** a one-time prompt before the first photo is uploaded, with a Settings toggle to withdraw. The shipped text is `CARDSIGHT_CONSENT_COPY` in `packages/shared/src/cardsight-consent.ts`, version `CARDSIGHT_CONSENT_VERSION` (bumped to `2026-10-18.2` for CardMagic grade-crop and the plain-language improve-service line, so earlier answers are asked again). This disclosure is the only place CardFlow copy may say "AI"; estimate copy never does. It is stored on the server with its version and timestamps (`provider_consents`: granted, declined or withdrawn). A "Don't allow" is recorded as a decline, never as a grant. Every grant, decline and withdrawal is also appended to `consent_events`, a history that is never edited; it's deleted with the account. **Only for accounts that confirmed 18+ (Policy Reviewer, Oct 17).** Guest look-around was removed (Sean, Oct 18): every user has an account before using the app. Only photos taken after an account consents go to CardSight. Each account also has a monthly CardSight cap (50 by default; Free plan ops reserve most calls for identify — see `docs/CARDMAGIC.md`). Past it, that user's photos stay on CardFlow's own matcher until the next month. The server checks consent right before calling CardSight. Without consent, CardFlow's own matcher or manual search is used. Changing the wording or CardSight's terms means bumping the version, and everyone is asked again.
+**Decided (Sean, Oct 17):** a one-time prompt before the first photo is uploaded, with a Settings toggle to withdraw. The shipped text is `CARDSIGHT_CONSENT_COPY` in `packages/shared/src/cardsight-consent.ts`, version `CARDSIGHT_CONSENT_VERSION` (bumped to `2026-10-18.2` for CardMagic grade-crop and the plain-language improve-service line, so earlier answers are asked again). This disclosure is the only place PokeSniper copy may say "AI"; estimate copy never does. It is stored on the server with its version and timestamps (`provider_consents`: granted, declined or withdrawn). A "Don't allow" is recorded as a decline, never as a grant. Every grant, decline and withdrawal is also appended to `consent_events`, a history that is never edited; it's deleted with the account. **Only for accounts that confirmed 18+ (Policy Reviewer, Oct 17).** Guest look-around was removed (Sean, Oct 18): every user has an account before using the app. Only photos taken after an account consents go to CardSight. Each account also has a monthly CardSight cap (50 by default; Free plan ops reserve most calls for identify — see `docs/CARDMAGIC.md`). Past it, that user's photos stay on PokeSniper's own matcher until the next month. The server checks consent right before calling CardSight. Without consent, PokeSniper's own matcher or manual search is used. Changing the wording or CardSight's terms means bumping the version, and everyone is asked again.
 
-> **Card recognition.** CardFlow can use CardSight, our card-recognition provider, to identify cards from your photos and to crop and straighten grade photos. If you have confirmed you're 18 or older and allow it, your card photos are sent to CardSight. CardSight may use photos you send to improve its card recognition service. CardSight's terms let it keep these images and use them to train its AI models. Turning this off later stops new uploads but doesn't remove photos CardSight already has. If you don't allow it, CardFlow matches and crops cards on its own servers, or you can search manually. You can change this anytime in Settings.
+> **Card recognition.** PokeSniper can use CardSight, our card-recognition provider, to identify cards from your photos and to crop and straighten grade photos. If you have confirmed you're 18 or older and allow it, your card photos are sent to CardSight. CardSight may use photos you send to improve its card recognition service. CardSight's terms let it keep these images and use them to train its AI models. Turning this off later stops new uploads but doesn't remove photos CardSight already has. If you don't allow it, PokeSniper matches and crops cards on its own servers, or you can search manually. You can change this anytime in Settings.
 >
-> **Settings > Card recognition** (toggle help): When on, card photos are also sent to CardSight, our card-recognition provider, to identify cards and to crop and straighten grade photos. CardSight may use photos you send to improve its card recognition service. CardSight's terms let it keep these images and use them to train its AI models. Turning this off stops new uploads but doesn't remove photos CardSight already has. When off, CardFlow matches cards on its own servers only.
+> **Settings > Card recognition** (toggle help): When on, card photos are also sent to CardSight, our card-recognition provider, to identify cards and to crop and straighten grade photos. CardSight may use photos you send to improve its card recognition service. CardSight's terms let it keep these images and use them to train its AI models. Turning this off stops new uploads but doesn't remove photos CardSight already has. When off, PokeSniper matches cards on its own servers only.
 >
 > Buttons: **Allow CardSight** · **Don't allow**
 
@@ -54,11 +54,11 @@ The earlier per-photo draft below is kept for counsel's reference.
 
 **Body (draft):**
 
-To suggest a match, CardFlow will send **only the photo you selected** to CardSight, a third-party recognition service, through our servers.
+To suggest a match, PokeSniper will send **only the photo you selected** to CardSight, a third-party recognition service, through our servers.
 
-CardSight is not part of CardFlow. We are not affiliated with CardSight, The Pokémon Company, Nintendo, Whatnot, or eBay.
+CardSight is not part of PokeSniper. We are not affiliated with CardSight, The Pokémon Company, Nintendo, Whatnot, or eBay.
 
-CardSight’s terms say they may use data you send to operate and improve their service, including training their machine-learning models. CardFlow cannot promise that CardSight will delete their copy when you delete the scan in CardFlow.
+CardSight’s terms say they may use data you send to operate and improve their service, including training their machine-learning models. PokeSniper cannot promise that CardSight will delete their copy when you delete the scan in PokeSniper.
 
 Suggestions can be wrong. You must confirm the card yourself before you buy, sell, or inventory it.
 
@@ -94,11 +94,11 @@ Your card photos are used only to identify or grade the card and are deleted rig
 
 **Delete a scan**
 
-Delete removes that scan, its saved photo in CardFlow, and the related suggestion history we store.
+Delete removes that scan, its saved photo in PokeSniper, and the related suggestion history we store.
 
 It does not undo a send that already went to CardSight.
 
-**Delete your CardFlow account**
+**Delete your PokeSniper account**
 
 This asks us to delete your account and the data we keep with it (settings, scans, inventory, purchase notes, listing drafts), except records we may need to keep for security, fraud, or law.
 
@@ -110,11 +110,11 @@ Account deletion is not the same as turning the app off or “freezing” the ac
 
 **Privacy policy draft: deleting your account (P4, Policy Reviewer)**
 
-Settings > Delete account deletes your CardFlow account and everything in it right away: your sign-in, email and password, MyDEX, your Watchlist and purchase details, scan history and any card photo not yet deleted, pre-grade estimate history, sales, listing drafts, Max Buy rules, your CardSight choice and your 18+ confirmation.
+Settings > Delete account deletes your PokeSniper account and everything in it right away: your sign-in, email and password, MyDEX, your Watchlist and purchase details, scan history and any card photo not yet deleted, pre-grade estimate history, sales, listing drafts, Max Buy rules, your CardSight choice and your 18+ confirmation.
 
-If your account was linked to PokéCollector, CardFlow removes the link and deletes the cards and wishlist it stored there. This can take up to 2 weeks, and PokéCollector's own backups may keep a copy for a while.
+If your account was linked to PokéCollector, PokeSniper removes the link and deletes the cards and wishlist it stored there. This can take up to 2 weeks, and PokéCollector's own backups may keep a copy for a while.
 
-CardFlow keeps only anonymous totals that can't identify you. Purchases you made on a marketplace aren't affected.
+PokeSniper keeps only anonymous totals that can't identify you. Purchases you made on a marketplace aren't affected.
 
 When you delete your account we keep a one-way scrambled version of your email for 90 days, only to prevent free-allowance resets.
 
@@ -136,7 +136,7 @@ This optional feature would look at **what you choose to analyze** (for example 
 
 It does **not** log into Whatnot or eBay for you, place bids, or complete purchases.
 
-CardFlow must not capture another app’s screen or a live show unless you start this feature, see an on-screen recording indicator, and can stop it at any time.
+PokeSniper must not capture another app’s screen or a live show unless you start this feature, see an on-screen recording indicator, and can stop it at any time.
 
 Marketplace apps have their own rules. Using overlays, bots, or scrapers can violate those rules. This feature will not be turned on until we tell you it is available and you opt in.
 
@@ -160,7 +160,7 @@ Marketplace apps have their own rules. Using overlays, bots, or scrapers can vio
 
 **Privacy policy draft: card-recognition provider (CardSight)**
 
-CardFlow can use **CardSight**, our card-recognition provider, to identify cards from your photos and to crop and straighten grade photos. If you allow it, your card photos are sent to CardSight. CardSight may use photos you send to improve its card recognition service. CardSight's terms let it keep these images and use them to train its AI models. Turning this off later (Settings > Card recognition) stops new uploads but doesn't remove photos CardSight already has, and deleting a scan or your account in CardFlow doesn't delete CardSight's copies. If you don't allow it, CardFlow matches cards on its own servers, or you can search manually. We send CardSight the photo and the fields its API needs, not your email. We record when you allowed or turned this off, and which version of this notice you saw.
+PokeSniper can use **CardSight**, our card-recognition provider, to identify cards from your photos and to crop and straighten grade photos. If you allow it, your card photos are sent to CardSight. CardSight may use photos you send to improve its card recognition service. CardSight's terms let it keep these images and use them to train its AI models. Turning this off later (Settings > Card recognition) stops new uploads but doesn't remove photos CardSight already has, and deleting a scan or your account in PokeSniper doesn't delete CardSight's copies. If you don't allow it, PokeSniper matches cards on its own servers, or you can search manually. We send CardSight the photo and the fields its API needs, not your email. We record when you allowed or turned this off, and which version of this notice you saw.
 
 **Privacy policy draft: email service provider (Resend)**
 
@@ -172,13 +172,13 @@ When you create an account, we email you a 6-digit code to confirm your address.
 
 **Privacy policy draft: analytics service provider**
 
-If you turn on usage analytics, CardFlow sends counts and timings to **PostHog Inc.**, a service provider that processes this data on our behalf and stores it in the **United States**. PostHog briefly receives your device's IP address when events arrive, but we have turned off its location lookup (GeoIP), so no location is derived or stored, and events are not linked to a person profile. We never send photos, card details, prices or anything you type. You can turn analytics off at any time in Settings; events not yet sent are deleted from your phone.
+If you turn on usage analytics, PokeSniper sends counts and timings to **PostHog Inc.**, a service provider that processes this data on our behalf and stores it in the **United States**. PostHog briefly receives your device's IP address when events arrive, but we have turned off its location lookup (GeoIP), so no location is derived or stored, and events are not linked to a person profile. We never send photos, card details, prices or anything you type. You can turn analytics off at any time in Settings; events not yet sent are deleted from your phone.
 
 **Privacy policy draft: crash-report service provider (Sentry)**
 
 We use **Sentry** (Functional Software, Inc.), a service provider that processes crash and error reports on our behalf, to find and fix crashes. A report contains the error and stack trace, the app version, device model and OS version, and a request ID. We remove emails, IP addresses, passwords and sign-in tokens, photos and photo file paths, and the content of your requests before a report is sent. Reports aren't used for advertising or tracking. Crash reports are off by default. You can turn them on in Settings > Send crash reports.
 
-**Performance timings:** when analytics is on, a small sample of scan-step timings, a coarse device class, OS and phone model are also sent to CardFlow's own servers (not to PostHog) to keep scanning fast. The same switch controls this; with it off nothing is sent. Our servers keep only aggregate timings by step and device class; the phone model and OS are not stored.
+**Performance timings:** when analytics is on, a small sample of scan-step timings, a coarse device class, OS and phone model are also sent to PokeSniper's own servers (not to PostHog) to keep scanning fast. The same switch controls this; with it off nothing is sent. Our servers keep only aggregate timings by step and device class; the phone model and OS are not stored.
 
 ---
 
@@ -186,7 +186,7 @@ We use **Sentry** (Functional Software, Inc.), a service provider that processes
 
 **Decided (Sean, Oct 18):** a free account is required before any part of the app. Sign in / sign up is the first screen. Guest look-around (browse-only guests from Oct 17) is removed. The API still accepts `CARD_FLOW_GUEST_BROWSE=true` for legacy/test minting only; production leaves it off, and the mobile app never calls `POST /v1/sessions/guest`.
 
-**Privacy policy draft:** Creating a free CardFlow account is required to use the app. You can delete your account anytime (Settings > Delete account).
+**Privacy policy draft:** Creating a free PokeSniper account is required to use the app. You can delete your account anytime (Settings > Delete account).
 
 **Accounts (open sign-up):** to create an account we collect your email address and a password. We store only a salted, one-way hash of the password (scrypt), never the password itself. Your email is used to sign you in. Deleting your account (Settings) removes your email, password hash, sessions and every record keyed to your account, in one step.
 
@@ -197,7 +197,7 @@ We use **Sentry** (Functional Software, Inc.), a service provider that processes
 Draft list for Settings:
 
 - Manual photo scans: always user-started
-- Use CardSight for card recognition: On / Off (decided: ask once, then this toggle; off = CardFlow's matcher only)
+- Use CardSight for card recognition: On / Off (decided: ask once, then this toggle; off = PokeSniper's matcher only)
 - Save scan photos: On / Off
 - Usage analytics: On / Off (hidden if no SDK)
 - Send crash reports: On / Off (off by default; opt-in; P4)
@@ -213,14 +213,14 @@ Draft list for Settings:
 
 **How it works (`packages/shared/src/age-gate.ts`):**
 - **Sign-up:** a required checkbox, unchecked by default: "I confirm I'm 18 or older." The screen keeps the line "By creating an account, you confirm you're 18 or older and agree to the Terms and Privacy Policy." The server refuses `POST /v1/accounts` without `ageConfirmed18Plus` and stores only `age_attested_at` and the wording version (`age_confirmations`).
-- **Testers and existing accounts:** they confirm once in the app ("I confirm I'm 18 or older.") before any CardSight call. Until then, CardFlow's own matcher is used.
+- **Testers and existing accounts:** they confirm once in the app ("I confirm I'm 18 or older.") before any CardSight call. Until then, PokeSniper's own matcher is used.
 - **CardSight:** called only for an account that has an 18+ confirmation AND current consent.
 - **Accounts only:** guest look-around was removed (Sean, Oct 18). Every user signs up or signs in before using the app.
 - **Under-18 reports:** an ops-only path (`POST /ops/under-18-report`, ops token) turns CardSight off and deletes the account and its data.
 
 **Privacy policy draft: Age**
 
-> CardFlow is intended for people 18 and older. Creating a free account is required to use the app and requires confirming you're 18 or older. We don't knowingly collect personal information from anyone under 18. If you believe someone under 18 has given us information, contact us at [contact email] and we'll delete it.
+> PokeSniper is intended for people 18 and older. Creating a free account is required to use the app and requires confirming you're 18 or older. We don't knowingly collect personal information from anyone under 18. If you believe someone under 18 has given us information, contact us at [contact email] and we'll delete it.
 
 **Counsel notes:**
 - Ask CardSight in writing whether self-attestation (a sign-up checkbox) is acceptable under their under-18 term.

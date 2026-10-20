@@ -10,7 +10,7 @@ import { createPokecollectorPacer, type PokecollectorPacer } from "./pokecollect
  * then daily), so a PokéCollector outage of a few days still ends with the user deleted. Calls
  * are paced well under PokéCollector's per-IP limits (pokecollector-pacer.ts).
  *
- * "hold" rows (shared, guest or legacy remote users) are never deleted here: other CardFlow
+ * "hold" rows (shared, guest or legacy remote users) are never deleted here: other PokeSniper
  * users' cards may be on them. The opaque-accounts relink script freezes them.
  */
 export const POKECOLLECTOR_DELETION_BACKOFF_MS = [
@@ -61,13 +61,13 @@ export interface PokecollectorDeletionQueue {
 export function createPokecollectorDeletionQueue(options: {
   accounts: AccountStore;
   pokecollector: () => PokecollectorAccounts;
-  /** CardFlow users still linked to this remote user (a row is held while any are). */
+  /** PokeSniper users still linked to this remote user (a row is held while any are). */
   linksTo: (remoteUserId: string) => number;
   now?: () => Date;
   pacer?: PokecollectorPacer;
   perRun?: number;
   maxAttempts?: number;
-  /** Called once when a row is marked "failed" (ops alert and log; no CardFlow user data in it). */
+  /** Called once when a row is marked "failed" (ops alert and log; no PokeSniper user data in it). */
   onGaveUp?: (row: { remoteUserId: string; attempts: number; lastResult: string }) => void;
 }): PokecollectorDeletionQueue {
   const now = options.now ?? (() => new Date());
@@ -79,7 +79,7 @@ export function createPokecollectorDeletionQueue(options: {
 
   async function attempt(row: PokecollectorPendingDeletion, result: PokecollectorDeletionRun): Promise<void> {
     if (options.linksTo(row.remoteUserId) > 0) {
-      // Someone was linked to it since: never delete a remote user another CardFlow user uses.
+      // Someone was linked to it since: never delete a remote user another PokeSniper user uses.
       options.accounts.updatePokecollectorDeletion(row.remoteUserId, { mode: "hold", lastResult: "shared" });
       result.held += 1;
       return;
@@ -166,7 +166,7 @@ export interface PokecollectorDeletionCounts {
   maxAttempts: number;
 }
 
-/** R3: counts only (no remote or CardFlow IDs) for /ops/pokecollector-deletions. */
+/** R3: counts only (no remote or PokeSniper IDs) for /ops/pokecollector-deletions. */
 export function pokecollectorDeletionCounts(rows: readonly PokecollectorPendingDeletion[], now: Date): PokecollectorDeletionCounts {
   const pending = rows.filter((r) => r.mode === "delete");
   const stuckBefore = now.getTime() - POKECOLLECTOR_DELETION_STUCK_AFTER_MS;

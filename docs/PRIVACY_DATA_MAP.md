@@ -1,10 +1,10 @@
-# CardFlow Privacy Data Map
+# PokeSniper Privacy Data Map
 
 **Document type:** Founder / legal-security review package  
 **Date:** 2026-09-12  
 **Status:** Draft data map — not a privacy policy and not a legal opinion  
 
-> **This is not legal advice.** This map does not claim CardFlow is GDPR/CCPA/COPPA compliant, or that any vendor is a lawful processor. Retention and deletion rows are **proposals** for counsel and founder to accept, reject, or change.
+> **This is not legal advice.** This map does not claim PokeSniper is GDPR/CCPA/COPPA compliant, or that any vendor is a lawful processor. Retention and deletion rows are **proposals** for counsel and founder to accept, reject, or change.
 
 ---
 
@@ -21,7 +21,7 @@
 Public GitHub product docs (`MVP_SCOPE.md`, `PRODUCT_OVERVIEW.md`, `NON_GOALS.md`) were **not found** (404). This map uses the product brief only.
 
 **Assumption (stack):** Supabase Auth / Postgres / Storage unless later confirmed.  
-**Assumption:** CardSight is called only from a CardFlow backend.  
+**Assumption:** CardSight is called only from a PokeSniper backend.  
 **D7 (Oct 15, 2026):** PostHog cloud is approved for **opt-in** product events only. No SDK is used; the phone posts to PostHog's HTTP batch API. Nothing is sent unless `EXPO_PUBLIC_POSTHOG_KEY` is set **and** the user turns on Settings → Usage analytics (off by default). Events are names plus allow-listed counts and timings (`time_to_confirm_ms`, `ms_since_scan`, `candidate_count`, `rank`, and a fixed `source` set). The distinct ID is a random per-install ID (deleted on opt-out). `$process_person_profile: false`, `$geoip_disable: true`. Never photos, card names or IDs, prices, search text or any typed text. No advertising ID, so no ATT prompt. The App Store privacy label needs updating for "Product interaction, not linked to identity, not used for tracking".  
 **Known (product):** MVP images are user-selected manual photos, not live marketplace capture.
 
@@ -40,7 +40,7 @@ Public GitHub product docs (`MVP_SCOPE.md`, `PRODUCT_OVERVIEW.md`, `NON_GOALS.md
 | **Access permissions** | The account owner; server service role for admin/delete. No other users. |
 | **Retention proposal** | Life of the account, then delete on account-deletion request except records counsel says must be kept (fraud, tax, dispute). |
 | **User deletion behavior** | Delete or irreversibly de-identify the account and foreign-key children. Play User Data (fetched): freezing is **not** deletion; provide in-app **and** web deletion if the app creates accounts. Apple 5.1.1(v): in-app account deletion if accounts exist. |
-| **Sent to CardSight / TCGdex / analytics?** | **CardSight:** should **not** send CardFlow user id/email with the image unless a written need exists (**Open**). **TCGdex:** no (public catalog, no auth). **Analytics:** no until a vendor is approved. |
+| **Sent to CardSight / TCGdex / analytics?** | **CardSight:** should **not** send PokeSniper user id/email with the image unless a written need exists (**Open**). **TCGdex:** no (public catalog, no auth). **Analytics:** no until a vendor is approved. |
 | **Never log?** | **Yes** for raw email in application logs where avoidable. Log opaque user uuid only. Never log auth tokens. |
 
 ### 2. Authentication secrets (passwords, refresh tokens, session cookies)
@@ -135,7 +135,7 @@ Public GitHub product docs (`MVP_SCOPE.md`, `PRODUCT_OVERVIEW.md`, `NON_GOALS.md
 | **Source** | TCGdex API / cards-database (**Known** use: catalog metadata/reference) |
 | **Purpose** | Display names, sets, languages; help the user verify the match |
 | **Storage location** | Short-lived cache and/or references on inventory rows. **Assumption:** not a full local clone unless counsel okays MIT + Pokémon IP issues. |
-| **Access permissions** | Readable by signed-in user for their workflow; not a public CardFlow redistribution API (**Open** if we later expose an API). |
+| **Access permissions** | Readable by signed-in user for their workflow; not a public PokeSniper redistribution API (**Open** if we later expose an API). |
 | **Retention proposal** | Refresh regularly; do not present as official Pokémon data |
 | **User deletion behavior** | Shared catalog cache is not user-personal. User-specific links deleted with inventory. |
 | **Sent to CardSight / TCGdex / analytics?** | **Fetched from** TCGdex. Not sent to CardSight except as needed to resolve an id (**Open**). |
@@ -312,7 +312,7 @@ Same research pass as `RISK_REGISTER.md`. Key privacy-related fetches: CardSight
 
 See `docs/STORE_PRIVACY_LABELS.md` for the App Store / Play answers and the perf-telemetry note.
 
-**Perf timings (`/v1/telemetry/perf`):** optional and opt-in. They're sent only when the analytics switch is on (the same switch as PostHog, off by default), and pending timings are dropped when it's turned off. They go to CardFlow's own API, not PostHog, and are kept as in-memory aggregates only. Store declaration if declared: Diagnostics > Performance Data, not linked, not tracking.
+**Perf timings (`/v1/telemetry/perf`):** optional and opt-in. They're sent only when the analytics switch is on (the same switch as PostHog, off by default), and pending timings are dropped when it's turned off. They go to PokeSniper's own API, not PostHog, and are kept as in-memory aggregates only. Store declaration if declared: Diagnostics > Performance Data, not linked, not tracking.
 
 **Accounts:** `user_accounts` (email, scrypt password hash, created_at). Sessions in `crm_sessions` (legacy guest sessions may still be flagged `is_guest`, 24-hour expiry). Account deletion removes every `user_id` row in one transaction. **Sean, Oct 18:** the app requires a free account; guest look-around is removed and the app never mints `POST /v1/sessions/guest`. Leftover guest rows from earlier builds expire in 24h and are purged by the existing cleanup when that path was enabled; no destructive migration drops guest tables in this change. Ops can later delete stranded `guest_*` user_id rows if any remain.
 
