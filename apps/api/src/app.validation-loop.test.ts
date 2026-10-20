@@ -3,6 +3,8 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
+  AGE_GATE_VERSION,
+  DEFAULT_INVITED_USER_ID,
   createMockPricingProvider,
   healthLeaksSecrets,
   LOCKED_DISPLAY_CURRENCY,
@@ -40,6 +42,7 @@ async function json<T>(
 }
 
 function mockPortsApp(store = createMemoryStore()) {
+  store.ageConfirmations.confirm(DEFAULT_INVITED_USER_ID, AGE_GATE_VERSION, "2026-10-18T00:00:00.000Z");
   return createApp(store, {
     catalog: mockTcgdexCatalogProvider,
     pricing: createMockPricingProvider(),

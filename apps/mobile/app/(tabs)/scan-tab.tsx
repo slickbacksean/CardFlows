@@ -4,6 +4,7 @@ import {
   LIVESTREAM_SCANNER_UNAVAILABLE_DETAIL,
   LIVESTREAM_SCANNER_UNAVAILABLE_MESSAGE,
   type LiveOverlayGuess,
+  type LivestreamAccess,
   type LiveVideoIdentityResult,
   actionErrorMessage,
   purchasedFailureMessage,
@@ -15,9 +16,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { LivestreamBrowser, type LivestreamBrowserHandle } from "@/components/ui/livestream-browser";
+import { LivestreamPaywall } from "@/components/ui/livestream-paywall";
 import { InlineError, ScreenError } from "@/components/ui/screen-state";
 import { ScreenerOverlay } from "@/components/ui/screener-overlay";
-import { undoLivestreamPurchase } from "@/lib/api";
+import { getLivestreamAccess, undoLivestreamPurchase } from "@/lib/api";
 import { cancelQueuedWrite, isQueuedId, runQueueableWrite } from "@/lib/write-queue";
 import { requireAccount } from "@/lib/signup-prompt";
 import {
@@ -50,6 +52,8 @@ export default function ScanTabScreen() {
   const [purchaseError, setPurchaseError] = useState<string | null>(null);
   const [tabFocused, setTabFocused] = useState(true);
   const [liveIdentity, setLiveIdentity] = useState<LiveVideoIdentityResult | null>(null);
+  const [livestreamAccess, setLivestreamAccess] = useState<LivestreamAccess | null>(null);
+  const [paywallDismissed, setPaywallDismissed] = useState(false);
   const browserRef = useRef<LivestreamBrowserHandle>(null);
   const chrome = LIVESTREAM_PLATFORMS[platform];
   const scannerUnavailable = !isLiveVideoNativeAvailable();
@@ -59,7 +63,17 @@ export default function ScanTabScreen() {
   useFocusEffect(
     useCallback(() => {
       setTabFocused(true);
+      let cancelled = false;
+      setPaywallDismissed(false);
+      void getLivestreamAccess()
+        .then((res) => {
+          if (!cancelled) setLivestreamAccess(res.access);
+        })
+        .catch(() => {
+          if (!cancelled) setLivestreamAccess(null);
+        });
       return () => {
+        cancelled = true;
         setTabFocused(false);
         stopLiveVideoIdentify();
         setScannerOn(false);
@@ -117,8 +131,10 @@ export default function ScanTabScreen() {
     }
   }
 
+  const livestreamLocked = livestreamAccess?.state === "locked";
+
   function toggleScanner() {
-    if (scannerUnavailable) return;
+    if (scannerUnavailable || livestreamLocked) return;
     const next = !scannerOn;
     if (next && !requireAccount()) return;
     setScannerOn(next);
@@ -218,7 +234,7 @@ export default function ScanTabScreen() {
                 {pageOn ? "PAGE ON" : "PAGE"}
               </Text>
             </View>
-            {scannerUnavailable ? null : (
+            {scannerUnavailable || livestreamLocked ? null : (
               <Pressable
                 accessibilityHint="Starts live-video identify without taking a screenshot"
                 accessibilityLabel="Scanner"
@@ -245,6 +261,23 @@ export default function ScanTabScreen() {
             />
           ))}
         </View>
+        {livestreamAccess?.state === "trial" ? (
+          <Text accessibilityRole="text" style={styles.trialBanner}>
+            {livestreamAccess.daysLeft === 1
+              ? "Livestream scanner trial: 1 day left"
+              : `Livestream scanner trial: ${livestreamAccess.daysLeft} days left`}
+          </Text>
+        ) : null}
+        {livestreamLocked && !paywallDismissed ? (
+          <View style={styles.lockedCard}>
+            <LivestreamPaywall onDismiss={() => setPaywallDismissed(true)} />
+          </View>
+        ) : null}
+        {livestreamLocked && paywallDismissed ? (
+          <Text accessibilityRole="text" style={styles.trialBanner}>
+            Subscribe to Premium to keep using the livestream scanner.
+          </Text>
+        ) : null}
         {purchaseError ? (
           <View style={styles.purchaseError}>
             <InlineError message={purchaseError} />
@@ -339,6 +372,18 @@ function SegmentButton({ label, selected, onPress }: SegmentButtonProps) {
 }
 
 const styles = StyleSheet.create({
+  trialBanner: {
+    color: colors.muted,
+    fontSize: 13,
+    lineHeight: 18,
+    paddingHorizontal: space.md,
+    paddingBottom: space.xs,
+  },
+  lockedCard: {
+    paddingHorizontal: space.md,
+    paddingBottom: space.sm,
+    gap: space.xs,
+  },
   purchaseError: { paddingHorizontal: space.md, paddingBottom: space.xs },
   safe: { flex: 1, backgroundColor: colors.bg },
   chrome: {

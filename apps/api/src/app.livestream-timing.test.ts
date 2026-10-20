@@ -1,8 +1,15 @@
 import jpeg from "jpeg-js";
 import { describe, expect, it } from "vitest";
+import { AGE_GATE_VERSION, DEFAULT_INVITED_USER_ID } from "@cardflow/shared";
 import { createApp } from "./app";
 import { normalizeIdentityCropQuad } from "./live-identity-openclip";
 import { createMemoryStore } from "./store";
+
+function storeWithAge() {
+  const store = createMemoryStore();
+  store.ageConfirmations.confirm(DEFAULT_INVITED_USER_ID, AGE_GATE_VERSION, "2026-10-18T00:00:00.000Z");
+  return store;
+}
 
 const tinyJpeg = Buffer.from([0xff, 0xd8, 0xff, 0xd9, ...Array(40).fill(9)]).toString("base64");
 const quad = [10, 12, 200, 8, 210, 300, 4, 296];
@@ -53,7 +60,7 @@ describe("livestream timing + crop corners", () => {
 
   it("forwards corners to the sidecar and keeps timing off by default", async () => {
     const seen: Array<number[] | null | undefined> = [];
-    const app = createApp(createMemoryStore(), {
+    const app = createApp(storeWithAge(), {
       liveIdentityOpenclip: fakeOpenclip(seen),
       livestreamTiming: false,
     });
@@ -67,7 +74,7 @@ describe("livestream timing + crop corners", () => {
   });
 
   it("reports per-stage timings and p50/p95 when the debug flag is on", async () => {
-    const app = createApp(createMemoryStore(), {
+    const app = createApp(storeWithAge(), {
       liveIdentityOpenclip: fakeOpenclip([]),
       livestreamTiming: true,
     });
@@ -96,7 +103,7 @@ describe("livestream timing + crop corners", () => {
       },
     };
     const phoneSeen: Array<number[] | null | undefined> = [];
-    const phoneApp = createApp(createMemoryStore(), {
+    const phoneApp = createApp(storeWithAge(), {
       liveVideoObb: () => yolo,
       liveIdentityOpenclip: fakeOpenclip(phoneSeen),
     });
@@ -104,7 +111,7 @@ describe("livestream timing + crop corners", () => {
     expect(phoneSeen).toEqual([quad]);
 
     const yoloSeen: Array<number[] | null | undefined> = [];
-    const yoloApp = createApp(createMemoryStore(), {
+    const yoloApp = createApp(storeWithAge(), {
       liveVideoObb: () => yolo,
       liveIdentityOpenclip: fakeOpenclip(yoloSeen),
     });
