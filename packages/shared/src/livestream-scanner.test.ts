@@ -112,10 +112,14 @@ describe("Livestream in-house browser + scanner control", () => {
     expect(api).not.toContain("cropFromServerYolo ? null");
     expect(liveIdentify).toContain("createLiveCardTracker");
     expect(liveIdentify).toContain("identityCropQuad");
-    expect(liveIdentify).toContain("one vendor/model match per tracked card");
+    expect(liveIdentify).toContain("match per tracked card");
+    expect(liveIdentify).toContain("createLiveIdentityVoter");
+    expect(liveIdentify).toContain("createLiveAnnounceDedupe");
     expect(liveIdentify).not.toContain("if (!yoloFrame && frame)");
     expect(tracker).toContain("same_crop");
     expect(tracker).toContain("already_matched");
+    expect(tracker).toContain("recheckAfterMs");
+    expect(tracker).toContain("maxTracks");
     expect(tracker).not.toContain("reconfirmMs");
     expect(overlay).toContain("HudBubble");
     expect(overlay).toContain("Purchased");

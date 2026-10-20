@@ -10,11 +10,15 @@ export const LIVE_SCAN_STAGES = [
   "serverDecode",
   "warp",
   "embed",
+  // match = search (HNSW) or sidecar wall time when stage breakdown is missing
+  "match",
   "search",
   "orb",
   "phash",
   "sidecar",
   "server",
+  // price = on-demand HUD price lookup (guess endpoint or cache hit)
+  "price",
   "total",
 ] as const;
 

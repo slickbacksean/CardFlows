@@ -144,7 +144,8 @@ describe("Task 9 livestream device QA", () => {
     const overlay = readRepoFile("apps/mobile/components/ui/screener-overlay.tsx");
     expect(liveIdentify).toContain("stabilizeLiveIdentity");
     expect(liveIdentify).toContain("publish(mockFrame);\n  publish(mockFrame);");
-    expect(overlay).toContain("getLiveOverlayGuess");
+    expect(overlay).toContain("getCachedLiveOverlayGuess");
+    expect(overlay).toContain("getLiveIdentityVote");
     expect(overlay).toContain("isStableLiveIdentity");
     expect(overlay).toContain("Live guess · not confirmed");
   });
