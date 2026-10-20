@@ -1,4 +1,4 @@
-import { AGE_GATE_VERSION, BATCH_GRADE_HEADER, EMAIL_UNVERIFIED_CODE, EMAIL_VERIFICATION_COPY, PREMIUM_REQUIRED_CODE, SIGNUP_REQUIRED_CODE, isPremiumFeature, OUT_OF_GRADES_CODE, OUT_OF_FULL_GRADES_CODE, GRADE_FULL_COPY, pregradeFailureMessage, quotaExhaustedMessage, type PremiumFeature, type SignupReason } from "@cardflow/shared";
+import { AGE_GATE_VERSION, TERMS_VERSION, BATCH_GRADE_HEADER, EMAIL_UNVERIFIED_CODE, EMAIL_VERIFICATION_COPY, PREMIUM_REQUIRED_CODE, SIGNUP_REQUIRED_CODE, isPremiumFeature, OUT_OF_GRADES_CODE, OUT_OF_FULL_GRADES_CODE, GRADE_FULL_COPY, pregradeFailureMessage, quotaExhaustedMessage, type PremiumFeature, type SignupReason } from "@cardflow/shared";
 import {
   CARD_FLOW_REQUEST_TIMEOUT_MS,
   cardFlowHttpErrorMessage,
@@ -1075,10 +1075,37 @@ export function confirmEmailVerification(code: string) {
 }
 
 /** Sean (Oct 17): sign-up sends the required 18+ checkbox (never a birth date). */
-export function createAccount(email: string, password: string, ageConfirmed18Plus: boolean) {
+export function createAccount(email: string, password: string, ageConfirmed18Plus: boolean, termsAccepted = false) {
+  const base: { email: string; password: string; ageConfirmed18Plus?: true; ageGateVersion?: string } = ageConfirmed18Plus ? { email, password, ageConfirmed18Plus: true, ageGateVersion: AGE_GATE_VERSION } : { email, password };
+  // Sean (Oct 19): the required Terms of Service + Privacy Policy checkbox.
   return callApi(apiContract.createAccount, {
-    body: ageConfirmed18Plus ? { email, password, ageConfirmed18Plus: true, ageGateVersion: AGE_GATE_VERSION } : { email, password },
+    body: termsAccepted ? { ...base, termsAccepted: true, termsVersion: TERMS_VERSION } : base,
   });
+}
+
+/** Sean (Oct 19): Sign in with Apple / Google. New accounts also send the 18+ and Terms fields. */
+export function signInWithSocialToken(input: {
+  provider: "apple" | "google";
+  idToken: string;
+  nonce?: string;
+  authorizationCode?: string;
+  ageConfirmed18Plus: boolean;
+  termsAccepted: boolean;
+}) {
+  return callApi(apiContract.signInWithSocial, {
+    body: {
+      provider: input.provider,
+      idToken: input.idToken,
+      ...(input.nonce ? { nonce: input.nonce } : {}),
+      ...(input.authorizationCode ? { authorizationCode: input.authorizationCode } : {}),
+      ...(input.ageConfirmed18Plus ? { ageConfirmed18Plus: true as const, ageGateVersion: AGE_GATE_VERSION } : {}),
+      ...(input.termsAccepted ? { termsAccepted: true as const, termsVersion: TERMS_VERSION } : {}),
+    },
+  });
+}
+
+export function getAuthProviders() {
+  return callApi(apiContract.getAuthProviders);
 }
 
 /** Whether this account attested 18+ (needed before any CardSight call). */
@@ -1100,8 +1127,11 @@ export function confirmPasswordReset(token: string, password: string) {
   return callApi(apiContract.confirmPasswordReset, { body: { token, password } });
 }
 
-export function signInWithPassword(email: string, password: string) {
-  return callApi(apiContract.signInWithPassword, { body: { email, password } });
+export function signInWithPassword(email: string, password: string, termsAccepted = false) {
+  // Accounts from before the Terms accept them on their next sign-in (server: terms_required).
+  return callApi(apiContract.signInWithPassword, {
+    body: termsAccepted ? { email, password, termsAccepted: true, termsVersion: TERMS_VERSION } : { email, password },
+  });
 }
 
 /** Legacy API helper. The app never calls this (Sean, Oct 18: free account required). */

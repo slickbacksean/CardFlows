@@ -42,6 +42,10 @@ Repeat for `preview`, and for `development` if wanted. `apps/mobile/.env.example
 | `EXPO_PUBLIC_CARD_FLOW_APP_KEY` | `X-CardFlow-App-Key` header for the API | all | header not sent. It's an abuse speed bump, not a secret; Sentry scrubs the header. |
 | `EXPO_PUBLIC_HUDS_URL` | Livestream HUD helper URL (local tooling) | development, preview (guidance) | platform default |
 | `EXPO_PUBLIC_CARD_FLOW_GRADE_JOBS` | Async pre-grade jobs (`=1`) | all | off |
+| `EXPO_PUBLIC_APPLE_SIGNIN_ENABLED` | `=1` adds the Sign in with Apple entitlement/plugin and shows the button (needs a new build) | all | Apple button hidden, no entitlement |
+| `EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID` | Google sign-in, iOS OAuth client ID (public) | all | Google button hidden on iOS |
+| `EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID` | Google sign-in, Android OAuth client ID (public) | all | Google button hidden on Android |
+| `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID` | Google sign-in, web OAuth client ID (public) | all | Google button hidden on web |
 | `EXPO_PUBLIC_CARD_FLOW_LIVESTREAM_TIMING` | Livestream timing logs (`=1`) | development, preview (**enforced**: a production build fails) | off |
 | `EXPO_PUBLIC_CARD_FLOW_LIVESTREAM_PRICE_SNAPSHOT` | Bulk livestream price snapshot (`=1`) | development, preview (**enforced**: production fails). Default **off** — TCGplayer on-device cache is under Policy review. | off |
 | `EXPO_PUBLIC_CARD_FLOW_LIVESTREAM_TCGPLAYER_LINK` | HUD link-out “See prices on TCGplayer” (`=1`) | all | off |
@@ -243,3 +247,18 @@ Read from the pinned `ghcr.io/git-romer/pokecollector-backend:1.51.0` source (un
   `PUT /api/auth/users/{id}` accepts `{password, is_active}` for freezing, admin
   `GET /api/auth/users` returns `[{id, username, role, is_active}]`, and admin
   `DELETE /api/auth/users/{id}` answers `404 {"detail": "User not found"}` for a missing user.
+
+## Sign in with Apple / Google (API, Sean Oct 19)
+
+| Variable | What it does | Unset means |
+|---|---|---|
+| `CARD_FLOW_APPLE_SIGNIN` | `true` turns on `POST /v1/sessions/social` for Apple | Apple off (button hidden) |
+| `CARD_FLOW_APPLE_AUDIENCES` | Comma list of allowed Apple token audiences | `app.pokesniper.mobile` (add `host.exp.Exponent` only for Expo Go testing) |
+| `CARD_FLOW_GOOGLE_CLIENT_IDS` | Comma list of Google OAuth client IDs (iOS, Android, web) accepted as token audience | Google off (button hidden) |
+
+| `CARD_FLOW_APPLE_TEAM_ID` | Apple Developer Team ID (Apple token exchange + revoke) | Apple stays off |
+| `CARD_FLOW_APPLE_KEY_ID` | Key ID of the Sign in with Apple `.p8` key | Apple stays off |
+| `CARD_FLOW_APPLE_PRIVATE_KEY` | **Secret.** Contents of the `.p8` key (PEM; `\n` escapes allowed). Railway sealed variable. | Apple stays off |
+| `CARD_FLOW_APPLE_CLIENT_ID` | Apple client ID for token exchange/revoke | `app.pokesniper.mobile` |
+
+Apple sign-in is only offered when `CARD_FLOW_APPLE_SIGNIN=true` **and** the three Apple key variables are set, because account deletion must revoke the user's Apple token (App Review 5.1.1(v)). Apple refresh tokens are stored AES-GCM encrypted with a key derived from `CARD_FLOW_SERVER_PEPPER`, and revoked + deleted with the account. Google client IDs are not secrets. Tokens are verified against Apple's and Google's public JWKS.

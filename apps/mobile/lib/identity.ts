@@ -1,5 +1,5 @@
 import { isGuestUserId, type InvitedIdentity } from "@cardflow/shared";
-import { createAccount, getIdentity, listInventory, signInWithPassword } from "./api";
+import { createAccount, getIdentity, listInventory, signInWithPassword, signInWithSocialToken } from "./api";
 import { resetAgeConfirmationCache } from "./age-confirmation";
 import { setDeviceItemIndexOwner } from "./device-item-index";
 import { resetCardSightConsentCache } from "./cardsight-consent";
@@ -21,6 +21,8 @@ interface IdentitySession {
 }
 
 let cachedUserId: string | null = null;
+/** Sean (Oct 19): Apple/Google-only accounts have no password (false from the server). */
+let cachedHasPassword: boolean | undefined;
 let restorePromise: Promise<IdentitySession> | null = null;
 
 type AuthListener = (userId: string | null) => void;
@@ -84,8 +86,24 @@ export async function signUpWithEmail(
   password: string,
   mode: "sign_up" | "sign_in",
   ageConfirmed18Plus = false,
+  termsAccepted = false,
 ): Promise<IdentitySession> {
-  const result = mode === "sign_up" ? await createAccount(email, password, ageConfirmed18Plus) : await signInWithPassword(email, password);
+  const result = mode === "sign_up" ? await createAccount(email, password, ageConfirmed18Plus, termsAccepted) : await signInWithPassword(email, password, termsAccepted);
+  cachedHasPassword = (result as { hasPassword?: boolean }).hasPassword ?? true;
+  return adoptSession(result);
+}
+
+/**
+ * Sean (Oct 19): Sign in with Apple / Google. A first-time sign-in without the 18+ and Terms
+ * checkboxes fails with code `signup_details_required` (no account is created).
+ */
+export async function signInWithSocial(input: Parameters<typeof signInWithSocialToken>[0]): Promise<IdentitySession> {
+  const result = await signInWithSocialToken(input);
+  cachedHasPassword = (result as { hasPassword?: boolean }).hasPassword ?? false;
+  return adoptSession(result);
+}
+
+async function adoptSession(result: Awaited<ReturnType<typeof signInWithPassword>>): Promise<IdentitySession> {
   await persistSessionToken(result.token);
   setSessionToken(result.token);
   const session = { ...toSession(result), emailVerified: result.emailVerified };
@@ -102,7 +120,9 @@ async function restoreIdentitySession(): Promise<IdentitySession> {
   if (stored) {
     setSessionToken(stored);
     try {
-      const restored = toSession(await getIdentity());
+      const raw = await getIdentity();
+      cachedHasPassword = (raw as { hasPassword?: boolean }).hasPassword;
+      const restored = toSession(raw);
       if (restored.identity && isSignedInIdentity(restored.identity)) {
         rememberIdentity(restored.identity);
         return restored;
@@ -122,6 +142,7 @@ async function restoreIdentitySession(): Promise<IdentitySession> {
  * Forget the session on this phone. The next screen is sign in / sign up (no guest session).
  */
 export async function signOutLocally(): Promise<void> {
+  cachedHasPassword = undefined;
   setSessionToken(null);
   await persistSessionToken(null);
   rememberIdentity(null);
@@ -139,6 +160,7 @@ export function isGuestSession(): boolean {
 
 /** Signed-up accounts (`acct_…`) have a password. */
 export function isPasswordAccountSession(): boolean {
+  if (cachedHasPassword === false) return false;
   return typeof cachedUserId === "string" && cachedUserId.startsWith("acct_");
 }
 

@@ -7,7 +7,7 @@ import type { NorthStarWeekTotal } from "@cardflow/shared";
 import type Database from "better-sqlite3";
 import { and, eq, isNull, lte } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
-import { crmSessions, emailVerificationCodes, passwordResetTokens, schema, userAccounts } from "./db/schema";
+import { authIdentities, crmSessions, emailVerificationCodes, passwordResetTokens, schema, userAccounts } from "./db/schema";
 import { serverPepper } from "./server-pepper";
 import { hashSessionToken, mintSessionToken } from "./session";
 
@@ -19,7 +19,15 @@ export interface AccountRecord {
   /** Null until the email is verified (only sign-ups from before #86 deployed are backfilled). */
   emailVerifiedAt?: string | null;
   verificationSends?: number;
+  /** Sean (Oct 19): Terms of Service version accepted at sign-up, and when. */
+  termsVersion?: string | null;
+  termsAcceptedAt?: string | null;
 }
+
+export type SocialProvider = "apple" | "google";
+
+/** Accounts created by Apple/Google sign-in have no password (this never verifies). */
+export const NO_PASSWORD_HASH = "none$social";
 
 /** Wrong guesses allowed per code before it stops working (a new code must be requested). */
 export const EMAIL_CODE_MAX_ATTEMPTS = 5;
@@ -34,7 +42,24 @@ export interface MintedSession {
 
 export interface AccountStore {
   /** Null when the email is already registered. */
-  createAccount(input: { email: string; passwordHash: string; at: string }): AccountRecord | null;
+  createAccount(input: {
+    email: string;
+    passwordHash: string;
+    at: string;
+    terms?: { version: string; acceptedAt: string };
+    /** Apple/Google already verified the email. */
+    emailVerified?: boolean;
+  }): AccountRecord | null;
+  /** Sean (Oct 19): Apple/Google subject → account. */
+  findUserBySocial(provider: SocialProvider, subject: string): string | null;
+  linkSocial(input: { provider: SocialProvider; subject: string; userId: string; email: string | null; at: string }): void;
+  /** Apple refresh token (sealed) for a linked subject. */
+  setSocialRefreshToken(provider: SocialProvider, subject: string, sealed: string): void;
+  /** Sealed refresh tokens for a user's linked identities (Apple revoke on deletion). */
+  listSocialRefreshTokens(userId: string): Array<{ provider: SocialProvider; sealed: string }>;
+  setTermsAcceptance(userId: string, version: string, at: string): void;
+  /** Provider-verified email on an existing account (Apple/Google link). */
+  markEmailVerified(userId: string, at: string): void;
   findByEmail(email: string): AccountRecord | null;
   getAccount(userId: string): AccountRecord | null;
   /** Forgot password: stores a reset token hash (earlier unused tokens for the user are voided). */
@@ -253,11 +278,50 @@ export function createSqliteAccountStore(
     }
   };
   return {
-    createAccount({ email, passwordHash, at }) {
+    createAccount({ email, passwordHash, at, terms, emailVerified }) {
       const normalized = normalizeEmail(email);
-      const record: AccountRecord = { userId: `acct_${crypto.randomUUID()}`, email: normalized, passwordHash, createdAt: at };
+      const record: AccountRecord = {
+        userId: `acct_${crypto.randomUUID()}`,
+        email: normalized,
+        passwordHash,
+        createdAt: at,
+        ...(terms ? { termsVersion: terms.version, termsAcceptedAt: terms.acceptedAt } : {}),
+        ...(emailVerified ? { emailVerifiedAt: at } : {}),
+      };
       const inserted = db.insert(userAccounts).values(record).onConflictDoNothing().run();
-      return inserted.changes === 1 ? record : null;
+      return inserted.changes === 1 ? { termsVersion: null, termsAcceptedAt: null, emailVerifiedAt: null, ...record } : null;
+    },
+    findUserBySocial(provider, subject) {
+      const row = db
+        .select({ userId: authIdentities.userId })
+        .from(authIdentities)
+        .where(and(eq(authIdentities.provider, provider), eq(authIdentities.subject, subject)))
+        .get();
+      return row?.userId ?? null;
+    },
+    linkSocial({ provider, subject, userId, email, at }) {
+      db.insert(authIdentities).values({ provider, subject, userId, email, createdAt: at }).onConflictDoNothing().run();
+    },
+    setSocialRefreshToken(provider, subject, sealed) {
+      db.update(authIdentities)
+        .set({ refreshTokenEnc: sealed })
+        .where(and(eq(authIdentities.provider, provider), eq(authIdentities.subject, subject)))
+        .run();
+    },
+    listSocialRefreshTokens(userId) {
+      return db
+        .select({ provider: authIdentities.provider, sealed: authIdentities.refreshTokenEnc })
+        .from(authIdentities)
+        .where(eq(authIdentities.userId, userId))
+        .all()
+        .filter((r) => r.sealed)
+        .map((r) => ({ provider: r.provider as SocialProvider, sealed: r.sealed! }));
+    },
+    setTermsAcceptance(userId, version, at) {
+      db.update(userAccounts).set({ termsVersion: version, termsAcceptedAt: at }).where(eq(userAccounts.userId, userId)).run();
+    },
+    markEmailVerified(userId, at) {
+      db.update(userAccounts).set({ emailVerifiedAt: at }).where(and(eq(userAccounts.userId, userId), isNull(userAccounts.emailVerifiedAt))).run();
     },
     findByEmail(email) {
       const row = db.select().from(userAccounts).where(eq(userAccounts.email, normalizeEmail(email))).get();

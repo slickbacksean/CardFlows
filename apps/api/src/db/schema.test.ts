@@ -57,6 +57,7 @@ describe("MVP CRM schema", () => {
       "account_deletion_audit",
       "age_confirmations",
       "allowance_tombstones",
+      "auth_identities",
       "card_external_ids",
       "cardflow_cards",
       "cardsight_user_usage",

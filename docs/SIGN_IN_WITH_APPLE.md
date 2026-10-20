@@ -1,6 +1,6 @@
-# Sign in with Apple (P4, stub)
+# Sign in with Apple (P4)
 
-**Status:** not built. `SIGN_IN_WITH_APPLE.enabled = false` in `packages/shared/src/sign-in-with-apple.ts`. No button, no API route (`/v1/sessions/apple` returns 404).
+**Status (Oct 19, 2026):** built behind flags (feat/signin-gate-terms). The app shows the Apple button on iOS only when the API reports Apple on (`GET /v1/auth/providers`), and the API accepts Apple tokens at `POST /v1/sessions/social` only when `CARD_FLOW_APPLE_SIGNIN=true` (audience `app.pokesniper.mobile`, nonce checked). Google sign-in shipped alongside it (App Review 4.8). Token revoke (step 3) is built: the app sends Apple's authorization code, the API exchanges it for a refresh token (AES-GCM sealed in `auth_identities.refresh_token_enc`) and revokes it via `https://appleid.apple.com/auth/revoke` when the account is deleted. Apple is only offered when the key is configured (`CARD_FLOW_APPLE_TEAM_ID`, `CARD_FLOW_APPLE_KEY_ID`, `CARD_FLOW_APPLE_PRIVATE_KEY`; see RELEASE_ENV.md). The app build needs `EXPO_PUBLIC_APPLE_SIGNIN_ENABLED=1` (adds the entitlement; new build). `SIGN_IN_WITH_APPLE.enabled` stays `false` as the default.
 
 **Blocked on:** the Apple Developer account (Sean).
 

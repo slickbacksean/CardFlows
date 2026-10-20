@@ -11,13 +11,22 @@ import {
   type LivestreamAccess,
 } from "@cardflow/shared";
 import { ageConfirmationState, hasAgeConfirmation } from "./age-store";
-import { ageGateEnabledFromEnv, cardMagicIdReserveFromEnv, cardSightMonthlyBudgetFromEnv, CARDSIGHT_GUEST_MONTHLY_CAP, CARDSIGHT_USER_MONTHLY_CAP_DEFAULT } from "./grade-quota-env";
+import { termsGateEnabledFromEnv, ageGateEnabledFromEnv, cardMagicIdReserveFromEnv, cardSightMonthlyBudgetFromEnv, CARDSIGHT_GUEST_MONTHLY_CAP, CARDSIGHT_USER_MONTHLY_CAP_DEFAULT } from "./grade-quota-env";
 import {
   monthStartIso,
   recognitionWithMultiCardMappings,
   scanQuotaForUser,
 } from "./multi-card-scan";
-import { SCAN_QUOTA_COPY } from "@cardflow/shared";
+import { SCAN_QUOTA_COPY, TERMS_COPY, TERMS_REQUIRED_CODE, TERMS_VERSION } from "@cardflow/shared";
+import { NO_PASSWORD_HASH, type SocialProvider } from "./account-store";
+import { appleKeyConfigFromEnv, createAppleTokenClient, openToken, sealToken, type AppleTokenClient } from "./apple-revoke";
+import {
+  createJwksSocialVerifier,
+  socialAuthConfigFromEnv,
+  socialProviderEnabled,
+  type SocialAuthConfig,
+  type SocialTokenVerifier,
+} from "./social-auth";
 import type { CardMagicClient } from "./cardmagic-adapter";
 import { cardMagicCornersToExtraShots, tryCardMagicForGrade, type GradeCropPath } from "./grade-cardmagic";
 import { canCardMagicUseBudget, consumeCardSightBudget } from "./cardsight-budget";
@@ -286,12 +295,15 @@ export function requiresVerifiedEmail(pathName: string): boolean {
 }
 
 function isPublicV1Path(method: string, pathName: string): boolean {
+  // Sean (Oct 19): everything else needs a signed-in account; only sign-in/sign-up is public.
+  if (method === "GET" && pathName === "/v1/auth/providers") return true;
   return (
     method === "POST" &&
     [
       "/v1/sessions",
       "/v1/sessions/guest",
       "/v1/sessions/password",
+      "/v1/sessions/social",
       "/v1/accounts",
       "/v1/password-resets",
       "/v1/password-resets/confirm",
@@ -396,6 +408,10 @@ export interface CreateAppOptions {
    * ageGateEnabledFromEnv).
    */
   ageGate?: boolean;
+  /** Sean (Oct 19): sign-up must accept the Terms of Service. Always on outside tests. */
+  termsGate?: boolean;
+  /** Sign in with Apple / Google (tests inject a verifier; default reads env + provider JWKS). */
+  socialAuth?: { config: SocialAuthConfig; verifier?: SocialTokenVerifier; apple?: AppleTokenClient | null };
   /** Tests: receives the purge so it can run on demand. */
   onUnverifiedPurge?: (run: () => { accountsPurged: number }) => void;
   /** Backend review M1 (P4): orphan sweep interval (0 = off; default 6 h) and a test handle. */
@@ -615,11 +631,10 @@ export function createApp(
   const appApiKey = options.appApiKey === undefined ? appApiKeyFromEnv() : options.appApiKey;
   const devAutoSession = options.devAutoSession ?? resolveDevAutoSession();
   // Guest mode is off with dev auto-session (that already signs everyone in).
-  const guestMode =
-    !devAutoSession &&
-    (options.guestMode ?? process.env.CARD_FLOW_GUEST_BROWSE?.trim().toLowerCase() === "true");
+  // Sean (Oct 19): no guest mode in the app or API. Only legacy tests can still turn it on.
+  const guestMode = !devAutoSession && options.guestMode === true;
   if (options.guestMode === undefined && process.env.CARD_FLOW_GUEST_SCANS?.trim()) {
-    console.warn("[guest] CARD_FLOW_GUEST_SCANS is ignored (no guest scans). Guest minting stays off unless CARD_FLOW_GUEST_BROWSE=true (app no longer uses guests).");
+    console.warn("[guest] CARD_FLOW_GUEST_SCANS is ignored (no guest scans). Guest mode is removed (Sean, Oct 19).");
   }
   const guestMintsPerHour = options.guestMintsPerHour ?? 10;
   /** Scan Idempotency-Key -> first scan ID (body hash, in-flight, 24 h). */
@@ -1314,6 +1329,22 @@ export function createApp(
   // Sean (Oct 17): accounts are 18+, stated at sign-up (no birth date). Guests state nothing,
   // so they never get CardSight (see the scan route).
   const ageGate = options.ageGate ?? ageGateEnabledFromEnv();
+  const termsGate = options.termsGate ?? termsGateEnabledFromEnv();
+  const termsRequired = (c: Context) =>
+    c.json({ ok: false, error: TERMS_REQUIRED_CODE, message: TERMS_COPY.required }, 400);
+  const termsAcceptedIn = (body: Record<string, unknown>) => body.termsAccepted === true && body.termsVersion === TERMS_VERSION;
+  /**
+   * Accounts from before the Terms (or an older version) accept them on their next sign-in:
+   * null = OK (recorded now if accepted in this request), otherwise the terms_required answer.
+   */
+  const termsGateForSignIn = (c: Context, account: { userId: string; termsVersion?: string | null }, body: Record<string, unknown>) => {
+    if (!termsGate || account.termsVersion === TERMS_VERSION) return null;
+    if (termsAcceptedIn(body)) {
+      store.accounts.setTermsAcceptance(account.userId, TERMS_VERSION, now().toISOString());
+      return null;
+    }
+    return termsRequired(c);
+  };
   const ageRequired = (c: Context) =>
     c.json({ ok: false, error: AGE_CONFIRMATION_REQUIRED_CODE, message: AGE_GATE_COPY.required }, 400);
 
@@ -1938,8 +1969,18 @@ export function createApp(
     const signUpBody = await c.req.json<Record<string, unknown>>().catch(() => ({}) as Record<string, unknown>);
     const bodyConfirmed = signUpBody.ageConfirmed18Plus === true && signUpBody.ageGateVersion === AGE_GATE_VERSION;
     if (ageGate && !bodyConfirmed) return ageRequired(c);
+    const termsAccepted = termsAcceptedIn(signUpBody);
+    const existingForEmail = store.accounts.findByEmail(email);
+    // A new account must accept the Terms (an existing email just signs in below).
+    if (termsGate && !termsAccepted && !existingForEmail) return termsRequired(c);
     const passwordHash = await hashPassword(password);
-    const created = store.accounts.createAccount({ email, passwordHash, at: now().toISOString() });
+    const signUpAt = now().toISOString();
+    const created = store.accounts.createAccount({
+      email,
+      passwordHash,
+      at: signUpAt,
+      ...(termsAccepted ? { terms: { version: TERMS_VERSION, acceptedAt: signUpAt } } : {}),
+    });
     let account = created;
     if (!account) {
       // Email already registered: the right password signs in; anything else gets one generic answer.
@@ -1947,6 +1988,8 @@ export function createApp(
       if (!existing || !(await verifyPassword(password, existing.passwordHash))) {
         return c.json({ ok: false, error: ACCOUNT_AUTH_COPY.signUpFailed }, 400);
       }
+      const needTerms = termsGateForSignIn(c, existing, signUpBody);
+      if (needTerms) return needTerms;
       account = existing;
     }
     if (created) {
@@ -1977,6 +2020,122 @@ export function createApp(
     });
   });
 
+  // Sean (Oct 19): Sign in with Apple / Google. Each is off until configured (see social-auth.ts).
+  const socialConfig = options.socialAuth?.config ?? socialAuthConfigFromEnv();
+  const socialVerifier = options.socialAuth?.verifier ?? createJwksSocialVerifier(socialConfig);
+  // Apple is offered only with the key that lets account deletion revoke the Apple token.
+  const appleTokens: AppleTokenClient | null = options.socialAuth
+    ? (options.socialAuth.apple ?? null)
+    : (() => {
+        const cfg = appleKeyConfigFromEnv();
+        return cfg ? createAppleTokenClient(cfg) : null;
+      })();
+  const providerOn = (p: SocialProvider) => socialProviderEnabled(socialConfig, p) && (p !== "apple" || appleTokens !== null);
+  if (socialProviderEnabled(socialConfig, "apple") && !appleTokens) {
+    console.warn("[auth] CARD_FLOW_APPLE_SIGNIN is on but the Apple key (TEAM_ID/KEY_ID/PRIVATE_KEY) is missing: Apple sign-in stays off.");
+  }
+  /** Fire-and-forget: revoke Apple tokens before the rows go (App Review 5.1.1(v)). */
+  const revokeSocialTokens = (userId: string) => {
+    if (!appleTokens) return;
+    for (const { provider, sealed } of store.accounts.listSocialRefreshTokens(userId)) {
+      const token = provider === "apple" ? openToken(sealed) : null;
+      if (token) void appleTokens.revoke(token).catch((err) => console.warn("[auth] Apple revoke failed", String(err)));
+    }
+  };
+  app.get("/v1/auth/providers", (c) =>
+    c.json({
+      ok: true as const,
+      apple: providerOn("apple"),
+      google: providerOn("google"),
+    }),
+  );
+  app.post("/v1/sessions/social", async (c) => {
+    const ip = clientIp(c, trustProxyHops, socketAddress) ?? "unknown";
+    if (overLimit(`social-ip:${ip}`, authLimits.signupPerIp, 60 * 60 * 1000)) return tooMany(c);
+    const body = await c.req.json<Record<string, unknown>>().catch(() => ({}) as Record<string, unknown>);
+    const provider = body.provider === "apple" || body.provider === "google" ? (body.provider as SocialProvider) : null;
+    const idToken = typeof body.idToken === "string" ? body.idToken : "";
+    if (!provider || !idToken) return c.json({ ok: false, error: "Bad request" }, 400);
+    if (!providerOn(provider)) return c.json({ ok: false, error: "Not found" }, 404);
+    let verified;
+    try {
+      verified = await socialVerifier({ provider, idToken, nonce: typeof body.nonce === "string" ? body.nonce : null });
+    } catch {
+      return c.json({ ok: false, error: ACCOUNT_AUTH_COPY.signInFailed }, 401);
+    }
+    const at = now().toISOString();
+    const storeAppleCode = async () => {
+      const code = typeof body.authorizationCode === "string" ? body.authorizationCode : "";
+      if (provider !== "apple" || !code || !appleTokens) return;
+      const refresh = await appleTokens.exchangeCode(code).catch(() => null);
+      if (refresh) store.accounts.setSocialRefreshToken("apple", verified.subject, sealToken(refresh));
+    };
+    const finish = async (account: { userId: string; email: string }, created: boolean) => {
+      await storeAppleCode();
+      const session = accountSession(account);
+      const fresh = store.accounts.getAccount(account.userId);
+      return c.json({
+        ok: true as const,
+        ...session,
+        invitedUsers: [session.identity],
+        movedScans: 0,
+        emailVerified: isUserEmailVerified(account.userId),
+        hasPassword: Boolean(fresh && fresh.passwordHash !== NO_PASSWORD_HASH),
+        created,
+      });
+    };
+    // 1) Already linked: sign in.
+    const linkedUserId = store.accounts.findUserBySocial(provider, verified.subject);
+    if (linkedUserId) {
+      const account = store.accounts.getAccount(linkedUserId);
+      if (!account) return c.json({ ok: false, error: ACCOUNT_AUTH_COPY.signInFailed }, 401);
+      const needTerms = termsGateForSignIn(c, account, body);
+      if (needTerms) return needTerms;
+      return finish(account, false);
+    }
+    // Linking or creating needs an email the provider verified.
+    const email = verified.email?.trim().toLowerCase() ?? "";
+    if (!verified.emailVerified || !isValidEmail(email)) {
+      return c.json({ ok: false, code: "email_unverified", error: ACCOUNT_AUTH_COPY.signInFailed }, 401);
+    }
+    // 2) Existing account with this verified email: link and sign in.
+    const existing = store.accounts.findByEmail(email);
+    if (existing) {
+      const needTerms = termsGateForSignIn(c, existing, body);
+      if (needTerms) return needTerms;
+      if (!isUserEmailVerified(existing.userId)) {
+        // Mobile Tech Lead (PR 113): an unverified email/password account may have been created by
+        // someone else with this address. The provider proved ownership, so it takes over: the
+        // password is cleared and every session is signed out before the link.
+        store.accounts.setPasswordHash(existing.userId, NO_PASSWORD_HASH);
+        store.accounts.deleteSessionsForUser(existing.userId);
+      }
+      store.accounts.linkSocial({ provider, subject: verified.subject, userId: existing.userId, email, at });
+      store.accounts.markEmailVerified(existing.userId, at);
+      return finish(existing, false);
+    }
+    // 3) New account: the Terms checkbox and the 18+ statement come first (nothing is created without them).
+    const ageOk = body.ageConfirmed18Plus === true && body.ageGateVersion === AGE_GATE_VERSION;
+    const termsOk = termsAcceptedIn(body);
+    if ((ageGate && !ageOk) || (termsGate && !termsOk)) {
+      return c.json(
+        { ok: false, error: "signup_details_required", needs: { age: ageGate && !ageOk, terms: termsGate && !termsOk } },
+        400,
+      );
+    }
+    const created = store.accounts.createAccount({
+      email,
+      passwordHash: NO_PASSWORD_HASH,
+      at,
+      emailVerified: true,
+      ...(termsOk ? { terms: { version: TERMS_VERSION, acceptedAt: at } } : {}),
+    });
+    if (!created) return c.json({ ok: false, error: ACCOUNT_AUTH_COPY.signInFailed }, 400);
+    store.accounts.linkSocial({ provider, subject: verified.subject, userId: created.userId, email, at });
+    if (ageOk) store.ageConfirmations.confirm(created.userId, AGE_GATE_VERSION, at);
+    return finish(created, true);
+  });
+
   app.post("/v1/sessions/password", async (c) => {
     const ip = clientIp(c, trustProxyHops, socketAddress) ?? "unknown";
     const { email, password } = await readCredentials(c);
@@ -1993,6 +2152,9 @@ export function createApp(
       overLimit(ipFailKey, authLimits.signInPerIp, window);
       return c.json({ ok: false, error: ACCOUNT_AUTH_COPY.signInFailed }, 401);
     }
+    const signInBody = await c.req.json<Record<string, unknown>>().catch(() => ({}) as Record<string, unknown>);
+    const needTerms = termsGateForSignIn(c, existing, signInBody);
+    if (needTerms) return needTerms;
     const moved = adoptGuestData(c.req.header("authorization"), existing.userId);
     const session = accountSession(existing);
     return c.json({
@@ -2213,6 +2375,7 @@ export function createApp(
    * weeks were counted at its first delete, so only the stray purchases and scans are added.
    */
   const deleteUserEverything = (userId: string, kind: DeletionAuditKind, deleteOptions: { activeWeeksCounted?: boolean } = {}) => {
+    revokeSocialTokens(userId);
     // Data Engineer review: every user_id row in one transaction first, then the files (whose
     // locations were collected before the rows went). A crash in between leaves orphan files
     // with no personal rows, which the photo retention sweep removes, never rows without files.
@@ -2371,7 +2534,7 @@ export function createApp(
   app.post("/v1/account/delete", async (c) => {
     const userId = c.get("userId");
     const account = store.accounts.getAccount(userId);
-    if (account?.passwordHash) {
+    if (account?.passwordHash && account.passwordHash !== NO_PASSWORD_HASH) {
       const limitKey = `account-delete:${userId}`;
       if (isLimited(limitKey, DELETE_PASSWORD_LIMIT, DELETE_PASSWORD_WINDOW_MS)) return tooMany(c);
       const body = await c.req.json<{ password?: unknown }>().catch(() => ({}) as { password?: unknown });
@@ -2406,6 +2569,11 @@ export function createApp(
       identity: c.get("identity"),
       invitedUsers: [c.get("identity")],
       emailVerified: isUserEmailVerified(c.get("userId")),
+      // Apple/Google-only accounts have no password (account deletion confirms by typing DELETE).
+      hasPassword: (() => {
+        const account = store.accounts.getAccount(c.get("userId"));
+        return account ? account.passwordHash !== NO_PASSWORD_HASH : undefined;
+      })(),
     });
   });
 

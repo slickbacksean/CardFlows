@@ -9,3 +9,5 @@ Status: DRAFT for counsel. Not published. Only the clauses decided so far are wr
 Matches the privacy policy's Age section (`docs/USER_CONSENT_DRAFT.md` section 8) and the sign-up checkbox (Sean, Oct 17–18, 2026: accounts are 18+, stated at sign-up; free account required before any app access).
 
 **Counsel notes:** check the Utah and Texas app-store age-verification laws before launch, and ask CardSight in writing whether self-attestation is acceptable.
+
+**Superseded (Oct 19, 2026):** the full Terms of Service draft is `docs/TERMS_OF_SERVICE.md`, generated from `packages/shared/src/terms.ts`.
