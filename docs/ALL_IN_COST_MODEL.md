@@ -1,4 +1,4 @@
-# CardFlow All-In Cost Model
+# PokeSniper All-In Cost Model
 
 **Status:** Spike recommendation for review. **No production tables. No API routes.**  
 **Related:** `MAX_BUY_CALCULATOR.md`, `CRM_DATA_MODEL.md` §8, `CRM_INVENTORY_GRAIN.md`, `CRM_LISTING_DRAFT_FIELDS.md`, `MVP_SCOPE.md`.
@@ -9,7 +9,7 @@
 
 | Label | Meaning |
 |-------|---------|
-| **Confirmed** | Decided by founder or already in CardFlow product / mapping docs on `main`. |
+| **Confirmed** | Decided by founder or already in PokeSniper product / mapping docs on `main`. |
 
 ---
 
@@ -165,7 +165,7 @@ From `crm-listing-draft-example.json` (Pikachu):
 | `asking_price` | `$9.00` | `crm_listing_drafts` |
 | Potential spread | `$4.96` | `asking_price - all_in_total` (internal calculation only) |
 
-**Confirmed:** Listing drafts are **internal CardFlow documents**, not marketplace listings (`CRM_LISTING_DRAFT_FIELDS.md`; `NON_GOALS.md`).
+**Confirmed:** Listing drafts are **internal PokeSniper documents**, not marketplace listings (`CRM_LISTING_DRAFT_FIELDS.md`; `NON_GOALS.md`).
 
 Copy rules:
 - **Never** label spread as "guaranteed profit"  

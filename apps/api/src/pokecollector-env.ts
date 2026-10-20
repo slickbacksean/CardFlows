@@ -171,7 +171,7 @@ export function createPokecollectorAccountsFromEnv(env: Env = process.env): {
 }
 
 /**
- * Re-review M2: optional PokéCollector admin credentials. When set, CardFlow mints its admin token
+ * Re-review M2: optional PokéCollector admin credentials. When set, PokeSniper mints its admin token
  * at first use and again when PokéCollector answers 401 (tokens last 7 days), so
  * CARD_FLOW_POKECOLLECTOR_TOKEN can be left empty. Without them, refresh the token by hand.
  */

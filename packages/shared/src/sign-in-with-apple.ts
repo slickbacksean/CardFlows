@@ -4,7 +4,7 @@
  * identity tokens), so nothing calls Apple yet and no button is shown. See
  * docs/SIGN_IN_WITH_APPLE.md for the plan.
  *
- * App Review 4.8: CardFlow signs in with email and password only (no Google/Facebook login), so
+ * App Review 4.8: PokeSniper signs in with email and password only (no Google/Facebook login), so
  * Sign in with Apple is not required to ship. If a third-party login is ever added, this has to
  * ship with it.
  */

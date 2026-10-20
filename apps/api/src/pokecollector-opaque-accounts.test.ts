@@ -420,7 +420,7 @@ describe("relink script (dry run by default; never run against a real server her
     expect(planPokecollectorRelink(store)).toEqual(result.plan);
   });
 
-  it("apply (mock PokéCollector only): fresh opaque users rebuilt from CardFlow inventory, old users frozen", async () => {
+  it("apply (mock PokéCollector only): fresh opaque users rebuilt from PokeSniper inventory, old users frozen", async () => {
     const { store } = await legacyWorld();
     const { accounts, frozen } = crashable();
     const result = await runPokecollectorRelink({ store, accounts, dryRun: false, state: memoryRelinkState() });
@@ -519,7 +519,7 @@ describe("relink script (dry run by default; never run against a real server her
   it("R1: a 'hold' row nobody live links to is admin-DELETEd, not frozen (the delete copy stays true)", async () => {
     const { store } = await legacyWorld();
     const { accounts, frozen } = crashable();
-    // A deleted account's old shared/legacy remote user: no CardFlow account links to it any more.
+    // A deleted account's old shared/legacy remote user: no PokeSniper account links to it any more.
     const held = accounts.seedRemoteUser("cardflow-sam");
     accounts.seedCollection(held, [{ id: "c1", tcgdexId: "base1-58", quantity: 1, selectedVariant: null, condition: null, purchasePrice: null }]);
     store.accounts.enqueuePokecollectorDeletion({ remoteUserId: held, mode: "hold", at: "2026-10-17T00:00:00.000Z" });

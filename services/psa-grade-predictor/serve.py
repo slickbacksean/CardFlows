@@ -1,5 +1,5 @@
 """
-CardFlow Prepare photo-estimate sidecar for the dual-branch PSA CNN.
+PokeSniper Prepare photo-estimate sidecar for the dual-branch PSA CNN.
 
 Does not vendor https://github.com/jshan9078/PSAGradePredictor (no license +
 private training weights). Point PSA_GRADE_UPSTREAM at a local clone of that

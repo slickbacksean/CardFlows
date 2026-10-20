@@ -1,5 +1,5 @@
 """
-CardFlow livestream OpenCLIP identity sidecar.
+PokeSniper livestream OpenCLIP identity sidecar.
 
 Inspired by https://github.com/t-sinclair2500/pokemon-scanner (MIT) — OpenCLIP
 ViT-B/32 + HNSW cosine search. CardFlow-owned code; do not vendor that tree.

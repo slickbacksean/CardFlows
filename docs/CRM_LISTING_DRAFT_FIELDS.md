@@ -1,19 +1,19 @@
-# CardFlow Listing Draft Fields
+# PokeSniper Listing Draft Fields
 
-**Status:** Spike recommendation for review. **Internal CardFlow document only.**  
+**Status:** Spike recommendation for review. **Internal PokeSniper document only.**  
 **Related:** `CRM_DATA_MODEL.md`, `CRM_WORKFLOW_STATES.md`, `NON_GOALS.md` (no automatic listing publication).
 
 ---
 
 ## 1. What a draft is
 
-A listing draft is a **reviewed document inside CardFlow** that helps the user prepare to sell later. It is not a marketplace listing.
+A listing draft is a **reviewed document inside PokeSniper** that helps the user prepare to sell later. It is not a marketplace listing.
 
 MVP:
 
 - User creates the draft from a **Purchased** inventory item.  
 - User edits and marks `ready_for_review`.  
-- CardFlow does **not** post to eBay, Whatnot, TCGplayer, Shopify, or any other venue.  
+- PokeSniper does **not** post to eBay, Whatnot, TCGplayer, Shopify, or any other venue.  
 - Feature flag: `listing_drafts_enabled` (ON) — drafts only; no publish (`MVP_SCOPE.md`).
 
 **Assumption:** Drafts are **not** allowed from Watchlist until the user converts to Purchased (`CRM_DATA_MODEL.md` §7). `MVP_SUCCESS_METRICS.md` leaves this open; this spike recommends Purchased-only so drafts always have a cost basis and a physical copy.
@@ -24,7 +24,7 @@ MVP:
 
 | Field | Required to create? | Required for `ready_for_review`? | Notes |
 |-------|---------------------|----------------------------------|-------|
-| `draft_id` | System | System | CardFlow UUID |
+| `draft_id` | System | System | PokeSniper UUID |
 | `inventory_item_id` | Yes | Yes | Purchased copy only |
 | `user_id` | Yes | Yes | Owner |
 | `cardflow_card_id` | Yes | Yes | Copied from the item; never a CardSight/TCGdex-only key |
@@ -67,7 +67,7 @@ User may edit freely. Do not generate marketplace SEO titles as if publishing.
 |--------|----------------|---------|
 | New photos the user adds for the draft | `user_listing_photo` | Yes |
 | Original scan, **referenced** (not re-labeled as catalog art) | `user_capture` | Yes |
-| TCGdex catalog art | `tcgdex_assets` | Display on the CardFlow screen only — **do not** store it as a listing photo the user “took” |
+| TCGdex catalog art | `tcgdex_assets` | Display on the PokeSniper screen only — **do not** store it as a listing photo the user “took” |
 
 Do not download/rehost the TCGdex assets tree to “help” the draft.
 
@@ -75,7 +75,7 @@ Do not download/rehost the TCGdex assets tree to “help” the draft.
 
 ## 5. Fields that must **not** exist in MVP
 
-Do **not** invent these as if CardFlow posted a listing:
+Do **not** invent these as if PokeSniper posted a listing:
 
 | Forbidden field | Why |
 |-----------------|-----|
@@ -84,7 +84,7 @@ Do **not** invent these as if CardFlow posted a listing:
 | `tcgplayer_product_id` as a publish key, `tcgplayer_listing_id` | Not a TCGplayer seller integration |
 | `shopify_product_id`, `shopify_variant_id` | No Shopify |
 | `published_at`, `ended_at`, `relisted_at` | No publication lifecycle |
-| `marketplace_listing_url` as a system-owned post URL | User may paste a URL in `notes` later; that is not CardFlow publishing |
+| `marketplace_listing_url` as a system-owned post URL | User may paste a URL in `notes` later; that is not PokeSniper publishing |
 | `auto_publish`, `publish_on_save`, `scheduled_publish_at` | Explicit non-goal |
 | `bid`, `buy_it_now_api`, `offer_auto_accept` | No marketplace automation |
 | Payment / payout account ids | Forbidden |
@@ -100,21 +100,21 @@ A later “export checklist” (copy title/description to clipboard) is **not** 
 
 | Column | Owner | Purpose |
 |--------|-------|---------|
-| `draft_id` | CardFlow | PK |
-| `inventory_item_id` | CardFlow | FK purchased item |
-| `user_id` | CardFlow | Owner |
-| `cardflow_card_id` | CardFlow | Identity (denormalized for list queries) |
-| `status` | CardFlow | `draft` \| `ready_for_review` |
-| `title` | CardFlow | User text |
-| `description` | CardFlow | User text |
-| `condition` | CardFlow | User text / later enum |
-| `asking_price` | CardFlow | User estimate, minor units |
-| `currency` | CardFlow | ISO 4217 |
-| `quantity` | CardFlow | `1` |
-| `photos_json` | CardFlow | Array of `{ storageRef, source, mimeType }` |
-| `intended_channel_note` | CardFlow | Free text |
-| `notes` | CardFlow | Private |
-| `created_at` / `updated_at` | CardFlow | Audit |
+| `draft_id` | PokeSniper | PK |
+| `inventory_item_id` | PokeSniper | FK purchased item |
+| `user_id` | PokeSniper | Owner |
+| `cardflow_card_id` | PokeSniper | Identity (denormalized for list queries) |
+| `status` | PokeSniper | `draft` \| `ready_for_review` |
+| `title` | PokeSniper | User text |
+| `description` | PokeSniper | User text |
+| `condition` | PokeSniper | User text / later enum |
+| `asking_price` | PokeSniper | User estimate, minor units |
+| `currency` | PokeSniper | ISO 4217 |
+| `quantity` | PokeSniper | `1` |
+| `photos_json` | PokeSniper | Array of `{ storageRef, source, mimeType }` |
+| `intended_channel_note` | PokeSniper | Free text |
+| `notes` | PokeSniper | Private |
+| `created_at` / `updated_at` | PokeSniper | Audit |
 
 On first insert of a draft for an `acquired` item, set inventory `workflow_state = drafted` (`CRM_WORKFLOW_STATES.md`).
 
@@ -127,7 +127,7 @@ On first insert of a draft for an `acquired` item, set inventory `workflow_state
 | Status | Meaning |
 |--------|---------|
 | `draft` | Started; user still editing |
-| `ready_for_review` | User marked it reviewed inside CardFlow |
+| `ready_for_review` | User marked it reviewed inside PokeSniper |
 | `abandoned` | Optional later; user discarded the draft (item may return to `acquired` if no other draft) |
 
 There is no `published` status.

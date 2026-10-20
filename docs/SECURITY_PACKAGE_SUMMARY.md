@@ -1,14 +1,14 @@
-# CardFlow Security Review Package — SUMMARY
+# PokeSniper Security Review Package — SUMMARY
 
 **Date:** 2026-09-12  
 **Authoring context:** Founder / legal-security review package  
-**This is not legal advice.** This package does **not** claim CardFlow is compliant, approved, partnered, affiliated, or legally safe.
+**This is not legal advice.** This package does **not** claim PokeSniper is compliant, approved, partnered, affiliated, or legally safe.
 
 ---
 
 ## TASK
 
-Create a read-only-researched founder/legal-security review package for CardFlow (Pokémon card reseller mobile app): risk register, privacy data map, engineering and marketplace checklists, draft consent and pricing disclaimer, and a counsel review list. No application code. No git commit. No compliance certification.
+Create a read-only-researched founder/legal-security review package for PokeSniper (Pokémon card reseller mobile app): risk register, privacy data map, engineering and marketplace checklists, draft consent and pricing disclaimer, and a counsel review list. No application code. No git commit. No compliance certification.
 
 ## STATUS
 

@@ -1,10 +1,10 @@
-# CardFlow Marketplace Policy Checklist
+# PokeSniper Marketplace Policy Checklist
 
 **Document type:** Founder / legal-security review  
 **Date:** 2026-09-12  
 **Status:** Draft — **not** a legal opinion that any marketplace feature is allowed  
 
-> **This is not legal advice.** CardFlow is **not** claimed to be affiliated with, approved by, or partnered with Whatnot, eBay, The Pokémon Company, Nintendo, CardSight, or TCGdex. Completing checkboxes is an engineering/product discipline, not permission to ship.
+> **This is not legal advice.** PokeSniper is **not** claimed to be affiliated with, approved by, or partnered with Whatnot, eBay, The Pokémon Company, Nintendo, CardSight, or TCGdex. Completing checkboxes is an engineering/product discipline, not permission to ship.
 
 **Known (product brief):** the app must **not** automate bids/purchases, scrape marketplace data, intercept login/payment information, or claim affiliation.
 
@@ -29,7 +29,7 @@
 
 **Source fetched:** https://legal.whatnot.com/ — Version 2.0, effective March 4, 2026 (US/non-EU-UK ToS). Community Guidelines via Help Center / search.
 
-Summarized **prohibitions** relevant to CardFlow (paraphrase, not a quote dump):
+Summarized **prohibitions** relevant to PokeSniper (paraphrase, not a quote dump):
 
 - Make any **automated use** of the App, or impose an unreasonable / disproportionately large load.
 - Use any **manual process to monitor or copy** material without prior written consent.
@@ -75,7 +75,7 @@ If ever reconsidered (founder + counsel first), the following are review gates �
 - [ ] Apple 4.2: app must not be a thin website wrapper.
 - [ ] Apple 5.2.2: using/accessing/monetizing a third-party service requires permission under **that** service’s terms; Apple may demand proof.
 - [ ] Play deceptive-behavior / User Data: do not mislead users about what the WebView is; do not collect unexpected account data.
-- [ ] Cookie jars isolated; CardFlow cannot read marketplace cookies.
+- [ ] Cookie jars isolated; PokeSniper cannot read marketplace cookies.
 - [ ] No JS injection, no overlay that occludes login/payment, no file-download of page HTML.
 - [ ] Deep links cannot steal OAuth codes intended for official apps.
 - [ ] **External browser fallback** is the default and remains available.
@@ -101,8 +101,8 @@ If ever reconsidered (founder + counsel first), the following are review gates �
 ## External browser fallback (allowed direction)
 
 - [ ] “Open in Whatnot” / “Open in eBay” uses the **OS browser** or official app URL scheme only.
-- [ ] No CardFlow code runs on the destination page.
-- [ ] UI copy: CardFlow does not log you in, bid, or pay.
+- [ ] No PokeSniper code runs on the destination page.
+- [ ] UI copy: PokeSniper does not log you in, bid, or pay.
 - [ ] User manually copies lot info back if they want it in inventory (user typing is not scraping).
 - [ ] Still no Whatnot/eBay logo assets unless licensed.
 
@@ -111,7 +111,7 @@ If ever reconsidered (founder + counsel first), the following are review gates �
 ## Branding reminder (marketplaces + Pokémon)
 
 - [ ] App name/icon/screenshots do not use Whatnot, eBay, Pokémon, or Nintendo marks as the primary brand.
-- [ ] No “official CardFlow for Whatnot” style phrasing.
+- [ ] No “official PokeSniper for Whatnot” style phrasing.
 - [ ] Pokémon Company public media guidelines (press site themes): no implied partnership; brand material generally not for product/app names; non-commercial framing on their press content — **commercial app use needs attorney review**.
 
 ---

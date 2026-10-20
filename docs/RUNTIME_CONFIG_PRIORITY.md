@@ -1,6 +1,6 @@
 # Runtime config priority
 
-Local setup checklist for CardFlow features that are implemented in code but still need env / services / weights before they are fully operational.
+Local setup checklist for PokeSniper features that are implemented in code but still need env / services / weights before they are fully operational.
 
 **Task checklist (one at a time):** [RUNTIME_CONFIG_TASKS.md](./RUNTIME_CONFIG_TASKS.md)
 

@@ -85,7 +85,7 @@ const STACK_STATUS_LABELS: { [K in SettingsStackStatusId]: Record<CardFlowHealth
 
 export const SETTINGS_JOBS = [
   { id: "max_buy_rules", label: "Max Buy rules" },
-  { id: "about", label: "About CardFlow" },
+  { id: "about", label: "About PokeSniper" },
 ] as const;
 
 export type SettingsJobId = (typeof SETTINGS_JOBS)[number]["id"];

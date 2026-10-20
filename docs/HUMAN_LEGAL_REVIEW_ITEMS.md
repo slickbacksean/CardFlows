@@ -1,10 +1,10 @@
-# CardFlow Human Legal Review Items
+# PokeSniper Human Legal Review Items
 
 **Document type:** Questions and artifacts for qualified counsel  
 **Date:** 2026-09-12  
 **Status:** Review list only  
 
-> **This is not legal advice.** This file lists issues for an attorney to analyze. It does **not** state that CardFlow is lawful, licensable, compliant, or ready to ship. No item below is pre-decided.
+> **This is not legal advice.** This file lists issues for an attorney to analyze. It does **not** state that PokeSniper is lawful, licensable, compliant, or ready to ship. No item below is pre-decided.
 
 Public GitHub product docs were **not found** (404). Official eBay User Agreement was **not fetched** (403/timeout). Treat marketplace and IP conclusions as **Open**.
 
@@ -29,7 +29,7 @@ Public GitHub product docs were **not found** (404). Official eBay User Agreemen
 12. Obtain and negotiate **Order form**, **DPA**, subprocessors, SCCs/UK addendum if EU/UK users.
 13. **ML/AI training** on Your Data (user card photos): disclosure, opt-out, whether a paid tier restricts training.
 14. Image **retention** at CardSight after the API responds; deletion assistance for end-user requests.
-15. **Caching** limits (short-term only; no standalone/full catalog; delete at end of Term) vs CardFlow “price snapshots.”
+15. **Caching** limits (short-term only; no standalone/full catalog; delete at end of Term) vs PokeSniper “price snapshots.”
 16. **Sensitive Data** prohibition (under-18 PI, payment cards, gov IDs, biometrics, other-account credentials, precise geolocation).
 17. Free-tier **$100** liability cap and AS-IS / no-accuracy warranty — acceptable residual risk?
 18. Required **attribution** or trademark use of the CardSight name/logo (**Open:** not found as a standalone attribution spec).
@@ -43,7 +43,7 @@ Public GitHub product docs were **not found** (404). Official eBay User Agreemen
 23. Commercial use of Pokémon **card images**, set logos, type icons, and character art — TCGdex hosting does **not** equal a TPC/Nintendo license.
 24. Commercial use of Pokémon **names**, set names, and the word “Pokémon” in the app name, subtitle, and screenshots.
 25. Pokémon Company media/brand guidelines (press sites describe strict non-implied-endorsement and product-name limits).
-26. TCGdex disclaimer: not produced, endorsed, supported, or affiliated with Nintendo or The Pokémon Company — how CardFlow must echo that.
+26. TCGdex disclaimer: not produced, endorsed, supported, or affiliated with Nintendo or The Pokémon Company — how PokeSniper must echo that.
 27. Risk of redistributing catalog data at scale.
 
 ## D. Whatnot

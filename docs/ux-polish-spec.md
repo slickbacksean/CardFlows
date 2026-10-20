@@ -1,4 +1,4 @@
-# CardFlow UX polish spec: Scan, Grade, Collection
+# PokeSniper UX polish spec: Scan, Grade, Collection
 UX/UI Product Designer, Oct 5, 2026. Copy constants corrected Oct 13, 2026 (`P0-01`). Applies to the Expo Router app in apps/mobile. This spec covers copy and behavior only. Do not change any API.
 
 ## 0. Rules for every screen
@@ -48,7 +48,7 @@ If the server returns several reasons, show the first one from this table only.
 | State | Title / body | Actions |
 |---|---|---|
 | First open, ready | Hint chip: "Point your camera at a card to identify it." | Shutter |
-| Camera permission not asked | Scan cards with your camera / "CardFlow uses the camera only while you're scanning." | Allow camera |
+| Camera permission not asked | Scan cards with your camera / "PokeSniper uses the camera only while you're scanning." | Allow camera |
 | Permission denied | Camera access is off / "Turn on camera access in Settings to scan cards." | Open Settings (Linking.openSettings) |
 | Identifying (after shutter) | Freeze the frame, show a spinner over it, "Identifying card…" After 8 s, add "Still working…". | Cancel |
 | No match | We couldn't match this card / "Try again with the whole card in the frame and less glare." | Try again |
@@ -59,7 +59,7 @@ If the server returns several reasons, show the first one from this table only.
 | State | Title / body | Actions |
 |---|---|---|
 | Entry | Grading Guidelines (unchanged). "Don't show this again" skips them next time. | Start Grading |
-| Camera permission | Same as Scan, but the body is "CardFlow uses the camera to photograph the front and back of your card." | Allow camera / Open Settings |
+| Camera permission | Same as Scan, but the body is "PokeSniper uses the camera to photograph the front and back of your card." | Allow camera / Open Settings |
 | Grading (after "Use photo" on the back) | Full screen with both thumbnails, a spinner, and "Estimating your card…" with the sub-line "This usually takes a few seconds." After 20 s, add "Still working…". | Cancel (returns to the back crop confirm with both photos kept) |
 | Retake | See section 2 | Retake / Photo tips |
 | Route unavailable (404) | Keep the current copy: "Photo pre-grade is not available yet. Mark defects still works." **Never compute a local score.** | Mark defects / Back |

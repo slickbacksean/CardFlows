@@ -1,13 +1,13 @@
-# CardFlow Listing Export and Copy
+# PokeSniper Listing Export and Copy
 
-**Status:** Spike recommendation for review. **Internal CardFlow document only.**  
+**Status:** Spike recommendation for review. **Internal PokeSniper document only.**  
 **Related:** `CRM_LISTING_DRAFT_FIELDS.md` §5, `LISTING_DRAFT_BUILDER.md`, `NON_GOALS.md`.
 
 ---
 
 ## 1. What this is
 
-Export / copy helps the user **take CardFlow draft text with them** (clipboard now; CSV later).
+Export / copy helps the user **take PokeSniper draft text with them** (clipboard now; CSV later).
 
 It is **explicitly not publication**.
 
@@ -80,7 +80,7 @@ When CSV is considered after beta:
 | Copy title/description | User may paste elsewhere manually |
 | CSV download | User-owned file |
 | Saving `intended_channel_note` | Reminder text only |
-| User pastes an external URL into `notes` | Still not CardFlow publishing |
+| User pastes an external URL into `notes` | Still not PokeSniper publishing |
 
 None of the above set inventory `listed` or draft `published` (neither exists as a real publish state in MVP).
 
@@ -102,7 +102,7 @@ Allowed clarity fields in the export wrapper:
 
 - `published: false`
 - `exportKind: clipboard | csv`
-- Human-readable disclaimer: CardFlow did not post this listing
+- Human-readable disclaimer: PokeSniper did not post this listing
 
 ---
 

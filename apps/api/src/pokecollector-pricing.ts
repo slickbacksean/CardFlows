@@ -127,7 +127,7 @@ export function estimateFromPokecollectorCard(
 
 /**
  * Server-only PokéCollector pricing. Prefers TCGPlayer USD; otherwise converts
- * Cardmarket EUR. Returns a CardFlow estimate DTO — never vendor blobs.
+ * Cardmarket EUR. Returns a PokeSniper estimate DTO — never vendor blobs.
  */
 export function createPokecollectorPricingProvider(
   options: PokecollectorHttpOptions,

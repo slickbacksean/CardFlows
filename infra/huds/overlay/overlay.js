@@ -60,18 +60,18 @@
       thumbEl.setAttribute("aria-label", "No catalog art");
     }
     if (scannerOn && cardVisible) {
-      bandEl.setAttribute("aria-label", "CardFlow overlay, reading a card");
+      bandEl.setAttribute("aria-label", "PokeSniper overlay, reading a card");
       nameEl.textContent = "Reading this card…";
       bodyEl.textContent = "Matching the live crop.";
       return;
     }
     if (scannerOn) {
-      bandEl.setAttribute("aria-label", "CardFlow overlay, looking for a card");
+      bandEl.setAttribute("aria-label", "PokeSniper overlay, looking for a card");
       nameEl.textContent = "Looking for a card…";
       bodyEl.textContent = "Live-video identify is on.";
       return;
     }
-    bandEl.setAttribute("aria-label", "CardFlow overlay, no card confirmed");
+    bandEl.setAttribute("aria-label", "PokeSniper overlay, no card confirmed");
     nameEl.textContent = "Scanner off";
     bodyEl.textContent = "Turn the scanner on to identify from live video.";
   }

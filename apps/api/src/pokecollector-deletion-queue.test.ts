@@ -114,7 +114,7 @@ describe("PokéCollector deletion queue (Backend re-review H1/M1)", () => {
     expect(w.store.getPokecollectorUserMapping(userId)).toBeUndefined();
     const rows = w.store.accounts.listPokecollectorDeletions();
     expect(rows).toEqual([expect.objectContaining({ remoteUserId: mapping.pokecollectorUserId, mode: "delete", attempts: 0 })]);
-    // Remote ID only: no CardFlow user ID, email or PokéCollector username.
+    // Remote ID only: no PokeSniper user ID, email or PokéCollector username.
     const stored = JSON.stringify(rows);
     for (const secret of [userId, "queued@example.com", "queued", mapping.pokecollectorUsername]) expect(stored).not.toContain(secret);
     release();
@@ -156,7 +156,7 @@ describe("PokéCollector deletion queue (Backend re-review H1/M1)", () => {
     expect(total / 86_400_000).toBeLessThan(5);
   });
 
-  it("a remote user other CardFlow users are linked to is held, never deleted (memory twin allows the share)", async () => {
+  it("a remote user other PokeSniper users are linked to is held, never deleted (memory twin allows the share)", async () => {
     const w = world({ store: createMemoryStore() });
     const { token, userId } = await linkedAccount(w.app, "shared@example.com");
     const mapping = w.store.getPokecollectorUserMapping(userId)!;
@@ -172,7 +172,7 @@ describe("PokéCollector deletion queue (Backend re-review H1/M1)", () => {
     const w = world();
     const { userId } = await linkedAccount(w.app, "late@example.com");
     const mapping = w.store.getPokecollectorUserMapping(userId)!;
-    // A queued row for a remote user that a CardFlow user is linked to (again) by the time it runs.
+    // A queued row for a remote user that a PokeSniper user is linked to (again) by the time it runs.
     w.store.accounts.enqueuePokecollectorDeletion({ remoteUserId: mapping.pokecollectorUserId, mode: "delete", at: "2026-10-17T00:00:00.000Z" });
     await w.queue().run();
     expect(w.calls).toEqual([]);

@@ -19,10 +19,10 @@ describe("cardFlowHttpErrorMessage", () => {
   it("keeps a plain server error and maps a text 500 away from a JSON parse error", () => {
     expect(cardFlowHttpErrorMessage(400, "Enter a valid price.")).toBe("Enter a valid price.");
     expect(cardFlowHttpErrorMessage(404)).toBe("That item was not found.");
-    expect(cardFlowHttpErrorMessage(401)).toBe("CardFlow couldn't authorize that request.");
-    expect(cardFlowHttpErrorMessage(500)).toBe("CardFlow couldn't finish that request.");
+    expect(cardFlowHttpErrorMessage(401)).toBe("PokeSniper couldn't authorize that request.");
+    expect(cardFlowHttpErrorMessage(500)).toBe("PokeSniper couldn't finish that request.");
     expect(cardFlowHttpErrorMessage(500, "Unexpected token < in JSON at position 0")).toBe(
-      "CardFlow couldn't finish that request.",
+      "PokeSniper couldn't finish that request.",
     );
     expect(cardFlowHttpErrorMessage(500, "SyntaxError: JSON Parse error")).not.toMatch(
       /JSON|Unexpected token|SyntaxError/i,
@@ -31,11 +31,11 @@ describe("cardFlowHttpErrorMessage", () => {
 });
 
 describe("cardFlowUnreachableMessage", () => {
-  it("says CardFlow is unreachable and drops a JSON parse detail", () => {
+  it("says PokeSniper is unreachable and drops a JSON parse detail", () => {
     expect(CARD_FLOW_REQUEST_TIMEOUT_MS).toBe(15_000);
     expect(cardFlowUnreachableMessage()).toBe(CARD_FLOW_UNREACHABLE_MESSAGE);
     expect(cardFlowUnreachableMessage("Network request failed")).toBe(
-      "Can't reach CardFlow. Network request failed",
+      "Can't reach PokeSniper. Network request failed",
     );
     expect(cardFlowUnreachableMessage("Unexpected token <")).toBe(CARD_FLOW_UNREACHABLE_MESSAGE);
     expect(CARD_FLOW_UNREACHABLE_MESSAGE).not.toMatch(/mock API/i);

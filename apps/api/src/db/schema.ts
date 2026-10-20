@@ -316,7 +316,7 @@ export const passwordResetTokens = sqliteTable(
 );
 
 /**
- * Server-side CardFlow user → their own PokéCollector user. Never a client JWT. Opaque accounts:
+ * Server-side PokeSniper user → their own PokéCollector user. Never a client JWT. Opaque accounts:
  * `pokecollector_username` is `cardflow-u-<HMAC>`; `password_ciphertext` is the per-link random
  * password, AES-256-GCM encrypted (null on legacy email-derived links, which are never used).
  */
@@ -582,10 +582,10 @@ export const northStarWeeklyTotals = sqliteTable("north_star_weekly_totals", {
 });
 
 /**
- * Backend re-review H1 (P4): PokéCollector users still to delete after a CardFlow account was
+ * Backend re-review H1 (P4): PokéCollector users still to delete after a PokeSniper account was
  * deleted, retried by the background queue with backoff. Only PokéCollector's numeric user ID is
- * kept (no CardFlow user ID, email or username). `mode` "hold" rows (a remote user shared with
- * other CardFlow users, a guest's shared user, or a legacy link) are never deleted here; the
+ * kept (no PokeSniper user ID, email or username). `mode` "hold" rows (a remote user shared with
+ * other PokeSniper users, a guest's shared user, or a legacy link) are never deleted here; the
  * opaque-accounts relink script freezes them.
  */
 export const pokecollectorPendingDeletions = sqliteTable("pokecollector_pending_deletions", {

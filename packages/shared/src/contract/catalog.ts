@@ -43,7 +43,7 @@ export const CatalogSearchResponseSchema = typed<CatalogSearchResponse>(
   }),
 );
 
-/** Raw TCGdex card from the catalog adapter (not yet a CardFlow canonical card). */
+/** Raw TCGdex card from the catalog adapter (not yet a PokeSniper canonical card). */
 export const TcgdexCardSchema = typed<TcgdexCard>(
   z.looseObject({
     id: z.string(),

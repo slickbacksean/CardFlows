@@ -57,7 +57,7 @@ describe("Confirm fail-soft copy", () => {
     expect(CONFIRM_AMBIGUOUS_TITLE).toContain("pick the print");
     expect(forbiddenConfirmClaim(CONFIRM_COULD_NOT_CONFIRM_MESSAGE)).toBeNull();
     expect(forbiddenConfirmClaim(CONFIRM_AMBIGUOUS_TITLE)).toBeNull();
-    expect(forbiddenConfirmClaim("CardFlow verified authentic")).toBe("verified_authentic");
+    expect(forbiddenConfirmClaim("PokeSniper verified authentic")).toBe("verified_authentic");
     expect(forbiddenConfirmClaim("99% identification accuracy")).toBe("accuracy_claim");
   });
 

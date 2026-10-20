@@ -63,7 +63,7 @@ function withEnv<T>(env: Record<string, string>, run: () => T): T {
     process.env = before;
   }
 }
-const CTX = { config: { name: "CardFlow", slug: "cardflow", extra: { eas: { projectId: "x" } } } };
+const CTX = { config: { name: "PokeSniper", slug: "cardflow", extra: { eas: { projectId: "x" } } } };
 
 function sourceFiles(dir: string): string[] {
   const out: string[] = [];
@@ -190,7 +190,7 @@ describe("P4: EAS profiles and env layout", () => {
     expect(json).not.toContain("api.example.com");
     expect(built.extra?.appEnv).toBe("preview");
     expect(built.extra?.eas).toEqual({ projectId: "x" });
-    expect(built.name).toBe("CardFlow");
+    expect(built.name).toBe("PokeSniper");
   });
 
   it("Dev Ops: every EXPO_PUBLIC_* the app reads is listed (app.config and RELEASE_ENV.md), as public", () => {
@@ -442,10 +442,10 @@ describe("P4: account deletion end to end", () => {
 
   it("Policy + Backend M3: exact deletion lines", () => {
     expect(POKECOLLECTOR_DELETION_LINE).toBe(
-      "If your account was linked to PokéCollector, CardFlow removes the link and deletes the cards and wishlist it stored there. This can take up to 2 weeks, and PokéCollector's own backups may keep a copy for a while.",
+      "If your account was linked to PokéCollector, PokeSniper removes the link and deletes the cards and wishlist it stored there. This can take up to 2 weeks, and PokéCollector's own backups may keep a copy for a while.",
     );
     expect(ACCOUNT_DELETION_COPY.deletes).toContain(POKECOLLECTOR_DELETION_LINE);
-    expect(ANONYMOUS_LEDGER_LINE).toBe("CardFlow keeps only anonymous totals that can't identify you. Purchases you made on a marketplace aren't affected.");
+    expect(ANONYMOUS_LEDGER_LINE).toBe("PokeSniper keeps only anonymous totals that can't identify you. Purchases you made on a marketplace aren't affected.");
     expect(ACCOUNT_DELETION_COPY.keeps).toBe(ANONYMOUS_LEDGER_LINE);
     expect(ACCOUNT_DELETION_COPY.subscription).toBe(
       "Deleting your account doesn't cancel an App Store or Google Play subscription. Cancel it in your store settings.",

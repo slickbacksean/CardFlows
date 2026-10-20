@@ -1,8 +1,8 @@
-# CardFlow Security Checklist
+# PokeSniper Security Checklist
 
 **Document type:** Engineering rules for the founder / legal-security review  
 **Date:** 2026-09-12  
-**Status:** Draft checklist — completing a box does **not** mean CardFlow is secure, compliant, or approved to ship  
+**Status:** Draft checklist — completing a box does **not** mean PokeSniper is secure, compliant, or approved to ship  
 
 > **This is not legal advice** and not a penetration-test report. **Assumption:** backend is Supabase plus a server component that calls CardSight. Public GitHub architecture docs were **not found** (404).
 
@@ -14,7 +14,7 @@
 
 - [ ] **No secrets in the mobile app.** No CardSight API keys, service-role keys, webhook secrets, or admin JWTs in the iOS/Android binary, plist, gradle properties, compiled strings, or shipped `.env`.
 - [ ] **No secrets in the git repo.** Use a secret manager / CI secrets. Rotate anything that was ever committed.
-- [ ] **Server-side vendor calls only.** The device calls CardFlow’s backend; the backend calls CardSight. The app never speaks to CardSight with a privileged key.
+- [ ] **Server-side vendor calls only.** The device calls PokeSniper’s backend; the backend calls CardSight. The app never speaks to CardSight with a privileged key.
 - [ ] **TCGdex** is a public no-key API (FAQ fetched 2026-09-12). Still proxy or cache considerately if needed so the app cannot be abused as an open relay, and do not scrape other sites “around” it.
 - [ ] **Secure env vars** on the server: least privilege, separate staging/prod keys, no key reuse across mobile debug builds.
 - [ ] If a key is suspected leaked: **rotate immediately**, treat as an incident, founder notified.

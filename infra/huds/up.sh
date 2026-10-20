@@ -1,5 +1,5 @@
 #!/bin/sh
-# Start unmodified HUDS serving the CardFlow livestream overlay HUD.
+# Start unmodified HUDS serving the PokeSniper livestream overlay HUD.
 # Pin the npm package. Do not vendor HUDS source into apps/ or packages/.
 set -eu
 

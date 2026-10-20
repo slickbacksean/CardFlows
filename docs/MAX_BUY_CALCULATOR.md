@@ -1,4 +1,4 @@
-# CardFlow Max Buy Calculator
+# PokeSniper Max Buy Calculator
 
 **Status:** Spike recommendation for review. **No production calculator code. No live pricing provider.**  
 **Related:** `ALL_IN_COST_MODEL.md`, `MAX_BUY_WITHOUT_PRICING_PROVIDER.md`, `CRM_DATA_MODEL.md` §8, §11, `MVP_SCOPE.md`, `NON_GOALS.md`.
@@ -9,7 +9,7 @@
 
 | Label | Meaning |
 |-------|---------|
-| **Confirmed** | Decided by founder or already in CardFlow product / mapping docs on `main`. |
+| **Confirmed** | Decided by founder or already in PokeSniper product / mapping docs on `main`. |
 | **Unconfirmed** | Depends on a later provider, legal review, or missing product spec. Do not invent. |
 
 ---
@@ -280,7 +280,7 @@ Example safe copy:
 
 | Forbidden | Why |
 |-----------|-----|
-| TCGdex `pricing` / `variants_detailed` pricing | Not CardFlow market truth; catalog metadata only |
+| TCGdex `pricing` / `variants_detailed` pricing | Not PokeSniper market truth; catalog metadata only |
 | CardSight as a price source | Recognition-only provider |
 | Scraped eBay / Whatnot / TCGplayer prices | Non-goal; legal/technical risk |
 | Invented pricing vendor API | Validation item; do not invent fields or permissions |

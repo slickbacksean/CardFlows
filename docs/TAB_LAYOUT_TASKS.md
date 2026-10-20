@@ -75,7 +75,7 @@ Follow: [TAB_LAYOUT_PLAN.md](./TAB_LAYOUT_PLAN.md) §5.
 Touch: [apps/mobile/app/(tabs)/export.tsx](../apps/mobile/app/(tabs)/export.tsx). Replace the placeholder/wireframe grid.
 
 - Title `Export`.
-- Constraint: `Clipboard copy omits private notes. CardFlow did not publish this.`
+- Constraint: `Clipboard copy omits private notes. PokeSniper did not publish this.`
 - Three rows: Copy listing · CSV (`not in private beta`) · Publish (`no`).
 - CSV and Publish are not tappable (or tap shows the same disabled meta, no navigation).
 
@@ -229,7 +229,7 @@ Follow: [TAB_LAYOUT_PLAN.md](./TAB_LAYOUT_PLAN.md) §4c.
 
 **Layout for this file is done.** Later identify work is [VALIDATION_ITEMS_TASKS.md](./VALIDATION_ITEMS_TASKS.md) Phase 6 and [ROADMAP.md](./ROADMAP.md): **in-stream live video** (YOLO + card-identity), **not** screenshot / “Scan a still photo.” Do not add Capture as the livestream identify path.
 
-In-app browser + CardFlow overlay. Follow [TAB_LAYOUT_PLAN.md](./TAB_LAYOUT_PLAN.md) §2 for chrome. Must not scrape or bid.
+In-app browser + PokeSniper overlay. Follow [TAB_LAYOUT_PLAN.md](./TAB_LAYOUT_PLAN.md) §2 for chrome. Must not scrape or bid.
 
 Touch: [apps/mobile/app/(tabs)/scan-tab.tsx](../apps/mobile/app/(tabs)/scan-tab.tsx). Center tab **opens this screen** (it is the screener, not Capture). Tab bar hidden while a show is open; `(X)` → Collection.
 
@@ -262,17 +262,17 @@ Touch: [apps/mobile/app/(tabs)/scan-tab.tsx](../apps/mobile/app/(tabs)/scan-tab.
 - Do **not** add PSA 9 / PSA 10 (or Raw live) figures.
 - Empty overlay copy from §2c until a card is confirmed. `[ Scan a still photo ]` → Capture.
 
-**Done when:** Overlay layout matches the screenshot’s identity strip spatially, with CardFlow fields only.
+**Done when:** Overlay layout matches the screenshot’s identity strip spatially, with PokeSniper fields only.
 
 ### Task 18 — WebView live region
 
 - [x] Done.
 
 - Remaining body is one region: `WebView: Whatnot live page` or `WebView: eBay live page`.
-- Chat, listing, Custom/Bid, timers stay **inside** that page. CardFlow does not draw bid buttons.
+- Chat, listing, Custom/Bid, timers stay **inside** that page. PokeSniper does not draw bid buttons.
 - Layout pass may use a labeled placeholder box. Loading a real WebView is allowed only as navigation to that platform’s live URL — no DOM scrape, no bid injection.
 
-**Done when:** The live page fills below the overlay. CardFlow has no Custom/Bid bar of its own.
+**Done when:** The live page fills below the overlay. PokeSniper has no Custom/Bid bar of its own.
 
 ### Task 19 — Errors + hard no’s
 
@@ -311,6 +311,6 @@ Do **not** start after this list until the five tabs match [TAB_LAYOUT_PLAN.md](
 - [x] Export lists Copy / CSV / Publish honestly. Only purchased drafts are copyable. Notes still omitted.
 - [x] Shop is three job rows. Buy → Capture. Sell → draft or Collection Purchased. No catalog grid.
 - [x] Grading has Prepare / Submitted / Returned. Purchased only. User-typed order/cert. Photo estimate is [GRADING_PREPARE_TASKS.md](./GRADING_PREPARE_TASKS.md), not this file.
-- [x] Livestream **layout** is an in-app Whatnot | eBay browser with a CardFlow overlay strip. Live identify from video is **not** in this file (see [VALIDATION_ITEMS_TASKS.md](./VALIDATION_ITEMS_TASKS.md) Phase 6). No PSA comps, no CardFlow bid bar.
+- [x] Livestream **layout** is an in-app Whatnot | eBay browser with a PokeSniper overlay strip. Live identify from video is **not** in this file (see [VALIDATION_ITEMS_TASKS.md](./VALIDATION_ITEMS_TASKS.md) Phase 6). No PSA comps, no PokeSniper bid bar.
 - [x] `pnpm test` and `pnpm typecheck` pass.
 - [x] Scan → confirm → Purchased or Watchlist → draft → Copy still works.

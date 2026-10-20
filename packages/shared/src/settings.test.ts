@@ -35,7 +35,7 @@ describe("Settings hard no's", () => {
   it("only links Max Buy rules and About", () => {
     expect(SETTINGS_JOBS.map((job) => job.id)).toEqual(["max_buy_rules", "about"]);
     expect(settingsJobLabel("max_buy_rules")).toBe("Max Buy rules");
-    expect(settingsJobLabel("about")).toBe("About CardFlow");
+    expect(settingsJobLabel("about")).toBe("About PokeSniper");
   });
 
   it("cannot start marketplace automation or a paywall from Settings", () => {

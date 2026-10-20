@@ -36,7 +36,7 @@ pnpm typecheck
 
 - [x] Done.
 
-Ultralytics YOLO is AGPL. CardFlow must not load `.onnx` until the founder accepts that license **for this product**.
+Ultralytics YOLO is AGPL. PokeSniper must not load `.onnx` until the founder accepts that license **for this product**.
 
 - Record the decision locally only: `CARD_FLOW_ULTRALYTICS_AGPL_ACCEPTED=true` in `apps/api/.env` (never commit the value as a secret-bearing file; `.env.example` stays empty).
 - Not a Settings row. Not Expo `SecureStore`.
@@ -235,7 +235,7 @@ Wait for founder/legal. Then replace `ABOUT_LEGAL_REVIEW_NOTE` and optionally se
 
 Touch: [packages/shared/src/about.ts](../packages/shared/src/about.ts).
 
-**Founder note (2026-10-01):** Replaced the tester-facing placeholder with the reserved [WIREFRAMES.md](./WIREFRAMES.md) §10b line: “Recognition is a provider. CardFlow owns inventory and drafts.” Body paragraphs stay the same (non-affiliation, TCGdex/PokéCollector, YOLO still + live identity, photo estimate not a cert, no marketplace publish, TCGP-scanner pipeline only, HoloDex as layout inspiration). `ABOUT_TCGDEX_ATTRIBUTION` stays `null` — [TCGDEX_VALIDATION.md](./TCGDEX_VALIDATION.md) still marks required in-app MIT wording Unconfirmed; do not paste a license. Copy stays under `ABOUT_MAX_CHARS`. No accuracy claims, no vendor keys, no PokéTrace/Anthropic names.
+**Founder note (2026-10-01):** Replaced the tester-facing placeholder with the reserved [WIREFRAMES.md](./WIREFRAMES.md) §10b line: “Recognition is a provider. PokeSniper owns inventory and drafts.” Body paragraphs stay the same (non-affiliation, TCGdex/PokéCollector, YOLO still + live identity, photo estimate not a cert, no marketplace publish, TCGP-scanner pipeline only, HoloDex as layout inspiration). `ABOUT_TCGDEX_ATTRIBUTION` stays `null` — [TCGDEX_VALIDATION.md](./TCGDEX_VALIDATION.md) still marks required in-app MIT wording Unconfirmed; do not paste a license. Copy stays under `ABOUT_MAX_CHARS`. No accuracy claims, no vendor keys, no PokéTrace/Anthropic names.
 
 **Done when:** About stays under `ABOUT_MAX_CHARS`. No accuracy claims, no vendor keys, no PokéTrace/Anthropic names.
 

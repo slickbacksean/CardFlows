@@ -126,7 +126,7 @@ function channelAverage(dct: number[], freqSize: number): number {
 
 /**
  * 24×24 RGB DCT perceptual hash. Same detect+hash approach as the TCG Pocket
- * scanner pipeline; CardFlow keys the index by English `tcgdex_id`, never Pocket ids.
+ * scanner pipeline; PokeSniper keys the index by English `tcgdex_id`, never Pocket ids.
  */
 export function rgbPerceptualHash(image: RgbBitmap): string {
   const small = resizeRgb(image, RGB_PHASH_SIZE, RGB_PHASH_SIZE);

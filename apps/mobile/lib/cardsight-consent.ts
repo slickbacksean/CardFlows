@@ -8,7 +8,7 @@ let asking: Promise<void> | null = null;
 /**
  * Sean: one-time CardSight disclosure before the first photo is uploaded. Allow or decline is
  * stored on the server (with its version); the server enforces it, so an offline or failed
- * check never sends a photo to CardSight. It just uses CardFlow's own matcher.
+ * check never sends a photo to CardSight. It just uses PokeSniper's own matcher.
  */
 export async function askCardSightConsentOnce(): Promise<void> {
   if (answered) return;
