@@ -1,10 +1,16 @@
 import { createHash, randomBytes, randomInt, timingSafeEqual } from "node:crypto";
 import { emailSenderFromEnv, type EmailSender } from "./email-sender";
 import { cardSightMonthKey, consentState, hasActiveConsent } from "./consent-store";
-import { AGE_CONFIRMATION_REQUIRED_CODE, AGE_GATE_COPY, AGE_GATE_VERSION } from "@cardflow/shared";
+import {
+  AGE_CONFIRMATION_REQUIRED_CODE,
+  AGE_GATE_COPY,
+  AGE_GATE_VERSION,
+  livestreamAccessAllowed,
+  livestreamAccessFor,
+  type LivestreamAccess,
+} from "@cardflow/shared";
 import { ageConfirmationState, hasAgeConfirmation } from "./age-store";
 import { ageGateEnabledFromEnv, cardMagicIdReserveFromEnv, cardSightMonthlyBudgetFromEnv, CARDSIGHT_GUEST_MONTHLY_CAP, CARDSIGHT_USER_MONTHLY_CAP_DEFAULT } from "./grade-quota-env";
-import { createRecognitionWithFallback } from "./cardsight-adapter";
 import {
   monthStartIso,
   recognitionWithMultiCardMappings,
@@ -1477,7 +1483,48 @@ export function createApp(
     });
   });
 
+  /**
+   * Sean (Oct 18/19): livestream is signed-in + 18+, free for 3 days from account creation, then Premium.
+   * Frames stay in-house (OpenCLIP/pHash) — never CardSight, so no CardSight consent check.
+   * After the trial: 403 premium_required; the app shows a subscribe paywall (IAP stub until StoreKit).
+   */
+  const accountCreatedAtForLivestream = (userId: string): string | null => {
+    const account = store.accounts.getAccount(userId);
+    if (account?.createdAt) return account.createdAt;
+    // Invited/dev users without user_accounts: grade anchor is "first seen" and starts the window.
+    const grade = getGradeAccount(userId);
+    if (grade.anchorAt) return grade.anchorAt;
+    return store.ensureGradeAnchor(userId, now().toISOString()).anchorAt ?? null;
+  };
+  const livestreamAccessSnapshot = (userId: string): LivestreamAccess => {
+    const premium = resolveAccountPlan(userId, getGradeAccount(userId).plan) === "premium";
+    return livestreamAccessFor({
+      premium,
+      accountCreatedAt: accountCreatedAtForLivestream(userId),
+      now: now(),
+    });
+  };
+  const ensureLivestreamAccess = (c: Context) => {
+    const userId = c.get("userId") as string;
+    if (isGuestUserId(userId)) return { ok: false as const, response: signupRequired(c, "scan") };
+    if (!hasAgeConfirmation(store.ageConfirmations, userId)) return { ok: false as const, response: ageRequired(c) };
+    const access = livestreamAccessSnapshot(userId);
+    if (!livestreamAccessAllowed(access)) {
+      return { ok: false as const, response: c.json(premiumRequiredBody("livestream_scanner"), 403) };
+    }
+    return { ok: true as const, access };
+  };
+
+  app.get("/v1/livestream/access", (c) => {
+    const userId = c.get("userId") as string;
+    if (isGuestUserId(userId)) return signupRequired(c, "scan");
+    if (!hasAgeConfirmation(store.ageConfirmations, userId)) return ageRequired(c);
+    return c.json({ ok: true as const, access: livestreamAccessSnapshot(userId) });
+  });
+
   app.get("/v1/livestream/guesses/:tcgdexId", async (c) => {
+    const gate = ensureLivestreamAccess(c);
+    if (!gate.ok) return gate.response;
     const tcgdexId = normalizeLiveVideoTcgdexId(c.req.param("tcgdexId"));
     if (!tcgdexId) {
       return c.json({ ok: false, error: "Unknown card id" }, 400);
@@ -1512,6 +1559,8 @@ export function createApp(
   });
 
   app.post("/v1/livestream/identify", async (c) => {
+    const gate = ensureLivestreamAccess(c);
+    if (!gate.ok) return gate.response;
     const body = await c.req.json<{
       source?: unknown;
       platform?: unknown;
@@ -1563,6 +1612,8 @@ export function createApp(
     const stages: LiveScanSample["stages"] = {};
     let warped = false;
     let openclipTcgdexId: string | null = null;
+    let openclipCandidates: { tcgdexId: string; similarity: number }[] = [];
+    let openclipSimilarity: number | null = null;
     if (livestreamIdentify === "yolo_identity" && liveIdentityOpenclip) {
       const decodeStart = performance.now();
       const crop = decodeIdentityCropJpeg(identityCropJpeg);
@@ -1578,9 +1629,12 @@ export function createApp(
           stages.warp = match.timings.warpMs;
           stages.embed = match.timings.embedMs;
           stages.search = match.timings.searchMs;
+          stages.match = match.timings.searchMs ?? match.timings.totalMs;
           stages.orb = match.timings.orbMs;
         }
         warped = match?.warped === true;
+        if (match?.candidates?.length) openclipCandidates = match.candidates;
+        if (typeof match?.similarity === "number") openclipSimilarity = match.similarity;
         if (match?.accepted && match.tcgdexId) {
           openclipTcgdexId = normalizeLiveVideoTcgdexId(match.tcgdexId);
         }
@@ -1614,7 +1668,11 @@ export function createApp(
       },
       classifier: livestreamIdentify === "yolo_identity" ? "yolo_identity" : "none",
     });
-    if (!livestreamTiming) return c.json({ ok: true, identity });
+    const extras = {
+      ...(openclipCandidates.length ? { candidates: openclipCandidates } : {}),
+      ...(openclipSimilarity != null ? { similarity: openclipSimilarity } : {}),
+    };
+    if (!livestreamTiming) return c.json({ ok: true, identity, ...extras });
     stages.server = performance.now() - startedAt;
     const sample: LiveScanSample = {
       stages,
@@ -1623,7 +1681,7 @@ export function createApp(
     };
     livestreamTimingLog.add(sample);
     console.info(`[livestream-timing] ${JSON.stringify({ ...sample, tcgdexId: identity.tcgdexId })}`);
-    return c.json({ ok: true, identity, timing: { stages, warped } });
+    return c.json({ ok: true, identity, timing: { stages, warped }, ...extras });
   });
 
   /** Debug only: p50/p95 per stage of recent livestream matches. 404 unless timing is on. */
@@ -2603,13 +2661,18 @@ export function createApp(
           store.consents.monthlyUse(userId, monthKey) < userCap
             ? options.cardSight
             : null;
+        // Charge per-user cap only after a successful CardSight response (errors/timeouts don't count).
+        // Global budget is charged inside the adapter the same way (consumeBudget after ok:true).
         const runLive = cardSight
-          ? () =>
-              store.consents.takeMonthlyUse(userId, monthKey, userCap)
-                ? createRecognitionWithFallback(cardSight, { name: recognitionProvider.name, identifyCard: () => runLocal() }).identifyCard(
-                    identifyRequest,
-                  )
-                : runLocal()
+          ? async () => {
+              if (store.consents.monthlyUse(userId, monthKey) >= userCap) return runLocal();
+              const first = await cardSight.identifyCard(identifyRequest);
+              if (first.ok) {
+                store.consents.takeMonthlyUse(userId, monthKey, userCap);
+                return first;
+              }
+              return runLocal();
+            }
           : runLocal;
         recognition = recognitionCache
           ? await recognitionCache.getOrIdentify(
@@ -2984,6 +3047,11 @@ export function createApp(
             const used = store.getVendorQuotaUsage("cardsight", monthKey);
             return canCardMagicUseBudget(used, cardSightMonthlyBudget, cardMagicIdReserve);
           },
+          // Peek before the call; charge only after a successful CardMagic response.
+          budgetRemaining: () =>
+            cardSightMonthlyBudget == null ||
+            store.getVendorQuotaUsage("cardsight", monthKey) < cardSightMonthlyBudget,
+          userCapRemaining: () => store.consents.monthlyUse(userId, monthKey) < userCap,
           consumeBudget: () =>
             consumeCardSightBudget({
               consume: store.consumeVendorQuota,

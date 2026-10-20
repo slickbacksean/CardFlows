@@ -62,8 +62,9 @@ describe("P0-13 livestream warp + recorded-stream eval", () => {
       now += 250;
     }
     const replay = replayLiveCardStream(frames, (frame) => frame.expectedId);
-    expect(replay.maxCallsPerTrack).toBe(1);
-    expect(replay.matchCalls).toBe(cards.length);
+    // P1: votesBeforeLock=3 gathers sharp-frame votes before the track locks.
+    expect(replay.maxCallsPerTrack).toBe(3);
+    expect(replay.matchCalls).toBe(cards.length * 3);
     expect(replay.matchRate).toBeGreaterThanOrEqual(0.9);
   });
 });

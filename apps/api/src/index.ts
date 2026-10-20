@@ -8,6 +8,7 @@ import { createPricingFromEnv, createPokecollectorAccountsFromEnv } from "./poke
 import { createRecognitionFromEnv } from "./recognition-env";
 import { cardSightAdapterFromEnv } from "./cardsight-adapter";
 import { cardMagicFromEnv } from "./cardmagic-adapter";
+import { calendarMonthKey } from "@cardflow/shared";
 import { consumeCardSightBudget } from "./cardsight-budget";
 import { cardMagicIdReserveFromEnv, cardSightMonthlyBudgetFromEnv, cardSightUserCapsFromEnv } from "./grade-quota-env";
 import { createGradeEstimateFromEnv, gradeEngineProbeFromEnv } from "./grade-estimate-env";
@@ -55,6 +56,11 @@ const { client: liveIdentityOpenclip, reason: openclipReason } =
 const cardSightBudget = cardSightMonthlyBudgetFromEnv();
 const cardMagicIdReserve = cardMagicIdReserveFromEnv(process.env, cardSightBudget);
 const cardSight = cardSightAdapterFromEnv(process.env, {
+  // Peek before the call; charge only after a successful billable response.
+  budgetAvailable: () => {
+    if (cardSightBudget == null) return true;
+    return store.getVendorQuotaUsage("cardsight", calendarMonthKey(new Date())) < cardSightBudget;
+  },
   consumeBudget: () =>
     consumeCardSightBudget({
       consume: store.consumeVendorQuota,
