@@ -905,7 +905,7 @@ export async function saveLivestreamPurchase(input: {
   streamUrl?: string | null;
   selectedVariant?: string | null;
 }, idempotencyKey?: string) {
-  const created = await createScan({ captureMethod: "manual_scan" });
+  const created = await createScan({ captureMethod: "livestream_hud" });
   const confirmed = await confirmScan(created.scan.scanId, {
     tcgdexId: input.tcgdexId,
     selectedVariant: input.selectedVariant,

@@ -74,6 +74,7 @@ import {
   isOpenWatchlist,
   isRecentDetailsNeededDuplicate,
   livestreamContextTags,
+  LIVESTREAM_SOURCE_TAG,
   WATCHLIST_CLOSED_WORKFLOW_STATE,
   watchlistConversionTags,
   watchlistSourceIdFromTags,
@@ -2945,14 +2946,24 @@ export function createApp(
     if (dexSetCardsCache.size > 500) dexSetCardsCache.delete(dexSetCardsCache.keys().next().value as string);
     return cards;
   }
+  /**
+   * MyDEX ownership comes from exactly two sources:
+   *  (a) a card confirmed through Scan a Card (single or multi-card photo scan), or
+   *  (b) a Purchased tap in the livestream scanner HUD (purchased item tagged "livestream").
+   * Watchlist entries, grading runs, manual Purchased saves and Watchlist→Purchased never count.
+   * The livestream HUD creates a hidden "livestream_hud" scan; that scan is skipped
+   * so undoing the HUD purchase also clears ownership.
+   */
   function dexOwnedIds(userId: string): Set<string> {
     const owned = new Set<string>();
     for (const item of listInventory(userId)) {
       if (item.intent !== "purchased") continue;
+      if (!(item.tags ?? []).includes(LIVESTREAM_SOURCE_TAG)) continue;
       const id = getCanonical(item.cardflowCardId)?.tcgdexId;
       if (id) owned.add(id);
     }
     for (const scan of listScans(userId)) {
+      if (scan.captureMethod === "livestream_hud") continue;
       const ids = new Set<string>();
       if (scan.confirmationId) ids.add(scan.confirmationId);
       for (const row of scan.cardResults ?? []) if (row.confirmationId) ids.add(row.confirmationId);

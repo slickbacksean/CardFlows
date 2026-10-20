@@ -130,7 +130,7 @@ function isScenario(value: unknown): value is RecognitionScenario {
 }
 
 function isCaptureMethod(value: unknown): value is CaptureMethod {
-  return value === "camera_photo" || value === "manual_scan";
+  return value === "camera_photo" || value === "manual_scan" || value === "livestream_hud";
 }
 
 function dollarsFromCents(cents: number | null | undefined): string | null {

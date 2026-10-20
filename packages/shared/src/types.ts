@@ -1,6 +1,7 @@
 export type RecognitionProviderName = "cardsight" | "mock" | "obb_phash" | "off";
 
-export type CaptureMethod = "camera_photo" | "manual_scan";
+/** livestream_hud = hidden image-less scan behind a livestream HUD Purchased tap (never a Scan a Card scan). */
+export type CaptureMethod = "camera_photo" | "manual_scan" | "livestream_hud";
 
 export type RecognitionConfidence = "High" | "Medium" | "Low";
 
