@@ -124,6 +124,8 @@ export interface CardCatalogProvider {
   /** English sets, including printed set size. Used to resolve `078/084` on a still. */
   listSets?(language: TcgdexLanguage): Promise<TcgdexSetBrief[]>;
   listCards(req: CatalogLookupRequest): Promise<TcgdexCard[]>;
+  /** MyDEX set view: every card in one English set (id, number, name, image base). One call. */
+  listSetCards?(setId: string, language: TcgdexLanguage): Promise<import("./dex").DexCatalogCard[]>;
 }
 
 const EMPTY_CARD_COUNT = { total: 0, official: 0 };
@@ -465,6 +467,12 @@ export function createMockTcgdexCatalogProvider(): CardCatalogProvider {
     async listSets(language) {
       if (!requireEn(language)) return [];
       return index.sets;
+    },
+    async listSetCards(setId, language) {
+      if (!requireEn(language)) return [];
+      return index.cards
+        .filter((card) => card.set.id === setId)
+        .map((card) => ({ id: card.id, localId: card.localId, name: card.name, image: card.image }));
     },
     async listCards(req) {
       if (!requireEn(req.language)) return [];

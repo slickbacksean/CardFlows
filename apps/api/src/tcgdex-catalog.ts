@@ -189,6 +189,22 @@ export function createTcgdexCatalogProvider(
     },
     resolveSetByName,
     listSets,
+    async listSetCards(setId, language) {
+      if (!isEn(language) || !setId.trim()) return [];
+      const raw = asJsonRecord(await sdkCall(() => tcgdex.fetch("sets", setId.trim())));
+      const cards = isRecord(raw) && Array.isArray(raw.cards) ? raw.cards : [];
+      const out: Array<{ id: string; localId: string; name: string; image: string | null }> = [];
+      for (const row of cards) {
+        if (!isRecord(row) || typeof row.id !== "string") continue;
+        out.push({
+          id: row.id,
+          localId: typeof row.localId === "string" ? row.localId : String(row.localId ?? ""),
+          name: typeof row.name === "string" ? row.name : row.id,
+          image: typeof row.image === "string" ? row.image : null,
+        });
+      }
+      return out;
+    },
     async listCards(req: CatalogLookupRequest) {
       if (!isEn(req.language)) return [];
       if (req.tcgdexId) {

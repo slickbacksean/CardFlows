@@ -382,6 +382,16 @@ export default function CollectionScreen() {
           </Text>
         ) : null}
 
+        <Pressable
+          accessibilityLabel="MyDEX by set"
+          accessibilityRole="button"
+          onPress={() => router.push("/dex")}
+          style={styles.dexLink}
+        >
+          <Ionicons color={colors.text} name="grid-outline" size={16} />
+          <Text style={styles.dexLinkText}>MyDEX by set</Text>
+        </Pressable>
+
         {segment === "purchased" && detailsNeededCount > 0 ? (
           <Pressable
             accessibilityLabel={DETAILS_NEEDED_LABEL}
@@ -600,6 +610,8 @@ function EmptyState({ segment, hasQuery, hasSegmentItems, onScan }: EmptyStatePr
 }
 
 const styles = StyleSheet.create({
+  dexLink: { flexDirection: "row", alignItems: "center", gap: 6, paddingVertical: 6 },
+  dexLinkText: { color: colors.text, fontSize: 14 },
   flex: { flex: 1, backgroundColor: colors.bg },
   toolbar: {
     paddingHorizontal: space.md,
