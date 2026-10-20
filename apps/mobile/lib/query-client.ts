@@ -1,5 +1,5 @@
 /**
- * React Query for CardFlow API reads (P1-01). Screens opt in one at a time;
+ * React Query for PokeSniper API reads (P1-01). Screens opt in one at a time;
  * existing screens keep their current fetch-on-focus behavior until moved.
  * Pure JS, works in Expo Go.
  */

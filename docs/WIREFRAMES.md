@@ -1,4 +1,4 @@
-# CardFlow MVP wireframes
+# PokeSniper MVP wireframes
 
 **Status:** Design validation. Product UX only — not the current four-route scaffold.  
 **Related:** [MVP_SCOPE.md](./MVP_SCOPE.md) (screen list), [ROADMAP.md](./ROADMAP.md), [IMPLEMENTATION_BRIEF.md](./IMPLEMENTATION_BRIEF.md), [NON_GOALS.md](./NON_GOALS.md).  
@@ -15,7 +15,7 @@ Implement in order: [WIREFRAME_TASKS.md](./WIREFRAME_TASKS.md) ([ROADMAP.md](./R
 - Catalog art is **display only** (`image.source = tcgdex_assets`). It is never a listing photo the user took.
 - Mock-scenario chips on today’s Home screen are **dev-only**. They do not appear here.
 
-## UI template (HoloDex chrome, CardFlow product)
+## UI template (HoloDex chrome, PokeSniper product)
 
 Borrow **structure** from HoloDex App Store screens. Do **not** copy HoloDex product promises.
 
@@ -24,12 +24,12 @@ Borrow **structure** from HoloDex App Store screens. Do **not** copy HoloDex pro
 | Dark navy canvas, rounded card tiles | Multi-TCG browse (Pokémon / One Piece / Lorcana / MTG / YGO) |
 | Wordmark + USD + bell + avatar in the header | Live market sparkline as truth / “track profits” |
 | 5-item bottom tab bar with a **raised center Scan** | AI grading score, PSA/BGS live rows |
-| 2-column card grid, search, underlined segments | Scan cart of many cards (CardFlow is one still image at a time) |
+| 2-column card grid, search, underlined segments | Scan cart of many cards (PokeSniper is one still image at a time) |
 | Full-screen camera: card-shaped frame, gallery left, shutter center | Paywall, Pro badges, unlimited-scan upsell |
 | Confirm: “your picture” vs matching catalog thumbs | “Collect all” batch commit without Confirm |
 | Detail: hero art + pill chips (set, #, EN, variant) | Community / trade / lucky-number gamification |
 
-**Brand:** CardFlow gold accent (`#E8C547` in [apps/mobile/lib/theme.ts](../apps/mobile/lib/theme.ts)), not the HoloDex logo. Primary filled CTAs may use a bright blue like HoloDex “Collect” for scan/save; gold for wordmark and selected tab.
+**Brand:** PokeSniper gold accent (`#E8C547` in [apps/mobile/lib/theme.ts](../apps/mobile/lib/theme.ts)), not the HoloDex logo. Primary filled CTAs may use a bright blue like HoloDex “Collect” for scan/save; gold for wordmark and selected tab.
 
 **Tab bar** (visible on Home, Collection, and placeholder tabs). Hidden on Capture, Confirm, Detail, Purchase, Draft, Max Buy rules.
 
@@ -75,7 +75,7 @@ Inventory (purchased tile) ──► Listing draft
 
 ```
 +------------------------------------+
-| CardFlow          USD  (bell) (me) |
+| PokeSniper          USD  (bell) (me) |
 +------------------------------------+
 | English raw singles                |
 |                                    |
@@ -97,7 +97,7 @@ Inventory (purchased tile) ──► Listing draft
 
 ```
 +------------------------------------+
-| CardFlow          USD  (bell) (me) |
+| PokeSniper          USD  (bell) (me) |
 +------------------------------------+
 | Recent                             |
 | +----------+  +----------+         |
@@ -122,7 +122,7 @@ Two-column tiles match HoloDex collectables/wishlist grids (large art, name, met
 
 ```
 +------------------------------------+
-| CardFlow          USD  (bell) (me) |
+| PokeSniper          USD  (bell) (me) |
 +------------------------------------+
 | Could not load inventory.          |
 | [ Try again ]                      |
@@ -200,7 +200,7 @@ Two-column tiles match HoloDex collectables/wishlist grids (large art, name, met
 
 ## 3. Candidates / Confirm
 
-**HoloDex pattern:** Review sheet after a shot — “your picture” vs **matching cards** thumbnail row, “Not quite right?”, then a filled primary CTA. CardFlow keeps **Confirm identity** (not “Collect this card”) and never batch-commits.
+**HoloDex pattern:** Review sheet after a shot — “your picture” vs **matching cards** thumbnail row, “Not quite right?”, then a filled primary CTA. PokeSniper keeps **Confirm identity** (not “Collect this card”) and never batch-commits.
 
 **Purpose:** Review CardSight candidates matched to TCGdex. High+High still requires Confirm (one tap) — never skip to inventory write.
 
@@ -294,7 +294,7 @@ No Confirm. No catalog picker. No CRM write.
 | (X)  Confirm card                  |
 +------------------------------------+
 | Too many scans                     |
-| Wait and retry. CardFlow did not   |
+| Wait and retry. PokeSniper did not   |
 | save this card.                    |
 |                                    |
 | Retry after ~30s                   |
@@ -339,7 +339,7 @@ Manual catalog search is **later**, not this MVP frame. HoloDex “Search manual
 
 ## 4. Card detail / Estimate
 
-**HoloDex pattern:** Hero catalog art, name + number, pill chips (game · set · # · EN · variant). Scroll body for value. CardFlow replaces market/PSA blocks with **user-entered reference** and **Max Buy guidance**.
+**HoloDex pattern:** Hero catalog art, name + number, pill chips (game · set · # · EN · variant). Scroll body for value. PokeSniper replaces market/PSA blocks with **user-entered reference** and **Max Buy guidance**.
 
 **Purpose:** Show confirmed catalog identity. Decide Purchased vs Watchlist.
 
@@ -408,7 +408,7 @@ Do not invent a pricing-provider module, live market chart, or “will sell for�
 
 ## 5. Purchase / Watchlist confirm
 
-**HoloDex pattern:** Bottom sheet / follow-on form after the primary CTA (their “Collect this card” adds details). CardFlow uses a sheet over detail: cost lines for Purchased, reminder-only for Watchlist.
+**HoloDex pattern:** Bottom sheet / follow-on form after the primary CTA (their “Collect this card” adds details). PokeSniper uses a sheet over detail: cost lines for Purchased, reminder-only for Watchlist.
 
 **Purpose:** Commit CRM intent. Purchased needs cost basis. Watchlist is interest only — not stock, no draft, no cost basis.
 
@@ -529,7 +529,7 @@ This is the **Inventory** tab. Home is the overview; this is the full list.
 
 ## 7. Watchlist tab
 
-**HoloDex pattern:** Wishlist grid + search. No Collect-to-own. CardFlow: watching only.
+**HoloDex pattern:** Wishlist grid + search. No Collect-to-own. PokeSniper: watching only.
 
 ```
 +------------------------------------+
@@ -679,7 +679,7 @@ There is **no** Publish button. `intended_channel_note` is free text, not a mark
 +------------------------------------+
 | < Draft · ready for review         |
 +------------------------------------+
-| Ready for review. CardFlow did     |
+| Ready for review. PokeSniper did     |
 | not publish this.                  |
 |                                    |
 | Copied title, description,         |
@@ -690,7 +690,7 @@ There is **no** Publish button. `intended_channel_note` is free text, not a mark
 +------------------------------------+
 ```
 
-Clipboard disclaimer: CardFlow clipboard export only. CardFlow did not publish this listing to any marketplace.
+Clipboard disclaimer: PokeSniper clipboard export only. PokeSniper did not publish this listing to any marketplace.
 
 ### 9d. Watchlist attempted (should not open)
 
@@ -708,7 +708,7 @@ Clipboard disclaimer: CardFlow clipboard export only. CardFlow did not publish t
 
 ## 10. Settings
 
-**HoloDex pattern:** Gear + avatar header, stacked stat/info cards, then rows. CardFlow: no total-market-value hero, no Pro badge, no graded count.
+**HoloDex pattern:** Gear + avatar header, stacked stat/info cards, then rows. PokeSniper: no total-market-value hero, no Pro badge, no graded count.
 
 **Purpose:** About, non-affiliation, research flags (off), link to Max Buy preferences. No paid subscription in private beta.
 
@@ -716,7 +716,7 @@ Clipboard disclaimer: CardFlow clipboard export only. CardFlow did not publish t
 
 ```
 +------------------------------------+
-| (gear) CardFlow     USD  (bell)(me)|
+| (gear) PokeSniper     USD  (bell)(me)|
 +------------------------------------+
 | Private beta · invited user        |
 |                                    |
@@ -729,7 +729,7 @@ Clipboard disclaimer: CardFlow clipboard export only. CardFlow did not publish t
 | Pricing provider             OFF   |
 | Marketplace automation       OFF   |
 |                                    |
-| [ About CardFlow ]                 |
+| [ About PokeSniper ]                 |
 +------------------------------------+
 | Home  Inventory  (O)  Watch  More  |
 +------------------------------------+
@@ -743,21 +743,21 @@ Research toggles are **visible as off**. Do not offer an in-app path to turn mar
 +------------------------------------+
 | < About                            |
 +------------------------------------+
-| CardFlow is not affiliated with,   |
+| PokeSniper is not affiliated with,   |
 | endorsed by, or sponsored by       |
 | Nintendo, The Pokémon Company,     |
 | or Game Freak.                     |
 |                                    |
 | Recognition is a provider.         |
 | Catalog metadata is TCGdex.        |
-| CardFlow owns inventory and        |
+| PokeSniper owns inventory and        |
 | drafts. No marketplace publish.    |
 |                                    |
 | Catalog images: TCGdex assets      |
 | (display only).                    |
 |                                    |
 | Layout inspired by collector-app   |
-| chrome (HoloDex); CardFlow is a    |
+| chrome (HoloDex); PokeSniper is a    |
 | separate product.                  |
 +------------------------------------+
 ```
@@ -787,7 +787,7 @@ Today’s Home mock-scenario chips (High / Ambiguous / No card / Timeout / Rate 
 ## Out of scope (do not frame)
 
 - Publish / eBay / Whatnot / TCGplayer / Shopify listing forms
-- Live camera streaming ID (HoloDex “point and scan” continuous feel is **not** CardFlow MVP)
+- Live camera streaming ID (HoloDex “point and scan” continuous feel is **not** PokeSniper MVP)
 - Sold / shipped / paid out warehouse screens
 - Pricing-provider market charts, PSA strips, or profit/returns
 - Auto-grade as an official cert / CardFlow-as-grader (Prepare photo **estimate** is [TAB_LAYOUT_PLAN.md](./TAB_LAYOUT_PLAN.md) §4a; PokeTrace slabs later)

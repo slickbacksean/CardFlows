@@ -1,5 +1,5 @@
 /**
- * Sean (Oct 17, 2026): CardFlow accounts are for adults 18 and older, stated at sign-up. There
+ * Sean (Oct 17, 2026): PokeSniper accounts are for adults 18 and older, stated at sign-up. There
  * is no birth-date screen. Sign-up has a required checkbox (unchecked by default), "I confirm
  * I'm 18 or older.", plus the Terms/Privacy line. The API refuses `POST /v1/accounts` without
  * `ageConfirmed18Plus: true` and stores only `age_attested_at` and this wording version.
@@ -19,7 +19,7 @@ export const AGE_GATE_COPY = {
   checkbox: "I confirm I'm 18 or older.",
   /** Testers and existing accounts confirm once in the app before any CardSight call. */
   confirmTitle: "Confirm your age",
-  confirmBody: "CardSight card recognition is for people 18 and older. Until you confirm, CardFlow's own matcher identifies your cards.",
+  confirmBody: "CardSight card recognition is for people 18 and older. Until you confirm, PokeSniper's own matcher identifies your cards.",
   confirmAction: "I confirm I'm 18 or older.",
   confirmLater: "Not now",
   /** Retained for docs/tests of the retired guest path; the app no longer shows guest Settings. */

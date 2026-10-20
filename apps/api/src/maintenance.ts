@@ -11,7 +11,7 @@ export function createMaintenanceApp() {
   app.get("/health", (c) => c.json({ ok: true, service: "cardflow-api", maintenance: true }));
   app.all("*", (c) => {
     c.header("Retry-After", "300");
-    return c.json({ ok: false, error: "maintenance", message: "CardFlow is down for maintenance. Try again in a few minutes." }, 503);
+    return c.json({ ok: false, error: "maintenance", message: "PokeSniper is down for maintenance. Try again in a few minutes." }, 503);
   });
   return app;
 }

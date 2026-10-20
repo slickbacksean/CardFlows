@@ -1,4 +1,4 @@
-# CardFlow roadmap
+# PokeSniper roadmap
 
 **Status:** Persistence, invite sessions, and live TCGdex catalog are in the app. Do not rewrite [IMPLEMENTATION_BRIEF.md](./IMPLEMENTATION_BRIEF.md).
 
@@ -11,7 +11,7 @@ ASCII screens: [WIREFRAMES.md](./WIREFRAMES.md). Step-by-step build list: [WIREF
 - Expo app, mock API, shared Max Buy + mapper, fixture tests.
 - Private-beta loop on mock recognition: scan → confirm → Max Buy → Purchased or Watchlist → listing draft → Copy.
 - Wireframe routes, still-image Capture (mock identify), Settings / Max Buy / About, invited-tester switching.
-- Durable SQLite CRM, request-scoped invite sessions, live English TCGdex catalog (public API; CardFlow adapter still strips `pricing` on that path).
+- Durable SQLite CRM, request-scoped invite sessions, live English TCGdex catalog (public API; PokeSniper adapter still strips `pricing` on that path).
 - Livestream tab is still a **placeholder** browser + overlay that fills only after Confirm from Capture. That screenshot-then-Capture path is **rejected** for the scanner going forward.
 
 Phase A–D wireframe routes are in the app. Dev-only mock-scenario chips live on Capture, not product Home.
@@ -32,12 +32,12 @@ Phase A–D wireframe routes are in the app. Dev-only mock-scenario chips live o
 
    **Livestream identify (no screenshots).** The scanner must read the **live video** in the in-house Whatnot | eBay browser. Visual identity uses the [pokemon-scanner](https://github.com/t-sinclair2500/pokemon-scanner) **pipeline** (OpenCLIP + HNSW) via `services/live-identity-openclip/`, with RGB pHash as fallback — see [LIVE_VISUAL_MODEL.md](./LIVE_VISUAL_MODEL.md). Execute remaining work one task at a time in [LIVE_IDENTITY_OPENCLIP_TASKS.md](./LIVE_IDENTITY_OPENCLIP_TASKS.md). It must **not** take a screenshot of the livestream, must **not** send the user to Capture, and must **not** identify from a still of the page. Overlay guesses do not write inventory. No Whatnot/eBay scrape, no CardSight on this tab, no PokéCollector Gemini.
 
-   **Market data.** Unmodified [PokéCollector](https://github.com/Git-Romer/pokecollector) is the source for catalog + USD estimates (TCGdex Cardmarket/TCGPlayer fields). CardFlow talks HTTP only (AGPL: do not copy their source). Listing drafts and Max Buy **rules** stay in CardFlow. Do **not** adopt [PokeMoney / pokecardprices](https://github.com/destinio/pokecardprices).
+   **Market data.** Unmodified [PokéCollector](https://github.com/Git-Romer/pokecollector) is the source for catalog + USD estimates (TCGdex Cardmarket/TCGPlayer fields). PokeSniper talks HTTP only (AGPL: do not copy their source). Listing drafts and Max Buy **rules** stay in PokeSniper. Do **not** adopt [PokeMoney / pokecardprices](https://github.com/destinio/pokecardprices).
 
    Founder exceptions (older “pricing OFF / no TCGdex pricing / overlay is not live ID” lines do not block this):
 
    - Overlay and portfolio may show TCGdex prices **via PokéCollector**. Never copy `pricing` onto listing drafts. Not a bid or a profit guarantee.
-   - PokéCollector may sync an English TCGdex replica. Do **not** run `tcgdex/server` in CardFlow.
+   - PokéCollector may sync an English TCGdex replica. Do **not** run `tcgdex/server` in PokeSniper.
    - Livestream ID is **in-stream video** (YOLO + identity model), not WebView screenshots and not a phone-camera scan product.
    - Capture stills use YOLO OBB + pHash (TCGP-scanner approach) against **TCGdex English art**, not CardSight and not the Pocket card DB.
    - Grading Prepare may show a photo **estimate** (casecomp **pipeline only**). Not a cert. [PokeTrace](https://poketrace.com/) slab comps are flag-gated on Prepare (`CARD_FLOW_POKETRACE_ENABLED`). No casecomp / tcg-oracle source. See [GRADING_PREPARE_TASKS.md](./GRADING_PREPARE_TASKS.md) and [DEVICE_RUNTIME_TASKS.md](./DEVICE_RUNTIME_TASKS.md) Task 11.

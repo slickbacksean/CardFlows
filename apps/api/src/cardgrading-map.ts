@@ -27,7 +27,7 @@ import {
  * Port of GitHub main packages/api/src/grading/photo-pregrade-mapper.ts and
  * map-detect-result.ts. The only overall number is
  * `grade_estimate.overall_grade`. Hard capture gates (card not found, tilt,
- * aspect, and CardFlow's sharpness / capture-scale gates from
+ * aspect, and PokeSniper's sharpness / capture-scale gates from
  * cardflow_capture_checks.py) are a retake with no number. Soft gates
  * (glare, lighting, resolution, small in frame) still score, with a warning.
  *
@@ -264,7 +264,7 @@ function hardRetake(report: Record<string, unknown>): PhotoPregradeRetake | null
 }
 
 /**
- * Map a vendored `grade_card` report to the CardFlow photo pre-grade body.
+ * Map a vendored `grade_card` report to the PokeSniper photo pre-grade body.
  * - `grade_estimate.overall_grade` → `estimate` (the only 1.0–10.0 number)
  * - `centering.overall_grade` → `subgrades.centering.points` (×10)
  * - `subgrades.{front,back}.*` → per-side grades
@@ -395,7 +395,7 @@ function surfaceNullReason(status: PhotoPregradeAngledStatus): string {
 /**
  * Prepare-sheet DTO from a scored pre-grade. `overall` is
  * `grade_estimate.overall_grade` unchanged; subgrades are the library's
- * per-side grades (null stays null). Never recomputed by CardFlow math.
+ * per-side grades (null stays null). Never recomputed by PokeSniper math.
  */
 export function gradeEstimateFromPregrade(result: PhotoPregradeSuccess): CardFlowGradeEstimate {
   const pillars = result.subgrades;

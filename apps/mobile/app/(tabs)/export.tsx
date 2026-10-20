@@ -140,7 +140,7 @@ export default function ExportScreen() {
       setNotice(
         result === "copied"
           ? `Copied ${copies.length} cards. Paste the sheet, then upload it yourself.${priceNote}`
-          : `Shared ${copies.length} cards. Upload the file yourself. CardFlow did not list them.${priceNote}`,
+          : `Shared ${copies.length} cards. Upload the file yourself. PokeSniper did not list them.${priceNote}`,
       );
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Couldn't export");
@@ -154,7 +154,7 @@ export default function ExportScreen() {
       <Text style={styles.title}>Export</Text>
       <StatusBanner />
       <Text style={styles.constraint}>
-        Share purchased cards as a spreadsheet. You upload it. CardFlow does not list them.
+        Share purchased cards as a spreadsheet. You upload it. PokeSniper does not list them.
       </Text>
 
       {isLoading ? (

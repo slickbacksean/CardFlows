@@ -1,4 +1,4 @@
-# CardFlow API on Railway (SQLite on a volume + Litestream)
+# PokeSniper API on Railway (SQLite on a volume + Litestream)
 
 Status: implemented in the repo (draft PR); **nothing is deployed and no accounts exist yet**. Sean does the account steps in "What Sean does" below. Source plan: Dev Ops, Oct 17, 2026.
 
@@ -52,7 +52,7 @@ Optional, later: Environment "drill" (temporary, for restore drills §7.B; delet
 | Draining seconds (teardown) | `30` | SIGTERM → SIGKILL gap. It covers the node shutdown (§8.1) plus Litestream's final sync (`shutdown-sync-timeout: 20s`). |
 | Overlap seconds | leave default/0 | Railway already prevents two deployments mounting the same volume, so there's a few seconds of downtime per deploy. Accepted. |
 | Resources | Memory limit **2 GB**, vCPU limit 2 | One grade peaks at about 1 GB (`docs/API_DEPLOY.md`). Hobby allows up to 48 GB per service. Billing follows actual use, not the limit. |
-| Public networking | Railway-generated `*.up.railway.app` domain on port 8080. Optional custom domain `api.<domain>` (§10). | Hobby allows 2 custom domains. |
+| Public networking | Railway-generated `*.up.railway.app` domain on port 8080. Optional custom domain `api.pokesniper.app` (§10). | Hobby allows 2 custom domains. |
 | Volume backups (Railway built-in) | Enable **Daily only** (kept 6 days) | A cheap third layer, but it can only restore into the same project and environment. Weekly (27 days) and Monthly (89 days) also fit the 90-day backup window; do not keep volume backups longer than 90 days (§6.4). |
 
 ## Paths, volume, permissions
@@ -132,7 +132,7 @@ Railway-provided (don't set): `RAILWAY_VOLUME_MOUNT_PATH`, `RAILWAY_VOLUME_NAME`
 Note: `CARD_FLOW_OBB_PHASH_INDEX` and `CARD_FLOW_OBB_ONNX_PATH` point at gitignored local files. If livestream identity needs them in production, upload them to `/data/models/` with `railway volume files upload` and set the path. Out of scope for this PR; flag it to Native Mobile.
 
 ### 9.2 EAS only (mobile build env, from PR #96 `docs/RELEASE_ENV.md`)
-- `EXPO_PUBLIC_API_URL` (required for preview and production): the Railway domain or `https://api.<domain>`. **Pick the custom domain before the first production iOS build** so moving off Railway later doesn't need an app update.
+- `EXPO_PUBLIC_API_URL` (required for preview and production): the Railway domain or `https://api.pokesniper.app`. **Pick the custom domain before the first production iOS build** so moving off Railway later doesn't need an app update.
 - `EXPO_PUBLIC_SENTRY_DSN`, `EXPO_PUBLIC_POSTHOG_KEY`, `EXPO_PUBLIC_POSTHOG_HOST`, `EXPO_PUBLIC_CARD_FLOW_APP_KEY`, `EXPO_PUBLIC_APP_ENV` (set by eas.json). **All are public and inlined in the bundle.**
 - EAS `secret` (build-time only, never in the bundle): `SENTRY_AUTH_TOKEN`, `SENTRY_ORG`, `SENTRY_PROJECT` (once source-map upload is wanted).
 
@@ -156,7 +156,7 @@ Agents don't create accounts, add payment methods, create cloud resources or dep
 | 8 | Generate and paste the secrets into Railway variables per environment: `CARD_FLOW_SERVER_PEPPER` (`openssl rand -base64 48`, different per environment), `CARD_FLOW_OPS_TOKEN` (`openssl rand -hex 32`), `CARD_FLOW_APP_API_KEY`, the R2 keys, plus the §9.1 non-secret values | **Required** | |
 | 9 | Turn on Railway **Daily** volume backups for the production volume (not Weekly or Monthly) | **Required** | |
 | 10 | Email sender: Resend account + verified sending domain → `RESEND_API_KEY`, `CARD_FLOW_EMAIL_FROM` | **Required for launch** (sign-up verification), separate workstream | Needs a domain |
-| 11 | Custom domain `api.<domain>`: add it in Railway and create the CNAME at the DNS host. Do it before the production EAS build. | Optional (recommended) | Hobby allows 2 custom domains |
+| 11 | Custom domain `api.pokesniper.app`: add it in Railway and create the CNAME at the DNS host. Do it before the production EAS build. | Optional (recommended) | Hobby allows 2 custom domains |
 | 12 | Healthchecks.io account (free): checks "litestream-prod" (5 min / 15 min grace) and "nightly-backup-prod" (1 day / 3 h grace) → paste the ping URLs | Optional (strongly recommended) | Replication-lag alerting depends on it |
 | 13 | Uptime monitor on `/health` (UptimeRobot or Better Stack free) | Optional (recommended) | |
 | 14 | Slack incoming webhook for `CARD_FLOW_ALERT_WEBHOOK_URL` | Optional (pending decision) | |

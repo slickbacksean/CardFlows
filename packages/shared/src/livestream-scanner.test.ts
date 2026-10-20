@@ -87,7 +87,7 @@ describe("Livestream in-house browser + scanner control", () => {
     expect(overlay).toContain("Scanner off");
     expect(overlay).toContain("HudBubble");
     expect(readRepoFile("apps/mobile/components/ui/hud-bubble.tsx")).toContain(
-      "Drag CardFlow overlay",
+      "Drag PokeSniper overlay",
     );
     expect(overlay).toContain("Looking for a card…");
     expect(overlay).toContain("HudEmptyFigures");

@@ -8,7 +8,7 @@ let asking: Promise<boolean> | null = null;
 /**
  * Policy Reviewer (Oct 17): CardSight is only for accounts that attested 18+. New accounts did
  * at sign-up; testers and existing accounts confirm once here, before the CardSight prompt.
- * "Not now" (or any failure) just means CardFlow's own matcher. Never shown to guests.
+ * "Not now" (or any failure) just means PokeSniper's own matcher. Never shown to guests.
  */
 export async function ensureAccountAgeConfirmed(): Promise<boolean> {
   if (confirmed) return true;

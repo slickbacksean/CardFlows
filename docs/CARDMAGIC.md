@@ -7,7 +7,7 @@ Estimate only. Not an official grade.
 | Path | Who | When |
 |---|---|---|
 | **CardMagic** (CardSight) | Server, saved grading photos | `CARD_FLOW_CARDMAGIC=on` + `CARDSIGHT_API_KEY` + signed-in + 18+ + current CardSight consent + monthly cap room **and** total CardSight calls this month below the ID-reserve floor |
-| **CardFlow card finder** | Server fallback + on-device live auto-capture | Always available; used when CardMagic is off, declines, hits the ID reserve, errors, times out (~8s), or returns `NO_CARD_FOUND` |
+| **PokeSniper card finder** | Server fallback + on-device live auto-capture | Always available; used when CardMagic is off, declines, hits the ID reserve, errors, times out (~8s), or returns `NO_CARD_FOUND` |
 
 Live auto-capture stays on-device. No CardMagic on camera frames.
 

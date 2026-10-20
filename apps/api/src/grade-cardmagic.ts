@@ -1,6 +1,6 @@
 /**
  * Hybrid card finder for saved grading photos: try CardMagic when enabled + consented,
- * else CardFlow's own detect (cardgrading). Live auto-capture stays on-device.
+ * else PokeSniper's own detect (cardgrading). Live auto-capture stays on-device.
  */
 import type { DetectCropResult, PhotoPregradeSide } from "@cardflow/shared";
 import type { CardMagicClient, CardMagicCornerSet, CardMagicResult } from "./cardmagic-adapter";

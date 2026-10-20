@@ -40,7 +40,7 @@ function proxyToApi(req, res) {
   proxyReq.on("error", () => {
     if (res.headersSent) return;
     res.writeHead(502, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({ ok: false, error: "CardFlow API is not running" }));
+    res.end(JSON.stringify({ ok: false, error: "PokeSniper API is not running" }));
   });
   req.pipe(proxyReq);
 }

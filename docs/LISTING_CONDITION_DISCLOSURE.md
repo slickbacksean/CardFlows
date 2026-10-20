@@ -1,6 +1,6 @@
-# CardFlow Listing Condition Disclosure
+# PokeSniper Listing Condition Disclosure
 
-**Status:** Spike recommendation for review. **Internal CardFlow document only.**  
+**Status:** Spike recommendation for review. **Internal PokeSniper document only.**  
 **Related:** `CRM_LISTING_DRAFT_FIELDS.md`, `LISTING_DRAFT_BUILDER.md`.
 
 ---
@@ -21,7 +21,7 @@ A **user-entered checklist** helps sellers describe raw English singles honestly
 
 ## 2. Checklist (raw English singles)
 
-All answers are **user self-assess / eyeball**. CardFlow does not verify.
+All answers are **user self-assess / eyeball**. PokeSniper does not verify.
 
 ### 2.1 Short optional checklist (ship in MVP) — Confirmed
 
@@ -41,7 +41,7 @@ Checklist is **optional** as a UX — user can still type `condition` freely —
 | Item | Lands in | Notes |
 |------|----------|-------|
 | Creases / scratches / writing / bends / odor | `description` | Useful prompts; not part of the short required-ship set |
-| Authenticity affirmation | `description` or `notes` | User statement only — **not** a CardFlow guarantee (**Assumption:** prompt optional) |
+| Authenticity affirmation | `description` or `notes` | User statement only — **not** a PokeSniper guarantee (**Assumption:** prompt optional) |
 | Photo disclosure | `description` | e.g. “Photos are mine” |
 
 Optional private reminder (all-in cost, binder location) stays in `notes`, not in listing body unless the user copies it. Never on clipboard.
@@ -66,7 +66,7 @@ Example composition:
 Corners: sharp. Edges: clean. Surface: light sleeve scuffs. Centering: looks good.
 No creases, writing, or bends noted. No smoke odor noted.
 Photos are mine (front scan + back photo).
-User affirms this is a genuine Pokémon TCG card to the best of their knowledge — not a CardFlow authenticity guarantee.
+User affirms this is a genuine Pokémon TCG card to the best of their knowledge — not a PokeSniper authenticity guarantee.
 ```
 
 ---
@@ -77,7 +77,7 @@ User affirms this is a genuine Pokémon TCG card to the best of their knowledge 
 |-----------|-----|
 | “PSA 10” / “BGS 9.5” / “CGC gem” auto-filled | Not graded inventory in MVP |
 | “AI graded NM” | No auto-grading product |
-| “CardFlow verified authentic” | CardFlow is not an authenticator |
+| “PokeSniper verified authentic” | PokeSniper is not an authenticator |
 | Silent omission of known damage the user already entered on inventory | Prefer honesty; still user-controlled |
 | Turning TCGdex rarity into a condition grade | Catalog ≠ condition |
 

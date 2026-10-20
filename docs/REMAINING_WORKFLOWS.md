@@ -44,7 +44,7 @@
 
 | Problem | Solution |
 |---------|----------|
-| `purchasePrice: "abc"` is HTTP 500. With PokéCollector on, the remote copy is written **before** local math throws, so PokéCollector has a card CardFlow does not. (P0-2) | Validate purchase price, shipping, tax, fees, supplies, and reference price **before** `writePokecollectorCopy`. |
+| `purchasePrice: "abc"` is HTTP 500. With PokéCollector on, the remote copy is written **before** local math throws, so PokéCollector has a card PokeSniper does not. (P0-2) | Validate purchase price, shipping, tax, fees, supplies, and reference price **before** `writePokecollectorCopy`. |
 | `POST /v1/max-buy` with `referencePriceAmount: "abc"` is 500. (P0-2) | Same parser. 400, nothing stored. |
 | Negative purchase price (`-50`) and `purchasedAt: "not-a-date"` are accepted. Decide accepts a negative reference price. (P1-9) | Reject amounts below 0. Validate `purchasedAt` with `z.iso.datetime()`. |
 | `conditionAdjustments` of `{ NM: -5, LP: "x" }` saves. Max Buy then shows `$NaN` or `-$348`. (P1-9) | Extend `maxBuyPreferencesRangeError` so every factor is a finite number ≥ 0. Clean bad rows already stored. |
@@ -67,7 +67,7 @@
 
 ## 4. Collection and card tracking
 
-**Status:** Cards created in CardFlow open, draft, and show all-in cost. Cards that exist only in PokéCollector do not.
+**Status:** Cards created in PokeSniper open, draft, and show all-in cost. Cards that exist only in PokéCollector do not.
 
 | Problem | Solution |
 |---------|----------|
@@ -139,7 +139,7 @@
 
 | Problem | Solution |
 |---------|----------|
-| Network errors say “start the mock API.” A text 500 becomes a JSON parse error. No request timeout. (P1-8) | Friendly “Can’t reach CardFlow.” Map status codes. `AbortController` ~15s. Dev hint only under `__DEV__`. |
+| Network errors say “start the mock API.” A text 500 becomes a JSON parse error. No request timeout. (P1-8) | Friendly “Can’t reach PokeSniper.” Map status codes. `AbortController` ~15s. Dev hint only under `__DEV__`. |
 | No root `ErrorBoundary`, no `+not-found` route. (P2-9) | “Try again” and a link to Collection. Unknown routes redirect to Collection. |
 | App defaults to `http://127.0.0.1:3001` and **ignores** `EXPO_PUBLIC_API_URL` on web and simulators. EAS is development-only. API `start` is `tsx`. (P2-10) | Honor `EXPO_PUBLIC_API_URL`. Loopback override only for dev simulators. HTTPS outside dev. `preview` and `production` EAS profiles. Run a compiled API with `node`. |
 | CORS allows every origin. (P2-11) | Allow-list `CARD_FLOW_CORS_ORIGINS`. Native apps do not need CORS. |
@@ -155,7 +155,7 @@
 
 ## Order to implement
 
-1. Money parser (workflows 1–2): stops the draft crash, the 500s, NaN Max Buy, and PokéCollector writing a copy CardFlow does not have.
+1. Money parser (workflows 1–2): stops the draft crash, the 500s, NaN Max Buy, and PokéCollector writing a copy PokeSniper does not have.
 2. Sessions (workflow 8) — done. Invite codes stay on the server; the app asks for a code instead of redeeming Alex.
 3. No mock recognition or mock grade outside tests (workflows 3 and 6), and health that says when a mock is on (workflow 7).
 4. Livestream on a real device (workflow 5): native build, prove frames, then ORB. Do not treat leftover Confirm as live identity.

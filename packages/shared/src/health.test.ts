@@ -12,7 +12,7 @@ import {
   slabPricingHealth,
 } from "./health";
 
-describe("CardFlow /health status", () => {
+describe("PokeSniper /health status", () => {
   it("maps stack names to honest unions and never CardSight", () => {
     expect(catalogHealth("mock")).toBe("mock");
     expect(catalogHealth("tcgdex")).toBe("tcgdex");

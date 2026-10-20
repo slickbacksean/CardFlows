@@ -1,4 +1,4 @@
-# CardFlow implementation brief
+# PokeSniper implementation brief
 
 **Status:** Frozen for private-beta build.  
 **Read this first.** Do not reread the full `docs/` tree unless this file points you to one doc. Do not rewrite planning docs.
@@ -13,7 +13,7 @@ English raw Pokémon singles only. Still image only. Native iOS/Android (Expo).
 
 | ID | Role |
 |----|------|
-| `cardflow_card_id` | CardFlow UUID. Mint **on Confirm only**. PK for CRM. |
+| `cardflow_card_id` | PokeSniper UUID. Mint **on Confirm only**. PK for CRM. |
 | `tcgdex_id` | Catalog ref only (e.g. `base1-58`). |
 | `cardsight_card_id` | Recognition ref only. Never look up TCGdex with it. |
 

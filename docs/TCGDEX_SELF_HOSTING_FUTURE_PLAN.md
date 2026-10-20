@@ -11,7 +11,7 @@ Use the **public API** (`https://api.tcgdex.net/v2`) and official **`@tcgdex/sdk
 
 That is the path the cards-database README lists first: SDKs, then `api.tcgdex.net`, then “you can build the API yourself” with Docker.
 
-CardFlow’s adapter is written to that contract so a later cutover is `setEndpoint`, not a rewrite.
+PokeSniper’s adapter is written to that contract so a later cutover is `setEndpoint`, not a rewrite.
 
 ---
 
@@ -21,10 +21,10 @@ CardFlow’s adapter is written to that contract so a later cutover is `setEndpo
 |--------|--------|
 | Spike / issue rules | Explicit: do not self-host; do not import the full DB. |
 | MVP traffic shape | English `GET` by set + `localId` or `id` — not a local replica of every language. |
-| Ops cost | Official image starts workers (`MAX_WORKERS`); CardFlow has no catalog-ops runbook yet. |
+| Ops cost | Official image starts workers (`MAX_WORKERS`); PokeSniper has no catalog-ops runbook yet. |
 | Assets | Card images live on `assets.tcgdex.net`, separate from card JSON (FAQ). Self-hosting the API does **not** automatically solve image hosting/licensing. |
-| Pricing trap | A local server would still expose `pricing` on some cards. CardFlow must keep ignoring it. |
-| No production tables | Self-hosting often tempts a local import table. Inventory must stay on CardFlow IDs, not a cloned TCGdex schema. |
+| Pricing trap | A local server would still expose `pricing` on some cards. PokeSniper must keep ignoring it. |
+| No production tables | Self-hosting often tempts a local import table. Inventory must stay on PokeSniper IDs, not a cloned TCGdex schema. |
 
 ---
 
@@ -45,22 +45,22 @@ CardFlow’s adapter is written to that contract so a later cutover is `setEndpo
 tcgdex.setEndpoint('https://custom-api.example.com/v2');
 ```
 
-**Unconfirmed:** Official docs do not specify CardFlow’s hosting SLA, how to pin a git SHA vs `edge`, how translations/`meta/translations` are updated, or whether assets must be mirrored.
+**Unconfirmed:** Official docs do not specify PokeSniper’s hosting SLA, how to pin a git SHA vs `edge`, how translations/`meta/translations` are updated, or whether assets must be mirrored.
 
 **Do not** invent a CardFlow-specific Docker fork in this spike.
 
 ---
 
-## 4. When CardFlow should self-host later
+## 4. When PokeSniper should self-host later
 
 Revisit only if **several** of these are true (founder + ops):
 
 1. **Repeated public-API outages** that block confirm after cache miss, after retries in `TCGDEX_ARCHITECTURE.md` fail.  
-2. **Courtesy / volume:** FAQ has no hard rate limit but asks clients not to refetch bulk data. If CardFlow would otherwise crawl `/cards` continuously, self-host or a bounded local cache is more polite than hammering.  
+2. **Courtesy / volume:** FAQ has no hard rate limit but asks clients not to refetch bulk data. If PokeSniper would otherwise crawl `/cards` continuously, self-host or a bounded local cache is more polite than hammering.  
 3. **Pinned catalog version** needed for audit (“this inventory row was confirmed against TCGdex data as of date/SHA”).  
 4. **Latency** from mobile → BFF → `api.tcgdex.net` is over budget after caching.  
 5. **Offline / restricted egress** environments (not current MVP).  
-6. **Language expansion** that needs CardFlow to contribute translations back (`meta/translations`) and run a known completion snapshot.
+6. **Language expansion** that needs PokeSniper to contribute translations back (`meta/translations`) and run a known completion snapshot.
 
 Self-hosting is **not** justified by:
 
@@ -88,7 +88,7 @@ When a future issue is opened:
 
 ## 6. What “self-host” must never become
 
-- A competing public Pokémon database product (out of CardFlow scope).  
+- A competing public Pokémon database product (out of PokeSniper scope).  
 - A silent full-market price warehouse via TCGdex `pricing`.  
 - An excuse to skip mapping confidence or human confirm.  
 - A download of the entire database “just in case” during MVP.

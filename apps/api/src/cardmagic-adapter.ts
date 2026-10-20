@@ -1,7 +1,7 @@
 /**
  * CardMagic (CardSight) for saved grading photos. OFF unless CARD_FLOW_CARDMAGIC=on
  * and CARDSIGHT_API_KEY is set. Callers must also check consent, age, and guest rules
- * (same plumbing as CardSight identify). Falls back to CardFlow's own card finder.
+ * (same plumbing as CardSight identify). Falls back to PokeSniper's own card finder.
  *
  * Docs: https://cardsight.ai/solutions/cardmagic
  */

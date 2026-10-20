@@ -1,13 +1,13 @@
-# CardFlow Listing Draft Builder
+# PokeSniper Listing Draft Builder
 
-**Status:** Spike recommendation for review. **Internal CardFlow document only.**  
+**Status:** Spike recommendation for review. **Internal PokeSniper document only.**  
 **Related:** `CRM_LISTING_DRAFT_FIELDS.md`, `CRM_WORKFLOW_STATES.md`, `LISTING_TITLE_TEMPLATES.md`, `LISTING_CONDITION_DISCLOSURE.md`, `LISTING_EXPORT_AND_COPY.md`, `NON_GOALS.md` (no automatic listing publication).
 
 ---
 
 ## 1. What the builder is
 
-The listing draft builder is an **internal CardFlow screen flow** that helps the user prepare sell copy for a **Purchased** inventory copy.
+The listing draft builder is an **internal PokeSniper screen flow** that helps the user prepare sell copy for a **Purchased** inventory copy.
 
 It is **not** a marketplace publisher.
 
@@ -16,8 +16,8 @@ MVP:
 - Opens only from a **Purchased** item (`intent = purchased`, workflow `acquired` or already `drafted`).
 - Prefills from catalog cache + inventory condition / cost.
 - User edits title, description, condition, asking price, photos, channel note, notes.
-- User marks `ready_for_review` inside CardFlow.
-- CardFlow does **not** post to eBay, Whatnot, TCGplayer, Shopify, or any other venue.
+- User marks `ready_for_review` inside PokeSniper.
+- PokeSniper does **not** post to eBay, Whatnot, TCGplayer, Shopify, or any other venue.
 - Feature flag: `listing_drafts_enabled` (ON) — drafts only; no publish (`MVP_SCOPE.md`).
 
 **Confirmed:** Drafts are not marketplace listings. No publish APIs in MVP.  
@@ -42,7 +42,7 @@ Purchased item (acquired)
 | Step | What happens | Not allowed |
 |------|--------------|-------------|
 | Open Purchased item | Load inventory + confirmation + catalog display cache | Open from Watchlist; invent identity without confirm |
-| Prefill | Fill draft fields from known CardFlow / catalog sources | Fill `asking_price` from TCGdex pricing or scrapers |
+| Prefill | Fill draft fields from known PokeSniper / catalog sources | Fill `asking_price` from TCGdex pricing or scrapers |
 | User edits | Title, description, condition, asking price, photos, channel note, notes | Auto-publish on save |
 | Ready for review | Status → `ready_for_review` | Status → `published` (does not exist) |
 
@@ -100,7 +100,7 @@ Condition: NM
 - Wear details beyond the condition label (corners, edges, surface, centering notes)
 - Storage / provenance the user wants to disclose (“from my binder”)
 - Photo statement (“Photos are mine”)
-- Any authenticity affirmation (user affirmation only — not a CardFlow guarantee)
+- Any authenticity affirmation (user affirmation only — not a PokeSniper guarantee)
 - Channel-specific sell copy
 
 **Never** auto-write: PSA/BGS grades, “mint gem”, “guaranteed authentic”, profit claims, scraped comps, marketplace fee schedules.
@@ -178,13 +178,13 @@ Do not color-code as “profit green” in MVP copy.
 - Field: `intended_channel_note` — free text (“maybe eBay later”).
 - **Not** a publish-target enum wired to an API.
 - Saving a note does **not** create marketplace ids or set `published`.
-- User may later paste an external URL into `notes`; that is still not CardFlow publishing.
+- User may later paste an external URL into `notes`; that is still not PokeSniper publishing.
 
 ---
 
 ## 10. Forbidden fields (MVP forever for this spike)
 
-Do not invent these as if CardFlow posted a listing:
+Do not invent these as if PokeSniper posted a listing:
 
 - `ebay_item_id`, `ebay_listing_id`, eBay-tied `sku`
 - `whatnot_show_id`, `whatnot_product_id`

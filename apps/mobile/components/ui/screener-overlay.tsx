@@ -211,7 +211,7 @@ export function ScreenerOverlay({
   if (livestreamOverlayUsesHud(overlayKind, hudReady)) {
     return (
       <HudBubble live={bubble.live} subtitle={bubble.subtitle} title={bubble.title}>
-        <View accessibilityLabel="CardFlow overlay" style={styles.hudBand}>
+        <View accessibilityLabel="PokeSniper overlay" style={styles.hudBand}>
           <WebView
             javaScriptEnabled
             onError={() => setHudReady(false)}
@@ -367,7 +367,7 @@ function NativeOverlay({
             </View>
           </View>
         </View>
-        <Text style={styles.caption}>CardFlow overlay · not a market</Text>
+        <Text style={styles.caption}>PokeSniper overlay · not a market</Text>
       </View>
     );
   }
@@ -378,7 +378,7 @@ function NativeOverlay({
     return (
       <View
         accessibilityLabel={
-          readingCard ? "CardFlow overlay, reading a card" : "CardFlow overlay, looking for a card"
+          readingCard ? "PokeSniper overlay, reading a card" : "PokeSniper overlay, looking for a card"
         }
         style={styles.band}
       >
@@ -390,13 +390,13 @@ function NativeOverlay({
             <HudEmptyFigures />
           </View>
         </View>
-        <Text style={styles.caption}>CardFlow overlay · not a market</Text>
+        <Text style={styles.caption}>PokeSniper overlay · not a market</Text>
       </View>
     );
   }
 
   return (
-    <View accessibilityLabel="CardFlow overlay, no card confirmed" style={styles.band}>
+    <View accessibilityLabel="PokeSniper overlay, no card confirmed" style={styles.band}>
       <View style={styles.row}>
         <View accessibilityLabel="No catalog art" style={styles.thumb} />
         <View style={styles.copy}>
@@ -405,7 +405,7 @@ function NativeOverlay({
           <HudEmptyFigures />
         </View>
       </View>
-      <Text style={styles.caption}>CardFlow overlay · not a market</Text>
+      <Text style={styles.caption}>PokeSniper overlay · not a market</Text>
     </View>
   );
 }

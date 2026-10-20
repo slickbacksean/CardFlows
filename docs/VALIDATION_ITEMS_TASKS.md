@@ -3,15 +3,15 @@
 Do these **in order**. One task at a time. Check the box when the “Done when” line is true.
 
 **Now:** [ROADMAP.md](./ROADMAP.md) step 5 work in this file is done. Overlay chrome (Task 26) is in the livestream strip (back/forward, page ON vs scanner ON). Tests stay on mocks; local stack may inject PokéCollector + OBB + pHash.  
-**Already in the app:** Scan → confirm → Max Buy → Purchased or Watchlist → draft → Copy on **SQLite** + invite sessions. Capture stills use **YOLO OBB + pHash** when enabled (tests stay mock). Public TCGdex catalog is live (CardFlow adapter strips `pricing` on that path). PokéCollector is catalog/price/collection SoR over HTTP. Livestream scanner ON is **live video** YOLO + card-identity; overlay guess is read-only and does not write inventory.  
+**Already in the app:** Scan → confirm → Max Buy → Purchased or Watchlist → draft → Copy on **SQLite** + invite sessions. Capture stills use **YOLO OBB + pHash** when enabled (tests stay mock). Public TCGdex catalog is live (PokeSniper adapter strips `pricing` on that path). PokéCollector is catalog/price/collection SoR over HTTP. Livestream scanner ON is **live video** YOLO + card-identity; overlay guess is read-only and does not write inventory.  
 **Keep:** Tab bar as-is. Capture / Settings / About / Max Buy stay stack screens. Confirm before inventory. Overlay guesses do **not** mint `cardflow_card_id` or write collection. USD only. No Apple/Google wall.  
 **Follow:** [IMPLEMENTATION_BRIEF.md](./IMPLEMENTATION_BRIEF.md) IDs + Max Buy + drafts (do not rewrite the brief); [CRM_DATA_MODEL.md](./CRM_DATA_MODEL.md) §13–14; [TCGDEX_ARCHITECTURE.md](./TCGDEX_ARCHITECTURE.md); [CARD_ID_MAPPING_PLAN.md](./CARD_ID_MAPPING_PLAN.md). Capture identify follows [Pokemon-TCGP-Card-Scanner](https://github.com/1vcian/Pokemon-TCGP-Card-Scanner) (pipeline only). Grading Prepare photo estimate follows [casecomp](https://github.com/Pyronewbic/casecomp) **pipeline only**; slab comps are [PokeTrace](https://poketrace.com/) — see [GRADING_PREPARE_TASKS.md](./GRADING_PREPARE_TASKS.md).  
 **Rules:** Do not rewrite the brief. Founder exceptions in this file and [ROADMAP.md](./ROADMAP.md) beat older “pricing OFF / CardSight still identify / overlay is not live ID” lines.  
-**Non-goals:** [NON_GOALS.md](./NON_GOALS.md) — no screenshot of the livestream as identify, no CardSight on Capture or livestream, no continuous phone-camera ID product, no Whatnot/eBay scrape, no auto-bid / publish / account automation. Do not run `tcgdex/server`. Do not vendor [PokeMoney](https://github.com/destinio/pokecardprices). Do not copy [PokéCollector](https://github.com/Git-Romer/pokecollector) AGPL source. Do not import TCG Pocket JSON/images as the CardFlow catalog. Do not use PokéCollector Gemini. Do not copy [casecomp](https://github.com/Pyronewbic/casecomp) or [tcg-oracle-app](https://github.com/sailorpepe/tcg-oracle-app) source.
+**Non-goals:** [NON_GOALS.md](./NON_GOALS.md) — no screenshot of the livestream as identify, no CardSight on Capture or livestream, no continuous phone-camera ID product, no Whatnot/eBay scrape, no auto-bid / publish / account automation. Do not run `tcgdex/server`. Do not vendor [PokeMoney](https://github.com/destinio/pokecardprices). Do not copy [PokéCollector](https://github.com/Git-Romer/pokecollector) AGPL source. Do not import TCG Pocket JSON/images as the PokeSniper catalog. Do not use PokéCollector Gemini. Do not copy [casecomp](https://github.com/Pyronewbic/casecomp) or [tcg-oracle-app](https://github.com/sailorpepe/tcg-oracle-app) source.
 
 **Founder exceptions (this file):**
 
-- **PokéCollector** (unmodified GHCR + Postgres) is the system of record for cards, market estimates, collection, wishlist, and portfolio. CardFlow SQLite keeps sessions, Max Buy prefs, listing drafts, and scan image refs.
+- **PokéCollector** (unmodified GHCR + Postgres) is the system of record for cards, market estimates, collection, wishlist, and portfolio. PokeSniper SQLite keeps sessions, Max Buy prefs, listing drafts, and scan image refs.
 - Overlay and portfolio may show TCGdex Cardmarket/TCGPlayer fields **via PokéCollector**. Prefer TCGPlayer USD when present. Never copy `pricing` onto listing drafts. Never claim a bid or profit.
 - Livestream identify is **in-stream live video**: combined **YOLO + card-identity** model. Not a screenshot, not Capture.
 - Capture stills use **YOLO11 Nano OBB + RGB perceptual hash** against English TCGdex art (`tcgdex_id`). Not CardSight. Not the TCG Pocket image set.
@@ -72,7 +72,7 @@ Follow: [CRM_DATA_MODEL.md](./CRM_DATA_MODEL.md) §14 and [CARD_ID_MAPPING_PLAN.
 
 MVP tables only:
 
-- `cardflow_cards` — unique `(language, tcgdex_id)`. PK is CardFlow UUID.
+- `cardflow_cards` — unique `(language, tcgdex_id)`. PK is PokeSniper UUID.
 - `card_external_ids` — `tcgdex` / `cardsight` refs. Never the inventory PK.
 - `crm_scans` — includes nullable `image_storage_ref` (fill in Task 5).
 - `crm_confirmations`
@@ -268,7 +268,7 @@ Touch: [apps/mobile/app/scan/[scanId].tsx](../apps/mobile/app/scan/[scanId].tsx)
 
 Still image **from Capture only** (Collection / Shop). Pipeline from [Pokemon-TCGP-Card-Scanner](https://github.com/1vcian/Pokemon-TCGP-Card-Scanner): **YOLO11 Nano OBB** locates the card, **24-bit RGB perceptual hash** matches official art.
 
-That repo is built for **TCG Pocket** screenshots. CardFlow is **English physical TCG**. Take the detect + hash approach; **do not** copy their Pocket card JSON, Pocket images, or React/TensorFlow.js app into Expo. Hash index is keyed by `tcgdex_id` from TCGdex English constructed art (or PokéCollector-cached art). Retrain/fine-tune the OBB on physical camera stills if the Pocket-trained weights fail on real photos.
+That repo is built for **TCG Pocket** screenshots. PokeSniper is **English physical TCG**. Take the detect + hash approach; **do not** copy their Pocket card JSON, Pocket images, or React/TensorFlow.js app into Expo. Hash index is keyed by `tcgdex_id` from TCGdex English constructed art (or PokéCollector-cached art). Retrain/fine-tune the OBB on physical camera stills if the Pocket-trained weights fail on real photos.
 
 Confirm still required. Scan still does not write inventory. **Do not** use this pipeline on the livestream tab. **Do not** call CardSight. `cardsight_identify_enabled` / `cardsight_pricing_enabled` / `cardsight_live_video_enabled` stay **false**.
 
@@ -319,7 +319,7 @@ Touch: Confirm screen + shared error copy.
 
 - No box / no hash match / ambiguous: short **user-safe** message + Search manually. Prefer “We couldn't confirm this card — search by English set and number.”
 - Ambiguous: picker **and** Search manually.
-- Flag off / mock: same Confirm path. Do not claim accuracy or “CardFlow verified authentic.”
+- Flag off / mock: same Confirm path. Do not claim accuracy or “PokeSniper verified authentic.”
 
 **Done when:** A bad photo still lets a tester Confirm via search and save Purchased.
 
@@ -327,7 +327,7 @@ Touch: Confirm screen + shared error copy.
 
 ## Phase 5 — PokéCollector data plane
 
-Cards, market estimates, collection, wishlist, and portfolio live in [PokéCollector](https://github.com/Git-Romer/pokecollector). CardFlow does **not** copy that AGPL codebase. Run unmodified GHCR images. Pin a release tag (not `latest`). English sync only (`TCGDEX_SYNC_LANGUAGES=en`).
+Cards, market estimates, collection, wishlist, and portfolio live in [PokéCollector](https://github.com/Git-Romer/pokecollector). PokeSniper does **not** copy that AGPL codebase. Run unmodified GHCR images. Pin a release tag (not `latest`). English sync only (`TCGDEX_SYNC_LANGUAGES=en`).
 
 ### Task 19 — Compose PokéCollector next to the API
 
@@ -348,11 +348,11 @@ Cards, market estimates, collection, wishlist, and portfolio live in [PokéColle
 - [x] Done.
 
 - `PokecollectorCatalogProvider` implements the existing catalog port (English `getCardById` / set + localId). Art stays constructed TCGdex URLs.
-- `PokecollectorPricingProvider` returns a CardFlow estimate DTO (cents, USD). Prefer TCGdex TCGPlayer USD when present; otherwise convert Cardmarket EUR. Label as estimate, not a market or a bid.
+- `PokecollectorPricingProvider` returns a PokeSniper estimate DTO (cents, USD). Prefer TCGdex TCGPlayer USD when present; otherwise convert Cardmarket EUR. Label as estimate, not a market or a bid.
 - Flag off / unreachable → overlay and Collection fail soft; Capture Confirm still works on mock/catalog cache.
 - Listing drafts still **must not** persist vendor `pricing` blobs.
 
-**Done when:** `GET` `base1-58` through CardFlow returns catalog fields. A separate pricing call can return USD cents or null. Mobile never sees a PokéCollector URL or JWT.
+**Done when:** `GET` `base1-58` through PokeSniper returns catalog fields. A separate pricing call can return USD cents or null. Mobile never sees a PokéCollector URL or JWT.
 
 ---
 
@@ -361,7 +361,7 @@ Cards, market estimates, collection, wishlist, and portfolio live in [PokéColle
 - [x] Done.
 
 - On invite redeem, the API upserts a PokéCollector user and stores the mapping **server-side** only.
-- Testers never see a PokéCollector login wall. Expo keeps the CardFlow invite token.
+- Testers never see a PokéCollector login wall. Expo keeps the PokeSniper invite token.
 - Switching Alex ↔ Jordan switches the mapped collection. Overlay clears on switch (already required in Task 9).
 
 **Done when:** Two invited sessions cannot read each other’s PokéCollector collection. No PokéCollector JWT in SecureStore.
@@ -375,9 +375,9 @@ Cards, market estimates, collection, wishlist, and portfolio live in [PokéColle
 - Collection Purchased | Watchlist tiles and counts read PokéCollector collection vs wishlist.
 - Portfolio summary is an **estimate**, never “profit.” USD only.
 - Confirm (Capture) writes a PokéCollector collection or wishlist row — still not on scan alone, still not from livestream overlay.
-- CardFlow SQLite is no longer inventory SoR. Drafts and Max Buy prefs stay in CardFlow, keyed to the confirmed copy / `tcgdex_id` as already designed.
+- PokeSniper SQLite is no longer inventory SoR. Drafts and Max Buy prefs stay in PokeSniper, keyed to the confirmed copy / `tcgdex_id` as already designed.
 
-**Done when:** Kill CardFlow API **and** PokéCollector, restart both: same invited user still sees the Purchased copy. Draft Copy still omits notes.
+**Done when:** Kill PokeSniper API **and** PokéCollector, restart both: same invited user still sees the Purchased copy. Draft Copy still omits notes.
 
 ---
 
@@ -473,10 +473,10 @@ Do **not** start these in this file:
 | Screenshot / view-shot / CLIP-on-jpeg livestream identify | [ROADMAP.md](./ROADMAP.md): live video only |
 | Overlay strip polish / “Scan a still photo” CTA | Do not restore screenshot Capture from this tab |
 | CardSight HTTP / pricing / live video | Replaced on Capture by OBB + pHash; never on livestream |
-| TCG Pocket JSON/images as CardFlow catalog | [Pokemon-TCGP-Card-Scanner](https://github.com/1vcian/Pokemon-TCGP-Card-Scanner) is Pocket, not physical TCG |
+| TCG Pocket JSON/images as PokeSniper catalog | [Pokemon-TCGP-Card-Scanner](https://github.com/1vcian/Pokemon-TCGP-Card-Scanner) is Pocket, not physical TCG |
 | PokeMoney / pokemontcg.io / official TCGPlayer API | [pokecardprices](https://github.com/destinio/pokecardprices) is not the price DB |
 | Clerk / Auth0 / mandatory Apple or Google wall | [WIREFRAMES.md](./WIREFRAMES.md) §10c; invite codes are the beta auth in this file |
-| Run `tcgdex/server` / import cards-database into CardFlow | PokéCollector sync is the replica; CardFlow still does not host TCGdex |
+| Run `tcgdex/server` / import cards-database into PokeSniper | PokéCollector sync is the replica; PokeSniper still does not host TCGdex |
 | PokéCollector Gemini scanner, binders, decks, Telegram, social, sealed P&L | Out of this slice |
 | Continuous phone-camera live ID | [NON_GOALS.md](./NON_GOALS.md); livestream is in-browser live video, not the phone camera |
 | Durable locations UI, audit explorer | Submitted/Returned persist per user |
@@ -488,7 +488,7 @@ Do **not** start these in this file:
 
 ## Definition of done (this file)
 
-- [x] API restart does not wipe drafts or Max Buy prefs (Phases 1–2). Collection durability after Phase 5 is PokéCollector + CardFlow together.
+- [x] API restart does not wipe drafts or Max Buy prefs (Phases 1–2). Collection durability after Phase 5 is PokéCollector + PokeSniper together.
 - [x] CRM writes are request-scoped to an invited session. Invite codes exist. No Apple/Google wall.
 - [x] Scan stills persist as first-party `image_storage_ref` and are never catalog art.
 - [x] Public TCGdex catalog is flag-gated, English GET only, pricing stripped **on that adapter**. Confirmed cards can read CRM cache if that adapter is down.

@@ -1,5 +1,5 @@
 /**
- * CardFlow API contract core (P1-01).
+ * PokeSniper API contract core (P1-01).
  *
  * One route definition per endpoint: method, path, optional query/body schema
  * and the success response schema. The API checks real requests and responses

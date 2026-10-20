@@ -1,6 +1,6 @@
 # API contract (P1-01)
 
-One contract for every CardFlow API route lives in `packages/shared/src/contract/`, one file per route group:
+One contract for every PokeSniper API route lives in `packages/shared/src/contract/`, one file per route group:
 
 | File | Routes |
 |---|---|

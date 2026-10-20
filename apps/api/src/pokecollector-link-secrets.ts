@@ -1,10 +1,10 @@
 import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes } from "node:crypto";
 
 /**
- * PokéCollector opaque per-user accounts. Each CardFlow user gets their own PokéCollector user:
+ * PokéCollector opaque per-user accounts. Each PokeSniper user gets their own PokéCollector user:
  * - username `cardflow-u-<base32(HMAC-SHA256(userId, pepper))[:20]>`, never derived from the
  *   email or label, so two users can't land on one remote user;
- * - a random per-link password, stored only encrypted (AES-256-GCM, bound to the CardFlow user ID).
+ * - a random per-link password, stored only encrypted (AES-256-GCM, bound to the PokeSniper user ID).
  * Both secrets are required. There is no fallback (no admin token, no built-in value): when either
  * is missing, PokéCollector accounts stay off (fail closed).
  */
@@ -103,7 +103,7 @@ function decryptWith(raw: Buffer, userId: string, key: Buffer): string {
 }
 
 /**
- * Throws if the ciphertext was changed, is too short, belongs to another CardFlow user, or was
+ * Throws if the ciphertext was changed, is too short, belongs to another PokeSniper user, or was
  * written with a key that isn't configured. `keys`: the current key, or every key (current first).
  */
 export function decryptLinkPassword(ciphertext: string, userId: string, keys: Buffer | readonly Buffer[]): string {

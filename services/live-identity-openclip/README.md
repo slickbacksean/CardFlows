@@ -1,8 +1,8 @@
-# CardFlow livestream identity — OpenCLIP sidecar
+# PokeSniper livestream identity — OpenCLIP sidecar
 
 Pipeline inspired by [t-sinclair2500/pokemon-scanner](https://github.com/t-sinclair2500/pokemon-scanner) (**MIT**): OpenCLIP ViT-B/32 embeddings + HNSW cosine search.
 
-CardFlow does **not** vendor that repo. Index keys are English **`tcgdex_id`** (TCGdex art), not pokemontcg.io ids. PokéCollector Gemini is never used here.
+PokeSniper does **not** vendor that repo. Index keys are English **`tcgdex_id`** (TCGdex art), not pokemontcg.io ids. PokéCollector Gemini is never used here.
 
 ## Setup
 
@@ -35,7 +35,7 @@ Match: `POST http://127.0.0.1:8092/v1/match` multipart field `crop` (JPEG/PNG of
 
 Accept gate: top-1 similarity ≥ `LIVE_IDENTITY_ACCEPT` (default `0.86`) **and** top-1 − top-2 ≥ `LIVE_IDENTITY_MARGIN` (default `0.02`). A near-tie is re-ranked with ORB inliers when a local reference image exists (`LIVE_IDENTITY_REF_DIR`, or `images/` next to the index, or `../images`). Missing OpenCV or a missing image keeps the cosine order. Responses carry `reason`: `accepted`, `below_threshold`, or `ambiguous`, plus `orb`: `orb` or `cosine`. `/health` reports `matchP50Ms` and `matchP95Ms` for recent matches. Re-tune on the built index with `python scripts/eval_accept.py`.
 
-## Wire into CardFlow API
+## Wire into PokeSniper API
 
 ```bash
 # apps/api/.env

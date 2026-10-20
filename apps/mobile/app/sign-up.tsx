@@ -59,7 +59,7 @@ export default function SignUpScreen() {
     <View style={authStyles.flex}>
       <PreferencesScreenHeader dismiss={signedIn ? "back" : null} title={title} />
       <ScrollView contentContainerStyle={authStyles.content} keyboardShouldPersistTaps="handled">
-        <Text style={authStyles.body}>Create a free account to use CardFlow. Sign in if you already have one.</Text>
+        <Text style={authStyles.body}>Create a free account to use PokeSniper. Sign in if you already have one.</Text>
         {mode === "sign_up" ? <Text style={authStyles.body}>{SIGNUP_ALLOWANCE_NOTE}</Text> : null}
         <TextInput
           accessibilityLabel="Email"

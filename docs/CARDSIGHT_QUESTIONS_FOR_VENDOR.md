@@ -1,8 +1,8 @@
 # CardSight — Questions for Vendor
 
-**Purpose:** Close **Unconfirmed** gaps before CardFlow production integration.  
+**Purpose:** Close **Unconfirmed** gaps before PokeSniper production integration.  
 **Do not** treat answers as Confirmed until written vendor reply or updated public docs.  
-**Context:** CardFlow intends server-side still-image identify for MVP; Pokémon catalog is TCGdex; live video is out of MVP unless founder-approved.
+**Context:** PokeSniper intends server-side still-image identify for MVP; Pokémon catalog is TCGdex; live video is out of MVP unless founder-approved.
 
 ---
 
@@ -24,7 +24,7 @@
 
 ## C. Identify semantics & Pokémon coverage
 
-8. For Pokémon specifically: which **segments / shortnames** should CardFlow use on `POST /v1/identify/card/{segment}`?
+8. For Pokémon specifically: which **segments / shortnames** should PokeSniper use on `POST /v1/identify/card/{segment}`?
 9. Coverage: % of modern English Pokémon sets identifiable? Japanese / other languages?
 10. How should clients interpret **set-level** matches (no `card.id`) for UX — force picker vs auto-navigate set?
 11. Ordering of `card.suggestions[]`: always best-first? Stable across identical images?
@@ -44,9 +44,9 @@
 
 18. How long are **uploaded images** retained? Can retention be set to zero / ephemeral?  
     - Public: **Unconfirmed**.
-19. May CardFlow **cache** identify results and pricing responses? Max retention for commercial End User Applications?  
+19. May PokeSniper **cache** identify results and pricing responses? Max retention for commercial End User Applications?  
     - Exact cache retention: **Unconfirmed**.
-20. Confirm commercial use is permitted for CardFlow as an End User Application (consumer collection app), and clarify any restrictions on persisting vendor card UUIDs as cross-references (not as a competing standalone DB).
+20. Confirm commercial use is permitted for PokeSniper as an End User Application (consumer collection app), and clarify any restrictions on persisting vendor card UUIDs as cross-references (not as a competing standalone DB).
 21. Privacy: are images used to train models? Opt-out available?
 
 ## F. Pricing API (if enabled later)

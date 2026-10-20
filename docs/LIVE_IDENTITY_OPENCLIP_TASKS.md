@@ -51,7 +51,7 @@ POST /v1/livestream/identify  { source: "live_video", … }
 stabilizeLiveIdentity (2 hits) → GET /v1/livestream/guesses/:id → HUD
 ```
 
-**PokéCollector** stays HTTP catalog + USD estimates only. **pokemon-scanner** contributes the *visual match idea* only — CardFlow owns the sidecar and TCGdex-keyed index.
+**PokéCollector** stays HTTP catalog + USD estimates only. **pokemon-scanner** contributes the *visual match idea* only — PokeSniper owns the sidecar and TCGdex-keyed index.
 
 ---
 
@@ -177,7 +177,7 @@ Touch: `services/live-identity-openclip/scripts/build_tcgdex_index.py`, `build_t
 - [x] Done.
 
 - Tune `LIVE_IDENTITY_ACCEPT` (default `0.86`) and `LIVE_IDENTITY_MARGIN` (default `0.02`) with `python scripts/eval_accept.py` if false accepts / rejects on messy live crops.
-- For phone → Mac: bind sidecar host if needed (`LIVE_IDENTITY_HOST=0.0.0.0`) and set API + (if phone ever called sidecar directly — it must **not**) only API LAN URL. Phone talks to CardFlow API only; API talks to sidecar on loopback or LAN.
+- For phone → Mac: bind sidecar host if needed (`LIVE_IDENTITY_HOST=0.0.0.0`) and set API + (if phone ever called sidecar directly — it must **not**) only API LAN URL. Phone talks to PokeSniper API only; API talks to sidecar on loopback or LAN.
 
 **Done when:** Phone’s `EXPO_PUBLIC_API_URL` hits API; API hits OpenCLIP; no OpenCLIP URL on the device.
 
@@ -209,7 +209,7 @@ Touch: `services/live-identity-openclip/serve.py` (+ small opencv helper). Prefe
 
 - [ ] Done. *(May stay deferred.)*
 
-Bottom-band collector number OCR is weak on compressed live video. Only add if ORB+OpenCLIP still miss clear upright cards. Map OCR number + fuzzy name → TCGdex search via existing CardFlow catalog HTTP — **not** pokemontcg.io resolver.
+Bottom-band collector number OCR is weak on compressed live video. Only add if ORB+OpenCLIP still miss clear upright cards. Map OCR number + fuzzy name → TCGdex search via existing PokeSniper catalog HTTP — **not** pokemontcg.io resolver.
 
 **Done when:** Either deferred with a founder note, or OCR only runs when OpenCLIP similarity is in a “review” band and never invents an id on low OCR confidence.
 

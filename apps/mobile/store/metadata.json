@@ -1,13 +1,13 @@
 {
   "apple": {
-    "name": "CardFlow",
+    "name": "PokeSniper",
     "subtitle": "Scan cards. Get a pre-grade estimate.",
-    "description": "CardFlow helps Pokémon card resellers scan English singles, confirm the print, and see a Max Buy from their own rules.\n\nPre-grade estimate\nPhotograph the front and back of a card for a pre-grade estimate. Estimate only. Not an official grade.\n\nMax Buy is your rule, not a market price. Spreads are estimates and show their price source and time. CardFlow does not promise a profit."
+    "description": "PokeSniper helps Pokémon card resellers scan English singles, confirm the print, and see a Max Buy from their own rules.\n\nPre-grade estimate\nPhotograph the front and back of a card for a pre-grade estimate. Estimate only. Not an official grade.\n\nMax Buy is your rule, not a market price. Spreads are estimates and show their price source and time. PokeSniper does not promise a profit."
   },
   "google": {
-    "title": "CardFlow",
+    "title": "PokeSniper",
     "shortDescription": "Scan cards and get a pre-grade estimate.",
-    "fullDescription": "CardFlow helps Pokémon card resellers scan English singles, confirm the print, and see a Max Buy from their own rules.\n\nPre-grade estimate. Estimate only. Not an official grade.\n\nMax Buy is your rule, not a market price. Spreads are estimates. CardFlow does not promise a profit."
+    "fullDescription": "PokeSniper helps Pokémon card resellers scan English singles, confirm the print, and see a Max Buy from their own rules.\n\nPre-grade estimate. Estimate only. Not an official grade.\n\nMax Buy is your rule, not a market price. Spreads are estimates. PokeSniper does not promise a profit."
   },
   "notes": "Estimate title and disclaimer must match PREGRADE_COPY. Never name a model or a grading company in this file. Slab price comparisons in the app may name companies; store listing copy may not."
 }

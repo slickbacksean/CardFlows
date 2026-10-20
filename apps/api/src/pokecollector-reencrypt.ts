@@ -16,7 +16,7 @@ import type { StorePort } from "./store";
  * links are still encrypted with it, and removing it makes those links unreadable (the user
  * would have to be relinked).
  *
- * Local only: reads and writes CardFlow's own database, never calls PokéCollector. Dry run by
+ * Local only: reads and writes PokeSniper's own database, never calls PokéCollector. Dry run by
  * default (counts only, nothing written). Never throws on one bad row; it's counted as failed.
  */
 export interface ReencryptLinksResult {

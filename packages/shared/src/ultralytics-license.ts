@@ -7,7 +7,7 @@ export const ULTRALYTICS_AGPL_REQUIRED_MESSAGE =
 type Env = Record<string, string | undefined>;
 
 /**
- * Ultralytics YOLO is AGPL. CardFlow never ships `.onnx` / `.pt` in git.
+ * Ultralytics YOLO is AGPL. PokeSniper never ships `.onnx` / `.pt` in git.
  * Missing this flag → full-frame stub / unidentified live video.
  */
 export function ultralyticsAgplAccepted(env: Env = process.env): boolean {

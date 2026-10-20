@@ -223,13 +223,13 @@ describe("email sender", () => {
 
   it("Resend: POSTs JSON to the Resend API with the bearer key", async () => {
     const fetchImpl = vi.fn(async () => new Response("{}", { status: 200 }));
-    const sender = createResendSender({ apiKey: "re_test", from: "CardFlow <no-reply@cardflow.test>", fetchImpl: fetchImpl as unknown as typeof fetch });
+    const sender = createResendSender({ apiKey: "re_test", from: "PokeSniper <no-reply@cardflow.test>", fetchImpl: fetchImpl as unknown as typeof fetch });
     expect(await sender.send(message)).toBe(true);
     const [url, init] = fetchImpl.mock.calls[0] as unknown as [string, RequestInit];
     expect(url).toBe(RESEND_ENDPOINT);
     expect(init.method).toBe("POST");
     expect((init.headers as Record<string, string>).authorization).toBe("Bearer re_test");
-    expect(JSON.parse(init.body as string)).toEqual({ from: "CardFlow <no-reply@cardflow.test>", to: ["sam@example.com"], subject: "S", text: "Code 123456" });
+    expect(JSON.parse(init.body as string)).toEqual({ from: "PokeSniper <no-reply@cardflow.test>", to: ["sam@example.com"], subject: "S", text: "Code 123456" });
   });
 
   it("Resend failures resolve false and never log the key or code", async () => {

@@ -47,12 +47,12 @@ describe("Livestream HUD (HUDS) + Cap-go in-app browser", () => {
     expect(livestreamHudOriginWhitelist("not a url")).toEqual([]);
   });
 
-  it("serves a CardFlow overlay HUD that starts scanner-off and has no marketplace scrape", () => {
+  it("serves a PokeSniper overlay HUD that starts scanner-off and has no marketplace scrape", () => {
     const html = readRepoFile("infra/huds/overlay/index.html");
     const js = readRepoFile("infra/huds/overlay/overlay.js");
     expect(html).toContain('<script src="huds"></script>');
     expect(html).toContain("Scanner off");
-    expect(html).toContain("CardFlow overlay · not a market");
+    expect(html).toContain("PokeSniper overlay · not a market");
     expect(js).toContain('huds.bind("scanner"');
     expect(js).toContain('huds.bind("identity"');
     expect(js).toContain("Looking for a card…");

@@ -9,7 +9,7 @@
 
 | Label | Meaning |
 |-------|---------|
-| **Confirmed** | Decided by founder or already in CardFlow product / mapping docs on `main`. |
+| **Confirmed** | Decided by founder or already in PokeSniper product / mapping docs on `main`. |
 | **Unconfirmed** | Depends on a later provider, legal review, or missing product spec. Do not invent. |
 
 ---
@@ -38,12 +38,12 @@ This document explains how Max Buy works in the **provider-less MVP path**.
 ```
 1. User scans a card (Manual Scan / Camera Photo)
 2. CardSight returns candidate(s); user Confirms identity
-3. CardFlow shows:
+3. PokeSniper shows:
    - Catalog name, set, image (TCGdex cache)
    - "Enter a reference price" input
    - User's Max Buy rules (margin %, fees buffer)
 4. User types a reference price: "$8.00"
-5. CardFlow computes Max Buy: "$5.57" (guidance from rules)
+5. PokeSniper computes Max Buy: "$5.57" (guidance from rules)
 6. User taps Purchased
 7. User enters all-in cost (purchase price required; shipping/tax/fees/supplies optional)
 8. CRM saves:
@@ -58,7 +58,7 @@ This document explains how Max Buy works in the **provider-less MVP path**.
 
 ```
 1–2. Same (scan, confirm)
-3. CardFlow shows:
+3. PokeSniper shows:
    - Catalog identity
    - "Enter a reference price" input
    - User's rules
@@ -125,7 +125,7 @@ Until then: **user-entered only**.
 
 **Never** say:
 - "No market data available" (implies we tried a live feed)  
-- "CardFlow cannot estimate this card" (Max Buy is user math, not a CardFlow estimate)  
+- "PokeSniper cannot estimate this card" (Max Buy is user math, not a PokeSniper estimate)  
 - "Pricing unavailable" (Max Buy ≠ pricing; it is guidance from user rules)  
 
 **Say:**
@@ -141,14 +141,14 @@ Until then: **user-entered only**.
 
 Example guidance:
 
-> CardFlow Max Buy is **your decision math**, not a live market feed. To compute Max Buy, enter a reference price you trust:
+> PokeSniper Max Buy is **your decision math**, not a live market feed. To compute Max Buy, enter a reference price you trust:
 >
 > - Recent sold listing you saw  
 > - Shop price sticker  
 > - Last price you recorded for this card  
 > - Your own research  
 >
-> CardFlow applies **your** margin and fees rules to show guidance. You are not required to use Max Buy; you can buy at any price and save to CRM.
+> PokeSniper applies **your** margin and fees rules to show guidance. You are not required to use Max Buy; you can buy at any price and save to CRM.
 
 **Never** instruct users to:
 - Scrape eBay / Whatnot  
@@ -260,7 +260,7 @@ When a provider is chosen:
 
 Success criteria (`MVP_SUCCESS_METRICS.md` assumptions):
 - Users can complete the loop without a live pricing feed  
-- Users do not expect CardFlow to "look up the price" (education/onboarding)  
+- Users do not expect PokeSniper to "look up the price" (education/onboarding)  
 - Purchased save rate ≥ 80% of Purchased taps (Max Buy null does not block)  
 
 If testers demand live pricing and refuse to type references, that is **evidence for prioritizing a provider**, not a blocker for CRM validation.
