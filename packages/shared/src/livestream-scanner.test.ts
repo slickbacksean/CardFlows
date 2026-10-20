@@ -123,4 +123,20 @@ describe("Livestream in-house browser + scanner control", () => {
     expect(scanTab).toMatch(/saveLivestreamPurchase\(|runQueueableWrite\("livestream_purchase"/);
     expect(scanTab).not.toContain("PurchaseSheet");
   });
+
+  it("shows a subscribe paywall after the trial (not a coming-soon lock)", () => {
+    const scanTab = readRepoFile("apps/mobile/app/(tabs)/scan-tab.tsx");
+    const paywall = readRepoFile("apps/mobile/components/ui/livestream-paywall.tsx");
+    const purchase = readRepoFile("apps/mobile/lib/premium-purchase.ts");
+    expect(scanTab).toContain("LivestreamPaywall");
+    expect(scanTab).not.toContain("PremiumPrompt");
+    expect(scanTab).not.toContain("coming soon");
+    expect(paywall).toContain("startPremiumPurchase");
+    expect(paywall).toContain("LIVESTREAM_PAYWALL_COPY");
+    expect(paywall).toContain("isPremiumIapEnabled");
+    expect(purchase).toContain("EXPO_PUBLIC_CARD_FLOW_IAP_ENABLED");
+    expect(purchase).toContain("TODO");
+    expect(purchase).toContain("StoreKit");
+  });
+
 });

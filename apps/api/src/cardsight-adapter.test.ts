@@ -66,11 +66,24 @@ describe("P1-05 CardSight adapter (recorded responses)", () => {
     expect(result.error?.code).toBe("PROVIDER_TIMEOUT");
   });
 
+
+  it("charges the budget only after a successful identify (not on errors/timeouts)", async () => {
+    const consumeBudget = vi.fn(() => true);
+    const okFetch = vi.fn(async () => json(200, { detections: [{ confidence: "high", card: { name: "Pikachu" } }] }));
+    await createCardSightRecognitionProvider({ apiKey: "k", fetch: okFetch as never, budgetAvailable: () => true, consumeBudget, sleep: noSleep }).identifyCard(req);
+    expect(consumeBudget).toHaveBeenCalledTimes(1);
+
+    const failConsume = vi.fn(() => true);
+    const badFetch = vi.fn(async () => new Response("{}", { status: 500 }));
+    await createCardSightRecognitionProvider({ apiKey: "k", fetch: badFetch as never, budgetAvailable: () => true, consumeBudget: failConsume, sleep: noSleep, maxRetries: 0 }).identifyCard(req);
+    expect(failConsume).not.toHaveBeenCalled();
+  });
+
   it("quota exhausted → no call, alert, and the fallback answers", async () => {
     const fetchMock = vi.fn();
     const onAlert = vi.fn();
     const onFallback = vi.fn();
-    const primary = createCardSightRecognitionProvider({ apiKey: "k", fetch: fetchMock as never, consumeBudget: () => false, onAlert });
+    const primary = createCardSightRecognitionProvider({ apiKey: "k", fetch: fetchMock as never, budgetAvailable: () => false, onAlert });
     const provider = createRecognitionWithFallback(primary, createMockCardRecognitionProvider({ defaultScenario: "high-confidence" }), onFallback);
     const result = await provider.identifyCard(req);
     expect(fetchMock).not.toHaveBeenCalled();

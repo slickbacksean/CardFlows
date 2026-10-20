@@ -1,6 +1,8 @@
 import jpeg from "jpeg-js";
 import { afterEach, describe, expect, it } from "vitest";
 import {
+  AGE_GATE_VERSION,
+  DEFAULT_INVITED_USER_ID,
   computeMaxBuy,
   createDisabledTcgdexCatalogProvider,
   createMockPricingProvider,
@@ -14,6 +16,11 @@ import { createMemoryStore } from "./store";
 import { createSqliteStore, type SqliteStorePort } from "./sqlite-store";
 
 type App = ReturnType<typeof createApp>;
+
+function withAge(store: ReturnType<typeof createMemoryStore> | SqliteStorePort) {
+  store.ageConfirmations.confirm(DEFAULT_INVITED_USER_ID, AGE_GATE_VERSION, "2026-10-18T00:00:00.000Z");
+  return store;
+}
 
 async function json<T>(
   app: App,
@@ -42,6 +49,7 @@ describe("GET /v1/livestream/guesses/:tcgdexId", () => {
   it("returns catalog + mock USD estimate + display Max Buy without Docker", async () => {
     const store = createSqliteStore({ sqlitePath: ":memory:" });
     stores.push(store);
+    withAge(store);
     const app = createApp(store, { pricing: createMockPricingProvider() });
     const expectedMaxBuy = computeMaxBuy({ referencePriceAmount: "8.25" });
 
@@ -106,7 +114,7 @@ describe("GET /v1/livestream/guesses/:tcgdexId", () => {
   });
 
   it("returns a null estimate when pricing is off and still does not write inventory", async () => {
-    const app = createApp(createMemoryStore());
+    const app = createApp(withAge(createMemoryStore()));
     const before = await json<{ items: unknown[] }>(app, "/v1/inventory");
 
     const response = await json<{
@@ -135,7 +143,7 @@ describe("GET /v1/livestream/guesses/:tcgdexId", () => {
   });
 
   it("fails soft when catalog is down and rejects invented ids", async () => {
-    const app = createApp(createMemoryStore(), {
+    const app = createApp(withAge(createMemoryStore()), {
       catalog: createDisabledTcgdexCatalogProvider(),
       pricing: createMockPricingProvider(),
     });
@@ -157,6 +165,7 @@ describe("GET /v1/livestream/guesses/:tcgdexId", () => {
   it("recomputes display Max Buy from current prefs without persisting the reference", async () => {
     const store = createSqliteStore({ sqlitePath: ":memory:" });
     stores.push(store);
+    withAge(store);
     const app = createApp(store, { pricing: createMockPricingProvider() });
 
     await json(app, "/v1/preferences", {
@@ -182,7 +191,7 @@ describe("GET /v1/livestream/guesses/:tcgdexId", () => {
   });
 
   it("identifies from a live_video frame and rejects screenshots", async () => {
-    const app = createApp(createMemoryStore());
+    const app = createApp(withAge(createMemoryStore()));
     const identified = await json<{
       identity: { tcgdexId: string | null; reason: string; pipeline: string };
     }>(app, "/v1/livestream/identify", {
@@ -215,7 +224,7 @@ describe("GET /v1/livestream/guesses/:tcgdexId", () => {
 
   it("classifies a live_video identityHash against the English index and does not write inventory", async () => {
     const hash = rgbPerceptualHash(ciStillBitmap("base1-58"));
-    const app = createApp(createMemoryStore(), { livestreamIdentityIndex: ciPhashIndex() });
+    const app = createApp(withAge(createMemoryStore()), { livestreamIdentityIndex: ciPhashIndex() });
     const before = await json<{ items: unknown[] }>(app, "/v1/inventory");
 
     const identified = await json<{
@@ -242,7 +251,7 @@ describe("GET /v1/livestream/guesses/:tcgdexId", () => {
 
     const missingIndex = await json<{
       identity: { tcgdexId: string | null; reason: string };
-    }>(createApp(createMemoryStore()), "/v1/livestream/identify", {
+    }>(createApp(withAge(createMemoryStore())), "/v1/livestream/identify", {
       method: "POST",
       body: JSON.stringify({
         source: "live_video",
@@ -259,7 +268,7 @@ describe("GET /v1/livestream/guesses/:tcgdexId", () => {
     const off = await json<{
       identity: { tcgdexId: string | null; reason: string };
     }>(
-      createApp(createMemoryStore(), {
+      createApp(withAge(createMemoryStore()), {
         livestreamIdentify: "off",
         livestreamIdentityIndex: ciPhashIndex(),
       }),
@@ -295,7 +304,7 @@ describe("GET /v1/livestream/guesses/:tcgdexId", () => {
     const identified = await json<{
       identity: { tcgdexId: string | null; reason: string };
     }>(
-      createApp(createMemoryStore(), {
+      createApp(withAge(createMemoryStore()), {
         livestreamIdentityIndex: ciPhashIndex(),
         liveIdentityOpenclip: openclip,
       }),
@@ -320,7 +329,7 @@ describe("GET /v1/livestream/guesses/:tcgdexId", () => {
     const sidecarDown = await json<{
       identity: { tcgdexId: string | null; reason: string };
     }>(
-      createApp(createMemoryStore(), {
+      createApp(withAge(createMemoryStore()), {
         livestreamIdentityIndex: ciPhashIndex(),
         liveIdentityOpenclip: {
           name: "openclip_hnsw",
@@ -363,7 +372,7 @@ describe("GET /v1/livestream/guesses/:tcgdexId", () => {
     const identified = await json<{
       identity: { tcgdexId: string | null; reason: string };
     }>(
-      createApp(createMemoryStore(), {
+      createApp(withAge(createMemoryStore()), {
         liveVideoObb: () => yolo,
         liveIdentityOpenclip: {
           name: "openclip_hnsw",
@@ -398,7 +407,7 @@ describe("GET /v1/livestream/guesses/:tcgdexId", () => {
     const missed = await json<{
       identity: { tcgdexId: string | null; reason: string };
     }>(
-      createApp(createMemoryStore(), {
+      createApp(withAge(createMemoryStore()), {
         liveVideoObb: () => ({
           async detect() {
             return [];

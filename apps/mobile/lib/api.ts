@@ -499,6 +499,10 @@ export function getLiveOverlayGuess(
 }
 
 /** Live-video metadata only. Never a page jpeg, never the Capture scan upload. */
+export function getLivestreamAccess() {
+  return callApi(apiContract.getLivestreamAccess, {});
+}
+
 export function identifyLivestreamFrame(input: {
   source: "live_video";
   platform: LiveVideoIdentityPlatform;

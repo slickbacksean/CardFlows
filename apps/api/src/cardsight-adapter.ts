@@ -30,7 +30,16 @@ export interface CardSightAdapterOptions {
   baseUrl?: string;
   timeoutMs?: number;
   maxRetries?: number;
-  /** Returns false when the monthly budget is used up. */
+  /**
+   * Peek: false when the monthly budget is used up (no call, no charge).
+   * Prefer this over calling consumeBudget before the request.
+   */
+  budgetAvailable?: () => boolean;
+  /**
+   * Charge the global monthly budget only after a successful billable response
+   * (HTTP 2xx mapped to ok:true). Errors, timeouts and 4xx/5xx do not charge
+   * (CardSight billing on failures is unconfirmed — we don't charge on errors).
+   */
   consumeBudget?: () => boolean;
   /** Ops alert hook (quota exhausted, auth failure). Never receives the key or image. */
   onAlert?: (event: { code: string; httpStatus?: number }) => void;
@@ -174,7 +183,8 @@ export function createCardSightRecognitionProvider(options: CardSightAdapterOpti
   return {
     name: "cardsight",
     async identifyCard(req: IdentifyCardRequest) {
-      if (options.consumeBudget && !options.consumeBudget()) {
+      // Peek only — charge happens after a successful billable response below.
+      if (options.budgetAvailable && !options.budgetAvailable()) {
         options.onAlert?.({ code: "QUOTA_EXCEEDED" });
         return failure({ code: "QUOTA_EXCEEDED", message: "Card matching is unavailable right now. Search by name or number.", retryable: false });
       }
@@ -194,7 +204,12 @@ export function createCardSightRecognitionProvider(options: CardSightAdapterOpti
             body: form,
             signal: controller.signal,
           });
-          if (res.ok) return mapCardSightWire(await res.json().catch(() => null), Date.now() - started);
+          if (res.ok) {
+            const mapped = mapCardSightWire(await res.json().catch(() => null), Date.now() - started);
+            // Charge only on a successful billable response (ok:true). Failures/timeouts/4xx do not.
+            if (mapped.ok) options.consumeBudget?.();
+            return mapped;
+          }
           lastStatus = res.status;
           if (res.status === 401 || res.status === 403) options.onAlert?.({ code: "PROVIDER_AUTH", httpStatus: res.status });
           if (!isRetryableStatus(res.status)) break;
