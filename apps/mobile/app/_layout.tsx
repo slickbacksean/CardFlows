@@ -25,6 +25,8 @@ const AUTH_SEGMENTS = new Set([
   "forgot-password",
   "reset-password",
   "verify-email",
+  // Sean (Oct 19): the Terms are readable from sign-up, before an account exists.
+  "terms",
 ]);
 
 export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
@@ -142,6 +144,7 @@ function AppRoot() {
         <Stack.Screen name="draft/[draftId]" options={{ headerShown: false }} />
         <Stack.Screen name="settings" options={{ headerShown: false }} />
         <Stack.Screen name="sign-up" options={{ headerShown: false }} />
+        <Stack.Screen name="terms" options={{ headerShown: false }} />
         <Stack.Screen name="about" options={{ headerShown: false }} />
         <Stack.Screen name="analytics" options={{ headerShown: false }} />
         <Stack.Screen name="practice" options={{ headerShown: false }} />

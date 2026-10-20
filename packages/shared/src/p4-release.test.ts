@@ -555,14 +555,15 @@ describe("P4: docs from the Policy and Dev Ops reviews", () => {
   });
 });
 
-describe("P4: Sign in with Apple stays a documented stub", () => {
-  it("is off everywhere and documented", () => {
+describe("P4: Sign in with Apple is off by default (server env flag, Sean Oct 19)", () => {
+  it("is off unless configured, and documented", () => {
     expect(SIGN_IN_WITH_APPLE.enabled).toBe(false);
     expect(signInWithAppleAvailable({ platform: "ios" })).toBe(false);
     const doc = read("docs/SIGN_IN_WITH_APPLE.md");
     expect(doc).toContain("Apple Developer account");
     expect(doc).toContain("4.8");
-    expect(read("apps/mobile/package.json")).not.toContain("expo-apple-authentication");
+    // Built on /v1/sessions/social, gated by CARD_FLOW_APPLE_SIGNIN (off by default).
+    expect(read("apps/api/src/social-auth.ts")).toContain("CARD_FLOW_APPLE_SIGNIN");
     expect(read("apps/api/src/app.ts")).not.toContain("/v1/sessions/apple");
   });
 });

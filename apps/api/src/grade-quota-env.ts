@@ -97,3 +97,9 @@ export function ageGateEnabledFromEnv(env: Env = process.env): boolean {
   if (!isTestEnv(env)) return true;
   return flag(env.CARD_FLOW_AGE_GATE) === true || env.CARD_FLOW_AGE_GATE?.trim().toLowerCase() === "on";
 }
+
+/** Sean (Oct 19): sign-up must accept the current Terms of Service. Always on outside tests. */
+export function termsGateEnabledFromEnv(env: Env = process.env): boolean {
+  if (!isTestEnv(env)) return true;
+  return flag(env.CARD_FLOW_TERMS_GATE) === true || env.CARD_FLOW_TERMS_GATE?.trim().toLowerCase() === "on";
+}

@@ -152,8 +152,9 @@ describe("browse-only guests", () => {
     expect((await call(createApp(store, { devAutoSession: false }), "/v1/sessions/guest", { method: "POST" })).status).toBe(404);
     expect(warn).toHaveBeenCalledWith(expect.stringContaining("CARD_FLOW_GUEST_SCANS is ignored"));
     warn.mockRestore();
+    // Sean (Oct 19): guest mode is removed; the old env switch no longer turns it on.
     vi.stubEnv("CARD_FLOW_GUEST_BROWSE", "true");
-    expect((await call(createApp(store, { devAutoSession: false }), "/v1/sessions/guest", { method: "POST" })).status).toBe(200);
+    expect((await call(createApp(store, { devAutoSession: false }), "/v1/sessions/guest", { method: "POST" })).status).toBe(404);
     const { app } = open({ guestMintsPerHour: 2 });
     expect((await call(app, "/v1/sessions/guest", { method: "POST" })).status).toBe(200);
     expect((await call(app, "/v1/sessions/guest", { method: "POST" })).status).toBe(200);

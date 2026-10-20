@@ -11,13 +11,14 @@
       "supportsTablet": false,
       "bundleIdentifier": "app.pokesniper.mobile",
       "infoPlist": {
-        "NSCameraUsageDescription": "PokeSniper uses the camera to photograph your Pok\u00e9mon cards. Photos are uploaded to PokeSniper, and to our card-recognition provider if you allow it, to identify your cards and prepare grade photos.",
+        "NSCameraUsageDescription": "PokeSniper uses the camera to photograph your Pokémon cards. Photos are uploaded to PokeSniper, and to our card-recognition provider if you allow it, to identify your cards and prepare grade photos.",
         "NSMotionUsageDescription": "PokeSniper uses motion to help you hold your phone level over a card."
       },
       "buildNumber": "1",
       "config": {
         "usesNonExemptEncryption": false
-      }
+      },
+      "usesAppleSignIn": true
     },
     "android": {
       "package": "app.pokesniper.mobile",
@@ -46,7 +47,7 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "PokeSniper uses the camera to photograph your Pok\u00e9mon cards. Photos are uploaded to PokeSniper, and to our card-recognition provider if you allow it, to identify your cards and prepare grade photos.",
+          "cameraPermission": "PokeSniper uses the camera to photograph your Pokémon cards. Photos are uploaded to PokeSniper, and to our card-recognition provider if you allow it, to identify your cards and prepare grade photos.",
           "microphonePermission": false,
           "recordAudioAndroid": false
         }
@@ -82,7 +83,8 @@
       "expo-image",
       "expo-status-bar",
       "expo-web-browser",
-      "@sentry/react-native"
+      "@sentry/react-native",
+      "expo-apple-authentication"
     ],
     "experiments": {
       "typedRoutes": true

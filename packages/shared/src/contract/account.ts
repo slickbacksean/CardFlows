@@ -12,6 +12,8 @@ const SessionResponse = z.looseObject({
   invitedUsers: z.array(InvitedIdentitySchema),
   /** Open sign-up accounts: false until the emailed code is confirmed. */
   emailVerified: z.boolean().optional(),
+  /** Apple/Google-only accounts: false (no password to confirm deletion with). */
+  hasPassword: z.boolean().optional(),
 });
 
 const CardSightConsentSchema = z.looseObject({
@@ -37,6 +39,20 @@ const SignUpBody = z.object({
   password: z.string(),
   ageConfirmed18Plus: z.literal(true).optional(),
   ageGateVersion: z.string().optional(),
+  /** Sean (Oct 19): required "I agree to the Terms of Service and Privacy Policy" checkbox. */
+  termsAccepted: z.literal(true).optional(),
+  termsVersion: z.string().optional(),
+});
+
+/** Sean (Oct 19): Sign in with Apple / Google. New accounts also send the 18+ and Terms fields. */
+const SocialSignInBody = z.object({
+  provider: z.enum(["apple", "google"]),
+  idToken: z.string(),
+  nonce: z.string().optional(),
+  ageConfirmed18Plus: z.literal(true).optional(),
+  ageGateVersion: z.string().optional(),
+  termsAccepted: z.literal(true).optional(),
+  termsVersion: z.string().optional(),
 });
 
 const money = z.union([z.string(), z.number()]).nullable().optional();
@@ -58,6 +74,20 @@ export const accountRoutes = {
     bodyKind: "json",
     body: PasswordBody,
     response: SessionResponse,
+  }),
+  signInWithSocial: defineRoute({
+    method: "POST",
+    path: "/v1/sessions/social",
+    bodyKind: "json",
+    body: SocialSignInBody,
+    response: SessionResponse,
+  }),
+  /** Which social sign-in providers the server has configured (public). */
+  getAuthProviders: defineRoute({
+    method: "GET",
+    path: "/v1/auth/providers",
+    bodyKind: "none",
+    response: z.looseObject({ ok: z.literal(true), apple: z.boolean(), google: z.boolean() }),
   }),
   /** Forgot password. Always the same 202 answer, whether or not the email has an account. */
   requestPasswordReset: defineRoute({
@@ -150,6 +180,7 @@ export const accountRoutes = {
       identity: InvitedIdentitySchema.nullable(),
       invitedUsers: z.array(InvitedIdentitySchema),
       emailVerified: z.boolean().optional(),
+      hasPassword: z.boolean().optional(),
     }),
   }),
   switchIdentity: defineRoute({

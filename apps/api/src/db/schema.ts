@@ -227,6 +227,9 @@ export const userAccounts = sqliteTable(
     emailVerifiedAt: text("email_verified_at"),
     /** Backend review M1: verification codes ever sent (lifetime cap). */
     verificationSends: integer("verification_sends").notNull().default(0),
+    /** Sean (Oct 19): Terms of Service version accepted at sign-up, and when (0028). */
+    termsVersion: text("terms_version"),
+    termsAcceptedAt: text("terms_accepted_at"),
   },
   (table) => [unique("user_accounts_email").on(table.email)],
 );
@@ -642,9 +645,22 @@ export const ageConfirmations = sqliteTable(
   (table) => [check("age_confirmations_true_chk", sql`${table.ageConfirmed18Plus} = 1`)],
 );
 
+/** Sean (Oct 19): Sign in with Apple / Google. One row per verified provider subject (0028). */
+export const authIdentities = sqliteTable(
+  "auth_identities",
+  {
+    provider: text("provider").notNull(),
+    subject: text("subject").notNull(),
+    userId: text("user_id").notNull(),
+    email: text("email"),
+    createdAt: text("created_at").notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.provider, table.subject] }), index("auth_identities_user_idx").on(table.userId)],
+);
 
 export const schema = {
   ageConfirmations,
+  authIdentities,
   cardflowCards,
   userAccounts,
   passwordResetTokens,

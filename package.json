@@ -24,7 +24,8 @@
     "typecheck:legacy": "pnpm build:legacy && pnpm --filter @cardflows/api typecheck",
     "livestream:timing": "node scripts/livestream-timing.mjs",
     "livestream:replay": "node scripts/livestream-replay.mjs",
-    "smoke:purchased": "node scripts/smoke-purchased-lane.mjs"
+    "smoke:purchased": "node scripts/smoke-purchased-lane.mjs",
+    "terms:doc": "tsx scripts/terms-doc.ts"
   },
   "dependencies": {
     "huds": "2.2.2"

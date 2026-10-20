@@ -289,7 +289,7 @@ describe("UX review: data, stale banner, slow loading", () => {
     expect(signUp).toContain("AGE_GATE_COPY.disabledCaption");
     expect(signUp).toContain("AGE_GATE_COPY.disabledHint");
     expect(signUp).toContain('accessibilityRole="checkbox"');
-    expect(signUp).toContain('disabled={saving || (mode === "sign_up" && !over18)}');
+    expect(signUp).toContain('disabled={saving || (mode === "sign_up" && !over18) || (mode === "sign_up" && !agreed)}');
     expect(AGE_GATE_COPY.disabledCaption).toBe("You must be 18 or older to create an account.");
     expect(verifyEmailIntro("sam@example.com")).toBe(
       "Verify your email to get pre-grade estimates. We sent a 6-digit code to sam@example.com.",

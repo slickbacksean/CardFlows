@@ -1202,6 +1202,7 @@ function createMemoryAccountStore(
   const emailCodes = new Map<string, { codeHash: string; expiresAt: string; attempts: number }>();
   const sendsByAddressDay = new Map<string, number>();
   const byEmail = new Map<string, string>();
+  const socialLinks = new Map<string, string>();
   const deletionAudit: DeletionAuditEntry[] = [];
   const allowanceTombstones = new Map<string, AllowanceTombstone>();
   const northStarTotals = new Map<string, NorthStarWeekTotal>();
@@ -1219,7 +1220,17 @@ function createMemoryAccountStore(
   };
   const live = (s: StoredSession, now: string) => s.expiresAt > now;
   return {
-    createAccount({ email, passwordHash, at }) {
+    findUserBySocial(provider, subject) {
+      return socialLinks.get(`${provider}:${subject}`) ?? null;
+    },
+    linkSocial({ provider, subject, userId }) {
+      if (!socialLinks.has(`${provider}:${subject}`)) socialLinks.set(`${provider}:${subject}`, userId);
+    },
+    markEmailVerified(userId, at) {
+      const account = accounts.get(userId);
+      if (account && !account.emailVerifiedAt) accounts.set(userId, { ...account, emailVerifiedAt: at });
+    },
+    createAccount({ email, passwordHash, at, terms, emailVerified }) {
       const normalized = normalizeEmail(email);
       if (byEmail.has(normalized)) return null;
       const record: AccountRecord = {
@@ -1227,8 +1238,10 @@ function createMemoryAccountStore(
         email: normalized,
         passwordHash,
         createdAt: at,
-        emailVerifiedAt: null,
+        emailVerifiedAt: emailVerified ? at : null,
         verificationSends: 0,
+        termsVersion: terms?.version ?? null,
+        termsAcceptedAt: terms?.acceptedAt ?? null,
       };
       accounts.set(record.userId, record);
       byEmail.set(normalized, record.userId);
@@ -1370,6 +1383,7 @@ function createMemoryAccountStore(
         });
       }
       port.deleteUserPhotos(userId);
+      for (const [key, owner] of socialLinks) if (owner === userId) socialLinks.delete(key);
       counts.crm_scans = port.deleteUserScans(userId);
       counts.scan_confirm_events = port.deleteUserConfirmEvents(userId);
       counts.user_price_snapshots = port.deleteUserPriceSnapshots(userId);

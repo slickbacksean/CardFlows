@@ -102,8 +102,8 @@ export const LIVESTREAM_PAYWALL_COPY = {
  * turning on `CARD_FLOW_IAP_ENABLED` / `EXPO_PUBLIC_CARD_FLOW_IAP_ENABLED`.
  */
 export const PREMIUM_LEGAL_URLS = {
-  terms: "https://cardflow.app/terms",
-  privacy: "https://cardflow.app/privacy",
+  terms: "https://pokesniper.app/terms",
+  privacy: "https://pokesniper.app/privacy",
 } as const;
 
 
