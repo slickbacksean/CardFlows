@@ -14,6 +14,7 @@ export const TERMS_VERSION = "2026-10-19.1";
 export const TERMS_EFFECTIVE_DATE = "October 19, 2026";
 export const TERMS_URL = "https://pokesniper.app/terms";
 export const PRIVACY_URL = "https://pokesniper.app/privacy";
+export const SUPPORT_URL = "https://pokesniper.app/support";
 export const SUPPORT_EMAIL = "support@pokesniper.app";
 export const TERMS_DRAFT_BANNER = "Draft — not legal advice; review before launch";
 export const TCGPLAYER_NOTICE = "This product uses TCGplayer data but is not endorsed or certified by TCGplayer.";

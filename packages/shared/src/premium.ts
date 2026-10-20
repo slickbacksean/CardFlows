@@ -97,10 +97,7 @@ export const LIVESTREAM_PAYWALL_COPY = {
   purchaseNotConnected: "Purchases aren't connected yet.",
 } as const;
 
-/**
- * Placeholder legal URLs for the IAP-on paywall. Replace with the published pages before
- * turning on `CARD_FLOW_IAP_ENABLED` / `EXPO_PUBLIC_CARD_FLOW_IAP_ENABLED`.
- */
+/** Published legal pages (site/ deployed to pokesniper.app) used by the IAP-on paywall. */
 export const PREMIUM_LEGAL_URLS = {
   terms: "https://pokesniper.app/terms",
   privacy: "https://pokesniper.app/privacy",
