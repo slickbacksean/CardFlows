@@ -102,11 +102,18 @@ describe("P4: EAS profiles and env layout", () => {
     expect(read("docs/RELEASE_ENV.md")).toContain("SENTRY_DISABLE_AUTO_UPLOAD");
   });
 
-  it("Dev Ops: no OTA updates yet (expo-updates is not added, no channels)", () => {
+  it("Dev Ops: EAS Update is configured (channels + appVersion runtime) but expo-updates needs a rebuild", () => {
+    // Expo Go only for now: no new native module in this PR.
     expect(read("apps/mobile/package.json")).not.toContain("expo-updates");
-    expect(read("apps/mobile/eas.json")).not.toContain("channel");
+    const raw = JSON.parse(read("apps/mobile/eas.json")) as { build: Record<string, { channel?: string }> };
+    expect(raw.build.preview?.channel).toBe("preview");
+    expect(raw.build.production?.channel).toBe("production");
+    expect(raw.build.development?.channel).toBeUndefined();
+    const app = JSON.parse(read("apps/mobile/app.json")) as { expo: { runtimeVersion?: unknown; updates?: { url?: string }; extra: { eas: { projectId: string } } } };
+    expect(app.expo.runtimeVersion).toEqual({ policy: "fingerprint" });
+    expect(app.expo.updates?.url).toBe(`https://u.expo.dev/${app.expo.extra.eas.projectId}`);
     const doc = read("docs/RELEASE_ENV.md");
-    for (const needle of ["EAS Update is out of scope", "channel", "runtimeVersion", "updates.url"]) expect(doc).toContain(needle);
+    for (const needle of ["EAS Update", "expo-updates", "rebuild", "channel", "runtimeVersion", "updates.url"]) expect(doc).toContain(needle);
   });
 
   it("commits no API URL, DSN or analytics key (they're EAS environment variables)", () => {
@@ -260,10 +267,12 @@ describe("P4: Sentry scaffold", () => {
     expect(sentry).not.toMatch(/setUser\(/);
   });
 
-  it("Dev Ops: environment from EXPO_PUBLIC_APP_ENV, plus release and dist", () => {
-    expect(sentry).toContain("environment: process.env.EXPO_PUBLIC_APP_ENV?.trim()");
-    expect(sentry).toContain("release: `${bundle}@${version}`");
-    expect(sentry).toMatch(/dist: build === undefined/);
+  it("Dev Ops: environment from SENTRY_ENVIRONMENT / APP_ENV, plus release (version+build) and dist", () => {
+    expect(sentry).toContain("sentryEnvironment: process.env.EXPO_PUBLIC_SENTRY_ENVIRONMENT");
+    expect(sentry).toContain("appEnv: process.env.EXPO_PUBLIC_APP_ENV");
+    expect(sentry).toContain("sentryReleaseTags(");
+    expect(sentry).toContain("enabled: !__DEV__");
+    expect(sentry).toContain("sendDefaultPii: false");
     expect(sentry).toContain("...sentryRelease()");
   });
 

@@ -7,6 +7,7 @@ import {
   playPurchasedSuccessHaptic,
   PurchasedUndoToast,
 } from "@/components/ui/hud-bubble";
+import { TcgplayerAttribution } from "@/components/ui/tcgplayer-attribution";
 import { livestreamHudPageUrl, publishLivestreamHud } from "@/lib/huds";
 import {
   getCachedLiveOverlayGuess,
@@ -386,6 +387,9 @@ function NativeOverlay({
           </View>
         </View>
         <Text style={styles.caption}>PokeSniper overlay · not a market</Text>
+        {liveGuess.estimateAmount ? (
+          <TcgplayerAttribution url={livestreamTcgplayerLink(liveGuess).url} />
+        ) : null}
       </View>
     );
   }

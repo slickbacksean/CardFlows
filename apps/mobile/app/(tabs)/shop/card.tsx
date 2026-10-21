@@ -25,6 +25,7 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { TcgplayerAttribution } from "@/components/ui/tcgplayer-attribution";
 import { shopColors, shopSpace } from "@/components/shop/shop-theme";
 import { getPriceEstimate, getSlabEstimates } from "@/lib/api";
 import {
@@ -320,12 +321,22 @@ export default function ShopCardScreen() {
           <Text style={styles.disclaimer}>
             {catalogMarket
               ? shownPrice
-                ? "TCGPlayer market price for this printing."
-                : "No TCGPlayer market price for this printing."
+                ? "TCGplayer market price for this printing."
+                : "No TCGplayer market price for this printing."
               : shownPrice
                 ? `Today's estimate is the latest price on file. ${PRICE_ESTIMATE_DISCLAIMER}`
                 : PRICE_ESTIMATE_DISCLAIMER}
           </Text>
+          {shownPrice ? (
+            <TcgplayerAttribution
+              url={tcgplayerUrl({
+                name: card.name,
+                localId: card.localId,
+                setName: card.set.name,
+                tcgplayerProductId: card.tcgplayerProductId,
+              })}
+            />
+          ) : null}
         </View>
 
         <View style={styles.section}>

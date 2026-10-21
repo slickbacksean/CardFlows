@@ -44,7 +44,9 @@ import {
   type ScanImageMimeType,
 } from "@cardflow/shared";
 import { Platform } from "react-native";
+import { FEATURE_DISABLED_CODE } from "@cardflow/shared";
 import { rememberDeviceItemIds } from "./device-item-index";
+import { markLivestreamDisabled } from "./feature-flags";
 import { createRequestId, rememberRequestId } from "./request-id";
 import { isPhysicalRuntime } from "./runtime-host";
 import { peekSessionToken, waitForSessionRestore } from "./session-token";
@@ -312,6 +314,8 @@ async function request<T>(
       (extra as Error & { signupRequired?: SignupReason }).signupRequired = reason;
       notifySignupRequired(reason);
     }
+    // Live Scan remote kill switch: any 503 feature_disabled flips the app's flag right away.
+    if (response.status === 503 && body.code === FEATURE_DISABLED_CODE) markLivestreamDisabled();
     throw extra;
   }
   return data;

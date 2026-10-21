@@ -1,3 +1,4 @@
+import { FEATURE_DISABLED_HEADER, featureDisabledBody, livestreamEnabledFromEnv } from "@cardflow/shared";
 import { buildDexSet, dexOwnedCountsBySet, type DexCatalogCard, type DexSetSummary, type TcgdexSetBrief } from "@cardflow/shared";
 import { createHash, randomBytes, randomInt, timingSafeEqual } from "node:crypto";
 import { emailSenderFromEnv, type EmailSender } from "./email-sender";
@@ -488,6 +489,11 @@ export interface CreateAppOptions {
    * Defaults to `CARD_FLOW_LIVESTREAM_TIMING=1`; off unless set, including production.
    */
   livestreamTiming?: boolean;
+  /**
+   * Live Scan remote kill switch. Defaults to `CARD_FLOW_LIVESTREAM_ENABLED` (on unless 0/false/off/no),
+   * read per request. Off: /v1/livestream/* answers 503 feature_disabled; /v1/status reports it.
+   */
+  livestreamEnabled?: () => boolean;
   /** YOLO on livestream frames. Empty until the AGPL flag and weights file are both set. */
   liveVideoObb?: () => ObbDetector | null;
   /** Prepare photo-estimate provider. Tests default to mock; flag off injects unavailable. */
@@ -1038,7 +1044,7 @@ export function createApp(
     c.header(REQUEST_ID_HEADER, requestId);
     const startedAt = performance.now();
     await next();
-    if (c.req.path !== "/health") {
+    if (c.req.path !== "/health" && !c.res.headers.get(FEATURE_DISABLED_HEADER)) {
       metrics.recordRequest(`${c.req.method} ${routePath(c, -1)}`, c.res.status, performance.now() - startedAt);
     }
     if (c.req.path !== "/health" && process.env.VITEST !== "true") {
@@ -1147,6 +1153,18 @@ export function createApp(
       browseOnly: true as const,
       expiresAt: minted.expiresAt,
     });
+  });
+
+  const livestreamEnabled =
+    options.livestreamEnabled ?? (() => livestreamEnabledFromEnv(process.env.CARD_FLOW_LIVESTREAM_ENABLED));
+  // Policy Reviewer (Oct 20): remote off switch for Live Scan, ahead of auth and body parsing.
+  app.use("/v1/livestream/*", async (c, next) => {
+    if (!livestreamEnabled()) {
+      // Marked so ops metrics don't count it toward 5xx error-spike alerts.
+      c.header(FEATURE_DISABLED_HEADER, "livestream");
+      return c.json(featureDisabledBody("livestream"), 503);
+    }
+    return next();
   });
 
   app.use("/v1/*", async (c, next) => {
@@ -1391,6 +1409,7 @@ export function createApp(
 
   registerStatusRoutes(app, {
     cacheMs: options.statusCacheMs,
+    features: () => ({ livestream: livestreamEnabled() }),
     inputs: async () => {
       const engine = gradeEngineProbe ? await boundedProbe(gradeEngineProbe) : null;
       return {

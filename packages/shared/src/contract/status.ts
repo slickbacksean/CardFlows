@@ -13,6 +13,12 @@ export const statusRoutes = {
     method: "GET",
     path: "/v1/status",
     bodyKind: "none",
-    response: z.looseObject({ ok: z.literal(true), banners: z.array(StatusBannerSchema), checkedAt: z.string() }),
+    response: z.looseObject({
+      ok: z.literal(true),
+      banners: z.array(StatusBannerSchema),
+      checkedAt: z.string(),
+      /** Remote kill switches. Optional so older servers still validate. */
+      features: z.looseObject({ livestream: z.boolean() }).optional(),
+    }),
   }),
 } as const;

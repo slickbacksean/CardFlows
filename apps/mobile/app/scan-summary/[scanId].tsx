@@ -10,6 +10,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { TcgplayerAttribution } from "@/components/ui/tcgplayer-attribution";
 import { PrimaryButton } from "@/components/ui/primary-button";
 import { getScan, listInventory, type ScanRecord } from "@/lib/api";
 import { priceQueryOptions } from "@/lib/price-queries";
@@ -180,6 +181,8 @@ export default function MultiCardScanSummaryScreen() {
             </Pressable>
           );
         })}
+
+        {priceQueries.some((q) => q.data?.estimate?.amount) ? <TcgplayerAttribution /> : null}
 
         {skippedCount > 0 ? (
           <Text style={styles.skipped}>{multiCardSkippedLabel(skippedCount)}</Text>

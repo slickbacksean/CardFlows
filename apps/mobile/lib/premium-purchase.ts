@@ -26,7 +26,8 @@ export type PremiumPurchaseResult =
 
 /** App-side IAP gate. Mirrors server `CARD_FLOW_IAP_ENABLED`. Off unless explicitly true/1. */
 export function isPremiumIapEnabled(
-  env: Record<string, string | undefined> = process.env as Record<string, string | undefined>,
+  // Literal access so Metro inlines the value in release bundles.
+  env: Record<string, string | undefined> = { EXPO_PUBLIC_CARD_FLOW_IAP_ENABLED: process.env.EXPO_PUBLIC_CARD_FLOW_IAP_ENABLED },
 ): boolean {
   return premiumIapEnabledFromEnv(env.EXPO_PUBLIC_CARD_FLOW_IAP_ENABLED);
 }

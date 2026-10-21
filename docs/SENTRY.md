@@ -68,3 +68,12 @@ List **Crash Data** (stack traces, device model, OS version, app version, reques
 1. Set `SENTRY_DSN` on a staging API. Restart.
 2. Force a 500 (or temporarily `throw` in a handler). The event in the **API** project should include tag `request_id`.
 3. Set `EXPO_PUBLIC_SENTRY_DSN`, reload the app, trigger the in-app error boundary. The event lands in the **mobile** project. Expo Go will only show JS errors, not native crashes.
+
+## Source-map upload steps
+Release builds currently skip upload (`SENTRY_DISABLE_AUTO_UPLOAD=true` in eas.json). To get readable stack traces:
+1. In Sentry: Settings > Auth Tokens, create an org token with `project:releases` and `org:read`.
+2. Add EAS secrets (never in git): `eas env:create --environment production --name SENTRY_AUTH_TOKEN --visibility secret`, plus `SENTRY_ORG` and `SENTRY_PROJECT` (plain). Repeat for `preview`.
+3. Remove `SENTRY_DISABLE_AUTO_UPLOAD` from the preview/production profiles in `apps/mobile/eas.json`.
+4. Rebuild with EAS. The `@sentry/react-native` plugin uploads the bundle and source maps for release `app.pokesniper.mobile@<version>+<build>`, dist `<build>`, matching what the app reports.
+5. Once `expo-updates` ships, upload maps for each OTA update too: `npx sentry-expo-upload-sourcemaps dist` after `eas update` (same release/dist).
+6. Check: Sentry > Releases shows the release with artifacts; trigger a test error in a preview build and confirm the stack trace is symbolicated.

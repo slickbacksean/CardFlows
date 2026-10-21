@@ -33,8 +33,9 @@ export const PUBLIC_ENV_VARS: ReadonlyArray<{
   enforced?: true;
 }> = [
   { name: "EXPO_PUBLIC_APP_ENV", purpose: "Profile name (set by eas.json)", profiles: APP_ENVS },
-  { name: "EXPO_PUBLIC_API_URL", purpose: "PokeSniper API base URL (required for preview and production)", profiles: APP_ENVS },
+  { name: "EXPO_PUBLIC_API_URL", purpose: "PokeSniper API base URL (required for preview and production; an EAS environment variable per profile, no default)", profiles: APP_ENVS },
   { name: "EXPO_PUBLIC_SENTRY_DSN", purpose: "Sentry crash reports (optional)", profiles: APP_ENVS },
+  { name: "EXPO_PUBLIC_SENTRY_ENVIRONMENT", purpose: "Sentry environment override (optional; default = APP_ENV)", profiles: APP_ENVS },
   { name: "EXPO_PUBLIC_POSTHOG_KEY", purpose: "PostHog project key (optional, plus user opt-in)", profiles: APP_ENVS },
   { name: "EXPO_PUBLIC_POSTHOG_HOST", purpose: "PostHog host (default in eas.json base)", profiles: APP_ENVS },
   { name: "EXPO_PUBLIC_CARD_FLOW_APP_KEY", purpose: "App key header for the API (an abuse speed bump, not a secret)", profiles: APP_ENVS },
@@ -46,6 +47,7 @@ export const PUBLIC_ENV_VARS: ReadonlyArray<{
   { name: "EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID", purpose: "Google sign-in OAuth client ID for iOS (optional; public)", profiles: APP_ENVS },
   { name: "EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID", purpose: "Google sign-in OAuth client ID for Android (optional; public)", profiles: APP_ENVS },
   { name: "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID", purpose: "Google sign-in OAuth web client ID (optional; public)", profiles: APP_ENVS },
+  { name: "EXPO_PUBLIC_CARD_FLOW_IAP_ENABLED", purpose: "In-app purchases (true/1; off hides every price)", profiles: APP_ENVS },
   { name: "EXPO_PUBLIC_CARD_FLOW_LIVESTREAM_TCGPLAYER_LINK", purpose: "HUD shows See prices on TCGplayer instead of estimate (=1)", profiles: APP_ENVS },
 ];
 
