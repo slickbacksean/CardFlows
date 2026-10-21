@@ -2504,8 +2504,12 @@ export function createApp(
     } else if (hasActiveConsent(store.consents, userId)) {
       store.consents.withdraw(userId, "cardsight", at);
     } else {
-      // Sean (Oct 21): consent comes from the Terms; turning it off in Settings is recorded as a decline.
-      store.consents.decline(userId, "cardsight", CARDSIGHT_CONSENT_VERSION, at);
+      // Sean (Oct 21): consent comes from the Terms; turning it off in Settings is recorded as a
+      // decline (once: saying no again adds nothing).
+      const record = store.consents.get(userId, "cardsight");
+      if (!record || !(record.declinedAt || record.withdrawnAt)) {
+        store.consents.decline(userId, "cardsight", CARDSIGHT_CONSENT_VERSION, at);
+      }
     }
     return c.json({ ok: true as const, consent: cardSightConsentView(userId) });
   });

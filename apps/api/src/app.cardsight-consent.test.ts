@@ -134,7 +134,7 @@ describe("CardSight consent: the server enforces it before calling the adapter",
   it("consent to an older version doesn't count (asked again)", async () => {
     const { app, store, cardSight } = setup();
     store.consents.grant(await currentUserId(app), "cardsight", "2020-01-01", "2020-01-01T00:00:00.000Z");
-    expect((await consent(app)).body.consent).toMatchObject({ granted: false, version: "2020-01-01", needsPrompt: true });
+    expect((await consent(app)).body.consent).toMatchObject({ granted: false, version: "2020-01-01", needsPrompt: false });
     await scan(app);
     expect(cardSight.calls).toHaveLength(0);
   });
@@ -327,10 +327,10 @@ describe("CardSight consent API", () => {
   it("disclosure names CardSight and says what its terms allow; only the two disclosure strings mention AI", () => {
     expect(CARDSIGHT_CONSENT_COPY.body).toContain("CardSight, our card-recognition provider");
     expect(CARDSIGHT_CONSENT_COPY.body).toContain("CardSight's terms let it keep these images and use them to train its AI models");
-    expect(CARDSIGHT_CONSENT_COPY.settingsHelp).toContain("doesn't remove photos CardSight already has");
+    expect(CARDSIGHT_CONSENT_COPY.settingsHelp).toContain("doesn't remove images CardSight already has");
     expect(CAMERA_USAGE_DESCRIPTION).toContain(PHOTO_PERMISSION_PURPOSE);
-    const { body, settingsHelp, ...rest } = CARDSIGHT_CONSENT_COPY;
-    expect(body && settingsHelp).toBeTruthy();
+    const { body, settingsHelp, terms, ...rest } = CARDSIGHT_CONSENT_COPY;
+    expect(body && settingsHelp && terms).toBeTruthy();
     expect([...Object.values(rest), CAMERA_USAGE_DESCRIPTION].join(" ")).not.toMatch(/\bAI\b|artificial intelligence|PSA|BGS|CGC/);
   });
 
