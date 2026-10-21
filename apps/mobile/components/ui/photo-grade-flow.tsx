@@ -29,7 +29,6 @@ import { GradeCardFinder } from "@/components/ui/grade-card-finder";
 import { GradeExtraShots } from "@/components/ui/grade-extra-shots";
 import { PrimaryButton } from "@/components/ui/primary-button";
 import { detectGradePhoto, getGradeQuota, grantGradeCredits, requestPhotoPregrade } from "@/lib/api";
-import { askCardSightConsentOnce } from "@/lib/cardsight-consent";
 import { ensureAccountAgeConfirmed } from "@/lib/age-confirmation";
 import { isGuestSession } from "@/lib/identity";
 import { gradeFlowSession } from "@/lib/grade-flow-session";
@@ -173,10 +172,8 @@ export function PhotoGradeFlow({ onOpenPipeline }: PhotoGradeFlowProps) {
   }
 
   async function ingestStill(nextSide: Side, picked: PickedGradeStill, fromFinder: boolean) {
-    // Same CardSight prompt as Capture: grade photos may go to CardMagic when allowed.
-    if (!isGuestSession() && (await ensureAccountAgeConfirmed())) {
-      await askCardSightConsentOnce();
-    }
+    // Sean (Oct 21): CardSight consent comes from the Terms (no prompt); accounts still confirm 18+.
+    if (!isGuestSession()) await ensureAccountAgeConfirmed();
     const prepared =
       picked.mimeType === "image/jpeg" && !fromFinder
         ? { still: picked }

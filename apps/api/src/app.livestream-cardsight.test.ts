@@ -127,14 +127,13 @@ describe("Live Scan: automatic CardSight identify (Sean Oct 21)", () => {
     expect(cs.calls).toHaveLength(2);
   });
 
-  it("no card in frame / no consent: CardSight is never called", async () => {
+  it("no card in frame / CardSight turned off: CardSight is never called", async () => {
     const a = await setup();
     await frame(a.app, { cardDetected: false });
     expect(a.cs.calls).toHaveLength(0);
     const b = await setup({ consent: false });
     const r = await frame(b.app);
     expect(b.cs.calls).toHaveLength(0);
-    expect(r.body.cardSight).toBe("consent_required");
     expect(r.body.identity.tcgdexId).toBeNull();
   });
 

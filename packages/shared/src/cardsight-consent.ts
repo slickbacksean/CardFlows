@@ -15,9 +15,19 @@ export const CARDSIGHT_CONSENT_VERSION = "2026-10-18.2";
 const CARDSIGHT_DISCLOSURE_BODY =
   "PokeSniper can use CardSight, our card-recognition provider, to identify cards from your photos and to crop and straighten grade photos. If you allow it, your card photos are sent to CardSight. CardSight may use photos you send to improve its card recognition service. CardSight's terms let it keep these images and use them to train its AI models. Turning this off later stops new uploads but doesn't remove photos CardSight already has. If you don't allow it, PokeSniper matches and crops cards on its own servers, or you can search manually. You can change this anytime in Settings.";
 const CARDSIGHT_DISCLOSURE_SETTINGS_HELP =
-  "When on, card photos are also sent to CardSight, our card-recognition provider, to identify cards and to crop and straighten grade photos. CardSight may use photos you send to improve its card recognition service. CardSight's terms let it keep these images and use them to train its AI models. Turning this off stops new uploads but doesn't remove photos CardSight already has. When off, PokeSniper matches and crops cards on its own servers only.";
+  "When on, card images from Scan a Card, grade photos and Live Scan are sent to CardSight, our card-recognition provider, to identify cards and to crop and straighten grade photos. Live Scan images are cropped to the card, with the stream's chat and bid areas blacked out. CardSight may use images you send to improve its card recognition service. CardSight's terms let it keep these images and use them to train its AI models. Turning this off stops new uploads but doesn't remove images CardSight already has. When off, PokeSniper matches and crops cards on its own servers only, and Live Scan doesn't identify cards.";
+/**
+ * Sean (Oct 21): CardSight consent is part of the Terms of Service accepted at sign-up
+ * (no separate prompt). This is the Terms' CardSight disclosure paragraph.
+ */
+const CARDSIGHT_TERMS_DISCLOSURE =
+  "CardSight may use images you send to improve its card recognition service. CardSight's terms let it keep these images and use them to train its AI models. You can turn CardSight off anytime in Settings > Card recognition. That stops new uploads but doesn't remove images CardSight already has. When it's off, PokeSniper identifies cards on its own servers only, or you can search manually, and Live Scan doesn't identify cards.";
 
-export const CARDSIGHT_AI_DISCLOSURES: readonly string[] = [CARDSIGHT_DISCLOSURE_BODY, CARDSIGHT_DISCLOSURE_SETTINGS_HELP];
+export const CARDSIGHT_AI_DISCLOSURES: readonly string[] = [
+  CARDSIGHT_DISCLOSURE_BODY,
+  CARDSIGHT_DISCLOSURE_SETTINGS_HELP,
+  CARDSIGHT_TERMS_DISCLOSURE,
+];
 
 export const CARDSIGHT_CONSENT_COPY = {
   title: "Card recognition",
@@ -27,6 +37,7 @@ export const CARDSIGHT_CONSENT_COPY = {
   settingsLabel: "Use CardSight for card recognition and grade photos",
   settingsHelp: CARDSIGHT_DISCLOSURE_SETTINGS_HELP,
   withdrawn: "CardSight is off. New photos are matched by PokeSniper only.",
+  terms: CARDSIGHT_TERMS_DISCLOSURE,
 } as const;
 
 export interface CardSightConsentState {

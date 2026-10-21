@@ -1392,6 +1392,24 @@ export function createApp(
     }
     return termsRequired(c);
   };
+  /**
+   * Sean (Oct 21): CardSight consent is part of the Terms accepted at sign-up (no separate prompt).
+   * Allowed = account accepted the current Terms version, unless the user turned CardSight off in
+   * Settings > Card recognition (a withdrawal or decline that wasn't re-granted).
+   */
+  const cardSightConsented = (userId: string): boolean => {
+    if (isGuestUserId(userId)) return false;
+    // Settings > Card recognition switched on (current version) always counts.
+    if (hasActiveConsent(store.consents, userId)) return true;
+    const record = store.consents.get(userId, "cardsight");
+    if (record && (record.withdrawnAt || record.declinedAt)) return false; // turned off in Settings
+    const account = store.accounts.getAccount(userId);
+    return account?.termsVersion === TERMS_VERSION;
+  };
+  const cardSightConsentView = (userId: string) => {
+    const state = consentState(store.consents.get(userId, "cardsight"));
+    return { ...state, granted: cardSightConsented(userId), needsPrompt: false };
+  };
   const ageRequired = (c: Context) =>
     c.json({ ok: false, error: AGE_CONFIRMATION_REQUIRED_CODE, message: AGE_GATE_COPY.required }, 400);
 
@@ -1666,7 +1684,7 @@ export function createApp(
     });
     if (!input.cardDetected) return quiet("no_card");
     // CardSight disclosure: frames go to CardSight only with this user's current consent.
-    if (!hasActiveConsent(store.consents, userId)) return quiet("unidentified", { cardSight: "consent_required" });
+    if (!cardSightConsented(userId)) return quiet("unidentified");
     const crop = decodeIdentityCropJpeg(input.identityCropJpeg);
     if (!crop) return quiet("unidentified");
     const key = input.identityHash
@@ -2416,7 +2434,7 @@ export function createApp(
 
   // Sean: CardSight disclosure + consent, stored with its version and timestamps.
   app.get("/v1/consents/cardsight", (c) =>
-    c.json({ ok: true as const, consent: consentState(store.consents.get(c.get("userId"), "cardsight")) }),
+    c.json({ ok: true as const, consent: cardSightConsentView(c.get("userId")) }),
   );
   app.post("/v1/consents/cardsight", async (c) => {
     const userId = c.get("userId");
@@ -2433,11 +2451,11 @@ export function createApp(
       store.consents.grant(userId, "cardsight", CARDSIGHT_CONSENT_VERSION, at);
     } else if (hasActiveConsent(store.consents, userId)) {
       store.consents.withdraw(userId, "cardsight", at);
-    } else if (consentState(store.consents.get(userId, "cardsight")).needsPrompt) {
-      // Backend review M4: a "No" to the prompt is a decline, never a grant that was withdrawn.
+    } else {
+      // Sean (Oct 21): consent comes from the Terms; turning it off in Settings is recorded as a decline.
       store.consents.decline(userId, "cardsight", CARDSIGHT_CONSENT_VERSION, at);
     }
-    return c.json({ ok: true as const, consent: consentState(store.consents.get(userId, "cardsight")) });
+    return c.json({ ok: true as const, consent: cardSightConsentView(userId) });
   });
 
   app.post("/v1/email-verifications", (c) => {
@@ -2640,7 +2658,7 @@ export function createApp(
     const { photos, staged, rowsDeleted } = deleteUserEverything(userId, "under18_report");
     return c.json({
       ok: true as const,
-      cardSightOff: !hasActiveConsent(store.consents, userId),
+      cardSightOff: !cardSightConsented(userId),
       photosDeleted: photos.deleted + staged,
       rowsDeleted,
     });
@@ -3008,7 +3026,7 @@ export function createApp(
           !isGuestUserId(userId) &&
           hasAgeConfirmation(store.ageConfirmations, userId) &&
           userCap > 0 &&
-          hasActiveConsent(store.consents, userId) &&
+          cardSightConsented(userId) &&
           store.consents.monthlyUse(userId, monthKey) < userCap
             ? options.cardSight
             : null;
@@ -3469,7 +3487,7 @@ export function createApp(
             !isGuestUserId(userId) &&
             hasAgeConfirmation(store.ageConfirmations, userId) &&
             userCap > 0 &&
-            hasActiveConsent(store.consents, userId),
+            cardSightConsented(userId),
           // Sean (Oct 18): save most of the free-plan CardSight cap for ID; CardMagic uses the remainder.
           mayUseIdReserve: () => {
             if (cardSightMonthlyBudget == null) return true;
