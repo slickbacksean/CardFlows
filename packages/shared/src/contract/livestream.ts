@@ -66,7 +66,11 @@ export const livestreamRoutes = {
       engine: z.enum(["in_house", "cardsight"]).optional(),
       /** Not identified yet; send the next new frame of this card. */
       retry: z.boolean().optional(),
-      limited: z.enum(["session", "user_daily", "user_monthly", "global_daily"]).optional(),
+      limited: z.enum(["session", "user_daily", "user_monthly", "global_daily", "global_monthly"]).optional(),
+      /** "in_house_confident" for our matcher; "High"/"Medium" for CardSight. */
+      tier: z.string().optional(),
+      /** Fail closed: the mask couldn't be applied, so nothing went to CardSight. */
+      mask: z.literal("unavailable").optional(),
     }),
   }),
   getLivestreamTiming: defineRoute({

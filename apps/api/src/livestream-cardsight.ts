@@ -24,7 +24,9 @@ export interface LiveCardSightLimits {
   perUserDaily: number;
   /** CardSight calls per UTC day from Live Scan, all users together (one global meter). */
   globalDaily: number;
-  /** CardSight calls per scanner session per rolling minute. */
+  /** Live Scan's ceiling on the one global monthly CardSight meter (shared with Scan a Card). */
+  globalMonthly: number;
+  /** CardSight calls per user per rolling minute (server-side key, not a client session id). */
   perSessionPerMinute: number;
   /** How long a card already sent (same crop hash) is answered from memory instead of re-sent. */
   dedupeMs: number;
@@ -41,16 +43,19 @@ export interface LiveCardSightLimits {
 }
 
 /**
- * Hybrid (Sean, Oct 21): the in-house matcher answers alone when it is this confident.
- * Tuned on the Oct 20 livestream ground truth (405 hand-boxed frames, 24 cards): at
- * similarity >= 0.84 and top-1 lead >= 0.012 there were 0 wrong answers (10 correct frames, 4 cards).
+ * Hybrid (Sean, Oct 21): the in-house matcher answers alone when it is this confident AND the same
+ * top-1 won 2 of the last 3 frames of the card. Computer Vision (Oct 21): 0.86 / 0.02 (the matcher's
+ * own accept gate); not tuned on Whatnot frames.
  * Env: CARD_FLOW_LIVE_INHOUSE_MIN_SIMILARITY / CARD_FLOW_LIVE_INHOUSE_MIN_MARGIN.
  */
 export interface LiveInHouseGate {
   minSimilarity: number;
   minMargin: number;
 }
-export const LIVE_INHOUSE_GATE_DEFAULTS: LiveInHouseGate = { minSimilarity: 0.84, minMargin: 0.012 };
+export const LIVE_INHOUSE_GATE_DEFAULTS: LiveInHouseGate = { minSimilarity: 0.86, minMargin: 0.02 };
+/** Same top-1 on this many of the last LIVE_INHOUSE_VOTE_WINDOW frames of the card. */
+export const LIVE_INHOUSE_VOTES = 2;
+export const LIVE_INHOUSE_VOTE_WINDOW = 3;
 
 export function liveInHouseGateFromEnv(env: NodeJS.ProcessEnv = process.env): LiveInHouseGate {
   const num = (raw: string | undefined, fallback: number) => {
@@ -75,19 +80,41 @@ export function inHouseConfident(
 }
 
 /**
- * Defaults (override with env):
- * - CARD_FLOW_LIVE_CARDSIGHT_USER_DAILY=150 (~1.5–2 h of active Live Scan per user per day)
- * - CARD_FLOW_LIVE_CARDSIGHT_GLOBAL_DAILY=1500 (fits a ~45k/month plan; alerts at 50/75/90%)
- * - CARD_FLOW_LIVE_CARDSIGHT_SESSION_PER_MIN=6 (one new card every ~10 s is a fast Whatnot pace)
- * - CARD_FLOW_LIVE_CARDSIGHT_DEDUPE_SECONDS=180
+ * Computer Vision (Oct 21): every Live Scan cap comes from ONE plan setting,
+ * CARD_FLOW_CARDSIGHT_PLAN_MONTHLY (falls back to CARD_FLOW_CARDSIGHT_MONTHLY_BUDGET, then 750 = the
+ * current free plan). Scan a Card keeps a 25% reserve of the plan; Live Scan may use the rest of the
+ * shared monthly meter. Raising the plan (e.g. Ultra 100k) scales everything.
+ *
+ * At 750/month: Live Scan monthly 562, app-wide daily 19, per user daily 3, Premium monthly 56,
+ * trial monthly 11, 6/min per user.
+ * At 100,000/month: Live Scan monthly 75,000, daily 2,500, per user daily 150, Premium 1,000, trial 200.
  */
+export const CARDSIGHT_PLAN_DEFAULT = 750;
+export const LIVE_SCAN_RESERVE_FOR_SCAN = 0.25;
+
+export function liveCardSightLimitsForPlan(planMonthly: number): Omit<LiveCardSightLimits, "deadlineMs" | "handoffMs" | "giveUpMs" | "dedupeMs" | "perSessionPerMinute"> {
+  const plan = Math.max(0, Math.floor(planMonthly));
+  const globalMonthly = Math.floor(plan * (1 - LIVE_SCAN_RESERVE_FOR_SCAN));
+  const globalDaily = Math.max(1, Math.ceil(globalMonthly / 30));
+  const premiumMonthly = Math.min(1_000, Math.max(1, Math.floor(globalMonthly / 10)));
+  return {
+    globalMonthly,
+    globalDaily,
+    perUserDaily: Math.min(150, Math.max(1, Math.floor(globalDaily / 5))),
+    premiumMonthly,
+    trialMonthly: Math.min(200, Math.max(1, Math.floor(premiumMonthly / 5))),
+  };
+}
+
+export function cardSightPlanFromEnv(env: NodeJS.ProcessEnv = process.env): number {
+  const raw = env.CARD_FLOW_CARDSIGHT_PLAN_MONTHLY ?? env.CARD_FLOW_CARDSIGHT_MONTHLY_BUDGET;
+  return positiveInt(raw, CARDSIGHT_PLAN_DEFAULT);
+}
+
 export const LIVE_CARDSIGHT_DEFAULTS: LiveCardSightLimits = {
-  perUserDaily: 150,
-  globalDaily: 1500,
+  ...liveCardSightLimitsForPlan(CARDSIGHT_PLAN_DEFAULT),
   perSessionPerMinute: 6,
   dedupeMs: 180_000,
-  premiumMonthly: 1_000,
-  trialMonthly: 200,
   deadlineMs: 2_500,
   handoffMs: 1_500,
   giveUpMs: 7_000,
@@ -99,21 +126,21 @@ function positiveInt(raw: string | undefined, fallback: number): number {
   return Number.isFinite(n) && n >= 0 ? Math.floor(n) : fallback;
 }
 
+/** Plan-derived caps; each can still be overridden on its own. */
 export function liveCardSightLimitsFromEnv(env: NodeJS.ProcessEnv = process.env): LiveCardSightLimits {
+  const plan = liveCardSightLimitsForPlan(cardSightPlanFromEnv(env));
+  const d = LIVE_CARDSIGHT_DEFAULTS;
   return {
-    perUserDaily: positiveInt(env.CARD_FLOW_LIVE_CARDSIGHT_USER_DAILY, LIVE_CARDSIGHT_DEFAULTS.perUserDaily),
-    globalDaily: positiveInt(env.CARD_FLOW_LIVE_CARDSIGHT_GLOBAL_DAILY, LIVE_CARDSIGHT_DEFAULTS.globalDaily),
-    perSessionPerMinute: positiveInt(
-      env.CARD_FLOW_LIVE_CARDSIGHT_SESSION_PER_MIN,
-      LIVE_CARDSIGHT_DEFAULTS.perSessionPerMinute,
-    ),
-    dedupeMs:
-      positiveInt(env.CARD_FLOW_LIVE_CARDSIGHT_DEDUPE_SECONDS, LIVE_CARDSIGHT_DEFAULTS.dedupeMs / 1000) * 1000,
-    premiumMonthly: positiveInt(env.CARD_FLOW_LIVE_CARDSIGHT_PREMIUM_MONTHLY, LIVE_CARDSIGHT_DEFAULTS.premiumMonthly),
-    trialMonthly: positiveInt(env.CARD_FLOW_LIVE_CARDSIGHT_TRIAL_MONTHLY, LIVE_CARDSIGHT_DEFAULTS.trialMonthly),
-    deadlineMs: positiveInt(env.CARD_FLOW_LIVE_CARDSIGHT_DEADLINE_MS, LIVE_CARDSIGHT_DEFAULTS.deadlineMs),
-    handoffMs: positiveInt(env.CARD_FLOW_LIVE_CARDSIGHT_HANDOFF_MS, LIVE_CARDSIGHT_DEFAULTS.handoffMs),
-    giveUpMs: LIVE_CARDSIGHT_DEFAULTS.giveUpMs,
+    globalMonthly: plan.globalMonthly,
+    perUserDaily: positiveInt(env.CARD_FLOW_LIVE_CARDSIGHT_USER_DAILY, plan.perUserDaily),
+    globalDaily: positiveInt(env.CARD_FLOW_LIVE_CARDSIGHT_GLOBAL_DAILY, plan.globalDaily),
+    perSessionPerMinute: positiveInt(env.CARD_FLOW_LIVE_CARDSIGHT_SESSION_PER_MIN, d.perSessionPerMinute),
+    dedupeMs: positiveInt(env.CARD_FLOW_LIVE_CARDSIGHT_DEDUPE_SECONDS, d.dedupeMs / 1000) * 1000,
+    premiumMonthly: positiveInt(env.CARD_FLOW_LIVE_CARDSIGHT_PREMIUM_MONTHLY, plan.premiumMonthly),
+    trialMonthly: positiveInt(env.CARD_FLOW_LIVE_CARDSIGHT_TRIAL_MONTHLY, plan.trialMonthly),
+    deadlineMs: positiveInt(env.CARD_FLOW_LIVE_CARDSIGHT_DEADLINE_MS, d.deadlineMs),
+    handoffMs: positiveInt(env.CARD_FLOW_LIVE_CARDSIGHT_HANDOFF_MS, d.handoffMs),
+    giveUpMs: positiveInt(env.CARD_FLOW_LIVE_SCAN_BUDGET_MS, d.giveUpMs),
   };
 }
 
@@ -189,6 +216,8 @@ export interface LiveCardSightCached {
 export function createLiveCardSightGate(limits: LiveCardSightLimits, nowMs: () => number = Date.now) {
   const seen = new Map<string, Array<{ key: string } & LiveCardSightCached>>();
   const sessions = new Map<string, number[]>();
+  const inHouse = new Map<string, Array<{ key: string; tcgdexId: string; at: number }>>();
+  const sessionStart = new Map<string, { first: number; last: number }>();
   let lastSweep = 0;
 
   function sweep(t: number) {
@@ -229,6 +258,36 @@ export function createLiveCardSightGate(limits: LiveCardSightLimits, nowMs: () =
       rows.push({ key, at: nowMs(), ...value });
       seen.set(userId, rows.slice(-50));
     },
+    /**
+     * Note our matcher's top-1 for this card; returns how many of the last 3 frames of the same card
+     * agree with it. In-process only, short-lived; our own matcher's output, no CardSight data.
+     */
+    noteInHouse(userId: string, key: string | null, tcgdexId: string | null): number {
+      if (!key || !tcgdexId) return 0;
+      const t = nowMs();
+      const list = inHouse.get(userId) ?? [];
+      const sameCard = (k: string) =>
+        key.startsWith("hash:") && k.startsWith("hash:") ? sameCardHash(key.slice(5), k.slice(5)) : k === key;
+      const fresh = list.filter((r) => t - r.at < 10_000);
+      fresh.push({ key, tcgdexId, at: t });
+      inHouse.set(userId, fresh.slice(-20));
+      const window = fresh.filter((r) => sameCard(r.key)).slice(-LIVE_INHOUSE_VOTE_WINDOW);
+      return window.filter((r) => r.tcgdexId === tcgdexId).length;
+    },
+    /**
+     * Server-side start of this user's scanner session: the first frame, reset after 60 s idle.
+     * Used to clamp the phone's cardAgeMs.
+     */
+    sessionAgeMs(userId: string): number {
+      const t = nowMs();
+      const row = sessionStart.get(userId);
+      if (!row || t - row.last > 60_000) {
+        sessionStart.set(userId, { first: t, last: t });
+        return 0;
+      }
+      row.last = t;
+      return t - row.first;
+    },
     /** Takes a session slot when there is room. */
     takeSessionSlot(sessionKey: string): boolean {
       if (limits.perSessionPerMinute <= 0) return false;
@@ -266,9 +325,15 @@ export const WHATNOT_OVERLAY_REGIONS: readonly NormRect[] = [
   { x: 0, y: 0, width: 1, height: 0.08 }, // host name / viewer count bar
 ];
 
+/**
+ * Computer Vision (Oct 21): production frames come from the HLS player buffer
+ * (iOS AVPlayerItemVideoOutput), which has no Whatnot overlays, so region masking is OFF by default.
+ * Set CARD_FLOW_LIVE_MASK_REGIONS=whatnot (defaults) or a JSON array to turn it on.
+ */
 export function liveMaskRegionsFromEnv(env: NodeJS.ProcessEnv = process.env): readonly NormRect[] {
   const raw = env.CARD_FLOW_LIVE_MASK_REGIONS?.trim();
-  if (!raw) return WHATNOT_OVERLAY_REGIONS;
+  if (!raw || raw === "off" || raw === "0") return [];
+  if (raw === "whatnot" || raw === "on" || raw === "1") return WHATNOT_OVERLAY_REGIONS;
   try {
     const parsed = JSON.parse(raw) as unknown;
     if (!Array.isArray(parsed)) return WHATNOT_OVERLAY_REGIONS;

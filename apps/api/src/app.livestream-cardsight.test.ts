@@ -10,7 +10,7 @@ import {
 } from "@cardflow/shared";
 import { identifyCardMock } from "@cardflow/shared/mock";
 import { createApp } from "./app";
-import { LIVE_CARDSIGHT_DEFAULTS } from "./livestream-cardsight";
+import { LIVE_CARDSIGHT_DEFAULTS, WHATNOT_OVERLAY_REGIONS } from "./livestream-cardsight";
 import { OpsMetrics, type OpsAlert } from "./ops-metrics";
 import { createMemoryStore } from "./store";
 
@@ -37,6 +37,9 @@ function cropB64(seed = 255) {
 }
 const hashOf = (ones: number) => "1".repeat(ones) + "0".repeat(105 - ones);
 
+let clockMs = 0;
+const QUAD = [1, 1, 31, 1, 31, 43, 1, 43];
+
 async function setup(opts: {
   respond?: () => CardFlowNormalizedRecognitionResult;
   consent?: boolean;
@@ -45,7 +48,10 @@ async function setup(opts: {
   inHouse?: { tcgdexId: string; similarity: number; second: number };
   delayMs?: number;
   metrics?: OpsMetrics;
+  regions?: boolean;
+  premium?: boolean;
 } = {}) {
+  clockMs = Date.parse("2026-10-21T12:00:00.000Z");
   const store = createMemoryStore();
   store.ageConfirmations.confirm(DEFAULT_INVITED_USER_ID, AGE_GATE_VERSION, "2026-10-21T00:00:00.000Z");
   const respond = opts.respond ?? (() => result([{ confidence: "High" }]));
@@ -75,7 +81,9 @@ async function setup(opts: {
     cardSight: cs.provider,
     livestreamCardSight: true,
     ...(openclip ? { liveIdentityOpenclip: openclip as never } : {}),
-    liveCardSightLimits: { ...LIVE_CARDSIGHT_DEFAULTS, ...opts.limits },
+    liveCardSightLimits: { ...LIVE_CARDSIGHT_DEFAULTS, perUserDaily: 100, ...opts.limits },
+    liveMaskRegions: opts.regions ? WHATNOT_OVERLAY_REGIONS : [],
+    now: () => new Date(clockMs),
     opsMetrics: opts.metrics ?? new OpsMetrics([(a) => alerts.push(a)]),
     ...(opts.enabled === false ? { livestreamEnabled: () => false } : {}),
   });
@@ -87,10 +95,15 @@ async function setup(opts: {
     });
     expect(res.status).toBe(200);
   }
+  // First frame of the scanner session (no card): starts the server-side session clock.
+  await frame(app, { cardDetected: false, advance: 0 });
   return { app, store, cs, alerts };
 }
 
 async function frame(app: ReturnType<typeof createApp>, extra: Record<string, unknown> = {}) {
+  const { advance = 2000, ...rest } = extra as { advance?: number };
+  clockMs += advance as number;
+  extra = rest;
   const res = await app.request("/v1/livestream/identify", {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -100,7 +113,7 @@ async function frame(app: ReturnType<typeof createApp>, extra: Record<string, un
       cardDetected: true,
       identityHash: hashOf(0),
       identityCropJpeg: cropB64(),
-      sessionId: "s1",
+      identityCropQuad: QUAD,
       ...extra,
     }),
   });
@@ -158,15 +171,19 @@ describe("Live Scan: automatic CardSight identify (Sean Oct 21)", () => {
 
   it("hybrid: a confident in-house match is shown at once and CardSight is not called", async () => {
     const { app, cs } = await setup({ inHouse: { tcgdexId: "swsh3-136", similarity: 0.9, second: 0.85 } });
-    const r = await frame(app);
+    const first = await frame(app, { cardAgeMs: 300, advance: 300 });
+    expect(first.body.identity.tcgdexId).toBeNull(); // 1 of 3 frames so far
+    const r = await frame(app, { cardAgeMs: 600, advance: 300 });
     expect(cs.calls).toHaveLength(0);
+    expect(r.body.identity.confidence).toBeNull(); // our matcher has no CardSight tier
+    expect(r.body.tier).toBe("in_house_confident");
     expect(r.body.identity).toMatchObject({ tcgdexId: "swsh3-136", reason: "identified" });
     expect(r.body.engine).toBe("in_house");
     expect(r.body.candidates).toBeUndefined();
   });
 
   it("hybrid: an unsure in-house match goes straight to CardSight (one call per card)", async () => {
-    const { app, cs } = await setup({ inHouse: { tcgdexId: "swsh3-136", similarity: 0.83, second: 0.829 } });
+    const { app, cs } = await setup({ inHouse: { tcgdexId: "swsh3-136", similarity: 0.85, second: 0.84 } });
     const r = await frame(app);
     expect(cs.calls).toHaveLength(1);
     expect(r.body.engine).toBe("cardsight");
@@ -212,10 +229,50 @@ describe("Live Scan: automatic CardSight identify (Sean Oct 21)", () => {
     expect(cs.calls).toHaveLength(1);
     await frame(app, { cardAgeMs: 3000 });
     expect(cs.calls).toHaveLength(1);
-    const late = await frame(app, { cardAgeMs: 7200, identityHash: hashOf(60) });
+    const late = await frame(app, { cardAgeMs: 7200, identityHash: hashOf(60), advance: 8000 });
     expect(cs.calls).toHaveLength(1);
     expect(late.body.identity.tcgdexId).toBeNull();
     expect(late.body.retry).toBe(false);
+  });
+
+  it("fails closed: no card corners (or no frame position when overlay masking is on) = no CardSight call", async () => {
+    const a = await setup();
+    const r = await frame(a.app, { identityCropQuad: null });
+    expect(a.cs.calls).toHaveLength(0);
+    expect(r.body.mask).toBe("unavailable");
+    const b = await setup({ regions: true });
+    await frame(b.app, { cardBox: null });
+    expect(b.cs.calls).toHaveLength(0);
+    await frame(b.app, { cardBox: { x: 0.2, y: 0.1, width: 0.5, height: 0.4 } });
+    expect(b.cs.calls).toHaveLength(1);
+  });
+
+  it("the phone's cardAgeMs is clamped to the server-side session", async () => {
+    const { app, cs } = await setup();
+    // Session is 300 ms old: a claimed 5 s card age can't skip our matcher's 1.5 s window.
+    await frame(app, { cardAgeMs: 5000, advance: 300 });
+    expect(cs.calls).toHaveLength(0);
+  });
+
+  it("meters are taken before the call; a timeout stays counted, a non-billed error is refunded", async () => {
+    const slow = await setup({ delayMs: 400, limits: { deadlineMs: 50 } });
+    await frame(slow.app);
+    expect(slow.store.getVendorQuotaUsage("cardsight", "2026-10")).toBe(1);
+    const failing = await setup({
+      respond: () => ({ ...result([]), ok: false, error: { code: "PROVIDER_UNAVAILABLE", message: "down", retryable: true } }),
+    });
+    await frame(failing.app);
+    expect(failing.cs.calls).toHaveLength(1);
+    expect(failing.store.getVendorQuotaUsage("cardsight", "2026-10")).toBe(0);
+  });
+
+  it("Live Scan stops at its share of the global monthly meter (Scan a Card keeps its reserve)", async () => {
+    const { app, cs, store } = await setup({ limits: { globalMonthly: 1 } });
+    await frame(app, { identityHash: hashOf(0) });
+    const capped = await frame(app, { identityHash: hashOf(60) });
+    expect(cs.calls).toHaveLength(1);
+    expect(capped.body.limited).toBe("global_monthly");
+    expect(store.getVendorQuotaUsage("cardsight", "2026-10")).toBe(1);
   });
 
   it("no card in frame / CardSight turned off: CardSight is never called", async () => {
@@ -252,7 +309,7 @@ describe("Live Scan: automatic CardSight identify (Sean Oct 21)", () => {
   });
 
   it("the crop sent is masked (Whatnot chat region blacked out)", async () => {
-    const { app, cs } = await setup();
+    const { app, cs } = await setup({ regions: true });
     await frame(app, { cardBox: { x: 0, y: 0.5, width: 0.5, height: 0.5 } });
     const sent = jpeg.decode(cs.calls[0]!.image, { useTArray: true });
     expect(sent.data[(40 * 32 + 16) * 4]!).toBeLessThan(40);

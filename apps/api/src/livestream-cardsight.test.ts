@@ -47,7 +47,15 @@ describe("Live Scan CardSight limits", () => {
         CARD_FLOW_LIVE_CARDSIGHT_SESSION_PER_MIN: "2",
         CARD_FLOW_LIVE_CARDSIGHT_DEDUPE_SECONDS: "30",
       }),
-    ).toMatchObject({ perUserDaily: 10, globalDaily: 200, perSessionPerMinute: 2, dedupeMs: 30_000, premiumMonthly: 1000, trialMonthly: 200 });
+    ).toMatchObject({ perUserDaily: 10, globalDaily: 200, perSessionPerMinute: 2, dedupeMs: 30_000 });
+    // One plan setting drives every cap: free 750/month by default, scales up automatically.
+    expect(liveCardSightLimitsFromEnv({})).toMatchObject({
+      globalMonthly: 562, globalDaily: 19, perUserDaily: 3, premiumMonthly: 56, trialMonthly: 11, giveUpMs: 7000,
+    });
+    expect(liveCardSightLimitsFromEnv({ CARD_FLOW_CARDSIGHT_PLAN_MONTHLY: "100000" })).toMatchObject({
+      globalMonthly: 75000, globalDaily: 2500, perUserDaily: 150, premiumMonthly: 1000, trialMonthly: 200,
+    });
+    expect(liveCardSightLimitsFromEnv({ CARD_FLOW_LIVE_SCAN_BUDGET_MS: "6000" }).giveUpMs).toBe(6000);
     expect(liveCardSightEnabledFromEnv({})).toBe(true);
     expect(liveCardSightEnabledFromEnv({ CARD_FLOW_LIVESTREAM_CARDSIGHT: "off" })).toBe(false);
   });
@@ -123,11 +131,11 @@ describe("maskLiveCrop", () => {
 describe("hybrid in-house gate + time budget", () => {
   it("in-house answers alone only above the tuned threshold", () => {
     const g = LIVE_INHOUSE_GATE_DEFAULTS;
-    expect(g).toEqual({ minSimilarity: 0.84, minMargin: 0.012 });
+    expect(g).toEqual({ minSimilarity: 0.86, minMargin: 0.02 });
     const c = (a: number, b: number) => [{ tcgdexId: "x-1", similarity: a }, { tcgdexId: "y-2", similarity: b }];
-    expect(inHouseConfident({ tcgdexId: "x-1", candidates: c(0.87, 0.84) }, g)).toBe(true);
-    expect(inHouseConfident({ tcgdexId: "x-1", candidates: c(0.86, 0.859) }, g)).toBe(false); // ambiguous
-    expect(inHouseConfident({ tcgdexId: "x-1", candidates: c(0.83, 0.7) }, g)).toBe(false); // too low
+    expect(inHouseConfident({ tcgdexId: "x-1", candidates: c(0.89, 0.86) }, g)).toBe(true);
+    expect(inHouseConfident({ tcgdexId: "x-1", candidates: c(0.87, 0.86) }, g)).toBe(false); // ambiguous
+    expect(inHouseConfident({ tcgdexId: "x-1", candidates: c(0.85, 0.7) }, g)).toBe(false); // too low
     expect(inHouseConfident({ tcgdexId: null, candidates: c(0.9, 0.7) }, g)).toBe(false);
     expect(liveInHouseGateFromEnv({ CARD_FLOW_LIVE_INHOUSE_MIN_SIMILARITY: "0.9" }).minSimilarity).toBe(0.9);
   });

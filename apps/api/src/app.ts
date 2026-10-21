@@ -44,6 +44,7 @@ import {
   inHouseConfident,
   liveCardSightEnabledFromEnv,
   liveCardSightUserMonthMeter,
+  LIVE_INHOUSE_VOTES,
   liveInHouseGateFromEnv,
   utcMonthKey,
   type LiveInHouseGate,
@@ -1681,11 +1682,9 @@ export function createApp(
       identityCropJpeg: string | null;
       identityCropQuad: number[] | null;
       cropInFrame: NormRect | null;
-      sessionId: string | null;
       inHouse: LiveVideoIdentityResult;
       inHouseTcgdexId: string | null;
       inHouseCandidates: { tcgdexId: string; similarity: number }[];
-      inHouseMs: number | null;
       accessState: string;
       /** ms since the phone first saw this card (null for older clients = handoff now). */
       cardAgeMs: number | null;
@@ -1694,16 +1693,14 @@ export function createApp(
     const userId = c.get("userId") as string;
     const pipeline = input.inHouse.pipeline;
     const limits = liveCardSightLimits;
-    const age = input.cardAgeMs ?? limits.handoffMs;
-    // In-house keeps trying (phone re-sends new frames of this card) until the give-up age.
+    // Clamp the phone's card age to this user's server-side scanner session (first frame, 60 s idle reset).
+    const sessionAge = liveCardSightGate.sessionAgeMs(userId);
+    const age = Math.min(input.cardAgeMs ?? limits.handoffMs, sessionAge);
+    // Our matcher keeps trying (the phone re-sends new frames of this card) until the give-up age.
     const retry = age < limits.giveUpMs;
     const quiet = (reason: LiveVideoIdentityResult["reason"], extras: Record<string, unknown> = {}) => ({
       identity: { tcgdexId: null, confidence: null, reason, pipeline },
       extras: { source: "cardsight", retry: reason !== "no_card" && retry, ...extras },
-    });
-    const shownAs = (tcgdexId: string, confidence: "High" | "Medium", engine: "in_house" | "cardsight") => ({
-      identity: { tcgdexId, confidence, reason: "identified" as const, pipeline },
-      extras: { source: "cardsight", engine },
     });
     // CardSight terms 3(b) / Sean (Oct 21): no per-scan logs, no card ids, no images. Only aggregate
     // engine + agree/disagree counters (never used to set thresholds). Raw responses are not kept.
@@ -1716,64 +1713,109 @@ export function createApp(
     };
     if (!input.cardDetected) return quiet("no_card");
 
-    // Hybrid (Sean, Oct 21): a confident in-house match is shown at once and CardSight isn't called.
+    // Hybrid: our matcher alone when confident (0.86 / 0.02) on 2 of the last 3 frames of this card.
+    // Labelled as our own engine; no CardSight confidence tier.
     const key = input.identityHash ? `hash:${input.identityHash}` : null;
-    if (inHouseConfident({ tcgdexId: input.inHouseTcgdexId, candidates: input.inHouseCandidates }, liveInHouseGate)) {
-      const id = input.inHouseTcgdexId!;
+    const ihConfident = inHouseConfident(
+      { tcgdexId: input.inHouseTcgdexId, candidates: input.inHouseCandidates },
+      liveInHouseGate,
+    );
+    const votes = liveCardSightGate.noteInHouse(userId, key, ihConfident ? input.inHouseTcgdexId : null);
+    if (ihConfident && votes >= LIVE_INHOUSE_VOTES) {
       countEngine("in_house");
-      return shownAs(id, "High", "in_house");
+      return {
+        identity: { tcgdexId: input.inHouseTcgdexId!, confidence: null, reason: "identified" as const, pipeline },
+        extras: { source: "cardsight", engine: "in_house", tier: "in_house_confident" },
+      };
     }
+    const shownByCardSight = (tcgdexId: string, confidence: "High" | "Medium") => ({
+      identity: { tcgdexId, confidence, reason: "identified" as const, pipeline },
+      extras: { source: "cardsight", engine: "cardsight", tier: confidence },
+    });
 
-    // Nothing confident by ~7 s: show nothing, stop.
+    // Nothing confident by the budget (~7 s): show nothing, stop.
     if (age >= limits.giveUpMs) return quiet("unidentified");
-    // Computer Vision (Oct 21): in-house alone for the first ~1.5 s of a card.
+    // Computer Vision (Oct 21): our matcher alone for the first ~1.5 s of a card.
     if (age < limits.handoffMs) return quiet("unidentified");
-    // CardSight is covered by the Terms (unless turned off in Settings). Otherwise: in-house only.
+    // CardSight is covered by the Terms (unless turned off in Settings). Otherwise: our matcher only.
     if (!cardSightConsented(userId)) return quiet("unidentified");
     const crop = decodeIdentityCropJpeg(input.identityCropJpeg);
     if (!crop) return quiet("unidentified");
+    // Fail closed: the outside-the-card mask needs the card corners; overlay regions (if turned on)
+    // need the crop's place in the frame. Without them nothing goes to CardSight.
+    const quadOk =
+      Array.isArray(input.identityCropQuad) &&
+      input.identityCropQuad.length === 8 &&
+      input.identityCropQuad.every((n) => Number.isFinite(n));
+    if (!quadOk || (liveMaskRegions.length > 0 && !input.cropInFrame)) {
+      return quiet("unidentified", { mask: "unavailable" });
+    }
     const cardKey = key ?? `crop:${createHash("sha256").update(crop.bytes).digest("hex")}`;
     // One CardSight call per card: the same card still in view is answered from memory (in-process,
     // short-lived, only to serve this user), never re-sent.
     const recalled = liveCardSightGate.recall(userId, cardKey);
     if (recalled) {
       return recalled.tcgdexId
-        ? shownAs(recalled.tcgdexId, recalled.confidence ?? "Medium", "cardsight")
+        ? shownByCardSight(recalled.tcgdexId, recalled.confidence ?? "Medium")
         : quiet("unidentified", recalled.hint ? { hint: recalled.hint } : {});
     }
-    const t = now();
-    const day = utcDayKey(t);
-    const month = utcMonthKey(t);
-    // Above the monthly cap: in-house only (it already wasn't confident, so nothing is shown).
-    const monthlyCap = input.accessState === "premium" ? limits.premiumMonthly : limits.trialMonthly;
-    if (store.getVendorQuotaUsage(liveCardSightUserMonthMeter(userId), month) >= monthlyCap) {
-      countEngine("in_house_only");
-      return quiet("unidentified", { limited: "user_monthly" });
-    }
-    if (store.getVendorQuotaUsage(LIVE_CARDSIGHT_GLOBAL_METER, day) >= limits.globalDaily) {
-      return quiet("unidentified", { limited: "global_daily" });
-    }
-    if (store.getVendorQuotaUsage(liveCardSightUserMeter(userId), day) >= limits.perUserDaily) {
-      return quiet("unidentified", { limited: "user_daily" });
-    }
-    if (!liveCardSightGate.takeSessionSlot(`${userId}:${input.sessionId ?? "default"}`)) {
-      return quiet("unidentified", { limited: "session" });
-    }
-    // Black out Whatnot chat / bid overlays and anything outside the card before it leaves us.
     const masked = maskLiveCrop(crop.bytes, {
       quad: input.identityCropQuad,
       cropInFrame: input.cropInFrame,
       regions: liveMaskRegions,
     });
-    if (!masked) return quiet("unidentified");
+    if (!masked) return quiet("unidentified", { mask: "unavailable" });
+
+    // Per-user rate limit (server-side key; never a client-made session id).
+    if (!liveCardSightGate.takeSessionSlot(userId)) return quiet("unidentified", { limited: "session" });
+
+    // Reserve every meter atomically BEFORE the call (no race). Refund only a non-billed failure.
+    const t = now();
+    const day = utcDayKey(t);
+    const month = calendarMonthKey(t);
+    const monthlyCap = input.accessState === "premium" ? limits.premiumMonthly : limits.trialMonthly;
+    // One global monthly CardSight meter shared with Scan a Card / grade photos. Live Scan stops at
+    // its ceiling so Scan a Card keeps its reserve of the plan.
+    const globalMonthlyCap =
+      cardSightMonthlyBudget != null ? Math.min(limits.globalMonthly, cardSightMonthlyBudget) : limits.globalMonthly;
+    const meters: Array<{ provider: string; key: string; cap: number; limited: string }> = [
+      { provider: liveCardSightUserMonthMeter(userId), key: month, cap: monthlyCap, limited: "user_monthly" },
+      { provider: liveCardSightUserMeter(userId), key: day, cap: limits.perUserDaily, limited: "user_daily" },
+      { provider: LIVE_CARDSIGHT_GLOBAL_METER, key: day, cap: limits.globalDaily, limited: "global_daily" },
+      { provider: "cardsight", key: month, cap: globalMonthlyCap, limited: "global_monthly" },
+    ];
+    const taken: typeof meters = [];
+    const refund = () => {
+      for (const m of taken) store.refundVendorQuota(m.provider, m.key);
+    };
+    for (const m of meters) {
+      if (!store.consumeVendorQuota(m.provider, m.key, m.cap)) {
+        refund();
+        // Over a cap: our matcher only (it already wasn't confident, so nothing is shown).
+        countEngine("in_house_only");
+        return quiet("unidentified", { limited: m.limited });
+      }
+      taken.push(m);
+    }
+    metrics.recordLiveCardSightDailyUsage(
+      store.getVendorQuotaUsage(LIVE_CARDSIGHT_GLOBAL_METER, day),
+      limits.globalDaily,
+      day,
+    );
+    metrics.recordCardSightBudgetUsage(store.getVendorQuotaUsage("cardsight", month), globalMonthlyCap);
+
     let result: CardFlowNormalizedRecognitionResult | null;
+    let timedOut = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
     try {
-      // Hard deadline keeps card-appears-to-result inside the ~7 s budget.
+      // Hard deadline keeps card-appears-to-result inside the budget. One attempt, prepaid.
       result = await Promise.race([
-        options.cardSight!.identifyCard({ image: masked, mimeType: "image/jpeg" }),
+        options.cardSight!.identifyCard({ image: masked, mimeType: "image/jpeg", prepaid: true }),
         new Promise<null>((resolve) => {
-          timer = setTimeout(() => resolve(null), limits.deadlineMs);
+          timer = setTimeout(() => {
+            timedOut = true;
+            resolve(null);
+          }, limits.deadlineMs);
         }),
       ]);
     } catch {
@@ -1781,19 +1823,15 @@ export function createApp(
     } finally {
       if (timer) clearTimeout(timer);
     }
+    // Timeouts stay counted (CardSight may have billed). Other failures were not billed: refund.
     if (!result) {
+      if (!timedOut) refund();
+      liveCardSightGate.remember(userId, cardKey, { tcgdexId: null, confidence: null, hint: null });
       return quiet("unidentified");
     }
-    if (!result.ok) return quiet("unidentified");
-    // Charge the meters only for a successful (billable) response.
-    store.consumeVendorQuota(liveCardSightUserMonthMeter(userId), month, monthlyCap);
-    store.consumeVendorQuota(liveCardSightUserMeter(userId), day, limits.perUserDaily);
-    if (store.consumeVendorQuota(LIVE_CARDSIGHT_GLOBAL_METER, day, limits.globalDaily)) {
-      metrics.recordLiveCardSightDailyUsage(
-        store.getVendorQuotaUsage(LIVE_CARDSIGHT_GLOBAL_METER, day),
-        limits.globalDaily,
-        day,
-      );
+    if (!result.ok) {
+      if (result.error?.code !== "PROVIDER_TIMEOUT") refund();
+      return quiet("unidentified");
     }
     const verdict = liveCardSightVerdict(result);
     let row: { tcgdexId: string | null; confidence: "High" | "Medium" | null; hint: typeof LIVE_ONE_CARD_HINT | null } = {
@@ -1806,11 +1844,13 @@ export function createApp(
       const tcgdexId = normalizeLiveVideoTcgdexId(mapped.mapping.tcgdexId);
       if (tcgdexId) row = { tcgdexId, confidence: verdict.detection.confidence as "High" | "Medium", hint: null };
     }
-    // One CardSight call per card: every answer (Low too) is remembered; in-house keeps trying.
+    // The raw response is dropped here; only what's needed to serve this user is kept, briefly.
+    result = null;
+    // One CardSight call per card: every answer (Low too) is remembered; our matcher keeps trying.
     liveCardSightGate.remember(userId, cardKey, row);
     countEngine("cardsight", row.tcgdexId);
     return row.tcgdexId
-      ? shownAs(row.tcgdexId, row.confidence ?? "Medium", "cardsight")
+      ? shownByCardSight(row.tcgdexId, row.confidence ?? "Medium")
       : quiet("unidentified", row.hint ? { hint: row.hint } : {});
   };
 
@@ -1942,11 +1982,9 @@ export function createApp(
         identityCropJpeg,
         identityCropQuad,
         cropInFrame: normalizeCropInFrame(body.cropInFrame ?? body.cardBox),
-        sessionId: typeof body.sessionId === "string" ? body.sessionId.slice(0, 64) : null,
         inHouse: identity,
         inHouseTcgdexId: openclipTcgdexId,
         inHouseCandidates: openclipCandidates,
-        inHouseMs: stages.sidecar != null ? Math.round(stages.sidecar) : null,
         accessState: gate.access.state,
         cardAgeMs:
           typeof body.cardAgeMs === "number" && Number.isFinite(body.cardAgeMs) && body.cardAgeMs >= 0
