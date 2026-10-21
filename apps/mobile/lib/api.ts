@@ -3,6 +3,7 @@ import {
   CARD_FLOW_REQUEST_TIMEOUT_MS,
   cardFlowHttpErrorMessage,
   cardFlowUnreachableMessage,
+  configuredApiUrlFor,
   resolveClientApiUrl,
   emptySlabEstimate,
   GRADE_QUOTA_COPY,
@@ -44,7 +45,9 @@ import {
   type ScanImageMimeType,
 } from "@cardflow/shared";
 import { Platform } from "react-native";
+import { FEATURE_DISABLED_CODE } from "@cardflow/shared";
 import { rememberDeviceItemIds } from "./device-item-index";
+import { markLivestreamDisabled } from "./feature-flags";
 import { createRequestId, rememberRequestId } from "./request-id";
 import { isPhysicalRuntime } from "./runtime-host";
 import { peekSessionToken, waitForSessionRestore } from "./session-token";
@@ -57,7 +60,7 @@ function defaultApiUrl(): string {
 /** Resolved when a request is made. Expo Go may not know the device until then. */
 export function apiUrl(): string {
   return resolveClientApiUrl({
-    configured: process.env.EXPO_PUBLIC_API_URL,
+    configured: configuredApiUrlFor(process.env.EXPO_PUBLIC_API_URL, process.env.EXPO_PUBLIC_APP_ENV),
     platform: Platform.OS,
     isDev: __DEV__,
     isPhysical: isPhysicalRuntime(),
@@ -312,6 +315,8 @@ async function request<T>(
       (extra as Error & { signupRequired?: SignupReason }).signupRequired = reason;
       notifySignupRequired(reason);
     }
+    // Live Scan remote kill switch: any 503 feature_disabled flips the app's flag right away.
+    if (response.status === 503 && body.code === FEATURE_DISABLED_CODE) markLivestreamDisabled();
     throw extra;
   }
   return data;

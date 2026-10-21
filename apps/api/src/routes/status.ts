@@ -1,10 +1,12 @@
 /** P1-21 status banners. Contract: `statusRoutes`. Cached briefly so polling stays cheap. */
-import { statusBanners, type StatusInputs } from "@cardflow/shared";
+import { statusBanners, type RemoteFeatureFlags, type StatusInputs } from "@cardflow/shared";
 import type { CardFlowApp } from "../app-env";
 
 export interface StatusRouteDeps {
   inputs(): Promise<StatusInputs>;
   cacheMs?: number;
+  /** Read on every request (not cached) so a kill switch applies right away. */
+  features?: () => RemoteFeatureFlags;
   now?: () => number;
 }
 
@@ -18,6 +20,6 @@ export function registerStatusRoutes(app: CardFlowApp, deps: StatusRouteDeps): v
       const banners = statusBanners(await deps.inputs());
       cached = { at: now(), body: { ok: true, banners, checkedAt: new Date(now()).toISOString() } };
     }
-    return c.json(cached.body);
+    return c.json(deps.features ? { ...cached.body, features: deps.features() } : cached.body);
   });
 }

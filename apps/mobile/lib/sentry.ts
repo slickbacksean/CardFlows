@@ -1,4 +1,4 @@
-import { CRASH_REPORTS_STORE_KEY, crashReportsEnabledFrom, scrubSentryEvent } from "@cardflow/shared";
+import { CRASH_REPORTS_STORE_KEY, crashReportsEnabledFrom, scrubSentryEvent, sentryReleaseTags } from "@cardflow/shared";
 import Constants from "expo-constants";
 import * as SecureStore from "expo-secure-store";
 import { Platform } from "react-native";
@@ -20,17 +20,22 @@ function isExpoGo(): boolean {
   return Constants.appOwnership === "expo" || Constants.executionEnvironment === "storeClient";
 }
 
-/** Dev Ops review: environment, release and dist so events line up with EAS builds. */
+/**
+ * Dev Ops review: environment, release and dist so events line up with EAS builds.
+ * release = bundle@version+build. environment = EXPO_PUBLIC_SENTRY_ENVIRONMENT, else
+ * EXPO_PUBLIC_APP_ENV (same names as the eas.json profiles and EAS Update channels). expo-updates
+ * isn't in the build yet, so its runtime channel isn't read; see docs/SENTRY.md.
+ */
 function sentryRelease() {
   const config = Constants.expoConfig;
-  const version = config?.version ?? "0.0.0";
-  const bundle = config?.ios?.bundleIdentifier ?? config?.android?.package ?? "app.pokesniper.mobile";
   const build = Platform.OS === "ios" ? config?.ios?.buildNumber : config?.android?.versionCode;
-  return {
-    environment: process.env.EXPO_PUBLIC_APP_ENV?.trim() || "development",
-    release: `${bundle}@${version}`,
-    dist: build === undefined || build === null ? undefined : String(build),
-  };
+  return sentryReleaseTags({
+    bundleId: config?.ios?.bundleIdentifier ?? config?.android?.package,
+    version: config?.version,
+    build,
+    sentryEnvironment: process.env.EXPO_PUBLIC_SENTRY_ENVIRONMENT,
+    appEnv: process.env.EXPO_PUBLIC_APP_ENV,
+  });
 }
 
 /**
@@ -57,6 +62,7 @@ export function initMobileSentry(): boolean {
     const native = Platform.OS !== "web" && !isExpoGo();
     loaded.init({
       dsn,
+      // Dev events are dropped: only release (non-__DEV__) builds send.
       enabled: !__DEV__,
       ...sentryRelease(),
       sendDefaultPii: false,

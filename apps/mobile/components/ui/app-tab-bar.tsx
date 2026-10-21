@@ -1,6 +1,8 @@
+import { LIVESTREAM_DISABLED_COPY } from "@cardflow/shared";
 import type { ComponentProps } from "react";
 import { Tabs, usePathname } from "expo-router";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
+import { useLivestreamEnabled } from "@/lib/feature-flags";
 import { ScanTabButton } from "@/components/ui/scan-tab-button";
 import { TabBarCurve } from "@/components/ui/tab-bar-curve";
 import {
@@ -29,6 +31,7 @@ function routesByName(
 
 export function AppTabBar({ state, descriptors, navigation, insets }: AppTabBarProps) {
   const pathname = usePathname();
+  const livestreamEnabled = useLivestreamEnabled();
   const focusedRoute = state.routes[state.index];
   if (focusedRoute?.name === "scan-tab" || /\/shop\/card(?:\/|$)/.test(pathname)) return null;
 
@@ -87,6 +90,10 @@ export function AppTabBar({ state, descriptors, navigation, insets }: AppTabBarP
           <ScanTabButton
             onPress={() => {
               if (!scanRoute) return;
+              if (!livestreamEnabled) {
+                Alert.alert("Live Scan", LIVESTREAM_DISABLED_COPY);
+                return;
+              }
               const event = navigation.emit({
                 type: "tabPress",
                 target: scanRoute.key,

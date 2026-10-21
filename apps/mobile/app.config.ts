@@ -33,8 +33,9 @@ export const PUBLIC_ENV_VARS: ReadonlyArray<{
   enforced?: true;
 }> = [
   { name: "EXPO_PUBLIC_APP_ENV", purpose: "Profile name (set by eas.json)", profiles: APP_ENVS },
-  { name: "EXPO_PUBLIC_API_URL", purpose: "PokeSniper API base URL (required for preview and production)", profiles: APP_ENVS },
+  { name: "EXPO_PUBLIC_API_URL", purpose: "PokeSniper API base URL (required for preview and production; production default https://api.pokesniper.app in eas.json)", profiles: APP_ENVS },
   { name: "EXPO_PUBLIC_SENTRY_DSN", purpose: "Sentry crash reports (optional)", profiles: APP_ENVS },
+  { name: "EXPO_PUBLIC_SENTRY_ENVIRONMENT", purpose: "Sentry environment override (optional; default = APP_ENV)", profiles: APP_ENVS },
   { name: "EXPO_PUBLIC_POSTHOG_KEY", purpose: "PostHog project key (optional, plus user opt-in)", profiles: APP_ENVS },
   { name: "EXPO_PUBLIC_POSTHOG_HOST", purpose: "PostHog host (default in eas.json base)", profiles: APP_ENVS },
   { name: "EXPO_PUBLIC_CARD_FLOW_APP_KEY", purpose: "App key header for the API (an abuse speed bump, not a secret)", profiles: APP_ENVS },
@@ -46,10 +47,14 @@ export const PUBLIC_ENV_VARS: ReadonlyArray<{
   { name: "EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID", purpose: "Google sign-in OAuth client ID for iOS (optional; public)", profiles: APP_ENVS },
   { name: "EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID", purpose: "Google sign-in OAuth client ID for Android (optional; public)", profiles: APP_ENVS },
   { name: "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID", purpose: "Google sign-in OAuth web client ID (optional; public)", profiles: APP_ENVS },
+  { name: "EXPO_PUBLIC_CARD_FLOW_IAP_ENABLED", purpose: "In-app purchases (true/1; off hides every price)", profiles: APP_ENVS },
   { name: "EXPO_PUBLIC_CARD_FLOW_LIVESTREAM_TCGPLAYER_LINK", purpose: "HUD shows See prices on TCGplayer instead of estimate (=1)", profiles: APP_ENVS },
 ];
 
 type Env = Record<string, string | undefined>;
+
+/** Same value as packages/shared PRODUCTION_API_URL (kept local: app.config runs in plain Node). */
+export const PRODUCTION_API_URL = "https://api.pokesniper.app";
 
 /** Unset means development (local runs). Anything else unknown is a mistake: throw. */
 export function appEnvFrom(value: string | undefined): AppEnv {
@@ -90,7 +95,7 @@ export function releaseEnvSummary(env: Env): ReleaseEnvSummary {
     apiUrlSet: isSet(env[RELEASE_ENV_KEYS.apiUrl]),
     crashReportingConfigured: isSet(env[RELEASE_ENV_KEYS.sentryDsn]),
     analyticsConfigured: isSet(env[RELEASE_ENV_KEYS.posthogKey]),
-    missingForRelease: appEnv === "development" || isSet(env[RELEASE_ENV_KEYS.apiUrl]) ? [] : [RELEASE_ENV_KEYS.apiUrl],
+    missingForRelease: appEnv !== "preview" || isSet(env[RELEASE_ENV_KEYS.apiUrl]) ? [] : [RELEASE_ENV_KEYS.apiUrl],
     optionalUnset: optional.filter((key) => !isSet(env[key])),
   };
 }
@@ -100,7 +105,8 @@ export function releaseEnvErrors(env: Env): string[] {
   const appEnv = appEnvFrom(env.APP_ENV ?? env.EXPO_PUBLIC_APP_ENV);
   if (appEnv === "development") return [];
   const errors: string[] = [];
-  const raw = env[RELEASE_ENV_KEYS.apiUrl]?.trim() ?? "";
+  // Production defaults to PRODUCTION_API_URL (lib/api.ts); preview must set one.
+  const raw = env[RELEASE_ENV_KEYS.apiUrl]?.trim() || (appEnv === "production" ? PRODUCTION_API_URL : "");
   if (!raw) {
     errors.push(`${RELEASE_ENV_KEYS.apiUrl} is required for ${appEnv} builds`);
   } else {

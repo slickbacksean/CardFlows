@@ -1,4 +1,5 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
+import { TcgplayerAttribution } from "@/components/ui/tcgplayer-attribution";
 import { trackEvent } from "@/lib/product-events";
 import { runQueueableWrite } from "@/lib/write-queue";
 import {
@@ -438,6 +439,7 @@ export default function DecideScreen() {
                         </Text>
                       ) : null}
                       <Text style={styles.body}>{marketEstimate.disclaimer}</Text>
+                      <TcgplayerAttribution />
                     </>
                   ) : (
                     <Text style={styles.body}>{PRICE_UNAVAILABLE_ENTER_OWN_COPY}</Text>

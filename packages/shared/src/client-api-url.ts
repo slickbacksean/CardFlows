@@ -39,6 +39,19 @@ export function releaseApiUrlProblem(input: { configured?: string | null; isDev:
   }
 }
 
+/** Production API (Sean, Oct 20). Used only by production builds that don't set EXPO_PUBLIC_API_URL. */
+export const PRODUCTION_API_URL = "https://api.pokesniper.app";
+
+/**
+ * The configured URL, or PRODUCTION_API_URL for a production build with none set. Preview and
+ * development get no default, so a preview build without a URL still fails loudly.
+ */
+export function configuredApiUrlFor(configured: string | null | undefined, appEnv: string | null | undefined): string {
+  const value = configured?.trim() ?? "";
+  if (value) return value;
+  return appEnv?.trim() === "production" ? PRODUCTION_API_URL : "";
+}
+
 export class ReleaseApiUrlError extends Error {
   constructor(readonly problem: ReleaseApiUrlProblem) {
     super(`EXPO_PUBLIC_API_URL is ${problem} in a release build`);

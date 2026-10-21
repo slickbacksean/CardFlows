@@ -35,8 +35,10 @@ Repeat for `preview`, and for `development` if wanted. `apps/mobile/.env.example
 | Variable | What it does | Profiles that may set it | Unset means |
 |---|---|---|---|
 | `EXPO_PUBLIC_APP_ENV` | Profile name (set by eas.json) | all | development |
-| `EXPO_PUBLIC_API_URL` | PokeSniper API base URL | all (**required** in preview/production) | local dev API (dev only) |
+| `EXPO_PUBLIC_API_URL` | PokeSniper API base URL | all (**required** in preview) | production: `https://api.pokesniper.app`; preview: build fails; dev: local API |
 | `EXPO_PUBLIC_SENTRY_DSN` | Sentry crash reports | all | crash reporting off |
+| `EXPO_PUBLIC_SENTRY_ENVIRONMENT` | Sentry `environment` override | all | `EXPO_PUBLIC_APP_ENV` |
+| `EXPO_PUBLIC_CARD_FLOW_IAP_ENABLED` | In-app purchases (`true`/`1`); off hides every price | all | off: no prices, "Subscriptions are opening soon." |
 | `EXPO_PUBLIC_POSTHOG_KEY` | PostHog project key | all | analytics off. Even when set, events also need the user's opt-in, which is off by default. |
 | `EXPO_PUBLIC_POSTHOG_HOST` | PostHog host | all (default in `base`) | `https://us.i.posthog.com` |
 | `EXPO_PUBLIC_CARD_FLOW_APP_KEY` | `X-CardFlow-App-Key` header for the API | all | header not sent. It's an abuse speed bump, not a secret; Sentry scrubs the header. |
@@ -54,23 +56,22 @@ Repeat for `preview`, and for `development` if wanted. `apps/mobile/.env.example
 - **`CARD_FLOW_ULTRALYTICS_AGPL_ACCEPTED` must stay unset** on the staging and production API until Sean makes the license decision (Ultralytics YOLO is AGPL-3.0). While it's unset, live-video YOLO is off and the weights are never loaded.
 - `SENTRY_DSN` / `SENTRY_ENVIRONMENT` are set on Railway (see [SENTRY.md](./SENTRY.md)).
 
-## OTA updates (EAS Update): out of scope for now
-**EAS Update is out of scope for now.** Sean paused OTA updates until the Apple account exists. `expo-updates` isn't installed, and eas.json has no channels. To add it later:
-1. `npx expo install expo-updates`. It ships in Expo Go and dev clients; store builds need a rebuild.
-2. A `channel` per profile in eas.json (`development`, `preview`, `production`).
-3. `runtimeVersion` in app config, either `{ "policy": "appVersion" }` (simple) or `{ "policy": "fingerprint" }` (safer for native changes).
-4. `updates.url` (`https://u.expo.dev/<EAS project id>`), set by `eas update:configure`.
-5. Decide who may run `eas update --channel production`, and roll back with `eas update:republish`.
+## OTA updates (EAS Update): configured, needs a rebuild
+EAS Update config is in place (Oct 20), but OTA updates don't work until a new native build includes `expo-updates`:
+- `app.json`: `runtimeVersion: { "policy": "appVersion" }` and `updates.url` (`https://u.expo.dev/<EAS project id>`).
+- `eas.json`: `channel: "preview"` and `channel: "production"` on those profiles (development has none).
+- **Not done yet:** `expo-updates` isn't installed (no new native module while we're on Expo Go). To turn it on: `npx expo install expo-updates`, then **rebuild** preview/production with EAS. Until then the config is inert and eas-cli may warn about the channel.
+- Publish: `eas update --channel production --message "..."`. Roll back with `eas update:republish`. Because the runtime is `appVersion`, bump `version` in app.json for any native change so old binaries never get JS they can't run.
 
 ## Sentry
 - **Off without a DSN:** `initMobileSentry()` returns before `require("@sentry/react-native")`. It also returns when Settings > **Send crash reports** is off (off by default; opt-in; turning it off closes the client right away).
-- Dev builds never send (`enabled: !__DEV__`). Events carry `environment` (from `EXPO_PUBLIC_APP_ENV`), `release` (`app.pokesniper.mobile@<version>`) and `dist` (build number).
+- Dev builds never send (`enabled: !__DEV__`). Events carry `environment` (`EXPO_PUBLIC_SENTRY_ENVIRONMENT` if set, else `EXPO_PUBLIC_APP_ENV`, which matches the EAS channel names), `release` (`app.pokesniper.mobile@<version>+<build>`) and `dist` (build number). See `sentryReleaseTags` in packages/shared.
 - **Scrubbing:** `sendDefaultPii: false`; no screenshots, view hierarchy, replay, tracing or failed-request capture. `beforeSend` runs `scrubSentryEvent`, which drops:
   - request bodies, cookies, and the `Authorization` and `X-CardFlow-App-Key` headers;
   - emails, IP addresses, bearer tokens, and JWT-like or long base64 blobs, including ones embedded in longer strings;
   - token/code/password/key query values, local photo URIs, and any key ending in `token`, `secret`, `password` or `apiKey`/`api_key`.
 - **Consent:** crash reports are **not** tied to the analytics opt-in (existing rule, PRIVACY_DATA_MAP §14). They are **opt-in** (`CRASH_REPORTS_DEFAULT_ON = false` in `packages/shared/src/crash-reports.ts`); Sentry is not initialized until the user turns them on.
-- **`SENTRY_DISABLE_AUTO_UPLOAD=true`** is set in the preview and production eas.json env, so EAS builds don't try to upload source maps without credentials and fail. Remove it once `SENTRY_AUTH_TOKEN` (plus `SENTRY_ORG` and `SENTRY_PROJECT`) is an EAS **secret**.
+- **`SENTRY_DISABLE_AUTO_UPLOAD=true`** is set in the preview and production eas.json env, so EAS builds don't try to upload source maps without credentials and fail. Remove it once `SENTRY_AUTH_TOKEN` (plus `SENTRY_ORG` and `SENTRY_PROJECT`) is an EAS **secret**. Step-by-step: [SENTRY.md](./SENTRY.md#source-map-upload-steps).
 
 ### Sentry dashboard (Sean, once per project: cardflow-api and cardflow-mobile)
 1. Settings > Security & Privacy: turn **Prevent Storing of IP Addresses** on.

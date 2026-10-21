@@ -1,6 +1,6 @@
 import { QueryClientProvider } from "@tanstack/react-query";
 import { type ErrorBoundaryProps, Link, Redirect, Stack, router, useSegments } from "expo-router";
-import { EMAIL_VERIFICATION_COPY, RELEASE_API_URL_ERROR_COPY, isGuestUserId, releaseApiUrlProblem } from "@cardflow/shared";
+import { EMAIL_VERIFICATION_COPY, RELEASE_API_URL_ERROR_COPY, configuredApiUrlFor, isGuestUserId, releaseApiUrlProblem } from "@cardflow/shared";
 import { onEmailUnverified, onSignupRequired } from "@/lib/api";
 import { StatusBar } from "expo-status-bar";
 import { useEffect, useState } from "react";
@@ -51,7 +51,10 @@ export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
  * shows this screen instead of the app, and never falls back to 127.0.0.1 / 10.0.2.2.
  * app.config.ts already refuses to build preview/production without one; this is the backstop.
  */
-const RELEASE_API_URL_PROBLEM = releaseApiUrlProblem({ configured: process.env.EXPO_PUBLIC_API_URL, isDev: __DEV__ });
+const RELEASE_API_URL_PROBLEM = releaseApiUrlProblem({
+  configured: configuredApiUrlFor(process.env.EXPO_PUBLIC_API_URL, process.env.EXPO_PUBLIC_APP_ENV),
+  isDev: __DEV__,
+});
 
 function ReleaseConfigErrorScreen() {
   return (

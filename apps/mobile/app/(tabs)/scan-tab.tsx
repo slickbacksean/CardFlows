@@ -1,6 +1,7 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { trackEvent } from "@/lib/product-events";
 import {
+  LIVESTREAM_DISABLED_COPY,
   LIVESTREAM_SCANNER_UNAVAILABLE_DETAIL,
   LIVESTREAM_SCANNER_UNAVAILABLE_MESSAGE,
   type LiveOverlayGuess,
@@ -20,6 +21,7 @@ import { LivestreamPaywall } from "@/components/ui/livestream-paywall";
 import { InlineError, ScreenError } from "@/components/ui/screen-state";
 import { ScreenerOverlay } from "@/components/ui/screener-overlay";
 import { getLivestreamAccess, undoLivestreamPurchase } from "@/lib/api";
+import { useLivestreamEnabled } from "@/lib/feature-flags";
 import { cancelQueuedWrite, isQueuedId, runQueueableWrite } from "@/lib/write-queue";
 import { requireAccount } from "@/lib/signup-prompt";
 import {
@@ -59,6 +61,18 @@ export default function ScanTabScreen() {
   const scannerUnavailable = !isLiveVideoNativeAvailable();
 
   useEffect(() => subscribeLiveVideoIdentity(setLiveIdentity), []);
+
+  // Live Scan remote kill switch: stop any active session the moment the server turns it off.
+  const livestreamEnabled = useLivestreamEnabled();
+  const [prevLivestreamEnabled, setPrevLivestreamEnabled] = useState(livestreamEnabled);
+  if (prevLivestreamEnabled !== livestreamEnabled) {
+    // Adjust state during render (not in an effect) so the switch reads off at once.
+    setPrevLivestreamEnabled(livestreamEnabled);
+    if (!livestreamEnabled) setScannerOn(false);
+  }
+  useEffect(() => {
+    if (!livestreamEnabled) stopLiveVideoIdentify();
+  }, [livestreamEnabled]);
 
   useFocusEffect(
     useCallback(() => {
@@ -140,6 +154,32 @@ export default function ScanTabScreen() {
     setScannerOn(next);
     if (next) startLiveVideoIdentify();
     else stopLiveVideoIdentify();
+  }
+
+  if (!livestreamEnabled) {
+    return (
+      <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
+        <View style={styles.errorBar}>
+          <Pressable
+            accessibilityHint="Returns to MyDEX"
+            accessibilityLabel="Close"
+            accessibilityRole="button"
+            hitSlop={12}
+            onPress={openCollection}
+            style={styles.iconButton}
+          >
+            <Ionicons color={colors.text} name="close" size={26} />
+          </Pressable>
+          <Text accessibilityRole="header" style={styles.errorTitle}>
+            Livestream Screener
+          </Text>
+          <View style={styles.iconButton} />
+        </View>
+        <View style={styles.errorBody}>
+          <InlineError message={LIVESTREAM_DISABLED_COPY} />
+        </View>
+      </SafeAreaView>
+    );
   }
 
   if (loadState === "error") {

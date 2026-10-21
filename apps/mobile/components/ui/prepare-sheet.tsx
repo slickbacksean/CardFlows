@@ -31,6 +31,7 @@ import {
   type CardFlowGradeEstimate,
   type CardFlowSlabEstimate,
 } from "@cardflow/shared";
+import { TcgplayerAttribution } from "@/components/ui/tcgplayer-attribution";
 import { trackEvent } from "@/lib/product-events";
 import { Image } from "expo-image";
 import { useEffect, useRef, useState } from "react";
@@ -435,6 +436,7 @@ function PrepareSheetForm({
                 <View style={styles.guidance}>
                   <Text style={styles.section}>Raw estimate</Text>
                   <Text style={styles.caption}>{SLAB_PRICE_DISCLAIMER}</Text>
+                  <TcgplayerAttribution />
                   {marketEstimate.rawRows.map((row) => (
                     <Text key={row.condition} style={styles.rowMeta}>
                       {rawRowLabel(row)} {row.display}

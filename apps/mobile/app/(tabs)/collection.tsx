@@ -1,4 +1,5 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
+import { TcgplayerAttribution } from "@/components/ui/tcgplayer-attribution";
 import { StatusBanner } from "@/components/ui/status-banner";
 import { SyncPending } from "@/components/ui/sync-pending";
 import { ScanQueueList } from "@/components/ui/scan-queue-list";
@@ -445,6 +446,7 @@ export default function CollectionScreen() {
               today={history.today}
             />
           ) : null}
+          {segment === "purchased" && loadedAt != null && portfolio?.amountCents ? <TcgplayerAttribution /> : null}
           <SyncPending />
           <ScanQueueList />
           <StatusBanner />

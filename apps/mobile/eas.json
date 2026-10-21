@@ -35,7 +35,8 @@
         "APP_ENV": "preview",
         "EXPO_PUBLIC_APP_ENV": "preview",
         "SENTRY_DISABLE_AUTO_UPLOAD": "true"
-      }
+      },
+      "channel": "preview"
     },
     "production": {
       "extends": "base",
@@ -48,7 +49,8 @@
         "APP_ENV": "production",
         "EXPO_PUBLIC_APP_ENV": "production",
         "SENTRY_DISABLE_AUTO_UPLOAD": "true"
-      }
+      },
+      "channel": "production"
     }
   },
   "submit": {

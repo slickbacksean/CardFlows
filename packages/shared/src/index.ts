@@ -617,7 +617,7 @@ export {
   cardFlowHttpErrorMessage,
   cardFlowUnreachableMessage,
 } from "./cardflow-http-error";
-export { isLoopbackOrLanHost, releaseApiUrlProblem, resolveClientApiUrl, ReleaseApiUrlError, RELEASE_API_URL_ERROR_COPY } from "./client-api-url";
+export { isLoopbackOrLanHost, releaseApiUrlProblem, resolveClientApiUrl, configuredApiUrlFor, PRODUCTION_API_URL, ReleaseApiUrlError, RELEASE_API_URL_ERROR_COPY } from "./client-api-url";
 export type { ClientApiUrlInput, ReleaseApiUrlProblem } from "./client-api-url";
 export {
   PHOTO_PREGRADE_SOURCE,
@@ -890,3 +890,5 @@ export * from "./multi-card-scan";
 export * from "./scan-quota";
 export * from "./dex";
 export * from "./terms";
+export * from "./livestream-kill-switch";
+export * from "./sentry-release";
