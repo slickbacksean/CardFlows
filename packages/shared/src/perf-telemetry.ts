@@ -8,6 +8,9 @@ export const PERF_STAGES = [
   "live_detect",
   "live_identify_round_trip",
   "live_frame_to_hud",
+  "live_card_to_result_in_house",
+  "live_card_to_result_cardsight",
+  "live_card_to_result_over_budget",
 ] as const;
 export type PerfStage = (typeof PERF_STAGES)[number];
 

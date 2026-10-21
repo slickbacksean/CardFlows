@@ -4,6 +4,9 @@ import { identifyCardMock } from "@cardflow/shared/mock";
 import type { CardFlowNormalizedRecognitionResult } from "@cardflow/shared";
 import {
   createLiveCardSightGate,
+  inHouseConfident,
+  LIVE_INHOUSE_GATE_DEFAULTS,
+  liveInHouseGateFromEnv,
   LIVE_CARDSIGHT_DEFAULTS,
   liveCardSightAlertLevel,
   liveCardSightEnabledFromEnv,
@@ -12,6 +15,7 @@ import {
   maskLiveCrop,
 } from "./livestream-cardsight";
 import { OpsMetrics } from "./ops-metrics";
+import { LIVE_SCAN_ID_BUDGET_MS, liveScanWorstCaseMs } from "@cardflow/shared";
 
 const base = identifyCardMock("high-confidence");
 function withDetections(dets: Array<Partial<CardFlowNormalizedRecognitionResult["detections"][number]>>) {
@@ -43,7 +47,7 @@ describe("Live Scan CardSight limits", () => {
         CARD_FLOW_LIVE_CARDSIGHT_SESSION_PER_MIN: "2",
         CARD_FLOW_LIVE_CARDSIGHT_DEDUPE_SECONDS: "30",
       }),
-    ).toEqual({ perUserDaily: 10, globalDaily: 200, perSessionPerMinute: 2, dedupeMs: 30_000 });
+    ).toMatchObject({ perUserDaily: 10, globalDaily: 200, perSessionPerMinute: 2, dedupeMs: 30_000, premiumMonthly: 1000, trialMonthly: 200 });
     expect(liveCardSightEnabledFromEnv({})).toBe(true);
     expect(liveCardSightEnabledFromEnv({ CARD_FLOW_LIVESTREAM_CARDSIGHT: "off" })).toBe(false);
   });
@@ -113,5 +117,24 @@ describe("maskLiveCrop", () => {
 
   it("returns null for bytes that are not a JPEG", () => {
     expect(maskLiveCrop(new Uint8Array([1, 2, 3]))).toBeNull();
+  });
+});
+
+describe("hybrid in-house gate + time budget", () => {
+  it("in-house answers alone only above the tuned threshold", () => {
+    const g = LIVE_INHOUSE_GATE_DEFAULTS;
+    expect(g).toEqual({ minSimilarity: 0.84, minMargin: 0.012 });
+    const c = (a: number, b: number) => [{ tcgdexId: "x-1", similarity: a }, { tcgdexId: "y-2", similarity: b }];
+    expect(inHouseConfident({ tcgdexId: "x-1", candidates: c(0.87, 0.84) }, g)).toBe(true);
+    expect(inHouseConfident({ tcgdexId: "x-1", candidates: c(0.86, 0.859) }, g)).toBe(false); // ambiguous
+    expect(inHouseConfident({ tcgdexId: "x-1", candidates: c(0.83, 0.7) }, g)).toBe(false); // too low
+    expect(inHouseConfident({ tcgdexId: null, candidates: c(0.9, 0.7) }, g)).toBe(false);
+    expect(liveInHouseGateFromEnv({ CARD_FLOW_LIVE_INHOUSE_MIN_SIMILARITY: "0.9" }).minSimilarity).toBe(0.9);
+  });
+
+  it("worst case card-appears-to-result fits the 7 s budget", () => {
+    expect(LIVE_SCAN_ID_BUDGET_MS).toBe(7000);
+    expect(liveScanWorstCaseMs()).toBeLessThanOrEqual(LIVE_SCAN_ID_BUDGET_MS);
+    expect(LIVE_CARDSIGHT_DEFAULTS.deadlineMs).toBeLessThanOrEqual(3500);
   });
 });

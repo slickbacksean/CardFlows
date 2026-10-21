@@ -13,6 +13,8 @@ import {
   createLiveScanTimingLog,
   identifyLiveVideo,
   LIVE_IDENTITY_STABLE_HITS,
+  LIVE_SCAN_ID_BUDGET_MS,
+  LIVE_SCAN_STEADY_MS,
   mockLiveVideoFrame,
   normalizeLiveHlsUrl,
   stabilizeLiveIdentity,
@@ -60,12 +62,29 @@ let latestVote: LiveVoteResult | null = null;
  * non-English card. Never a guess, never a pick-one prompt.
  */
 let latestHint: "one_card_at_a_time" | null = null;
+/**
+ * Sean (Oct 21): a card must be identified within ~7 s of appearing. The only wait before the first
+ * send is a short frame-change check (seen in 2 polls, LIVE_SCAN_STEADY_MS); then the server answers
+ * with in-house (if confident) or CardSight right away.
+ */
+let cardAppearedAt: number | null = null;
+let cardTimedOut = false;
 /** Per scanner session (server rate-limits CardSight per session). */
 let sessionId: string | null = null;
 
 /** Quiet hint for the HUD, or null. */
 export function getLiveScanHint(): "one_card_at_a_time" | null {
   return latestHint;
+}
+
+/** Card appears → result shown, per engine. Logged with the timing flag; always sent to perf stats. */
+function noteCardToResult(engine: string) {
+  if (cardAppearedAt == null || cardTimedOut) return;
+  const ms = Date.now() - cardAppearedAt;
+  cardTimedOut = true; // one sample per card
+  recordPerfStage(engine === "in_house" ? "live_card_to_result_in_house" : "live_card_to_result_cardsight", ms);
+  if (ms > LIVE_SCAN_ID_BUDGET_MS) recordPerfStage("live_card_to_result_over_budget", ms);
+  if (TIMING_ENABLED) console.info(`[livestream-card-to-result] ${JSON.stringify({ engine, ms })}`);
 }
 
 function nowMs(): number {
@@ -287,6 +306,7 @@ async function identifyFrame(frame: LiveVideoFrame, key: string, pullMs: number)
         missedCards = 0;
         settledKey = key;
         latestHint = null;
+        noteCardToResult((response as { engine?: string }).engine ?? "cardsight");
         publishResult(response.identity);
         return;
       }
@@ -401,6 +421,7 @@ async function pollNativeFrame() {
     }
     queuedFrame = null;
     tracker.reset();
+    cardAppearedAt = null;
     publish(frame);
     return;
   }
@@ -411,6 +432,18 @@ async function pollNativeFrame() {
       hash: frame.identityHash ?? null,
       nowMs: Date.now(),
     });
+    if (cardAppearedAt == null) {
+      cardAppearedAt = Date.now();
+      cardTimedOut = false;
+    }
+    if (
+      decision.action === "match" &&
+      decision.reason === "new_track" &&
+      Date.now() - cardAppearedAt < LIVE_SCAN_STEADY_MS
+    ) {
+      // Frame-change check only (~300 ms): a card that flicks past is never sent.
+      return;
+    }
     if (decision.action === "skip") {
       // Same tracked card, already matched, or a crop hash we already sent: no vendor/model call.
       noteTiming({ stages: { detect: frame.detectMs ?? undefined, pull: pullMs }, outcome: "skipped" });
@@ -504,6 +537,7 @@ export function startLiveVideoIdentify(): void {
     return;
   }
   running = true;
+  cardAppearedAt = null;
   sessionId = `ls-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
   latestHint = null;
   recentHits = [];

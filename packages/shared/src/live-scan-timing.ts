@@ -123,3 +123,25 @@ export function createLiveScanTimingLog(capacity = 500) {
     },
   };
 }
+
+/**
+ * Sean (Oct 21): a Live Scan card must be identified within ~7 s of appearing.
+ * Budget: frame-change check + one poll + in-house match + CardSight (hard deadline) + HUD slack.
+ */
+export const LIVE_SCAN_ID_BUDGET_MS = 7_000;
+/** Seen in two polls before the first send (frame-change check only, not a hold timer). */
+export const LIVE_SCAN_STEADY_MS = 300;
+/** Phone frame poll interval (live-identify.ts FRAME_POLL_MS). */
+export const LIVE_SCAN_POLL_MS = 250;
+/** Upper bound for the in-house OpenCLIP pass on the server (p95 ~630 ms measured). */
+export const LIVE_SCAN_IN_HOUSE_MAX_MS = 1_500;
+/** CardSight call deadline for Live Scan; past it the frame shows nothing (no retry storm). */
+export const LIVE_SCAN_CARDSIGHT_DEADLINE_MS = 3_500;
+/** Upload + HUD render allowance. */
+export const LIVE_SCAN_NETWORK_SLACK_MS = 1_000;
+
+export function liveScanWorstCaseMs(): number {
+  return (
+    LIVE_SCAN_STEADY_MS + LIVE_SCAN_POLL_MS + LIVE_SCAN_IN_HOUSE_MAX_MS + LIVE_SCAN_CARDSIGHT_DEADLINE_MS + LIVE_SCAN_NETWORK_SLACK_MS
+  );
+}

@@ -1,5 +1,5 @@
 import jpeg from "jpeg-js";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   AGE_GATE_VERSION,
   CARDSIGHT_CONSENT_VERSION,
@@ -42,14 +42,38 @@ async function setup(opts: {
   consent?: boolean;
   limits?: Partial<typeof LIVE_CARDSIGHT_DEFAULTS>;
   enabled?: boolean;
+  inHouse?: { tcgdexId: string; similarity: number; second: number };
+  delayMs?: number;
 } = {}) {
   const store = createMemoryStore();
   store.ageConfirmations.confirm(DEFAULT_INVITED_USER_ID, AGE_GATE_VERSION, "2026-10-21T00:00:00.000Z");
-  const cs = fakeCardSight(opts.respond ?? (() => result([{ confidence: "High" }])));
+  const respond = opts.respond ?? (() => result([{ confidence: "High" }]));
+  const cs = fakeCardSight(
+    opts.delayMs ? () => new Promise((r) => setTimeout(() => r(respond()), opts.delayMs)) as never : respond,
+  );
+  const ih = opts.inHouse;
+  const openclip = ih
+    ? {
+        name: "openclip_hnsw" as const,
+        matchCropJpeg: async () => ({
+          pipeline: "openclip_hnsw" as const,
+          accepted: true,
+          tcgdexId: ih.tcgdexId,
+          similarity: ih.similarity,
+          candidates: [
+            { tcgdexId: ih.tcgdexId, similarity: ih.similarity },
+            { tcgdexId: "base1-1", similarity: ih.second },
+          ],
+          warped: false,
+          timings: { totalMs: 40 },
+        }),
+      }
+    : null;
   const alerts: OpsAlert[] = [];
   const app = createApp(store, {
     cardSight: cs.provider,
     livestreamCardSight: true,
+    ...(openclip ? { liveIdentityOpenclip: openclip as never } : {}),
     liveCardSightLimits: { ...LIVE_CARDSIGHT_DEFAULTS, ...opts.limits },
     opsMetrics: new OpsMetrics([(a) => alerts.push(a)]),
     ...(opts.enabled === false ? { livestreamEnabled: () => false } : {}),
@@ -125,6 +149,52 @@ describe("Live Scan: automatic CardSight identify (Sean Oct 21)", () => {
     expect(again.body.identity.reason).toBe("identified");
     await frame(app, { identityHash: hashOf(60) });
     expect(cs.calls).toHaveLength(2);
+  });
+
+  it("hybrid: a confident in-house match is shown at once and CardSight is not called", async () => {
+    const { app, cs } = await setup({ inHouse: { tcgdexId: "swsh3-136", similarity: 0.9, second: 0.85 } });
+    const r = await frame(app);
+    expect(cs.calls).toHaveLength(0);
+    expect(r.body.identity).toMatchObject({ tcgdexId: "swsh3-136", reason: "identified" });
+    expect(r.body.engine).toBe("in_house");
+    expect(r.body.candidates).toBeUndefined();
+  });
+
+  it("hybrid: an unsure in-house match goes straight to CardSight (one call per card)", async () => {
+    const { app, cs } = await setup({ inHouse: { tcgdexId: "swsh3-136", similarity: 0.83, second: 0.829 } });
+    const r = await frame(app);
+    expect(cs.calls).toHaveLength(1);
+    expect(r.body.engine).toBe("cardsight");
+    await frame(app);
+    expect(cs.calls).toHaveLength(1);
+  });
+
+  it("engine log never stores CardSight card ids (CardSight terms 3(b))", async () => {
+    const info = vi.spyOn(console, "info").mockImplementation(() => {});
+    const { app } = await setup();
+    const r = await frame(app);
+    const cardSightId = r.body.identity.tcgdexId as string;
+    const lines = info.mock.calls.map((c) => String(c[0])).filter((l) => l.startsWith("[livestream-engine]"));
+    info.mockRestore();
+    expect(lines.length).toBeGreaterThan(0);
+    for (const line of lines) expect(line).not.toContain(cardSightId);
+  });
+
+  it("past the monthly trial cap, Live Scan falls back to in-house only (no cut-off)", async () => {
+    const { app, cs } = await setup({ limits: { trialMonthly: 1 } });
+    await frame(app, { identityHash: hashOf(0) });
+    const capped = await frame(app, { identityHash: hashOf(60) });
+    expect(cs.calls).toHaveLength(1);
+    expect(capped.status).toBe(200);
+    expect(capped.body.limited).toBe("user_monthly");
+  });
+
+  it("a slow CardSight answer is dropped at the deadline (time budget)", async () => {
+    const { app } = await setup({ delayMs: 400, limits: { deadlineMs: 50 } });
+    const started = Date.now();
+    const r = await frame(app);
+    expect(Date.now() - started).toBeLessThan(350);
+    expect(r.body.identity.tcgdexId).toBeNull();
   });
 
   it("no card in frame / CardSight turned off: CardSight is never called", async () => {

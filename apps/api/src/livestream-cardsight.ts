@@ -28,6 +28,46 @@ export interface LiveCardSightLimits {
   perSessionPerMinute: number;
   /** How long a card already sent (same crop hash) is answered from memory instead of re-sent. */
   dedupeMs: number;
+  /** Live Scan CardSight calls per Premium user per calendar month; past it, in-house only. */
+  premiumMonthly: number;
+  /** Same for users on the free Live Scan trial. */
+  trialMonthly: number;
+  /** CardSight deadline for one Live Scan frame (ms). Past it the frame shows nothing. */
+  deadlineMs: number;
+}
+
+/**
+ * Hybrid (Sean, Oct 21): the in-house matcher answers alone when it is this confident.
+ * Tuned on the Oct 20 livestream ground truth (405 hand-boxed frames, 24 cards): at
+ * similarity >= 0.84 and top-1 lead >= 0.012 there were 0 wrong answers (10 correct frames, 4 cards).
+ * Env: CARD_FLOW_LIVE_INHOUSE_MIN_SIMILARITY / CARD_FLOW_LIVE_INHOUSE_MIN_MARGIN.
+ */
+export interface LiveInHouseGate {
+  minSimilarity: number;
+  minMargin: number;
+}
+export const LIVE_INHOUSE_GATE_DEFAULTS: LiveInHouseGate = { minSimilarity: 0.84, minMargin: 0.012 };
+
+export function liveInHouseGateFromEnv(env: NodeJS.ProcessEnv = process.env): LiveInHouseGate {
+  const num = (raw: string | undefined, fallback: number) => {
+    const n = Number(raw?.trim());
+    return raw != null && raw.trim() !== "" && Number.isFinite(n) ? n : fallback;
+  };
+  return {
+    minSimilarity: num(env.CARD_FLOW_LIVE_INHOUSE_MIN_SIMILARITY, LIVE_INHOUSE_GATE_DEFAULTS.minSimilarity),
+    minMargin: num(env.CARD_FLOW_LIVE_INHOUSE_MIN_MARGIN, LIVE_INHOUSE_GATE_DEFAULTS.minMargin),
+  };
+}
+
+/** True when the in-house top match is confident enough to show without CardSight. */
+export function inHouseConfident(
+  input: { tcgdexId: string | null; candidates: readonly { tcgdexId: string; similarity: number }[] },
+  gate: LiveInHouseGate,
+): boolean {
+  const top = input.candidates[0];
+  if (!input.tcgdexId || !top || top.tcgdexId !== input.tcgdexId) return false;
+  const second = input.candidates[1]?.similarity ?? 0;
+  return top.similarity >= gate.minSimilarity && top.similarity - second >= gate.minMargin;
 }
 
 /**
@@ -42,6 +82,9 @@ export const LIVE_CARDSIGHT_DEFAULTS: LiveCardSightLimits = {
   globalDaily: 1500,
   perSessionPerMinute: 6,
   dedupeMs: 180_000,
+  premiumMonthly: 1_000,
+  trialMonthly: 200,
+  deadlineMs: 3_500,
 };
 
 function positiveInt(raw: string | undefined, fallback: number): number {
@@ -60,6 +103,9 @@ export function liveCardSightLimitsFromEnv(env: NodeJS.ProcessEnv = process.env)
     ),
     dedupeMs:
       positiveInt(env.CARD_FLOW_LIVE_CARDSIGHT_DEDUPE_SECONDS, LIVE_CARDSIGHT_DEFAULTS.dedupeMs / 1000) * 1000,
+    premiumMonthly: positiveInt(env.CARD_FLOW_LIVE_CARDSIGHT_PREMIUM_MONTHLY, LIVE_CARDSIGHT_DEFAULTS.premiumMonthly),
+    trialMonthly: positiveInt(env.CARD_FLOW_LIVE_CARDSIGHT_TRIAL_MONTHLY, LIVE_CARDSIGHT_DEFAULTS.trialMonthly),
+    deadlineMs: positiveInt(env.CARD_FLOW_LIVE_CARDSIGHT_DEADLINE_MS, LIVE_CARDSIGHT_DEFAULTS.deadlineMs),
   };
 }
 
@@ -71,6 +117,8 @@ export function liveCardSightEnabledFromEnv(env: NodeJS.ProcessEnv = process.env
 
 export const LIVE_CARDSIGHT_GLOBAL_METER = "cardsight_live";
 export const liveCardSightUserMeter = (userId: string) => `cardsight_live_user:${userId}`;
+export const liveCardSightUserMonthMeter = (userId: string) => `cardsight_live_user_month:${userId}`;
+export const utcMonthKey = (now: Date) => now.toISOString().slice(0, 7);
 export const utcDayKey = (now: Date) => now.toISOString().slice(0, 10);
 
 /** Alert levels for the app-wide daily meter. */

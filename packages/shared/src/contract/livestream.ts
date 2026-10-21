@@ -60,8 +60,9 @@ export const livestreamRoutes = {
       source: z.literal("cardsight").optional(),
       /** Quiet hint for multi-card / non-English frames. Never a guess. */
       hint: z.literal("one_card_at_a_time").optional(),
-      limited: z.enum(["session", "user_daily", "global_daily"]).optional(),
-      cardSight: z.literal("consent_required").optional(),
+      /** Which engine answered: our matcher (confident) or CardSight. */
+      engine: z.enum(["in_house", "cardsight"]).optional(),
+      limited: z.enum(["session", "user_daily", "user_monthly", "global_daily"]).optional(),
     }),
   }),
   getLivestreamTiming: defineRoute({

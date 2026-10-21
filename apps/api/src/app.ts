@@ -41,7 +41,12 @@ import {
   createLiveCardSightGate,
   LIVE_CARDSIGHT_GLOBAL_METER,
   LIVE_ONE_CARD_HINT,
+  inHouseConfident,
   liveCardSightEnabledFromEnv,
+  liveCardSightUserMonthMeter,
+  liveInHouseGateFromEnv,
+  utcMonthKey,
+  type LiveInHouseGate,
   liveCardSightLimitsFromEnv,
   liveCardSightUserMeter,
   liveCardSightVerdict,
@@ -517,6 +522,8 @@ export interface CreateAppOptions {
   livestreamCardSight?: boolean;
   /** Live Scan CardSight caps. Defaults to env (see livestream-cardsight.ts). */
   liveCardSightLimits?: LiveCardSightLimits;
+  /** Hybrid: in-house confidence gate (CARD_FLOW_LIVE_INHOUSE_MIN_SIMILARITY / _MIN_MARGIN). */
+  liveInHouseGate?: LiveInHouseGate;
   /** Whatnot overlay regions blacked out before a crop goes to CardSight. */
   liveMaskRegions?: readonly NormRect[];
   /** YOLO on livestream frames. Empty until the AGPL flag and weights file are both set. */
@@ -849,6 +856,7 @@ export function createApp(
   const liveCardSightOn = options.livestreamCardSight ?? liveCardSightEnabledFromEnv(process.env);
   const liveCardSightLimits = options.liveCardSightLimits ?? liveCardSightLimitsFromEnv(process.env);
   const liveMaskRegions = options.liveMaskRegions ?? liveMaskRegionsFromEnv(process.env);
+  const liveInHouseGate = options.liveInHouseGate ?? liveInHouseGateFromEnv(process.env);
   const liveCardSightGate = createLiveCardSightGate(liveCardSightLimits, () => now().getTime());
   const liveVideoObb = options.liveVideoObb ?? (() => null);
   const gradeUploads = options.gradeUploads ?? defaultGradeUploadCache;
@@ -1675,51 +1683,68 @@ export function createApp(
       cropInFrame: NormRect | null;
       sessionId: string | null;
       inHouse: LiveVideoIdentityResult;
+      inHouseTcgdexId: string | null;
+      inHouseCandidates: { tcgdexId: string; similarity: number }[];
+      inHouseMs: number | null;
+      accessState: string;
     },
   ): Promise<{ identity: LiveVideoIdentityResult; extras: Record<string, unknown> }> => {
     const userId = c.get("userId") as string;
+    const pipeline = input.inHouse.pipeline;
     const quiet = (reason: LiveVideoIdentityResult["reason"], extras: Record<string, unknown> = {}) => ({
-      identity: { tcgdexId: null, confidence: null, reason, pipeline: input.inHouse.pipeline },
+      identity: { tcgdexId: null, confidence: null, reason, pipeline },
       extras: { source: "cardsight", ...extras },
     });
-    if (!input.cardDetected) return quiet("no_card");
-    // CardSight disclosure: frames go to CardSight only with this user's current consent.
-    if (!cardSightConsented(userId)) return quiet("unidentified");
-    const crop = decodeIdentityCropJpeg(input.identityCropJpeg);
-    if (!crop) return quiet("unidentified");
-    const key = input.identityHash
-      ? `hash:${input.identityHash}`
-      : `crop:${createHash("sha256").update(crop.bytes).digest("hex")}`;
-    const logCompare = (cardSightId: string | null, cached: boolean) => {
+    const shownAs = (tcgdexId: string, confidence: "High" | "Medium", engine: "in_house" | "cardsight") => ({
+      identity: { tcgdexId, confidence, reason: "identified" as const, pipeline },
+      extras: { source: "cardsight", engine },
+    });
+    // Terms 3(b) of CardSight: no dataset from its outputs. This log holds only the engine, the
+    // CardSight confidence tier, timings and OUR matcher's output. No CardSight card ids.
+    const logEngine = (entry: { engine: string; tier?: string | null; cardSightMs?: number; cached?: boolean }) => {
       console.info(
-        `[livestream-compare] ${JSON.stringify({
-          cardsight: cardSightId,
-          inHouse: input.inHouse.tcgdexId,
-          agree: cardSightId != null && cardSightId === input.inHouse.tcgdexId,
-          cached,
+        `[livestream-engine] ${JSON.stringify({
+          ...entry,
+          inHouse: input.inHouseTcgdexId,
+          inHouseSimilarity: input.inHouseCandidates[0]?.similarity ?? null,
+          inHouseMs: input.inHouseMs,
         })}`,
       );
     };
-    const fromMemory = (row: { tcgdexId: string | null; confidence: "High" | "Medium" | null; hint: string | null }) =>
-      row.tcgdexId
-        ? {
-            identity: {
-              tcgdexId: row.tcgdexId,
-              confidence: row.confidence,
-              reason: "identified" as const,
-              pipeline: input.inHouse.pipeline,
-            },
-            extras: { source: "cardsight" },
-          }
-        : quiet("unidentified", row.hint ? { hint: row.hint } : {});
-    // Same card still in view: answer from memory, never re-send.
-    const recalled = liveCardSightGate.recall(userId, key);
-    if (recalled) {
-      logCompare(recalled.tcgdexId, true);
-      return fromMemory(recalled);
+    if (!input.cardDetected) return quiet("no_card");
+
+    // Hybrid (Sean, Oct 21): a confident in-house match is shown at once and CardSight isn't called.
+    const key = input.identityHash ? `hash:${input.identityHash}` : null;
+    if (inHouseConfident({ tcgdexId: input.inHouseTcgdexId, candidates: input.inHouseCandidates }, liveInHouseGate)) {
+      const id = input.inHouseTcgdexId!;
+      logEngine({ engine: "in_house" });
+      return shownAs(id, "High", "in_house");
     }
-    const day = utcDayKey(now());
+
+    // CardSight is covered by the Terms (unless turned off in Settings). Otherwise: in-house only.
+    if (!cardSightConsented(userId)) return quiet("unidentified");
+    const crop = decodeIdentityCropJpeg(input.identityCropJpeg);
+    if (!crop) return quiet("unidentified");
+    const cardKey = key ?? `crop:${createHash("sha256").update(crop.bytes).digest("hex")}`;
+    // One CardSight call per card: the same card still in view is answered from memory (in-process,
+    // short-lived, only to serve this user), never re-sent.
+    const recalled = liveCardSightGate.recall(userId, cardKey);
+    if (recalled) {
+      logEngine({ engine: "cardsight", tier: recalled.confidence, cached: true });
+      return recalled.tcgdexId
+        ? shownAs(recalled.tcgdexId, recalled.confidence ?? "Medium", "cardsight")
+        : quiet("unidentified", recalled.hint ? { hint: recalled.hint } : {});
+    }
+    const t = now();
+    const day = utcDayKey(t);
+    const month = utcMonthKey(t);
     const limits = liveCardSightLimits;
+    // Above the monthly cap: in-house only (it already wasn't confident, so nothing is shown).
+    const monthlyCap = input.accessState === "premium" ? limits.premiumMonthly : limits.trialMonthly;
+    if (store.getVendorQuotaUsage(liveCardSightUserMonthMeter(userId), month) >= monthlyCap) {
+      logEngine({ engine: "in_house_only_monthly_cap" });
+      return quiet("unidentified", { limited: "user_monthly" });
+    }
     if (store.getVendorQuotaUsage(LIVE_CARDSIGHT_GLOBAL_METER, day) >= limits.globalDaily) {
       return quiet("unidentified", { limited: "global_daily" });
     }
@@ -1736,14 +1761,30 @@ export function createApp(
       regions: liveMaskRegions,
     });
     if (!masked) return quiet("unidentified");
-    let result: CardFlowNormalizedRecognitionResult;
+    const started = performance.now();
+    let result: CardFlowNormalizedRecognitionResult | null;
+    let timer: ReturnType<typeof setTimeout> | undefined;
     try {
-      result = await options.cardSight!.identifyCard({ image: masked, mimeType: "image/jpeg" });
+      // Hard deadline keeps card-appears-to-result inside the ~7 s budget.
+      result = await Promise.race([
+        options.cardSight!.identifyCard({ image: masked, mimeType: "image/jpeg" }),
+        new Promise<null>((resolve) => {
+          timer = setTimeout(() => resolve(null), limits.deadlineMs);
+        }),
+      ]);
     } catch {
+      result = null;
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+    const cardSightMs = Math.round(performance.now() - started);
+    if (!result) {
+      logEngine({ engine: "cardsight", tier: "timeout", cardSightMs });
       return quiet("unidentified");
     }
     if (!result.ok) return quiet("unidentified");
-    // Charge the daily meters only for a successful (billable) response.
+    // Charge the meters only for a successful (billable) response.
+    store.consumeVendorQuota(liveCardSightUserMonthMeter(userId), month, monthlyCap);
     store.consumeVendorQuota(liveCardSightUserMeter(userId), day, limits.perUserDaily);
     if (store.consumeVendorQuota(LIVE_CARDSIGHT_GLOBAL_METER, day, limits.globalDaily)) {
       metrics.recordLiveCardSightDailyUsage(
@@ -1761,14 +1802,18 @@ export function createApp(
     if (verdict.kind === "identified") {
       const mapped = await recognitionWithMultiCardMappings({ ...result, detections: [verdict.detection] }, catalog);
       const tcgdexId = normalizeLiveVideoTcgdexId(mapped.mapping.tcgdexId);
-      if (tcgdexId) {
-        row = { tcgdexId, confidence: verdict.detection.confidence as "High" | "Medium", hint: null };
-      }
+      if (tcgdexId) row = { tcgdexId, confidence: verdict.detection.confidence as "High" | "Medium", hint: null };
     }
-    // Low confidence is not remembered, so the next new stable frame can try again.
-    if (verdict.kind !== "low" && verdict.kind !== "none") liveCardSightGate.remember(userId, key, row);
-    logCompare(row.tcgdexId, false);
-    return fromMemory(row);
+    // Low is not remembered, so the next new frame of this card may try again (still capped).
+    if (verdict.kind !== "low" && verdict.kind !== "none") liveCardSightGate.remember(userId, cardKey, row);
+    logEngine({
+      engine: "cardsight",
+      tier: verdict.kind === "identified" ? verdict.detection.confidence : verdict.kind,
+      cardSightMs,
+    });
+    return row.tcgdexId
+      ? shownAs(row.tcgdexId, row.confidence ?? "Medium", "cardsight")
+      : quiet("unidentified", row.hint ? { hint: row.hint } : {});
   };
 
   app.post("/v1/livestream/identify", async (c) => {
@@ -1900,6 +1945,10 @@ export function createApp(
         cropInFrame: normalizeCropInFrame(body.cropInFrame ?? body.cardBox),
         sessionId: typeof body.sessionId === "string" ? body.sessionId.slice(0, 64) : null,
         inHouse: identity,
+        inHouseTcgdexId: openclipTcgdexId,
+        inHouseCandidates: openclipCandidates,
+        inHouseMs: stages.sidecar != null ? Math.round(stages.sidecar) : null,
+        accessState: gate.access.state,
       });
       shown = live.identity;
       extras = live.extras;
