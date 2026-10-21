@@ -26,7 +26,8 @@
     "livestream:replay": "node scripts/livestream-replay.mjs",
     "smoke:purchased": "node scripts/smoke-purchased-lane.mjs",
     "terms:doc": "tsx scripts/terms-doc.ts",
-    "site:build": "tsx scripts/site-build.ts"
+    "site:build": "tsx scripts/site-build.ts",
+    "training:export": "tsx scripts/export-training-samples.ts"
   },
   "dependencies": {
     "huds": "2.2.2"

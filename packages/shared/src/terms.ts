@@ -9,9 +9,16 @@
  */
 import { CARDSIGHT_CONSENT_COPY } from "./cardsight-consent";
 import { PHOTO_RETENTION_LINE } from "./account-deletion";
+import { TRAINING_PHOTO_LINE } from "./training-capture";
 
-export const TERMS_VERSION = "2026-10-19.1";
-export const TERMS_EFFECTIVE_DATE = "October 19, 2026";
+/**
+ * Sean (Oct 21): 2026-10-21.1 adds keeping confirmed Scan a Card photos to train PokeSniper's own
+ * card recognition (section 5). Consent is acceptance of these Terms (Sean's choice, no separate
+ * checkbox); everyone re-accepts on their next sign-in, and capture only runs for accounts on this
+ * version.
+ */
+export const TERMS_VERSION = "2026-10-21.1";
+export const TERMS_EFFECTIVE_DATE = "October 21, 2026";
 export const TERMS_URL = "https://pokesniper.app/terms";
 export const PRIVACY_URL = "https://pokesniper.app/privacy";
 export const SUPPORT_URL = "https://pokesniper.app/support";
@@ -67,7 +74,9 @@ export const TERMS_SECTIONS: readonly TermsSection[] = [
     heading: "5. Photos",
     paragraphs: [
       PHOTO_RETENTION_LINE,
-      "Scan and grade photos are temporary. PokeSniper deletes them right after use, and a cleanup removes anything left within 24 hours. This doesn't apply to copies CardSight already received under section 4.",
+      "Grade photos are temporary. PokeSniper deletes them right after use, and a cleanup removes anything left within 24 hours. Scan photos that aren't kept under the next paragraph are deleted the same way. This doesn't apply to copies CardSight already received under section 4.",
+      TRAINING_PHOTO_LINE,
+      "Only photos from Scan a Card are kept for this, only for accounts that confirmed they're 18 or older, and only with the card you confirmed. Live Scan video and frames and grade photos are never kept for this. Kept photos are used only to train and test PokeSniper's own card recognition; they aren't used for advertising, and they aren't sent to CardSight or anyone else for this purpose. Card identifications that came from CardSight are never kept as training labels.",
     ],
   },
   {
@@ -117,7 +126,7 @@ export const TERMS_SECTIONS: readonly TermsSection[] = [
   {
     heading: "12. Deleting your account",
     paragraphs: [
-      "You can delete your account anytime in Settings > Delete account. This permanently deletes your account and the data in it, as described in the Privacy Policy. It doesn't remove photos CardSight already has, and it doesn't cancel an App Store or Google Play subscription.",
+      "You can delete your account anytime in Settings > Delete account. This permanently deletes your account and the data in it, as described in the Privacy Policy. It also deletes any photos kept under section 5 to improve card recognition. It doesn't remove photos CardSight already has, and it doesn't cancel an App Store or Google Play subscription.",
     ],
   },
   {

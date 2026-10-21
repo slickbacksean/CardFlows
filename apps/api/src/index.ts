@@ -19,6 +19,7 @@ import { scanPhotoTtlHoursFromEnv, startPhotoRetentionJob } from "./photo-retent
 import { startDiskUsageMonitor } from "./disk-usage";
 import { purgeExpiredGradeExtras } from "./grade-extra-store";
 import { createStoreFromEnv } from "./store-env";
+import { createFsTrainingStore, trainingCaptureConfigFromEnv } from "./training-store";
 import { loadOptionalPhashIndex } from "./obb-phash-provider";
 import { resolveLiveIdentityOpenclipFromEnv } from "./live-identity-openclip";
 import { resolveLiveVideoObbDetector } from "./live-video-obb";
@@ -74,6 +75,12 @@ const cardMagic = cardMagicFromEnv(process.env, {
   // Same global monthly budget as identify (one CardSight plan).
   // ID reserve + per-call takeUse are applied in the grade detect route.
 });
+// Sean (Oct 21): confirmed Scan a Card photos kept to train PokeSniper's own matcher (Terms §5).
+// TODO(R2): restricted bucket. Until then the data volume; production keeps it off unless
+// CARD_FLOW_TRAINING_CAPTURE_ENABLED=true. The opt-out store exists whenever a directory does,
+// so Settings opt-outs and deletions always work.
+const trainingConfig = trainingCaptureConfigFromEnv(process.env, selection.kind === "sqlite" ? selection.sqlitePath : null);
+const trainingStore = trainingConfig.dir ? createFsTrainingStore(trainingConfig.dir) : null;
 const liveVideoYoloHolder: { detector: ObbDetector | null } = { detector: null };
 const app = createApp(store, {
   devAutoSession: resolveDevAutoSession(),
@@ -96,6 +103,9 @@ const app = createApp(store, {
   liveIdentityOpenclip,
   liveVideoObb: () => liveVideoYoloHolder.detector,
   liveIdentifyEnabled: recognitionSelection.identifyEnabled,
+  trainingCapture: trainingStore
+    ? { store: trainingStore, enabled: trainingConfig.enabled, retentionMonths: trainingConfig.retentionMonths }
+    : undefined,
 });
 // Sean (Oct 19): photos are deleted right after identification / grading. This hourly sweep
 // catches anything left by failed or abandoned work: grade stills and extras after 24 h, scan
@@ -106,7 +116,9 @@ const photoRetention = startPhotoRetentionJob({
     const graded = store.purgeExpiredGradePhotos(now);
     const extras = purgeExpiredGradeExtras(now);
     const scans = store.purgeExpiredScanPhotos(now, scanPhotoTtlHours);
-    return { deleted: graded.deleted + extras.deleted + scans.deleted };
+    // Training photos: deleted after CARD_FLOW_TRAINING_RETENTION_MONTHS (default 12).
+    const training = trainingStore?.purgeExpired(now, trainingConfig.retentionMonths) ?? 0;
+    return { deleted: graded.deleted + extras.deleted + scans.deleted + training };
   },
   onPurge: (result) => {
     if (result.deleted > 0) {
@@ -139,6 +151,7 @@ const server = serve({ fetch: app.fetch, port }, (info) => {
   console.log(
     `Recognition: ${recognitionSelection.kind} (${recognitionSelection.reason})`,
   );
+  console.log(`Training capture: ${trainingConfig.enabled ? "on" : "off"} (${trainingConfig.reason})`);
   console.log(`Grade estimate: ${gradeEstimateSelection.kind} (${gradeEstimateSelection.reason})`);
   console.log(`Slab pricing: ${slabPricingSelection.kind} (${slabPricingSelection.reason})`);
   console.log(`Pricing: ${pricingSelection.kind} (${pricingSelection.reason})`);

@@ -26,6 +26,11 @@ const CardSightConsentSchema = z.looseObject({
   needsPrompt: z.boolean(),
 });
 
+const TrainingPreferenceSchema = z.looseObject({
+  enabled: z.boolean(),
+  captureActive: z.boolean(),
+});
+
 const AgeConfirmationSchema = z.looseObject({
   confirmed: z.boolean(),
   version: z.string().nullable(),
@@ -142,6 +147,21 @@ export const accountRoutes = {
     bodyKind: "json",
     body: z.object({ granted: z.boolean(), version: z.string().optional() }),
     response: z.looseObject({ ok: z.literal(true), consent: CardSightConsentSchema }),
+  }),
+  /** Sean (Oct 21): "Help improve card recognition" (keep confirmed Scan a Card photos to train PokeSniper's own matcher). */
+  getTrainingPreference: defineRoute({
+    method: "GET",
+    path: "/v1/preferences/training",
+    bodyKind: "none",
+    response: z.looseObject({ ok: z.literal(true), training: TrainingPreferenceSchema }),
+  }),
+  /** Opt out (false) stops new retention and deletes kept training photos; true opts back in. */
+  setTrainingPreference: defineRoute({
+    method: "POST",
+    path: "/v1/preferences/training",
+    bodyKind: "json",
+    body: z.object({ enabled: z.boolean() }),
+    response: z.looseObject({ ok: z.literal(true), training: TrainingPreferenceSchema, deleted: z.number().int().nonnegative() }),
   }),
   /** Whether this account attested 18+ (current wording). Guests are never confirmed. */
   getAgeConfirmation: defineRoute({

@@ -80,7 +80,7 @@ Public GitHub product docs (`MVP_SCOPE.md`, `PRODUCT_OVERVIEW.md`, `NON_GOALS.md
 | **Purpose** | Recognition assist; user record of the scan |
 | **Storage location** | **Assumption:** private Storage bucket; object key includes `user_id`. Optional local cache on device. |
 | **Access permissions** | Owner via short-lived signed URL only; backend for CardSight forward. **Never** public-read. |
-| **Retention** | **Decided (Sean, Oct 19): photos are not stored.** Scan photos are used only to identify the card and are deleted as soon as identification and confirmation finish; grade photos (front/back and angled extras) are deleted as soon as the grade result is saved. An hourly sweep deletes anything left (failed or abandoned work) after 24 h (`CARD_FLOW_SCAN_PHOTO_TTL_HOURS=24`). MyDEX and scan history show the catalog image. Only grade numbers and text results are kept. |
+| **Retention** | **Sean (Oct 21): confirmed Scan a Card photos are kept for training PokeSniper's own matcher** (Terms §5, opt-out in Settings, 12 months via `CARD_FLOW_TRAINING_RETENTION_MONTHS`, deleted on opt-out and account deletion; separate restricted store, user ID as HMAC; never Live Scan frames, grade photos, guests, non-18+ accounts or CardSight-assisted labels; production capture off until `CARD_FLOW_TRAINING_CAPTURE_ENABLED=true` and restricted storage exists). Otherwise: **Decided (Sean, Oct 19): photos are not stored.** Scan photos are used only to identify the card and are deleted as soon as identification and confirmation finish; grade photos (front/back and angled extras) are deleted as soon as the grade result is saved. An hourly sweep deletes anything left (failed or abandoned work) after 24 h (`CARD_FLOW_SCAN_PHOTO_TTL_HOURS=24`). MyDEX and scan history show the catalog image. Only grade numbers and text results are kept. |
 | **User deletion behavior** | Delete object(s) and signed-URL ability. Disclose that CardSight may already have processed a copy (**Open:** CardSight retention / training). |
 | **Sent to CardSight / TCGdex / analytics?** | **CardSight:** **Yes**, only after explicit user action on that image (**Known** intent). CardSight ToS: Your Data may be used to provide Software, improve it, and **train ML/AI**. **TCGdex:** no. **Analytics:** never send raw images. |
 | **Never log?** | **Yes — never log raw images or image bytes.** |
@@ -328,7 +328,7 @@ Primary data is SQLite plus photo files on one Railway volume (US West). Backup 
 | Railway volume backups (Daily only; never Weekly/Monthly) | 6 days |
 | `/data/pre-migrate/` copies (keep 3, pruned at 14 days) | 14 days |
 | Planned nightly DB snapshots (follow-up) | 14 days |
-| Photos | Not backed up: scan and grade photos are deleted within 24 h (see §4) |
+| Photos | Not backed up: scan and grade photos are deleted within 24 h (see §4). Training photos (`training/` on the volume) are not in Litestream backups either |
 
 All fit inside the "up to 2 weeks" deletion promise. Providers: Cloudflare R2 (recommended) or Railway Buckets (Tigris), both encrypted at rest by the provider; Litestream v0.5 has **no client-side encryption**, so access relies on bucket-scoped tokens. Staging and production never share a bucket or token.
 

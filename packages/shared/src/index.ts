@@ -880,6 +880,7 @@ export * from "./quota-period";
 export * from "./account-auth";
 export * from "./email-verification";
 export * from "./cardsight-consent";
+export * from "./training-capture";
 export * from "./age-gate";
 export * from "./grade-full-mode";
 export * from "./account-deletion";

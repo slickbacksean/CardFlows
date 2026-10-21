@@ -12,9 +12,12 @@ export const POKECOLLECTOR_DELETION_LINE =
 export const ANONYMOUS_LEDGER_LINE =
   "PokeSniper keeps only anonymous totals that can't identify you. Purchases you made on a marketplace aren't affected.";
 
-/** Sean (Oct 19): photos are not stored. Shown in the app and used in the privacy policy draft. */
+/**
+ * Sean (Oct 19): photos are deleted after use. Sean (Oct 21): except confirmed Scan a Card photos
+ * kept to improve PokeSniper's own card recognition (TRAINING_PHOTO_LINE), unless the user opts out.
+ */
 export const PHOTO_RETENTION_LINE =
-  "Your card photos are used only to identify or grade the card and are deleted right after, within 24 hours at most. Grade results are kept; the photos aren't.";
+  "Your card photos are used to identify or grade the card and are deleted right after, within 24 hours at most, except Scan a Card photos kept to improve PokeSniper's own card recognition (Terms section 5; you can turn this off in Settings). Grade results are kept; grade photos aren't.";
 
 export const ACCOUNT_DELETION_COPY = {
   settingsRow: "Delete account",
@@ -24,6 +27,7 @@ export const ACCOUNT_DELETION_COPY = {
     "Your sign-in, email and password",
     "Every card in MyDEX, your Watchlist and your purchase details",
     "Your scan history and any card photo not yet deleted (photos are deleted within 24 hours anyway)",
+    "Scan a Card photos kept to improve PokeSniper's own card recognition",
     "Pre-grade estimate history, sales, listing drafts and Max Buy rules",
     "Your CardSight choice and your 18+ confirmation",
     POKECOLLECTOR_DELETION_LINE,
