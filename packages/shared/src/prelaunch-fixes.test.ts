@@ -2,21 +2,18 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { PRODUCTION_API_URL, configuredApiUrlFor, releaseApiUrlProblem } from "./client-api-url";
+import { releaseApiUrlProblem } from "./client-api-url";
 import { TCGPLAYER_NOTICE } from "./terms";
 
 const repoRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 const read = (rel: string) => readFileSync(path.join(repoRoot, rel), "utf8");
 
 describe("release API URL", () => {
-  it("production defaults to the public API; preview and dev get no default", () => {
-    expect(PRODUCTION_API_URL).toBe("https://api.pokesniper.app");
-    expect(configuredApiUrlFor(undefined, "production")).toBe(PRODUCTION_API_URL);
-    expect(configuredApiUrlFor(" https://staging.example.com ", "production")).toBe("https://staging.example.com");
-    expect(configuredApiUrlFor(undefined, "preview")).toBe("");
-    expect(configuredApiUrlFor(undefined, undefined)).toBe("");
-    expect(releaseApiUrlProblem({ configured: configuredApiUrlFor(undefined, "production"), isDev: false })).toBeNull();
-    expect(releaseApiUrlProblem({ configured: configuredApiUrlFor(undefined, "preview"), isDev: false })).toBe("missing");
+  it("has no hardcoded production default: a release build without a URL is a config error", () => {
+    expect(releaseApiUrlProblem({ configured: undefined, isDev: false })).toBe("missing");
+    for (const f of ["apps/mobile/lib/api.ts", "apps/mobile/app/_layout.tsx", "apps/mobile/app.config.ts", "apps/mobile/eas.json"]) {
+      expect(read(f), f).not.toContain("api.pokesniper.app");
+    }
   });
 });
 
@@ -59,5 +56,8 @@ describe("Live Scan kill switch (app)", () => {
     expect(read("apps/mobile/app/(tabs)/scan-tab.tsx")).toContain("LIVESTREAM_DISABLED_COPY");
     expect(read("apps/mobile/components/ui/app-tab-bar.tsx")).toContain("useLivestreamEnabled()");
     expect(read("apps/mobile/lib/api.ts")).toContain("markLivestreamDisabled()");
+    // Dev Ops: expected 503s from the kill switch never reach Sentry or 5xx alerts.
+    expect(read("apps/mobile/lib/sentry.ts")).toContain("FEATURE_DISABLED_CODE");
+    expect(read("apps/api/src/app.ts")).toContain("FEATURE_DISABLED_HEADER");
   });
 });

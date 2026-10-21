@@ -35,7 +35,7 @@ Repeat for `preview`, and for `development` if wanted. `apps/mobile/.env.example
 | Variable | What it does | Profiles that may set it | Unset means |
 |---|---|---|---|
 | `EXPO_PUBLIC_APP_ENV` | Profile name (set by eas.json) | all | development |
-| `EXPO_PUBLIC_API_URL` | PokeSniper API base URL | all (**required** in preview) | production: `https://api.pokesniper.app`; preview: build fails; dev: local API |
+| `EXPO_PUBLIC_API_URL` | PokeSniper API base URL | all (**required** in preview/production) | local dev API (dev only); preview/production builds fail |
 | `EXPO_PUBLIC_SENTRY_DSN` | Sentry crash reports | all | crash reporting off |
 | `EXPO_PUBLIC_SENTRY_ENVIRONMENT` | Sentry `environment` override | all | `EXPO_PUBLIC_APP_ENV` |
 | `EXPO_PUBLIC_CARD_FLOW_IAP_ENABLED` | In-app purchases (`true`/`1`); off hides every price | all | off: no prices, "Subscriptions are opening soon." |
@@ -56,12 +56,25 @@ Repeat for `preview`, and for `development` if wanted. `apps/mobile/.env.example
 - **`CARD_FLOW_ULTRALYTICS_AGPL_ACCEPTED` must stay unset** on the staging and production API until Sean makes the license decision (Ultralytics YOLO is AGPL-3.0). While it's unset, live-video YOLO is off and the weights are never loaded.
 - `SENTRY_DSN` / `SENTRY_ENVIRONMENT` are set on Railway (see [SENTRY.md](./SENTRY.md)).
 
+## API URL per profile (Dev Ops, blocking)
+There is **no hardcoded default**. Set `EXPO_PUBLIC_API_URL` as an EAS environment variable on each environment, so a profile that extends production can't silently point at prod:
+```
+eas env:create --environment production --name EXPO_PUBLIC_API_URL --value https://api.pokesniper.app --visibility plaintext
+eas env:create --environment preview --name EXPO_PUBLIC_API_URL --value <staging API URL> --visibility plaintext
+```
+A new profile must set its own `environment` and its own variable. Missing or loopback/LAN → `app.config.ts` fails the build; a release bundle that slips through shows the config error screen, never localhost.
+
+## Live Scan kill switch
+- API env `CARD_FLOW_LIVESTREAM_ENABLED` on Railway (default on). Set `false` to turn Live Scan off; Railway **redeploys** the service to apply it.
+- Apps pick it up on the next `/v1/status` poll (every `STATUS_POLL_MS`) or immediately on the next livestream call (503 `feature_disabled`). No app update needed.
+- These 503s carry `x-cardflow-feature-disabled` and are excluded from 5xx error-spike alerts and mobile Sentry.
+
 ## OTA updates (EAS Update): configured, needs a rebuild
 EAS Update config is in place (Oct 20), but OTA updates don't work until a new native build includes `expo-updates`:
-- `app.json`: `runtimeVersion: { "policy": "appVersion" }` and `updates.url` (`https://u.expo.dev/<EAS project id>`).
+- `app.json`: `runtimeVersion: { "policy": "fingerprint" }` (Dev Ops: a native change gets a new runtime automatically) and `updates.url` (`https://u.expo.dev/<EAS project id>`).
 - `eas.json`: `channel: "preview"` and `channel: "production"` on those profiles (development has none).
 - **Not done yet:** `expo-updates` isn't installed (no new native module while we're on Expo Go). To turn it on: `npx expo install expo-updates`, then **rebuild** preview/production with EAS. Until then the config is inert and eas-cli may warn about the channel.
-- Publish: `eas update --channel production --message "..."`. Roll back with `eas update:republish`. Because the runtime is `appVersion`, bump `version` in app.json for any native change so old binaries never get JS they can't run.
+- Publish: `eas update --channel production --message "..."`. Roll back with `eas update:republish`.
 
 ## Sentry
 - **Off without a DSN:** `initMobileSentry()` returns before `require("@sentry/react-native")`. It also returns when Settings > **Send crash reports** is off (off by default; opt-in; turning it off closes the client right away).

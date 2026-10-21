@@ -1,4 +1,4 @@
-import { featureDisabledBody, livestreamEnabledFromEnv } from "@cardflow/shared";
+import { FEATURE_DISABLED_HEADER, featureDisabledBody, livestreamEnabledFromEnv } from "@cardflow/shared";
 import { buildDexSet, dexOwnedCountsBySet, type DexCatalogCard, type DexSetSummary, type TcgdexSetBrief } from "@cardflow/shared";
 import { createHash, randomBytes, randomInt, timingSafeEqual } from "node:crypto";
 import { emailSenderFromEnv, type EmailSender } from "./email-sender";
@@ -1044,7 +1044,7 @@ export function createApp(
     c.header(REQUEST_ID_HEADER, requestId);
     const startedAt = performance.now();
     await next();
-    if (c.req.path !== "/health") {
+    if (c.req.path !== "/health" && !c.res.headers.get(FEATURE_DISABLED_HEADER)) {
       metrics.recordRequest(`${c.req.method} ${routePath(c, -1)}`, c.res.status, performance.now() - startedAt);
     }
     if (c.req.path !== "/health" && process.env.VITEST !== "true") {
@@ -1159,7 +1159,11 @@ export function createApp(
     options.livestreamEnabled ?? (() => livestreamEnabledFromEnv(process.env.CARD_FLOW_LIVESTREAM_ENABLED));
   // Policy Reviewer (Oct 20): remote off switch for Live Scan, ahead of auth and body parsing.
   app.use("/v1/livestream/*", async (c, next) => {
-    if (!livestreamEnabled()) return c.json(featureDisabledBody("livestream"), 503);
+    if (!livestreamEnabled()) {
+      // Marked so ops metrics don't count it toward 5xx error-spike alerts.
+      c.header(FEATURE_DISABLED_HEADER, "livestream");
+      return c.json(featureDisabledBody("livestream"), 503);
+    }
     return next();
   });
 

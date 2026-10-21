@@ -95,7 +95,7 @@
     },
     "owner": "slickbacksean",
     "runtimeVersion": {
-      "policy": "appVersion"
+      "policy": "fingerprint"
     },
     "updates": {
       "url": "https://u.expo.dev/5510ee74-4479-4f85-b37c-4d3040bac692",

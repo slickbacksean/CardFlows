@@ -110,7 +110,7 @@ describe("P4: EAS profiles and env layout", () => {
     expect(raw.build.production?.channel).toBe("production");
     expect(raw.build.development?.channel).toBeUndefined();
     const app = JSON.parse(read("apps/mobile/app.json")) as { expo: { runtimeVersion?: unknown; updates?: { url?: string }; extra: { eas: { projectId: string } } } };
-    expect(app.expo.runtimeVersion).toEqual({ policy: "appVersion" });
+    expect(app.expo.runtimeVersion).toEqual({ policy: "fingerprint" });
     expect(app.expo.updates?.url).toBe(`https://u.expo.dev/${app.expo.extra.eas.projectId}`);
     const doc = read("docs/RELEASE_ENV.md");
     for (const needle of ["EAS Update", "expo-updates", "rebuild", "channel", "runtimeVersion", "updates.url"]) expect(doc).toContain(needle);
@@ -152,9 +152,7 @@ describe("P4: EAS profiles and env layout", () => {
       missingForRelease: [],
       optionalUnset: ["EXPO_PUBLIC_SENTRY_DSN", "EXPO_PUBLIC_POSTHOG_KEY"],
     });
-    // Sean (Oct 20): production defaults to https://api.pokesniper.app; preview must set one.
-    expect(releaseEnvSummary({ APP_ENV: "production" }).missingForRelease).toEqual([]);
-    expect(releaseEnvSummary({ APP_ENV: "preview" }).missingForRelease).toEqual(["EXPO_PUBLIC_API_URL"]);
+    expect(releaseEnvSummary({ APP_ENV: "production" }).missingForRelease).toEqual(["EXPO_PUBLIC_API_URL"]);
     const prod = releaseEnvSummary({ APP_ENV: "production", EXPO_PUBLIC_API_URL: "https://api.example.com" });
     expect(prod.missingForRelease).toEqual([]);
     expect(prod.optionalUnset).toEqual(["EXPO_PUBLIC_SENTRY_DSN", "EXPO_PUBLIC_POSTHOG_KEY"]);
@@ -163,8 +161,7 @@ describe("P4: EAS profiles and env layout", () => {
   it("Dev Ops (blocking): preview/production builds throw without a public API URL", () => {
     const build = mobileConfig.default;
     for (const appEnv of ["preview", "production"]) {
-      if (appEnv === "preview") expect(() => withEnv({ APP_ENV: appEnv }, () => build(CTX)), appEnv).toThrow(/EXPO_PUBLIC_API_URL is required/);
-      else expect(withEnv({ APP_ENV: appEnv }, () => build(CTX)).extra?.appEnv).toBe("production");
+      expect(() => withEnv({ APP_ENV: appEnv }, () => build(CTX)), appEnv).toThrow(/EXPO_PUBLIC_API_URL is required/);
       for (const url of ["http://127.0.0.1:3001", "http://10.0.2.2:3001", "http://192.168.1.8:3001", "http://localhost:3001", "http://172.20.0.5", "http://[::1]:3001", "http://mac.local:3001"]) {
         expect(() => withEnv({ APP_ENV: appEnv, EXPO_PUBLIC_API_URL: url }, () => build(CTX)), `${appEnv} ${url}`).toThrow(/loopback\/LAN/);
       }
@@ -235,8 +232,7 @@ describe("P4: EAS profiles and env layout", () => {
       "http://10.0.2.2:3001",
     );
     const layout = read("apps/mobile/app/_layout.tsx");
-    expect(layout).toContain("configured: configuredApiUrlFor(process.env.EXPO_PUBLIC_API_URL, process.env.EXPO_PUBLIC_APP_ENV)");
-    expect(layout).toContain("isDev: __DEV__");
+    expect(layout).toContain("releaseApiUrlProblem({ configured: process.env.EXPO_PUBLIC_API_URL, isDev: __DEV__ })");
     expect(layout).toContain("if (RELEASE_API_URL_PROBLEM) return <ReleaseConfigErrorScreen />;");
   });
 });

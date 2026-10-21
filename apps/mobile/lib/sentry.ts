@@ -1,4 +1,4 @@
-import { CRASH_REPORTS_STORE_KEY, crashReportsEnabledFrom, scrubSentryEvent, sentryReleaseTags } from "@cardflow/shared";
+import { CRASH_REPORTS_STORE_KEY, crashReportsEnabledFrom, scrubSentryEvent, sentryReleaseTags, FEATURE_DISABLED_CODE } from "@cardflow/shared";
 import Constants from "expo-constants";
 import * as SecureStore from "expo-secure-store";
 import { Platform } from "react-native";
@@ -133,6 +133,8 @@ export function crashReportsEnabled(): boolean {
 
 export function captureMobileException(error: unknown): void {
   if (!crashReportsOn || !enabled || !sentry) return;
+  // Live Scan kill switch: an expected 503 feature_disabled is not a crash.
+  if ((error as { code?: unknown } | null)?.code === FEATURE_DISABLED_CODE) return;
   sentry.captureException(error);
 }
 

@@ -12,6 +12,7 @@ describe("Live Scan kill switch", () => {
     ] as const) {
       const res = await app.request(path, { method, headers: { "content-type": "application/json" }, ...(method === "POST" ? { body: "{}" } : {}) });
       expect(res.status, path).toBe(503);
+      expect(res.headers.get("x-cardflow-feature-disabled")).toBe("livestream");
       expect(await res.json()).toMatchObject({ ok: false, code: FEATURE_DISABLED_CODE, feature: "livestream", error: LIVESTREAM_DISABLED_COPY });
     }
   });

@@ -1,10 +1,13 @@
 /**
  * Remote kill switches (Policy Reviewer, Oct 20): Live Scan can be turned off server-side
  * without an app update if Whatnot or Apple objects. Server env `CARD_FLOW_LIVESTREAM_ENABLED`
- * (default on). Exposed on GET /v1/status as `features.livestream`; livestream routes answer
+ * (default on). Changing it on Railway needs a redeploy/restart; apps pick it up on the next
+ * /v1/status poll (STATUS_POLL_MS) or the next livestream call. Exposed on GET /v1/status as `features.livestream`; livestream routes answer
  * 503 `feature_disabled` while off.
  */
 export const FEATURE_DISABLED_CODE = "feature_disabled";
+/** Set on kill-switch 503s so ops metrics skip them (not an outage). */
+export const FEATURE_DISABLED_HEADER = "x-cardflow-feature-disabled";
 export const LIVESTREAM_DISABLED_COPY = "Live Scan is temporarily unavailable.";
 
 export interface RemoteFeatureFlags {

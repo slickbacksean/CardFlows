@@ -3,7 +3,6 @@ import {
   CARD_FLOW_REQUEST_TIMEOUT_MS,
   cardFlowHttpErrorMessage,
   cardFlowUnreachableMessage,
-  configuredApiUrlFor,
   resolveClientApiUrl,
   emptySlabEstimate,
   GRADE_QUOTA_COPY,
@@ -60,7 +59,7 @@ function defaultApiUrl(): string {
 /** Resolved when a request is made. Expo Go may not know the device until then. */
 export function apiUrl(): string {
   return resolveClientApiUrl({
-    configured: configuredApiUrlFor(process.env.EXPO_PUBLIC_API_URL, process.env.EXPO_PUBLIC_APP_ENV),
+    configured: process.env.EXPO_PUBLIC_API_URL,
     platform: Platform.OS,
     isDev: __DEV__,
     isPhysical: isPhysicalRuntime(),
