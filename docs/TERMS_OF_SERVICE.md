@@ -2,7 +2,7 @@
 
 > **Draft — not legal advice; review before launch.**
 
-Version 2026-10-19.1 · Effective October 19, 2026
+Version 2026-10-21.1 · Effective October 21, 2026
 
 ## 1. Agreement
 
@@ -26,9 +26,13 @@ CardSight is not part of PokeSniper, and we don't control how CardSight keeps or
 
 ## 5. Photos
 
-Your card photos are used only to identify or grade the card and are deleted right after, within 24 hours at most. Grade results are kept; the photos aren't.
+Your card photos are used to identify or grade the card and are deleted right after, within 24 hours at most, except Scan a Card photos kept to improve PokeSniper's own card recognition (Terms section 5; you can turn this off in Settings). Grade results are kept; grade photos aren't.
 
-Scan and grade photos are temporary. PokeSniper deletes them right after use, and a cleanup removes anything left within 24 hours. This doesn't apply to copies CardSight already received under section 4.
+Grade photos are temporary. PokeSniper deletes them right after use, and a cleanup removes anything left within 24 hours. Scan photos that aren't kept under the next paragraph are deleted the same way. This doesn't apply to copies CardSight already received under section 4.
+
+When you confirm a card in Scan a Card, PokeSniper may keep that photo and the card you confirmed to improve PokeSniper's own card recognition. These photos are never sold or shared, are stored securely with restricted access, and are deleted after 12 months or when you delete your account. You can opt out anytime in Settings > Card recognition > Help improve card recognition; opting out stops new photos from being kept and deletes the ones already kept.
+
+Only photos from Scan a Card are kept for this, only for accounts that confirmed they're 18 or older, and only with the card you confirmed. Live Scan video and frames and grade photos are never kept for this. Kept photos are used only to train and test PokeSniper's own card recognition; they aren't used for advertising, and they aren't sent to CardSight or anyone else for this purpose. Card identifications that came from CardSight are never kept as training labels.
 
 ## 6. Pre-grade estimates
 
@@ -72,7 +76,7 @@ We may suspend or close accounts that break these Terms.
 
 ## 12. Deleting your account
 
-You can delete your account anytime in Settings > Delete account. This permanently deletes your account and the data in it, as described in the Privacy Policy. It doesn't remove photos CardSight already has, and it doesn't cancel an App Store or Google Play subscription.
+You can delete your account anytime in Settings > Delete account. This permanently deletes your account and the data in it, as described in the Privacy Policy. It also deletes any photos kept under section 5 to improve card recognition. It doesn't remove photos CardSight already has, and it doesn't cancel an App Store or Google Play subscription.
 
 ## 13. Disclaimers
 

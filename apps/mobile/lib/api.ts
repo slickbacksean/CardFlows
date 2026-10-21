@@ -1055,6 +1055,16 @@ export function setCardSightConsent(granted: boolean, version: string) {
   return callApi(apiContract.setCardSightConsent, { body: granted ? { granted, version } : { granted } });
 }
 
+/** Sean (Oct 21): "Help improve card recognition" (default on per the Terms). */
+export function getTrainingPreference() {
+  return callApi(apiContract.getTrainingPreference);
+}
+
+/** Off stops new retention and deletes kept training photos on the server. */
+export function setTrainingPreference(enabled: boolean) {
+  return callApi(apiContract.setTrainingPreference, { body: { enabled } });
+}
+
 let emailUnverifiedListener: (() => void) | null = null;
 
 /** The root layout opens the verify-email screen when a pre-grade estimate is refused. */

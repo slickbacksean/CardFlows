@@ -276,3 +276,13 @@ Read from the pinned `ghcr.io/git-romer/pokecollector-backend:1.51.0` source (un
 | `CARD_FLOW_APPLE_CLIENT_ID` | Apple client ID for token exchange/revoke | `app.pokesniper.mobile` |
 
 Apple sign-in is only offered when `CARD_FLOW_APPLE_SIGNIN=true` **and** the three Apple key variables are set, because account deletion must revoke the user's Apple token (App Review 5.1.1(v)). Apple refresh tokens are stored AES-GCM encrypted with a key derived from `CARD_FLOW_SERVER_PEPPER`, and revoked + deleted with the account. Google client IDs are not secrets. Tokens are verified against Apple's and Google's public JWKS.
+
+## Training capture (Sean, Oct 21)
+
+| Variable | Default | Notes |
+| --- | --- | --- |
+| `CARD_FLOW_TRAINING_CAPTURE_ENABLED` | off in production, on elsewhere | Keep confirmed Scan a Card photos to train PokeSniper's own matcher. Leave unset/false in production until restricted storage (R2) exists and the store privacy labels are updated. |
+| `CARD_FLOW_TRAINING_DIR` | `training/` next to `CARD_FLOW_SQLITE_PATH` | Restricted store (0700 dir, 0600 files). TODO(R2). |
+| `CARD_FLOW_TRAINING_RETENTION_MONTHS` | `12` | Hourly retention job deletes older samples. Keep in sync with Terms §5 if changed. |
+
+Export for the training pipeline: `CARD_FLOW_TRAINING_DIR=... pnpm training:export --out /workspace/training-data/user` (images/, labels.jsonl, manifest.json; CardSight-assisted and expired samples excluded).

@@ -211,6 +211,8 @@ import {
 import { createPokecollectorDeletionQueue, pokecollectorDeletionCounts, type PokecollectorDeletionQueue } from "./pokecollector-deletion-queue";
 import type { PokecollectorPacer } from "./pokecollector-pacer";
 import { SCAN_IMAGE_MAX_BYTES, type ScanImageMimeType } from "./scan-image";
+import type { TrainingStore } from "./training-store";
+import { classifyTrainingLabelSource } from "@cardflow/shared";
 import {
   gradeUploadCache as defaultGradeUploadCache,
   isGradePhotoSide,
@@ -548,6 +550,12 @@ export interface CreateAppOptions {
   now?: () => Date;
   /** Detect stills reused by pre-grade so each photo is uploaded once. */
   gradeUploads?: GradeUploadCache;
+  /**
+   * Sean (Oct 21): keep confirmed Scan a Card photos to train PokeSniper's own matcher. `store`
+   * absent = the opt-out setting still works but nothing is captured. `enabled` false = no capture
+   * (production default until restricted storage exists; CARD_FLOW_TRAINING_CAPTURE_ENABLED).
+   */
+  trainingCapture?: { store: TrainingStore; enabled: boolean; retentionMonths?: number };
 }
 
 /** SqliteStorePort exposes ping(); the memory store has no DB to check. */
@@ -569,6 +577,59 @@ export function createApp(
   store: StorePort = createMemoryStore(),
   options: CreateAppOptions = {},
 ) {
+  /**
+   * Sean (Oct 21): training capture for PokeSniper's own matcher. Only Scan a Card (this route;
+   * Live Scan frames never reach it), only signed-up 18+ accounts on the current Terms that haven't
+   * opted out, and never a CardSight-assisted label. Failures never break the confirm.
+   */
+  function captureTrainingSample(input: {
+    userId: string;
+    scan: ScanRecord;
+    tcgdexId: string;
+    selectedVariant: string | null;
+    via: string | null;
+    recognitionProvider: string | null;
+    shownTcgdexIds: string[];
+    cropBox: { x: number; y: number; width: number; height: number } | null;
+  }): "saved" | "skipped" {
+    const training = options.trainingCapture;
+    if (!training?.enabled) return "skipped";
+    const { userId, scan } = input;
+    try {
+      if (isGuestUserId(userId)) return "skipped";
+      if (!hasAgeConfirmation(store.ageConfirmations, userId)) return "skipped";
+      const account = store.accounts.getAccount(userId);
+      if (!account || account.termsVersion !== TERMS_VERSION) return "skipped";
+      if (training.store.isOptedOut(userId)) return "skipped";
+      const labelSource = classifyTrainingLabelSource({
+        via: input.via,
+        recognitionProvider: input.recognitionProvider,
+        chosenTcgdexId: input.tcgdexId,
+        shownTcgdexIds: input.shownTcgdexIds,
+      });
+      // CardSight compliance: never keep a CardSight output as a label.
+      if (labelSource === "cardsight_assisted") return "skipped";
+      const image = store.getScanImage(userId, scan.scanId);
+      if (!image) return "skipped";
+      training.store.saveSample({
+        userId,
+        bytes: image.bytes,
+        mimeType: image.mimeType,
+        tcgdexId: input.tcgdexId,
+        selectedVariant: input.selectedVariant,
+        labelSource,
+        recognitionProvider: input.recognitionProvider,
+        termsVersion: TERMS_VERSION,
+        capturedAt: now().toISOString(),
+        source: "scan_a_card",
+        cropBox: input.cropBox,
+      });
+      return "saved";
+    } catch (error) {
+      console.warn(JSON.stringify({ event: "training_capture_failed", message: error instanceof Error ? error.message : "unknown" }));
+      return "skipped";
+    }
+  }
   /** Sean (Oct 19): a scan's photo is deleted once identification and every confirm are done. */
   function deleteScanPhotoWhenSettled(userId: string, scan: ScanRecord): void {
     const pending = scan.cardResults?.some((row) => row.state !== "confirmed" && row.state !== "skipped");
@@ -704,6 +765,7 @@ export function createApp(
       const scans = store.listScans(userId).length;
       store.deleteUserPhotos(userId);
       deleteUserGradeExtras(userId);
+      options.trainingCapture?.store.forgetUser(userId);
       // Re-review H1: a guest's PokéCollector user is shared (legacy `cardflow-guest`): held, never deleted.
       const link = getPokecollectorUserMapping(userId);
       store.accounts.deleteAllUserRows(userId, {
@@ -2256,6 +2318,27 @@ export function createApp(
   app.get("/v1/consents/cardsight", (c) =>
     c.json({ ok: true as const, consent: consentState(store.consents.get(c.get("userId"), "cardsight")) }),
   );
+  // Sean (Oct 21): "Help improve card recognition". Default on (Terms); off stops new retention and
+  // deletes this user's kept training photos right away.
+  const trainingCaptureActive = () => Boolean(options.trainingCapture?.enabled);
+  app.get("/v1/preferences/training", (c) => {
+    const userId = c.get("userId");
+    const enabled = !isGuestUserId(userId) && !(options.trainingCapture?.store.isOptedOut(userId) ?? false);
+    return c.json({ ok: true as const, training: { enabled, captureActive: trainingCaptureActive() } });
+  });
+  app.post("/v1/preferences/training", async (c) => {
+    const userId = c.get("userId");
+    if (isGuestUserId(userId)) return signupRequired(c, "cardsight");
+    const body = await c.req.json<{ enabled?: unknown }>().catch(() => ({}) as Record<string, unknown>);
+    if (typeof body.enabled !== "boolean") return c.json({ ok: false, error: "enabled must be true or false" }, 400);
+    const training = options.trainingCapture?.store;
+    let deleted = 0;
+    if (training) {
+      training.setOptedOut(userId, !body.enabled);
+      if (!body.enabled) deleted = training.deleteUserSamples(userId);
+    }
+    return c.json({ ok: true as const, training: { enabled: body.enabled, captureActive: trainingCaptureActive() }, deleted });
+  });
   app.post("/v1/consents/cardsight", async (c) => {
     const userId = c.get("userId");
     // Policy Reviewer (Oct 17): guests never get CardSight, so they can't give consent either.
@@ -2438,6 +2521,8 @@ export function createApp(
     const photos = removePhotos();
     const staged = gradeUploads.releaseUser(userId);
     deleteUserGradeExtras(userId);
+    // Sean (Oct 21): training photos go on account deletion too.
+    options.trainingCapture?.store.forgetUser(userId);
     let pokecollector: "not_linked" | "queued" | "held" = "not_linked";
     if (pokecollectorRemote && pokecollectorLink) {
       const queued = store.accounts.listPokecollectorDeletions().find((row) => row.remoteUserId === pokecollectorLink.pokecollectorUserId);
@@ -3032,7 +3117,22 @@ export function createApp(
         recognitionProvider: mappingForConfirm.provider,
       });
       if (correction) recordScanCorrection(correction);
-      // Sean (Oct 19): scan photos are not kept. Delete the still once every card on it is done.
+      // Sean (Oct 21): keep this photo + the user's confirmed card as a training sample for
+      // PokeSniper's own matcher (Terms §5), before the scan still is deleted below.
+      captureTrainingSample({
+        userId,
+        scan,
+        tcgdexId: body.tcgdexId,
+        selectedVariant: body.selectedVariant ?? null,
+        via: body.via ?? null,
+        // The recognition engine (not the catalog mapper) decides whether CardSight suggested it.
+        recognitionProvider: scan.recognition?.provider ?? null,
+        shownTcgdexIds: mappingForConfirm.candidates.map((card) => card.tcgdexId).concat(
+          mappingForConfirm.tcgdexId ? [mappingForConfirm.tcgdexId] : [],
+        ),
+        cropBox: cardRow?.cropBox ?? null,
+      });
+      // Scan stills themselves are still deleted once every card on the photo is done.
       deleteScanPhotoWhenSettled(userId, result.scan);
       const shown = mappingForConfirm.candidates.map((card) => card.tcgdexId);
       const predicted = mappingForConfirm.tcgdexId ?? mappingForConfirm.canonicalCard?.tcgdexId ?? null;
