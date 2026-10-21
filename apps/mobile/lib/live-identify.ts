@@ -55,6 +55,18 @@ const voter = createLiveIdentityVoter();
 /** Do not re-announce the same card within 60 s. */
 const announceDedupe = createLiveAnnounceDedupe();
 let latestVote: LiveVoteResult | null = null;
+/**
+ * Sean (Oct 21): quiet "try one card at a time" when CardSight sees several cards or a
+ * non-English card. Never a guess, never a pick-one prompt.
+ */
+let latestHint: "one_card_at_a_time" | null = null;
+/** Per scanner session (server rate-limits CardSight per session). */
+let sessionId: string | null = null;
+
+/** Quiet hint for the HUD, or null. */
+export function getLiveScanHint(): "one_card_at_a_time" | null {
+  return latestHint;
+}
 
 function nowMs(): number {
   return globalThis.performance?.now?.() ?? Date.now();
@@ -228,6 +240,9 @@ async function identifyFrame(frame: LiveVideoFrame, key: string, pullMs: number)
       // 4 corners in crop pixels; the sidecar warps with warp.py before matching.
       identityCropQuad: frame.identityCropQuad ?? null,
       videoFrameJpeg: yoloDetect ? (frame.videoFrameJpeg ?? null) : null,
+      // Where the crop sits in the frame, so the server can black out Whatnot chat / bid areas.
+      cardBox: frame.cardBox ?? null,
+      sessionId,
     });
     const roundTripMs = nowMs() - requestStart;
     recordPerfStage("live_identify_round_trip", roundTripMs);
@@ -264,6 +279,31 @@ async function identifyFrame(frame: LiveVideoFrame, key: string, pullMs: number)
       outcome: response.identity.reason === "identified" ? "accepted" : "rejected",
       warped: response.timing?.warped,
     });
+    if ((response as { source?: string }).source === "cardsight") {
+      // Sean (Oct 21): CardSight already gated Medium/High on the server. Show it as-is, or nothing.
+      latestHint = (response as { hint?: "one_card_at_a_time" }).hint ?? null;
+      latestVote = null;
+      if (response.identity.reason === "identified" && response.identity.tcgdexId) {
+        missedCards = 0;
+        settledKey = key;
+        latestHint = null;
+        publishResult(response.identity);
+        return;
+      }
+      if (keepSettledIdentity(key)) {
+        publishResult(latest);
+        return;
+      }
+      if (response.identity.reason === "no_card" && latest.reason === "identified") {
+        missedCards += 1;
+        if (missedCards < MISS_LIMIT) {
+          publishResult(latest);
+          return;
+        }
+      }
+      publishResult({ ...response.identity, tcgdexId: null, confidence: null });
+      return;
+    }
     if (response.identity.reason === "identified" || response.identity.reason === "unidentified") {
       const extra = response as {
         candidates?: { tcgdexId: string; similarity?: number }[];
@@ -274,7 +314,8 @@ async function identifyFrame(frame: LiveVideoFrame, key: string, pullMs: number)
         similarity: typeof extra.similarity === "number" ? extra.similarity : null,
         candidates: Array.isArray(extra.candidates) ? extra.candidates : null,
       });
-      latestVote = vote;
+      // Sean (Oct 21): no "is it one of these?" prompt. A pick-one tier just keeps waiting.
+      latestVote = vote.tier === "pick_one" ? { ...vote, tier: "waiting", top3: [], copy: null } : vote;
       if (vote.tier === "auto_show" && vote.tcgdexId) {
         missedCards = 0;
         settledKey = key;
@@ -298,7 +339,7 @@ async function identifyFrame(frame: LiveVideoFrame, key: string, pullMs: number)
             reason: "unidentified",
             pipeline: response.identity.pipeline,
           },
-          vote,
+          latestVote,
         );
         if (response.identity.reason === "identified") {
           // Still remember the server hit for the track lock, but do not auto-show yet.
@@ -463,6 +504,8 @@ export function startLiveVideoIdentify(): void {
     return;
   }
   running = true;
+  sessionId = `ls-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+  latestHint = null;
   recentHits = [];
   settledKey = null;
   queuedFrame = null;
@@ -487,6 +530,8 @@ export function startLiveVideoIdentify(): void {
 
 export function stopLiveVideoIdentify(): void {
   running = false;
+  sessionId = null;
+  latestHint = null;
   mockFrame = null;
   recentHits = [];
   settledKey = null;

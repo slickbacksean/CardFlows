@@ -44,11 +44,24 @@ export const livestreamRoutes = {
       identityCropJpeg: z.string().nullable().optional(),
       identityCropQuad: z.array(z.number()).nullable().optional(),
       videoFrameJpeg: z.string().nullable().optional(),
+      /** Where the card crop sits in the live frame (normalized); used to mask Whatnot overlays. */
+      cardBox: z
+        .object({ x: z.number(), y: z.number(), width: z.number(), height: z.number() })
+        .nullable()
+        .optional(),
+      /** Scanner session id (per-session CardSight rate limit). */
+      sessionId: z.string().max(64).nullable().optional(),
     }),
     response: z.looseObject({
       ok: z.literal(true),
       identity: LiveVideoIdentitySchema,
       timing: Timing.optional(),
+      /** "cardsight" when Live Scan used CardSight (no candidates, Medium/High only). */
+      source: z.literal("cardsight").optional(),
+      /** Quiet hint for multi-card / non-English frames. Never a guess. */
+      hint: z.literal("one_card_at_a_time").optional(),
+      limited: z.enum(["session", "user_daily", "global_daily"]).optional(),
+      cardSight: z.literal("consent_required").optional(),
     }),
   }),
   getLivestreamTiming: defineRoute({

@@ -16,6 +16,9 @@ export type OpsAlertKind =
   | "server_5xx_spike"
   | "pokecollector_deletion_failed"
   | "cardsight_budget_80"
+  | "cardsight_live_daily_50"
+  | "cardsight_live_daily_75"
+  | "cardsight_live_daily_90"
   | "volume_disk_70"
   | "volume_disk_85";
 
@@ -105,6 +108,23 @@ export class OpsMetrics {
       "cardsight_budget_80",
       "cardsight_budget_80",
       `CardSight monthly usage is at ${used}/${cap} (~${pct}%). Free plan hard-stops at the cap.`,
+    );
+  }
+
+  /**
+   * Sean (Oct 21): Live Scan CardSight app-wide daily meter. Alerts once per level per day at
+   * 50%, 75% and 90% of CARD_FLOW_LIVE_CARDSIGHT_GLOBAL_DAILY.
+   */
+  recordLiveCardSightDailyUsage(used: number, cap: number, dayKey: string) {
+    if (!(cap > 0)) return;
+    const pct = (used / cap) * 100;
+    const level = pct >= 90 ? 90 : pct >= 75 ? 75 : pct >= 50 ? 50 : 0;
+    if (level === 0) return;
+    const kind = `cardsight_live_daily_${level}` as OpsAlertKind;
+    this.alert(
+      kind,
+      `${kind}:${dayKey}`,
+      `Live Scan CardSight usage today (${dayKey} UTC) is at ${used}/${cap} (${Math.round(pct)}%). Live Scan stops calling CardSight at the cap.`,
     );
   }
 
