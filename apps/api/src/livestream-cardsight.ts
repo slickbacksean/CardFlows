@@ -34,6 +34,10 @@ export interface LiveCardSightLimits {
   trialMonthly: number;
   /** CardSight deadline for one Live Scan frame (ms). Past it the frame shows nothing. */
   deadlineMs: number;
+  /** Computer Vision (Oct 21): in-house alone for this long after the card appears, then CardSight. */
+  handoffMs: number;
+  /** Nothing confident by this card age = show nothing and stop trying. */
+  giveUpMs: number;
 }
 
 /**
@@ -84,7 +88,9 @@ export const LIVE_CARDSIGHT_DEFAULTS: LiveCardSightLimits = {
   dedupeMs: 180_000,
   premiumMonthly: 1_000,
   trialMonthly: 200,
-  deadlineMs: 3_500,
+  deadlineMs: 2_500,
+  handoffMs: 1_500,
+  giveUpMs: 7_000,
 };
 
 function positiveInt(raw: string | undefined, fallback: number): number {
@@ -106,6 +112,8 @@ export function liveCardSightLimitsFromEnv(env: NodeJS.ProcessEnv = process.env)
     premiumMonthly: positiveInt(env.CARD_FLOW_LIVE_CARDSIGHT_PREMIUM_MONTHLY, LIVE_CARDSIGHT_DEFAULTS.premiumMonthly),
     trialMonthly: positiveInt(env.CARD_FLOW_LIVE_CARDSIGHT_TRIAL_MONTHLY, LIVE_CARDSIGHT_DEFAULTS.trialMonthly),
     deadlineMs: positiveInt(env.CARD_FLOW_LIVE_CARDSIGHT_DEADLINE_MS, LIVE_CARDSIGHT_DEFAULTS.deadlineMs),
+    handoffMs: positiveInt(env.CARD_FLOW_LIVE_CARDSIGHT_HANDOFF_MS, LIVE_CARDSIGHT_DEFAULTS.handoffMs),
+    giveUpMs: LIVE_CARDSIGHT_DEFAULTS.giveUpMs,
   };
 }
 

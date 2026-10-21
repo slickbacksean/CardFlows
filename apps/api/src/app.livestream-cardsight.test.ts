@@ -125,8 +125,12 @@ describe("Live Scan: automatic CardSight identify (Sean Oct 21)", () => {
     const { app, cs } = await setup({ respond: () => result([{ confidence: conf }]) });
     const low = await frame(app);
     expect(low.body.identity).toMatchObject({ tcgdexId: null, confidence: null, reason: "unidentified" });
+    expect(low.body.retry).toBe(true);
+    // One CardSight call per card: the same card is not re-sent after a Low answer.
+    await frame(app);
+    expect(cs.calls).toHaveLength(1);
     conf = "Medium";
-    const med = await frame(app);
+    const med = await frame(app, { identityHash: hashOf(60) });
     expect(cs.calls).toHaveLength(2);
     expect(med.body.identity).toMatchObject({ reason: "identified", confidence: "Medium" });
   });
@@ -197,6 +201,21 @@ describe("Live Scan: automatic CardSight identify (Sean Oct 21)", () => {
     const r = await frame(app);
     expect(Date.now() - started).toBeLessThan(350);
     expect(r.body.identity.tcgdexId).toBeNull();
+  });
+
+  it("in-house alone for the first 1.5 s; one CardSight call after; nothing after 7 s", async () => {
+    const { app, cs } = await setup({ respond: () => result([{ confidence: "Low" }]) });
+    const early = await frame(app, { cardAgeMs: 600 });
+    expect(cs.calls).toHaveLength(0);
+    expect(early.body.retry).toBe(true);
+    await frame(app, { cardAgeMs: 1600 });
+    expect(cs.calls).toHaveLength(1);
+    await frame(app, { cardAgeMs: 3000 });
+    expect(cs.calls).toHaveLength(1);
+    const late = await frame(app, { cardAgeMs: 7200, identityHash: hashOf(60) });
+    expect(cs.calls).toHaveLength(1);
+    expect(late.body.identity.tcgdexId).toBeNull();
+    expect(late.body.retry).toBe(false);
   });
 
   it("no card in frame / CardSight turned off: CardSight is never called", async () => {

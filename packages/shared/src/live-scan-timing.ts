@@ -133,15 +133,25 @@ export const LIVE_SCAN_ID_BUDGET_MS = 7_000;
 export const LIVE_SCAN_STEADY_MS = 300;
 /** Phone frame poll interval (live-identify.ts FRAME_POLL_MS). */
 export const LIVE_SCAN_POLL_MS = 250;
+/** Computer Vision (Oct 21): in-house alone for this long, then one CardSight call (server env). */
+export const LIVE_SCAN_HANDOFF_MS = 1_500;
+/** A frame sent at the handoff may wait behind one in-flight in-house request (~630 ms p95). */
+export const LIVE_SCAN_IN_FLIGHT_WAIT_MS = 650;
 /** Upper bound for the in-house OpenCLIP pass on the server (p95 ~630 ms measured). */
-export const LIVE_SCAN_IN_HOUSE_MAX_MS = 1_500;
+export const LIVE_SCAN_IN_HOUSE_MAX_MS = 1_000;
 /** CardSight call deadline for Live Scan; past it the frame shows nothing (no retry storm). */
-export const LIVE_SCAN_CARDSIGHT_DEADLINE_MS = 3_500;
+export const LIVE_SCAN_CARDSIGHT_DEADLINE_MS = 2_500;
 /** Upload + HUD render allowance. */
-export const LIVE_SCAN_NETWORK_SLACK_MS = 1_000;
+export const LIVE_SCAN_NETWORK_SLACK_MS = 600;
 
+/** Worst case on the CardSight path: card appears → handoff → in-house pass → CardSight deadline. */
 export function liveScanWorstCaseMs(): number {
   return (
-    LIVE_SCAN_STEADY_MS + LIVE_SCAN_POLL_MS + LIVE_SCAN_IN_HOUSE_MAX_MS + LIVE_SCAN_CARDSIGHT_DEADLINE_MS + LIVE_SCAN_NETWORK_SLACK_MS
+    LIVE_SCAN_HANDOFF_MS +
+    LIVE_SCAN_POLL_MS +
+    LIVE_SCAN_IN_FLIGHT_WAIT_MS +
+    LIVE_SCAN_IN_HOUSE_MAX_MS +
+    LIVE_SCAN_CARDSIGHT_DEADLINE_MS +
+    LIVE_SCAN_NETWORK_SLACK_MS
   );
 }

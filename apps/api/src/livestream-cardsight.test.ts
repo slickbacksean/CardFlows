@@ -15,7 +15,7 @@ import {
   maskLiveCrop,
 } from "./livestream-cardsight";
 import { OpsMetrics } from "./ops-metrics";
-import { LIVE_SCAN_ID_BUDGET_MS, liveScanWorstCaseMs } from "@cardflow/shared";
+import { LIVE_SCAN_CARDSIGHT_DEADLINE_MS, LIVE_SCAN_HANDOFF_MS, LIVE_SCAN_ID_BUDGET_MS, liveScanWorstCaseMs } from "@cardflow/shared";
 
 const base = identifyCardMock("high-confidence");
 function withDetections(dets: Array<Partial<CardFlowNormalizedRecognitionResult["detections"][number]>>) {
@@ -135,6 +135,8 @@ describe("hybrid in-house gate + time budget", () => {
   it("worst case card-appears-to-result fits the 7 s budget", () => {
     expect(LIVE_SCAN_ID_BUDGET_MS).toBe(7000);
     expect(liveScanWorstCaseMs()).toBeLessThanOrEqual(LIVE_SCAN_ID_BUDGET_MS);
-    expect(LIVE_CARDSIGHT_DEFAULTS.deadlineMs).toBeLessThanOrEqual(3500);
+    expect(LIVE_CARDSIGHT_DEFAULTS.deadlineMs).toBe(LIVE_SCAN_CARDSIGHT_DEADLINE_MS);
+    expect(LIVE_CARDSIGHT_DEFAULTS.handoffMs).toBe(LIVE_SCAN_HANDOFF_MS);
+    expect(LIVE_CARDSIGHT_DEFAULTS.giveUpMs).toBe(LIVE_SCAN_ID_BUDGET_MS);
   });
 });

@@ -262,6 +262,7 @@ async function identifyFrame(frame: LiveVideoFrame, key: string, pullMs: number)
       // Where the crop sits in the frame, so the server can black out Whatnot chat / bid areas.
       cardBox: frame.cardBox ?? null,
       sessionId,
+      cardAgeMs: cardAppearedAt == null ? null : Date.now() - cardAppearedAt,
     });
     const roundTripMs = nowMs() - requestStart;
     recordPerfStage("live_identify_round_trip", roundTripMs);
@@ -269,7 +270,9 @@ async function identifyFrame(frame: LiveVideoFrame, key: string, pullMs: number)
     if (frame.detectMs != null) recordPerfStage("live_detect", frame.detectMs);
     recordPerfStage("live_frame_to_hud", pullMs + (frame.detectMs ?? 0) + roundTripMs);
     if (!running) return;
-    if (frame.cardDetected) {
+    const retryCard = (response as { retry?: boolean }).retry === true;
+    // Not identified yet and still inside ~7 s: leave the track open so the next new frame is sent.
+    if (frame.cardDetected && !retryCard) {
       tracker.noteMatch({
         hash: frame.identityHash ?? null,
         tcgdexId: response.identity.reason === "identified" ? response.identity.tcgdexId : null,

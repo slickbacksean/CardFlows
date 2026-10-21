@@ -51,6 +51,8 @@ export const livestreamRoutes = {
         .optional(),
       /** Scanner session id (per-session CardSight rate limit). */
       sessionId: z.string().max(64).nullable().optional(),
+      /** ms since this card first appeared on the phone (in-house-only window, give-up). */
+      cardAgeMs: z.number().nullable().optional(),
     }),
     response: z.looseObject({
       ok: z.literal(true),
@@ -62,6 +64,8 @@ export const livestreamRoutes = {
       hint: z.literal("one_card_at_a_time").optional(),
       /** Which engine answered: our matcher (confident) or CardSight. */
       engine: z.enum(["in_house", "cardsight"]).optional(),
+      /** Not identified yet; send the next new frame of this card. */
+      retry: z.boolean().optional(),
       limited: z.enum(["session", "user_daily", "user_monthly", "global_daily"]).optional(),
     }),
   }),

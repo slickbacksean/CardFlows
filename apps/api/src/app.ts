@@ -1687,13 +1687,19 @@ export function createApp(
       inHouseCandidates: { tcgdexId: string; similarity: number }[];
       inHouseMs: number | null;
       accessState: string;
+      /** ms since the phone first saw this card (null for older clients = handoff now). */
+      cardAgeMs: number | null;
     },
   ): Promise<{ identity: LiveVideoIdentityResult; extras: Record<string, unknown> }> => {
     const userId = c.get("userId") as string;
     const pipeline = input.inHouse.pipeline;
+    const limits = liveCardSightLimits;
+    const age = input.cardAgeMs ?? limits.handoffMs;
+    // In-house keeps trying (phone re-sends new frames of this card) until the give-up age.
+    const retry = age < limits.giveUpMs;
     const quiet = (reason: LiveVideoIdentityResult["reason"], extras: Record<string, unknown> = {}) => ({
       identity: { tcgdexId: null, confidence: null, reason, pipeline },
-      extras: { source: "cardsight", ...extras },
+      extras: { source: "cardsight", retry: reason !== "no_card" && retry, ...extras },
     });
     const shownAs = (tcgdexId: string, confidence: "High" | "Medium", engine: "in_house" | "cardsight") => ({
       identity: { tcgdexId, confidence, reason: "identified" as const, pipeline },
@@ -1718,6 +1724,10 @@ export function createApp(
       return shownAs(id, "High", "in_house");
     }
 
+    // Nothing confident by ~7 s: show nothing, stop.
+    if (age >= limits.giveUpMs) return quiet("unidentified");
+    // Computer Vision (Oct 21): in-house alone for the first ~1.5 s of a card.
+    if (age < limits.handoffMs) return quiet("unidentified");
     // CardSight is covered by the Terms (unless turned off in Settings). Otherwise: in-house only.
     if (!cardSightConsented(userId)) return quiet("unidentified");
     const crop = decodeIdentityCropJpeg(input.identityCropJpeg);
@@ -1734,7 +1744,6 @@ export function createApp(
     const t = now();
     const day = utcDayKey(t);
     const month = utcMonthKey(t);
-    const limits = liveCardSightLimits;
     // Above the monthly cap: in-house only (it already wasn't confident, so nothing is shown).
     const monthlyCap = input.accessState === "premium" ? limits.premiumMonthly : limits.trialMonthly;
     if (store.getVendorQuotaUsage(liveCardSightUserMonthMeter(userId), month) >= monthlyCap) {
@@ -1797,8 +1806,8 @@ export function createApp(
       const tcgdexId = normalizeLiveVideoTcgdexId(mapped.mapping.tcgdexId);
       if (tcgdexId) row = { tcgdexId, confidence: verdict.detection.confidence as "High" | "Medium", hint: null };
     }
-    // Low is not remembered, so the next new frame of this card may try again (still capped).
-    if (verdict.kind !== "low" && verdict.kind !== "none") liveCardSightGate.remember(userId, cardKey, row);
+    // One CardSight call per card: every answer (Low too) is remembered; in-house keeps trying.
+    liveCardSightGate.remember(userId, cardKey, row);
     countEngine("cardsight", row.tcgdexId);
     return row.tcgdexId
       ? shownAs(row.tcgdexId, row.confidence ?? "Medium", "cardsight")
@@ -1822,6 +1831,7 @@ export function createApp(
       cardBox?: unknown;
       cropInFrame?: unknown;
       sessionId?: unknown;
+      cardAgeMs?: unknown;
     }>();
     if (body.image != null || body.screenshot != null) {
       return c.json({ ok: false, error: "live_video frames only" }, 400);
@@ -1938,6 +1948,10 @@ export function createApp(
         inHouseCandidates: openclipCandidates,
         inHouseMs: stages.sidecar != null ? Math.round(stages.sidecar) : null,
         accessState: gate.access.state,
+        cardAgeMs:
+          typeof body.cardAgeMs === "number" && Number.isFinite(body.cardAgeMs) && body.cardAgeMs >= 0
+            ? body.cardAgeMs
+            : null,
       });
       shown = live.identity;
       extras = live.extras;
