@@ -10,8 +10,8 @@
 import { CARDSIGHT_CONSENT_COPY } from "./cardsight-consent";
 import { PHOTO_RETENTION_LINE } from "./account-deletion";
 
-export const TERMS_VERSION = "2026-10-19.1";
-export const TERMS_EFFECTIVE_DATE = "October 19, 2026";
+export const TERMS_VERSION = "2026-10-21.2";
+export const TERMS_EFFECTIVE_DATE = "October 21, 2026";
 export const TERMS_URL = "https://pokesniper.app/terms";
 export const PRIVACY_URL = "https://pokesniper.app/privacy";
 export const SUPPORT_URL = "https://pokesniper.app/support";
@@ -58,8 +58,8 @@ export const TERMS_SECTIONS: readonly TermsSection[] = [
   {
     heading: "4. Card scanning and CardSight",
     paragraphs: [
-      "Scan a Card identifies cards from photos you take or choose. PokeSniper may use CardSight, a third-party card-recognition provider, only if you have confirmed you're 18 or older and you allow it. We ask before the first photo is sent.",
-      CARDSIGHT_CONSENT_COPY.body,
+      "Scan a Card and Live Scan identify cards using CardSight, a third-party card-recognition provider. By accepting these Terms, you agree that PokeSniper sends card images to CardSight to identify cards: photos you take or choose in Scan a Card, grade photos (to crop and straighten them), and in Live Scan, a cropped image of the card from the livestream frame. Before a Live Scan image is sent, PokeSniper blacks out everything outside the card and the stream's chat, bid and other on-screen overlay areas. CardSight is used only for accounts confirmed 18 or older.",
+      CARDSIGHT_CONSENT_COPY.terms,
       "CardSight is not part of PokeSniper, and we don't control how CardSight keeps or uses photos it receives.",
     ],
   },
@@ -88,7 +88,7 @@ export const TERMS_SECTIONS: readonly TermsSection[] = [
     heading: "8. Live Scan",
     paragraphs: [
       "Live Scan is an optional tool you start yourself. While you watch a livestream in PokeSniper's in-app browser, it identifies Pokémon cards shown on screen so you can look up the card. You can stop it at any time.",
-      "To read frames, Live Scan plays the stream's video on your phone. Frames are processed in memory and discarded. PokeSniper does not record, save or redistribute any stream video or audio. To identify a card, a small cropped image of the card from the current frame (and, when the card finder is turned on, the frame itself) is sent to PokeSniper's servers, processed in memory, and discarded; it is not saved and is not sent to CardSight.",
+      "To read frames, Live Scan plays the stream's video on your phone. Frames are processed in memory and discarded. PokeSniper does not record, save or redistribute any stream video or audio. To identify a card, a small cropped image of the card from the current frame (and, when the card finder is turned on, the frame itself) is sent to PokeSniper's servers, processed in memory, and discarded; PokeSniper does not save it. PokeSniper first tries to identify the card with its own matcher. If our matcher isn't confident, that cropped card image, masked as described in section 4, may be sent to CardSight, unless you have turned CardSight off. Live Scan shows a card only when PokeSniper's matcher or CardSight is confident in the match; otherwise it shows nothing.",
       "PokeSniper is not affiliated with, endorsed by or sponsored by Whatnot. Your use of Whatnot is subject to Whatnot's terms. If you sign in to Whatnot, you do so on Whatnot's own web page inside the in-app browser. PokeSniper does not read, collect or store your Whatnot password, and it doesn't send it to our servers.",
       "We may turn Live Scan off or change it at any time.",
     ],

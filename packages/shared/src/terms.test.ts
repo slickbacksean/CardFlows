@@ -39,7 +39,7 @@ describe("Sean (Oct 19): Terms of Service", () => {
   });
 
   it("says AI only inside the CardSight disclosure, and never names a grading company", () => {
-    expect(all.replace(CARDSIGHT_CONSENT_COPY.body, "")).not.toMatch(/\bAI\b/);
+    expect(all.replace(CARDSIGHT_CONSENT_COPY.terms, "")).not.toMatch(/\bAI\b/);
     expect(all).not.toMatch(/\b(PSA|BGS|CGC|Beckett)\b/);
   });
 

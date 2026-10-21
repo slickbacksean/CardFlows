@@ -44,11 +44,33 @@ export const livestreamRoutes = {
       identityCropJpeg: z.string().nullable().optional(),
       identityCropQuad: z.array(z.number()).nullable().optional(),
       videoFrameJpeg: z.string().nullable().optional(),
+      /** Where the card crop sits in the live frame (normalized); used to mask Whatnot overlays. */
+      cardBox: z
+        .object({ x: z.number(), y: z.number(), width: z.number(), height: z.number() })
+        .nullable()
+        .optional(),
+      /** Scanner session id (per-session CardSight rate limit). */
+      sessionId: z.string().max(64).nullable().optional(),
+      /** ms since this card first appeared on the phone (in-house-only window, give-up). */
+      cardAgeMs: z.number().nullable().optional(),
     }),
     response: z.looseObject({
       ok: z.literal(true),
       identity: LiveVideoIdentitySchema,
       timing: Timing.optional(),
+      /** "cardsight" when Live Scan used CardSight (no candidates, Medium/High only). */
+      source: z.literal("cardsight").optional(),
+      /** Quiet hint for multi-card / non-English frames. Never a guess. */
+      hint: z.literal("one_card_at_a_time").optional(),
+      /** Which engine answered: our matcher (confident) or CardSight. */
+      engine: z.enum(["in_house", "cardsight"]).optional(),
+      /** Not identified yet; send the next new frame of this card. */
+      retry: z.boolean().optional(),
+      limited: z.enum(["session", "user_daily", "user_monthly", "global_daily", "global_monthly"]).optional(),
+      /** "in_house_confident" for our matcher; "High"/"Medium" for CardSight. */
+      tier: z.string().optional(),
+      /** Fail closed: the mask couldn't be applied, so nothing went to CardSight. */
+      mask: z.literal("unavailable").optional(),
     }),
   }),
   getLivestreamTiming: defineRoute({

@@ -32,7 +32,6 @@ import { PermissionGate } from "@/components/ui/permission-gate";
 import { InlineError } from "@/components/ui/screen-state";
 import { createScan } from "@/lib/api";
 import { ensureAccountAgeConfirmed } from "@/lib/age-confirmation";
-import { askCardSightConsentOnce } from "@/lib/cardsight-consent";
 import { requireAccount, useAccountOrLeave } from "@/lib/signup-prompt";
 import { getMockScenario } from "@/lib/mock-scenario";
 import { prepareScanStill, rememberScanCapture } from "@/lib/scan-capture";
@@ -90,12 +89,9 @@ export default function CaptureScreen() {
   ) {
     // Browse-only guests (Sean, Oct 17): sign up before any scan.
     if (!requireAccount()) return;
-    // Sean: the one-time CardSight disclosure comes before the first photo is uploaded.
-    // Policy Reviewer (Oct 17): guests never see it (they never get CardSight), and accounts
-    // confirm 18+ first (testers and existing accounts once; new accounts did at sign-up).
-    if (imageUri && (await ensureAccountAgeConfirmed())) {
-      await askCardSightConsentOnce();
-    }
+    // Sean (Oct 21): CardSight consent is part of the Terms accepted at sign-up (no separate prompt).
+    // Accounts still confirm 18+ first (testers and existing accounts once; new accounts did at sign-up).
+    if (imageUri) await ensureAccountAgeConfirmed();
     const startedAt = Date.now();
     let uploadUri = imageUri;
     let uploadMime = imageMimeType ?? null;

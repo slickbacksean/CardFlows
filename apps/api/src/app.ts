@@ -37,6 +37,26 @@ import { CARDSIGHT_CONSENT_VERSION, INVITED_USERS, EMAIL_CODE_LIFETIME_SENDS, EM
 import { NORTH_STAR_NAME, SCANS_PER_WAR_NAME, northStarUserWeekTotals, northStarWeekly, type NorthStarWeekTotal } from "@cardflow/shared";
 import { ANONYMIZED_USER_PREFIX } from "./purchase-ledger";
 import { opsMetrics, type OpsMetrics } from "./ops-metrics";
+import {
+  createLiveCardSightGate,
+  LIVE_CARDSIGHT_GLOBAL_METER,
+  LIVE_ONE_CARD_HINT,
+  inHouseConfident,
+  liveCardSightEnabledFromEnv,
+  liveCardSightUserMonthMeter,
+  LIVE_INHOUSE_VOTES,
+  liveInHouseGateFromEnv,
+  utcMonthKey,
+  type LiveInHouseGate,
+  liveCardSightLimitsFromEnv,
+  liveCardSightUserMeter,
+  liveCardSightVerdict,
+  liveMaskRegionsFromEnv,
+  maskLiveCrop,
+  utcDayKey,
+  type LiveCardSightLimits,
+  type NormRect,
+} from "./livestream-cardsight";
 import { parseUserPriceAmount } from "@cardflow/shared";
 import { OUT_OF_FULL_GRADES_CODE, GRADE_FULL_COPY, gradeFullAllowance, gradeFullModeEnabled, gradeFullMonthlyLimit, gradeFullUsageKey } from "@cardflow/shared";
 import {
@@ -134,6 +154,7 @@ import {
   type CardCatalogProvider,
   type CardFlowCanonicalCard,
   type CardFlowNormalizedRecognitionResult,
+  type LiveVideoIdentityResult,
   type CardFlowPriceEstimate,
   type CardPricingProvider,
   type CardRecognitionProvider,
@@ -494,6 +515,18 @@ export interface CreateAppOptions {
    * read per request. Off: /v1/livestream/* answers 503 feature_disabled; /v1/status reports it.
    */
   livestreamEnabled?: () => boolean;
+  /**
+   * Sean (Oct 21): Live Scan identifies with CardSight (automatic, Medium/High only). Needs `cardSight`.
+   * Defaults to `CARD_FLOW_LIVESTREAM_CARDSIGHT` (on unless 0/false/off/no). In-house matcher still
+   * runs, hidden, for comparison logging only.
+   */
+  livestreamCardSight?: boolean;
+  /** Live Scan CardSight caps. Defaults to env (see livestream-cardsight.ts). */
+  liveCardSightLimits?: LiveCardSightLimits;
+  /** Hybrid: in-house confidence gate (CARD_FLOW_LIVE_INHOUSE_MIN_SIMILARITY / _MIN_MARGIN). */
+  liveInHouseGate?: LiveInHouseGate;
+  /** Whatnot overlay regions blacked out before a crop goes to CardSight. */
+  liveMaskRegions?: readonly NormRect[];
   /** YOLO on livestream frames. Empty until the AGPL flag and weights file are both set. */
   liveVideoObb?: () => ObbDetector | null;
   /** Prepare photo-estimate provider. Tests default to mock; flag off injects unavailable. */
@@ -821,6 +854,11 @@ export function createApp(
   const livestreamTiming =
     options.livestreamTiming ?? process.env.CARD_FLOW_LIVESTREAM_TIMING?.trim() === "1";
   const livestreamTimingLog = createLiveScanTimingLog(500);
+  const liveCardSightOn = options.livestreamCardSight ?? liveCardSightEnabledFromEnv(process.env);
+  const liveCardSightLimits = options.liveCardSightLimits ?? liveCardSightLimitsFromEnv(process.env);
+  const liveMaskRegions = options.liveMaskRegions ?? liveMaskRegionsFromEnv(process.env);
+  const liveInHouseGate = options.liveInHouseGate ?? liveInHouseGateFromEnv(process.env);
+  const liveCardSightGate = createLiveCardSightGate(liveCardSightLimits, () => now().getTime());
   const liveVideoObb = options.liveVideoObb ?? (() => null);
   const gradeUploads = options.gradeUploads ?? defaultGradeUploadCache;
 
@@ -1363,6 +1401,24 @@ export function createApp(
     }
     return termsRequired(c);
   };
+  /**
+   * Sean (Oct 21): CardSight consent is part of the Terms accepted at sign-up (no separate prompt).
+   * Allowed = account accepted the current Terms version, unless the user turned CardSight off in
+   * Settings > Card recognition (a withdrawal or decline that wasn't re-granted).
+   */
+  const cardSightConsented = (userId: string): boolean => {
+    if (isGuestUserId(userId)) return false;
+    // Settings > Card recognition switched on (current version) always counts.
+    if (hasActiveConsent(store.consents, userId)) return true;
+    const record = store.consents.get(userId, "cardsight");
+    if (record && (record.withdrawnAt || record.declinedAt)) return false; // turned off in Settings
+    const account = store.accounts.getAccount(userId);
+    return account?.termsVersion === TERMS_VERSION;
+  };
+  const cardSightConsentView = (userId: string) => {
+    const state = consentState(store.consents.get(userId, "cardsight"));
+    return { ...state, granted: cardSightConsented(userId), needsPrompt: false };
+  };
   const ageRequired = (c: Context) =>
     c.json({ ok: false, error: AGE_CONFIRMATION_REQUIRED_CODE, message: AGE_GATE_COPY.required }, 400);
 
@@ -1537,7 +1593,7 @@ export function createApp(
 
   /**
    * Sean (Oct 18/19): livestream is signed-in + 18+, free for 3 days from account creation, then Premium.
-   * Frames stay in-house (OpenCLIP/pHash) — never CardSight, so no CardSight consent check.
+   * Oct 21: frames go to CardSight (masked) only with current CardSight consent; see liveCardSightIdentify.
    * After the trial: 403 premium_required; the app shows a subscribe paywall (IAP stub until StoreKit).
    */
   const accountCreatedAtForLivestream = (userId: string): string | null => {
@@ -1610,6 +1666,194 @@ export function createApp(
     return c.json({ ok: true, guess });
   });
 
+  const normalizeCropInFrame = (raw: unknown): NormRect | null => {
+    if (!raw || typeof raw !== "object") return null;
+    const r = raw as Record<string, unknown>;
+    const v = [r.x, r.y, r.width, r.height];
+    if (!v.every((n) => typeof n === "number" && Number.isFinite(n) && n >= 0 && n <= 1)) return null;
+    return { x: r.x as number, y: r.y as number, width: r.width as number, height: r.height as number };
+  };
+
+  const liveCardSightIdentify = async (
+    c: Context,
+    input: {
+      cardDetected: boolean;
+      identityHash: string | null;
+      identityCropJpeg: string | null;
+      identityCropQuad: number[] | null;
+      cropInFrame: NormRect | null;
+      inHouse: LiveVideoIdentityResult;
+      inHouseTcgdexId: string | null;
+      inHouseCandidates: { tcgdexId: string; similarity: number }[];
+      accessState: string;
+      /** ms since the phone first saw this card (null for older clients = handoff now). */
+      cardAgeMs: number | null;
+    },
+  ): Promise<{ identity: LiveVideoIdentityResult; extras: Record<string, unknown> }> => {
+    const userId = c.get("userId") as string;
+    const pipeline = input.inHouse.pipeline;
+    const limits = liveCardSightLimits;
+    // Clamp the phone's card age to this user's server-side scanner session (first frame, 60 s idle reset).
+    const sessionAge = liveCardSightGate.sessionAgeMs(userId);
+    const age = Math.min(input.cardAgeMs ?? limits.handoffMs, sessionAge);
+    // Our matcher keeps trying (the phone re-sends new frames of this card) until the give-up age.
+    const retry = age < limits.giveUpMs;
+    const quiet = (reason: LiveVideoIdentityResult["reason"], extras: Record<string, unknown> = {}) => ({
+      identity: { tcgdexId: null, confidence: null, reason, pipeline },
+      extras: { source: "cardsight", retry: reason !== "no_card" && retry, ...extras },
+    });
+    // CardSight terms 3(b) / Sean (Oct 21): no per-scan logs, no card ids, no images. Only aggregate
+    // engine + agree/disagree counters (never used to set thresholds). Raw responses are not kept.
+    const countEngine = (engine: "in_house" | "cardsight" | "in_house_only", cardSightId?: string | null) => {
+      const agree =
+        engine === "cardsight" && cardSightId && input.inHouseTcgdexId
+          ? cardSightId === input.inHouseTcgdexId
+          : null;
+      metrics.recordLiveEngine(engine, agree);
+    };
+    if (!input.cardDetected) return quiet("no_card");
+
+    // Hybrid: our matcher alone when confident (0.86 / 0.02) on 2 of the last 3 frames of this card.
+    // Labelled as our own engine; no CardSight confidence tier.
+    const key = input.identityHash ? `hash:${input.identityHash}` : null;
+    const ihConfident = inHouseConfident(
+      { tcgdexId: input.inHouseTcgdexId, candidates: input.inHouseCandidates },
+      liveInHouseGate,
+    );
+    const votes = liveCardSightGate.noteInHouse(userId, key, ihConfident ? input.inHouseTcgdexId : null);
+    if (ihConfident && votes >= LIVE_INHOUSE_VOTES) {
+      countEngine("in_house");
+      return {
+        identity: { tcgdexId: input.inHouseTcgdexId!, confidence: null, reason: "identified" as const, pipeline },
+        extras: { source: "cardsight", engine: "in_house", tier: "in_house_confident" },
+      };
+    }
+    const shownByCardSight = (tcgdexId: string, confidence: "High" | "Medium") => ({
+      identity: { tcgdexId, confidence, reason: "identified" as const, pipeline },
+      extras: { source: "cardsight", engine: "cardsight", tier: confidence },
+    });
+
+    // Nothing confident by the budget (~7 s): show nothing, stop.
+    if (age >= limits.giveUpMs) return quiet("unidentified");
+    // Computer Vision (Oct 21): our matcher alone for the first ~1.5 s of a card.
+    if (age < limits.handoffMs) return quiet("unidentified");
+    // CardSight is covered by the Terms (unless turned off in Settings). Otherwise: our matcher only.
+    if (!cardSightConsented(userId)) return quiet("unidentified");
+    const crop = decodeIdentityCropJpeg(input.identityCropJpeg);
+    if (!crop) return quiet("unidentified");
+    // Fail closed: the outside-the-card mask needs the card corners; overlay regions (if turned on)
+    // need the crop's place in the frame. Without them nothing goes to CardSight.
+    const quadOk =
+      Array.isArray(input.identityCropQuad) &&
+      input.identityCropQuad.length === 8 &&
+      input.identityCropQuad.every((n) => Number.isFinite(n));
+    if (!quadOk || (liveMaskRegions.length > 0 && !input.cropInFrame)) {
+      return quiet("unidentified", { mask: "unavailable" });
+    }
+    const cardKey = key ?? `crop:${createHash("sha256").update(crop.bytes).digest("hex")}`;
+    // One CardSight call per card: the same card still in view is answered from memory (in-process,
+    // short-lived, only to serve this user), never re-sent.
+    const recalled = liveCardSightGate.recall(userId, cardKey);
+    if (recalled) {
+      return recalled.tcgdexId
+        ? shownByCardSight(recalled.tcgdexId, recalled.confidence ?? "Medium")
+        : quiet("unidentified", recalled.hint ? { hint: recalled.hint } : {});
+    }
+    const masked = maskLiveCrop(crop.bytes, {
+      quad: input.identityCropQuad,
+      cropInFrame: input.cropInFrame,
+      regions: liveMaskRegions,
+    });
+    if (!masked) return quiet("unidentified", { mask: "unavailable" });
+
+    // Per-user rate limit (server-side key; never a client-made session id).
+    if (!liveCardSightGate.takeSessionSlot(userId)) return quiet("unidentified", { limited: "session" });
+
+    // Reserve every meter atomically BEFORE the call (no race). Refund only a non-billed failure.
+    const t = now();
+    const day = utcDayKey(t);
+    const month = calendarMonthKey(t);
+    const monthlyCap = input.accessState === "premium" ? limits.premiumMonthly : limits.trialMonthly;
+    // One global monthly CardSight meter shared with Scan a Card / grade photos. Live Scan stops at
+    // its ceiling so Scan a Card keeps its reserve of the plan.
+    const globalMonthlyCap =
+      cardSightMonthlyBudget != null ? Math.min(limits.globalMonthly, cardSightMonthlyBudget) : limits.globalMonthly;
+    const meters: Array<{ provider: string; key: string; cap: number; limited: string }> = [
+      { provider: liveCardSightUserMonthMeter(userId), key: month, cap: monthlyCap, limited: "user_monthly" },
+      { provider: liveCardSightUserMeter(userId), key: day, cap: limits.perUserDaily, limited: "user_daily" },
+      { provider: LIVE_CARDSIGHT_GLOBAL_METER, key: day, cap: limits.globalDaily, limited: "global_daily" },
+      { provider: "cardsight", key: month, cap: globalMonthlyCap, limited: "global_monthly" },
+    ];
+    const taken: typeof meters = [];
+    const refund = () => {
+      for (const m of taken) store.refundVendorQuota(m.provider, m.key);
+    };
+    for (const m of meters) {
+      if (!store.consumeVendorQuota(m.provider, m.key, m.cap)) {
+        refund();
+        // Over a cap: our matcher only (it already wasn't confident, so nothing is shown).
+        countEngine("in_house_only");
+        return quiet("unidentified", { limited: m.limited });
+      }
+      taken.push(m);
+    }
+    metrics.recordLiveCardSightDailyUsage(
+      store.getVendorQuotaUsage(LIVE_CARDSIGHT_GLOBAL_METER, day),
+      limits.globalDaily,
+      day,
+    );
+    metrics.recordCardSightBudgetUsage(store.getVendorQuotaUsage("cardsight", month), globalMonthlyCap);
+
+    let result: CardFlowNormalizedRecognitionResult | null;
+    let timedOut = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      // Hard deadline keeps card-appears-to-result inside the budget. One attempt, prepaid.
+      result = await Promise.race([
+        options.cardSight!.identifyCard({ image: masked, mimeType: "image/jpeg", prepaid: true }),
+        new Promise<null>((resolve) => {
+          timer = setTimeout(() => {
+            timedOut = true;
+            resolve(null);
+          }, limits.deadlineMs);
+        }),
+      ]);
+    } catch {
+      result = null;
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+    // Timeouts stay counted (CardSight may have billed). Other failures were not billed: refund.
+    if (!result) {
+      if (!timedOut) refund();
+      liveCardSightGate.remember(userId, cardKey, { tcgdexId: null, confidence: null, hint: null });
+      return quiet("unidentified");
+    }
+    if (!result.ok) {
+      if (result.error?.code !== "PROVIDER_TIMEOUT") refund();
+      return quiet("unidentified");
+    }
+    const verdict = liveCardSightVerdict(result);
+    let row: { tcgdexId: string | null; confidence: "High" | "Medium" | null; hint: typeof LIVE_ONE_CARD_HINT | null } = {
+      tcgdexId: null,
+      confidence: null,
+      hint: verdict.kind === "multi_card" || verdict.kind === "non_english" ? LIVE_ONE_CARD_HINT : null,
+    };
+    if (verdict.kind === "identified") {
+      const mapped = await recognitionWithMultiCardMappings({ ...result, detections: [verdict.detection] }, catalog);
+      const tcgdexId = normalizeLiveVideoTcgdexId(mapped.mapping.tcgdexId);
+      if (tcgdexId) row = { tcgdexId, confidence: verdict.detection.confidence as "High" | "Medium", hint: null };
+    }
+    // The raw response is dropped here; only what's needed to serve this user is kept, briefly.
+    result = null;
+    // One CardSight call per card: every answer (Low too) is remembered; our matcher keeps trying.
+    liveCardSightGate.remember(userId, cardKey, row);
+    countEngine("cardsight", row.tcgdexId);
+    return row.tcgdexId
+      ? shownByCardSight(row.tcgdexId, row.confidence ?? "Medium")
+      : quiet("unidentified", row.hint ? { hint: row.hint } : {});
+  };
+
   app.post("/v1/livestream/identify", async (c) => {
     const gate = ensureLivestreamAccess(c);
     if (!gate.ok) return gate.response;
@@ -1624,6 +1868,10 @@ export function createApp(
       videoFrameJpeg?: unknown;
       image?: unknown;
       screenshot?: unknown;
+      cardBox?: unknown;
+      cropInFrame?: unknown;
+      sessionId?: unknown;
+      cardAgeMs?: unknown;
     }>();
     if (body.image != null || body.screenshot != null) {
       return c.json({ ok: false, error: "live_video frames only" }, 400);
@@ -1720,20 +1968,42 @@ export function createApp(
       },
       classifier: livestreamIdentify === "yolo_identity" ? "yolo_identity" : "none",
     });
-    const extras = {
+    // Sean (Oct 21): with CardSight on, the in-house result is hidden (comparison log only) and
+    // the shown identity comes from CardSight at Medium/High confidence, or nothing.
+    let extras: Record<string, unknown> = {
       ...(openclipCandidates.length ? { candidates: openclipCandidates } : {}),
       ...(openclipSimilarity != null ? { similarity: openclipSimilarity } : {}),
     };
-    if (!livestreamTiming) return c.json({ ok: true, identity, ...extras });
+    let shown = identity;
+    if (liveCardSightOn && options.cardSight) {
+      const live = await liveCardSightIdentify(c, {
+        cardDetected,
+        identityHash,
+        identityCropJpeg,
+        identityCropQuad,
+        cropInFrame: normalizeCropInFrame(body.cropInFrame ?? body.cardBox),
+        inHouse: identity,
+        inHouseTcgdexId: openclipTcgdexId,
+        inHouseCandidates: openclipCandidates,
+        accessState: gate.access.state,
+        cardAgeMs:
+          typeof body.cardAgeMs === "number" && Number.isFinite(body.cardAgeMs) && body.cardAgeMs >= 0
+            ? body.cardAgeMs
+            : null,
+      });
+      shown = live.identity;
+      extras = live.extras;
+    }
+    if (!livestreamTiming) return c.json({ ok: true, identity: shown, ...extras });
     stages.server = performance.now() - startedAt;
     const sample: LiveScanSample = {
       stages,
-      outcome: identity.reason === "identified" ? "accepted" : "rejected",
+      outcome: shown.reason === "identified" ? "accepted" : "rejected",
       warped,
     };
     livestreamTimingLog.add(sample);
-    console.info(`[livestream-timing] ${JSON.stringify({ ...sample, tcgdexId: identity.tcgdexId })}`);
-    return c.json({ ok: true, identity, timing: { stages, warped }, ...extras });
+    console.info(`[livestream-timing] ${JSON.stringify({ ...sample, tcgdexId: shown.tcgdexId })}`);
+    return c.json({ ok: true, identity: shown, timing: { stages, warped }, ...extras });
   });
 
   /** Debug only: p50/p95 per stage of recent livestream matches. 404 unless timing is on. */
@@ -2254,7 +2524,7 @@ export function createApp(
 
   // Sean: CardSight disclosure + consent, stored with its version and timestamps.
   app.get("/v1/consents/cardsight", (c) =>
-    c.json({ ok: true as const, consent: consentState(store.consents.get(c.get("userId"), "cardsight")) }),
+    c.json({ ok: true as const, consent: cardSightConsentView(c.get("userId")) }),
   );
   app.post("/v1/consents/cardsight", async (c) => {
     const userId = c.get("userId");
@@ -2271,11 +2541,15 @@ export function createApp(
       store.consents.grant(userId, "cardsight", CARDSIGHT_CONSENT_VERSION, at);
     } else if (hasActiveConsent(store.consents, userId)) {
       store.consents.withdraw(userId, "cardsight", at);
-    } else if (consentState(store.consents.get(userId, "cardsight")).needsPrompt) {
-      // Backend review M4: a "No" to the prompt is a decline, never a grant that was withdrawn.
-      store.consents.decline(userId, "cardsight", CARDSIGHT_CONSENT_VERSION, at);
+    } else {
+      // Sean (Oct 21): consent comes from the Terms; turning it off in Settings is recorded as a
+      // decline (once: saying no again adds nothing).
+      const record = store.consents.get(userId, "cardsight");
+      if (!record || !(record.declinedAt || record.withdrawnAt)) {
+        store.consents.decline(userId, "cardsight", CARDSIGHT_CONSENT_VERSION, at);
+      }
     }
-    return c.json({ ok: true as const, consent: consentState(store.consents.get(userId, "cardsight")) });
+    return c.json({ ok: true as const, consent: cardSightConsentView(userId) });
   });
 
   app.post("/v1/email-verifications", (c) => {
@@ -2478,7 +2752,7 @@ export function createApp(
     const { photos, staged, rowsDeleted } = deleteUserEverything(userId, "under18_report");
     return c.json({
       ok: true as const,
-      cardSightOff: !hasActiveConsent(store.consents, userId),
+      cardSightOff: !cardSightConsented(userId),
       photosDeleted: photos.deleted + staged,
       rowsDeleted,
     });
@@ -2846,7 +3120,7 @@ export function createApp(
           !isGuestUserId(userId) &&
           hasAgeConfirmation(store.ageConfirmations, userId) &&
           userCap > 0 &&
-          hasActiveConsent(store.consents, userId) &&
+          cardSightConsented(userId) &&
           store.consents.monthlyUse(userId, monthKey) < userCap
             ? options.cardSight
             : null;
@@ -3307,7 +3581,7 @@ export function createApp(
             !isGuestUserId(userId) &&
             hasAgeConfirmation(store.ageConfirmations, userId) &&
             userCap > 0 &&
-            hasActiveConsent(store.consents, userId),
+            cardSightConsented(userId),
           // Sean (Oct 18): save most of the free-plan CardSight cap for ID; CardMagic uses the remainder.
           mayUseIdReserve: () => {
             if (cardSightMonthlyBudget == null) return true;

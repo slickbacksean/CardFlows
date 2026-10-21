@@ -53,13 +53,11 @@ describe("Policy Reviewer: guests never get CardSight", () => {
     expect(guestRouteAllowed("POST", "/v1/scans")).toBe(false);
   });
 
-  it("capture: accounts confirm 18+ before the CardSight prompt, all before upload", () => {
+  it("capture: accounts confirm 18+ before upload (CardSight consent comes from the Terms)", () => {
     const capture = read("apps/mobile/app/capture.tsx");
-    const gate = capture.indexOf("if (imageUri && (await ensureAccountAgeConfirmed())) {");
-    const ask = capture.indexOf("await askCardSightConsentOnce()");
+    const gate = capture.indexOf("if (imageUri) await ensureAccountAgeConfirmed();");
     expect(gate).toBeGreaterThan(-1);
-    expect(gate).toBeLessThan(ask);
-    expect(ask).toBeLessThan(capture.indexOf("await createScan("));
+    expect(gate).toBeLessThan(capture.indexOf("await createScan("));
     expect(capture).toContain("AGE_GATE_COPY.captureTip");
   });
 

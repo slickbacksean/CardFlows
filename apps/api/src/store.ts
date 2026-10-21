@@ -907,6 +907,8 @@ export interface StorePort {
   consumeGradeQuota: (userId: string, input: GradeQuotaConsumeInput) => GradeQuotaConsumeResult;
   getVendorQuotaUsage: (provider: string, monthKey: string) => number;
   consumeVendorQuota: (provider: string, monthKey: string, cap: number) => boolean;
+  /** Give back one reserved use (a call that was not billed). Never below 0. */
+  refundVendorQuota: (provider: string, monthKey: string) => void;
   /** P1-26 confirm log. */
   saveConfirmEvent: (event: ConfirmEvent) => void;
   listConfirmEvents: (options?: { since?: string; limit?: number }) => ConfirmEvent[];
@@ -1065,6 +1067,11 @@ export function createMemoryStore(): StorePort {
     return true;
   }
 
+  function refundVendorQuota(provider: string, monthKey: string): void {
+    const used = getVendorQuotaUsage(provider, monthKey);
+    if (used > 0) vendorUsage.set(vendorKey(provider, monthKey), used - 1);
+  }
+
   const purchaseLedger = createMemoryPurchaseLedger();
   const recordPurchase = (item: InventoryItemRecord | undefined) => {
     if (item?.purchase) {
@@ -1174,6 +1181,7 @@ export function createMemoryStore(): StorePort {
     consumeGradeQuota,
     getVendorQuotaUsage,
     consumeVendorQuota,
+    refundVendorQuota,
     ...confirmLog,
     saveUserPriceSnapshot(userId: string, snapshot: UserPriceSnapshot) {
       userPrices.push({ ...snapshot, userId });

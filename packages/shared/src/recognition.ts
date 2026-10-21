@@ -19,6 +19,11 @@ export interface IdentifyCardRequest {
   clientRequestId?: string;
   /** DEV/mock only. Live adapters ignore this. */
   scenario?: RecognitionScenario;
+  /**
+   * Live Scan (Oct 21): the caller already reserved the global monthly budget for this call, so the
+   * adapter must not peek or charge it again, and must make one attempt only (no retries).
+   */
+  prepaid?: boolean;
 }
 
 export interface CardRecognitionProvider {

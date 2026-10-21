@@ -650,7 +650,16 @@ export { RECOGNITION_SCENARIOS } from "./types";
 export type * from "./types";
 export {
   createLiveScanTimingLog,
+  LIVE_SCAN_CARDSIGHT_DEADLINE_MS,
+  LIVE_SCAN_HANDOFF_MS,
+  LIVE_SCAN_ID_BUDGET_MS,
+  LIVE_SCAN_IN_FLIGHT_WAIT_MS,
+  LIVE_SCAN_IN_HOUSE_MAX_MS,
+  LIVE_SCAN_NETWORK_SLACK_MS,
+  LIVE_SCAN_POLL_MS,
   LIVE_SCAN_STAGES,
+  LIVE_SCAN_STEADY_MS,
+  liveScanWorstCaseMs,
   percentile,
   summarizeLiveScanSamples,
   type LiveScanOutcome,

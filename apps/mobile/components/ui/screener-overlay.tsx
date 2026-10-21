@@ -15,13 +15,12 @@ import {
   livestreamTcgplayerLinkPreferred,
   LIVESTREAM_TCGPLAYER_LINK_COPY,
 } from "@/lib/livestream-price";
-import { getLiveIdentityVote } from "@/lib/live-identify";
+import { getLiveIdentityVote, getLiveScanHint } from "@/lib/live-identify";
 import { overlayDollarLabel } from "@/lib/livestream";
 import { colors, space } from "@/lib/theme";
 import {
   emptyLiveOverlayGuess,
   isStableLiveIdentity,
-  LIVE_VOTE_PICK_ONE_COPY,
   LIVE_VOTE_WAITING_COPY,
   LIVESTREAM_SCANNER_UNAVAILABLE_DETAIL,
   LIVESTREAM_SCANNER_UNAVAILABLE_MESSAGE,
@@ -279,8 +278,9 @@ function overlayBubbleCopy(
     };
   }
   const vote = getLiveIdentityVote();
-  if (kind === "looking" && vote?.tier === "pick_one") {
-    return { title: LIVE_VOTE_PICK_ONE_COPY, subtitle: "Tap a match to confirm", live: true };
+  // Sean (Oct 21): never ask "is it one of these?". Several cards or a non-English card get a quiet hint.
+  if (kind === "looking" && getLiveScanHint() === "one_card_at_a_time") {
+    return { title: "Looking for a card…", subtitle: "Try one card at a time", live: true };
   }
   if (kind === "looking" && vote?.tier === "waiting" && readingCard) {
     return { title: LIVE_VOTE_WAITING_COPY, subtitle: "Hold the card steady", live: true };

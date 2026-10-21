@@ -9,6 +9,7 @@ import {
   CAMERA_USAGE_DESCRIPTION,
   CARDSIGHT_CONSENT_VERSION,
   PHOTO_PERMISSION_PURPOSE,
+  TERMS_VERSION,
   type CardRecognitionProvider,
   type IdentifyCardRequest,
 } from "@cardflow/shared";
@@ -133,7 +134,7 @@ describe("CardSight consent: the server enforces it before calling the adapter",
   it("consent to an older version doesn't count (asked again)", async () => {
     const { app, store, cardSight } = setup();
     store.consents.grant(await currentUserId(app), "cardsight", "2020-01-01", "2020-01-01T00:00:00.000Z");
-    expect((await consent(app)).body.consent).toMatchObject({ granted: false, version: "2020-01-01", needsPrompt: true });
+    expect((await consent(app)).body.consent).toMatchObject({ granted: false, version: "2020-01-01", needsPrompt: false });
     await scan(app);
     expect(cardSight.calls).toHaveLength(0);
   });
@@ -212,7 +213,7 @@ describe.each(["sqlite", "memory"] as const)("Policy Reviewer: guests never get 
     expect(up.status).toBe(200);
     const token = up.body.token as string;
     // The account answers for itself: no consent, history or usage came from the guest.
-    expect((await req(app, "/v1/consents/cardsight", { token })).body.consent).toMatchObject({ granted: false, needsPrompt: true });
+    expect((await req(app, "/v1/consents/cardsight", { token })).body.consent).toMatchObject({ granted: false, needsPrompt: false });
     const accountId = await userIdOf(app, token);
     expect(store.consents.events(accountId)).toEqual([]);
     expect(cardSight.calls).toHaveLength(0);
@@ -220,6 +221,39 @@ describe.each(["sqlite", "memory"] as const)("Policy Reviewer: guests never get 
     // Only photos taken after consent go to CardSight.
     await req(app, "/v1/consents/cardsight", { body: { granted: true, version: CARDSIGHT_CONSENT_VERSION }, token });
     expect(cardSight.calls).toHaveLength(0);
+    await scanAs(app, token);
+    expect(cardSight.calls).toHaveLength(1);
+  });
+
+  it("Sean (Oct 21): accepting the current Terms is CardSight consent (no prompt); Settings can turn it off", async () => {
+    const { app, store, cardSight } = open();
+    const up = await req(app, "/v1/accounts", {
+      body: {
+        email: "terms@example.com",
+        password: "correct horse battery",
+        ageConfirmed18Plus: true,
+        ageGateVersion: AGE_GATE_VERSION,
+        termsAccepted: true,
+        termsVersion: TERMS_VERSION,
+      },
+    });
+    expect(up.status).toBe(200);
+    const token = up.body.token as string;
+    expect((await req(app, "/v1/consents/cardsight", { token })).body.consent).toMatchObject({ granted: true, needsPrompt: false });
+    await scanAs(app, token);
+    expect(cardSight.calls).toHaveLength(1);
+
+    // Turned off in Settings: nothing more goes to CardSight.
+    await req(app, "/v1/consents/cardsight", { body: { granted: false }, token });
+    expect((await req(app, "/v1/consents/cardsight", { token })).body.consent).toMatchObject({ granted: false });
+    await scanAs(app, token);
+    expect(cardSight.calls).toHaveLength(1);
+
+    // An older Terms version doesn't count.
+    const id = await userIdOf(app, token);
+    await req(app, "/v1/consents/cardsight", { body: { granted: true, version: CARDSIGHT_CONSENT_VERSION }, token });
+    store.consents.withdraw(id, "cardsight", "2026-10-21T01:00:00.000Z");
+    store.accounts.setTermsAcceptance(id, "2026-10-19.1", "2026-10-19T00:00:00.000Z");
     await scanAs(app, token);
     expect(cardSight.calls).toHaveLength(1);
   });
@@ -256,7 +290,7 @@ describe("CardSight consent API", () => {
       declinedAt: null,
       withdrawnAt: null,
       currentVersion: CARDSIGHT_CONSENT_VERSION,
-      needsPrompt: true,
+      needsPrompt: false,
     });
     expect((await consent(app, { granted: true })).status).toBe(409);
     expect((await consent(app, { granted: true, version: "old" })).status).toBe(409);
@@ -293,10 +327,10 @@ describe("CardSight consent API", () => {
   it("disclosure names CardSight and says what its terms allow; only the two disclosure strings mention AI", () => {
     expect(CARDSIGHT_CONSENT_COPY.body).toContain("CardSight, our card-recognition provider");
     expect(CARDSIGHT_CONSENT_COPY.body).toContain("CardSight's terms let it keep these images and use them to train its AI models");
-    expect(CARDSIGHT_CONSENT_COPY.settingsHelp).toContain("doesn't remove photos CardSight already has");
+    expect(CARDSIGHT_CONSENT_COPY.settingsHelp).toContain("doesn't remove images CardSight already has");
     expect(CAMERA_USAGE_DESCRIPTION).toContain(PHOTO_PERMISSION_PURPOSE);
-    const { body, settingsHelp, ...rest } = CARDSIGHT_CONSENT_COPY;
-    expect(body && settingsHelp).toBeTruthy();
+    const { body, settingsHelp, terms, ...rest } = CARDSIGHT_CONSENT_COPY;
+    expect(body && settingsHelp && terms).toBeTruthy();
     expect([...Object.values(rest), CAMERA_USAGE_DESCRIPTION].join(" ")).not.toMatch(/\bAI\b|artificial intelligence|PSA|BGS|CGC/);
   });
 
@@ -441,7 +475,7 @@ describe("Backend review: recognition cache and fallbacks", () => {
     expect(local.calls.length).toBeGreaterThan(0);
   });
 
-  it("livestream identify never calls CardSight, even with consent", async () => {
+  it("livestream identify sends nothing to CardSight without a decodable card crop", async () => {
     const { app, cardSight } = setup();
     await consent(app, { granted: true, version: CARDSIGHT_CONSENT_VERSION });
     const res = await app.request("/v1/livestream/identify", {
@@ -485,4 +519,5 @@ describe("CardSight charge-on-success (Sean Oct 18)", () => {
     expect(ok.calls).toHaveLength(1);
     expect(second.store.consents.monthlyUse(await currentUserId(second.app), "2026-10")).toBe(1);
   });
+
 });

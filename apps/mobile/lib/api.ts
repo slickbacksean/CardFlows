@@ -516,6 +516,9 @@ export function identifyLivestreamFrame(input: {
   identityCropJpeg?: string | null;
   identityCropQuad?: number[] | null;
   videoFrameJpeg?: string | null;
+  cardBox?: { x: number; y: number; width: number; height: number } | null;
+  sessionId?: string | null;
+  cardAgeMs?: number | null;
 }) {
   return callApi(apiContract.identifyLivestreamFrame, {
     body: {
@@ -527,6 +530,9 @@ export function identifyLivestreamFrame(input: {
       identityCropJpeg: input.identityCropJpeg ?? null,
       identityCropQuad: input.identityCropQuad ?? null,
       videoFrameJpeg: input.videoFrameJpeg ?? null,
+      cardBox: input.cardBox ?? null,
+      sessionId: input.sessionId ?? null,
+      cardAgeMs: input.cardAgeMs ?? null,
     },
   });
 }

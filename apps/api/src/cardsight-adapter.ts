@@ -184,13 +184,14 @@ export function createCardSightRecognitionProvider(options: CardSightAdapterOpti
     name: "cardsight",
     async identifyCard(req: IdentifyCardRequest) {
       // Peek only — charge happens after a successful billable response below.
-      if (options.budgetAvailable && !options.budgetAvailable()) {
+      if (!req.prepaid && options.budgetAvailable && !options.budgetAvailable()) {
         options.onAlert?.({ code: "QUOTA_EXCEEDED" });
         return failure({ code: "QUOTA_EXCEEDED", message: "Card matching is unavailable right now. Search by name or number.", retryable: false });
       }
       const path = req.segment ? `/v1/identify/card/${encodeURIComponent(req.segment)}` : "/v1/identify/card";
       let lastStatus: number | null = null;
-      for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
+      const attempts = req.prepaid ? 0 : maxRetries;
+      for (let attempt = 0; attempt <= attempts; attempt += 1) {
         if (attempt > 0) await sleep(250 * 2 ** (attempt - 1));
         const controller = new AbortController();
         const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -207,7 +208,7 @@ export function createCardSightRecognitionProvider(options: CardSightAdapterOpti
           if (res.ok) {
             const mapped = mapCardSightWire(await res.json().catch(() => null), Date.now() - started);
             // Charge only on a successful billable response (ok:true). Failures/timeouts/4xx do not.
-            if (mapped.ok) options.consumeBudget?.();
+            if (mapped.ok && !req.prepaid) options.consumeBudget?.();
             return mapped;
           }
           lastStatus = res.status;

@@ -2002,6 +2002,12 @@ export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStor
     })();
   }
 
+  function refundVendorQuota(provider: string, monthKey: string): void {
+    sqlite
+      .prepare(`UPDATE vendor_quota_usage SET used = used - 1 WHERE provider = ? AND month_key = ? AND used > 0`)
+      .run(provider, monthKey);
+  }
+
   function listPortfolioSnapshots(
     userId: string,
     sinceDate?: string | null,
@@ -2233,6 +2239,7 @@ export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStor
     consumeGradeQuota,
     getVendorQuotaUsage,
     consumeVendorQuota,
+    refundVendorQuota,
     saveConfirmEvent,
     listConfirmEvents,
     confirmCounts,
