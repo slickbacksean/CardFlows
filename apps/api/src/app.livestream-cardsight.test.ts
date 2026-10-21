@@ -44,6 +44,7 @@ async function setup(opts: {
   enabled?: boolean;
   inHouse?: { tcgdexId: string; similarity: number; second: number };
   delayMs?: number;
+  metrics?: OpsMetrics;
 } = {}) {
   const store = createMemoryStore();
   store.ageConfirmations.confirm(DEFAULT_INVITED_USER_ID, AGE_GATE_VERSION, "2026-10-21T00:00:00.000Z");
@@ -75,7 +76,7 @@ async function setup(opts: {
     livestreamCardSight: true,
     ...(openclip ? { liveIdentityOpenclip: openclip as never } : {}),
     liveCardSightLimits: { ...LIVE_CARDSIGHT_DEFAULTS, ...opts.limits },
-    opsMetrics: new OpsMetrics([(a) => alerts.push(a)]),
+    opsMetrics: opts.metrics ?? new OpsMetrics([(a) => alerts.push(a)]),
     ...(opts.enabled === false ? { livestreamEnabled: () => false } : {}),
   });
   if (opts.consent ?? true) {
@@ -169,15 +170,16 @@ describe("Live Scan: automatic CardSight identify (Sean Oct 21)", () => {
     expect(cs.calls).toHaveLength(1);
   });
 
-  it("engine log never stores CardSight card ids (CardSight terms 3(b))", async () => {
+  it("comparison is aggregate counters only: no per-scan log lines, no card ids", async () => {
     const info = vi.spyOn(console, "info").mockImplementation(() => {});
-    const { app } = await setup();
-    const r = await frame(app);
-    const cardSightId = r.body.identity.tcgdexId as string;
-    const lines = info.mock.calls.map((c) => String(c[0])).filter((l) => l.startsWith("[livestream-engine]"));
+    const metrics = new OpsMetrics();
+    const { app } = await setup({ metrics });
+    await frame(app);
+    const logged = info.mock.calls.map((c) => String(c[0]));
     info.mockRestore();
-    expect(lines.length).toBeGreaterThan(0);
-    for (const line of lines) expect(line).not.toContain(cardSightId);
+    expect(logged.filter((l) => /livestream-(engine|compare)/.test(l))).toEqual([]);
+    expect(metrics.liveEngine.cardsight).toBe(1);
+    expect(JSON.stringify(metrics.liveEngine)).not.toMatch(/[a-z]+\d*-\d+/);
   });
 
   it("past the monthly trial cap, Live Scan falls back to in-house only (no cut-off)", async () => {

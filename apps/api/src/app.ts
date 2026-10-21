@@ -1699,17 +1699,14 @@ export function createApp(
       identity: { tcgdexId, confidence, reason: "identified" as const, pipeline },
       extras: { source: "cardsight", engine },
     });
-    // Terms 3(b) of CardSight: no dataset from its outputs. This log holds only the engine, the
-    // CardSight confidence tier, timings and OUR matcher's output. No CardSight card ids.
-    const logEngine = (entry: { engine: string; tier?: string | null; cardSightMs?: number; cached?: boolean }) => {
-      console.info(
-        `[livestream-engine] ${JSON.stringify({
-          ...entry,
-          inHouse: input.inHouseTcgdexId,
-          inHouseSimilarity: input.inHouseCandidates[0]?.similarity ?? null,
-          inHouseMs: input.inHouseMs,
-        })}`,
-      );
+    // CardSight terms 3(b) / Sean (Oct 21): no per-scan logs, no card ids, no images. Only aggregate
+    // engine + agree/disagree counters (never used to set thresholds). Raw responses are not kept.
+    const countEngine = (engine: "in_house" | "cardsight" | "in_house_only", cardSightId?: string | null) => {
+      const agree =
+        engine === "cardsight" && cardSightId && input.inHouseTcgdexId
+          ? cardSightId === input.inHouseTcgdexId
+          : null;
+      metrics.recordLiveEngine(engine, agree);
     };
     if (!input.cardDetected) return quiet("no_card");
 
@@ -1717,7 +1714,7 @@ export function createApp(
     const key = input.identityHash ? `hash:${input.identityHash}` : null;
     if (inHouseConfident({ tcgdexId: input.inHouseTcgdexId, candidates: input.inHouseCandidates }, liveInHouseGate)) {
       const id = input.inHouseTcgdexId!;
-      logEngine({ engine: "in_house" });
+      countEngine("in_house");
       return shownAs(id, "High", "in_house");
     }
 
@@ -1730,7 +1727,6 @@ export function createApp(
     // short-lived, only to serve this user), never re-sent.
     const recalled = liveCardSightGate.recall(userId, cardKey);
     if (recalled) {
-      logEngine({ engine: "cardsight", tier: recalled.confidence, cached: true });
       return recalled.tcgdexId
         ? shownAs(recalled.tcgdexId, recalled.confidence ?? "Medium", "cardsight")
         : quiet("unidentified", recalled.hint ? { hint: recalled.hint } : {});
@@ -1742,7 +1738,7 @@ export function createApp(
     // Above the monthly cap: in-house only (it already wasn't confident, so nothing is shown).
     const monthlyCap = input.accessState === "premium" ? limits.premiumMonthly : limits.trialMonthly;
     if (store.getVendorQuotaUsage(liveCardSightUserMonthMeter(userId), month) >= monthlyCap) {
-      logEngine({ engine: "in_house_only_monthly_cap" });
+      countEngine("in_house_only");
       return quiet("unidentified", { limited: "user_monthly" });
     }
     if (store.getVendorQuotaUsage(LIVE_CARDSIGHT_GLOBAL_METER, day) >= limits.globalDaily) {
@@ -1761,7 +1757,6 @@ export function createApp(
       regions: liveMaskRegions,
     });
     if (!masked) return quiet("unidentified");
-    const started = performance.now();
     let result: CardFlowNormalizedRecognitionResult | null;
     let timer: ReturnType<typeof setTimeout> | undefined;
     try {
@@ -1777,9 +1772,7 @@ export function createApp(
     } finally {
       if (timer) clearTimeout(timer);
     }
-    const cardSightMs = Math.round(performance.now() - started);
     if (!result) {
-      logEngine({ engine: "cardsight", tier: "timeout", cardSightMs });
       return quiet("unidentified");
     }
     if (!result.ok) return quiet("unidentified");
@@ -1806,11 +1799,7 @@ export function createApp(
     }
     // Low is not remembered, so the next new frame of this card may try again (still capped).
     if (verdict.kind !== "low" && verdict.kind !== "none") liveCardSightGate.remember(userId, cardKey, row);
-    logEngine({
-      engine: "cardsight",
-      tier: verdict.kind === "identified" ? verdict.detection.confidence : verdict.kind,
-      cardSightMs,
-    });
+    countEngine("cardsight", row.tcgdexId);
     return row.tcgdexId
       ? shownAs(row.tcgdexId, row.confidence ?? "Medium", "cardsight")
       : quiet("unidentified", row.hint ? { hint: row.hint } : {});

@@ -112,6 +112,17 @@ export class OpsMetrics {
   }
 
   /**
+   * Sean (Oct 21): Live Scan engine counters, aggregate only (no ids, no per-scan rows).
+   * agree/disagree compare our matcher with CardSight only when CardSight was called anyway.
+   */
+  readonly liveEngine = { in_house: 0, cardsight: 0, in_house_only: 0, agree: 0, disagree: 0 };
+  recordLiveEngine(engine: "in_house" | "cardsight" | "in_house_only", agree: boolean | null) {
+    this.liveEngine[engine] += 1;
+    if (agree === true) this.liveEngine.agree += 1;
+    else if (agree === false) this.liveEngine.disagree += 1;
+  }
+
+  /**
    * Sean (Oct 21): Live Scan CardSight app-wide daily meter. Alerts once per level per day at
    * 50%, 75% and 90% of CARD_FLOW_LIVE_CARDSIGHT_GLOBAL_DAILY.
    */
@@ -236,6 +247,7 @@ export class OpsMetrics {
       vendors,
       pokecollectorDeletionsFailed: this.pokecollectorDeletionsFailed,
       alerts: [...this.alerts],
+      liveEngine: { ...this.liveEngine },
     };
   }
 }
