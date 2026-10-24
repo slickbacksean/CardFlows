@@ -50,8 +50,19 @@ const TIMING_ENABLED = process.env.EXPO_PUBLIC_CARD_FLOW_LIVESTREAM_TIMING === "
 const timingLog = createLiveScanTimingLog(300);
 /** Up to 3 IoU tracks; one vendor/model match per tracked card until recheck. */
 const tracker = createLiveCardTracker();
-/** Vote across 3 sharp identify results before auto-showing a match. */
-const voter = createLiveIdentityVoter();
+/**
+ * Temporal voting: averages per-frame similarities + best frame's score across hold.
+ * Off by default; enable with EXPO_PUBLIC_CARD_FLOW_LIVESTREAM_TEMPORAL_VOTING=1.
+ * Research shows +4.5pp on streams and +10pp on eBay vs. single-frame matching.
+ */
+const TEMPORAL_VOTING_ENABLED = process.env.EXPO_PUBLIC_CARD_FLOW_LIVESTREAM_TEMPORAL_VOTING === "1";
+const TEMPORAL_FRAME_COUNT = TEMPORAL_VOTING_ENABLED ? 12 : 3;
+/** Vote across frames before auto-showing a match. */
+const voter = createLiveIdentityVoter({
+  sharpFrames: TEMPORAL_FRAME_COUNT,
+  useTemporal: TEMPORAL_VOTING_ENABLED,
+  temporalMinCombinedScore: 1.65,
+});
 /** Do not re-announce the same card within 60 s. */
 const announceDedupe = createLiveAnnounceDedupe();
 let latestVote: LiveVoteResult | null = null;
@@ -266,13 +277,17 @@ async function identifyFrame(frame: LiveVideoFrame, key: string, pullMs: number)
     });
     if (response.identity.reason === "identified" || response.identity.reason === "unidentified") {
       const extra = response as {
-        candidates?: { tcgdexId: string; similarity?: number }[];
+        candidates?: { tcgdexId: string; similarity?: number; name?: string; localId?: string }[];
         similarity?: number | null;
+        ocrNames?: string[];
+        ocrNumber?: string | null;
       };
       const vote = voter.add({
         tcgdexId: response.identity.reason === "identified" ? response.identity.tcgdexId : null,
         similarity: typeof extra.similarity === "number" ? extra.similarity : null,
         candidates: Array.isArray(extra.candidates) ? extra.candidates : null,
+        ocrNames: Array.isArray(extra.ocrNames) ? extra.ocrNames : null,
+        ocrNumber: typeof extra.ocrNumber === "string" ? extra.ocrNumber : null,
       });
       latestVote = vote;
       if (vote.tier === "auto_show" && vote.tcgdexId) {

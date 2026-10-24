@@ -1,24 +1,30 @@
 """
-PokeSniper livestream OpenCLIP identity sidecar.
+PokeSniper livestream identity sidecar: trained DINOv2-S or OpenCLIP.
 
-Inspired by https://github.com/t-sinclair2500/pokemon-scanner (MIT) — OpenCLIP
-ViT-B/32 + HNSW cosine search. CardFlow-owned code; do not vendor that tree.
-Index rows are English tcgdex_id (TCGdex art), never PokéCollector Gemini.
+Primary: Trained DINOv2-S + SubCenterArcFace (when TRAINED_MODEL_* env vars set)
+Fallback: OpenCLIP ViT-B/32 + HNSW cosine search
 
-Env:
-  LIVE_IDENTITY_INDEX   Directory with hnsw.bin + meta.json (required for match)
-  LIVE_IDENTITY_TOKEN   Optional shared secret; must match API token
-  LIVE_IDENTITY_HOST    Default 127.0.0.1
-  LIVE_IDENTITY_PORT    Default 8092
-  LIVE_IDENTITY_DEVICE  cuda | cpu | mps (default: auto)
-  LIVE_IDENTITY_TOPK    Default 5
-  LIVE_IDENTITY_ACCEPT  Cosine similarity accept threshold (default 0.86)
-  LIVE_IDENTITY_MARGIN  Min top-1 minus top-2 similarity to accept (default 0.02)
-  LIVE_IDENTITY_WARP    1 (default) straightens the crop when the phone sends corners; 0 = old crop only
-  LIVE_IDENTITY_LIVE_FLOOR  Lower similarity allowed when the winner is clearly ahead (default 0.80)
-  LIVE_IDENTITY_LIVE_FLOOR_MARGIN  Margin required to use the floor (default 0.045)
+Env (trained model):
+  TRAINED_MODEL_WEIGHTS     Path or URL to b1_best.pt checkpoint
+  TRAINED_MODEL_CAT_FULL    Path or URL to cat_full_b1.npy
+  TRAINED_MODEL_CAT_ART     Path or URL to cat_art_b1.npy
+  TRAINED_MODEL_CAT_IDS     Path or URL to cat_ids.json
+  TRAINED_MODEL_ACCEPT      Similarity threshold (default: 0.68)
+  TRAINED_MODEL_MARGIN      Min margin (default: 0.02)
+  TRAINED_MODEL_TOPK        Top-K candidates (default: 5)
 
-Defaults come from scripts/eval_accept.py on the full English index (2026-09-30).
+Env (OpenCLIP fallback):
+  LIVE_IDENTITY_INDEX       Directory with hnsw.bin + meta.json
+  LIVE_IDENTITY_TOKEN       Optional shared secret; must match API token
+  LIVE_IDENTITY_HOST        Default 127.0.0.1
+  LIVE_IDENTITY_PORT        Default 8092
+  LIVE_IDENTITY_DEVICE      cuda | cpu | mps (default: auto)
+  LIVE_IDENTITY_TOPK        Default 5
+  LIVE_IDENTITY_ACCEPT      Cosine similarity accept threshold (default 0.86)
+  LIVE_IDENTITY_MARGIN      Min top-1 minus top-2 similarity to accept (default 0.02)
+  LIVE_IDENTITY_WARP        1 (default) straightens crop; 0 = old crop only
+  LIVE_IDENTITY_LIVE_FLOOR  Lower similarity when winner is clearly ahead (default 0.80)
+  LIVE_IDENTITY_LIVE_FLOOR_MARGIN  Margin required for floor (default 0.045)
 """
 
 from __future__ import annotations
@@ -40,6 +46,7 @@ from PIL import Image
 
 from orb_rerank import rerank_near_tie
 from warp import warp_card
+from trained_dinov2 import load_trained_model, TrainedModel
 
 INDEX_DIR = Path(os.environ.get("LIVE_IDENTITY_INDEX", "")).expanduser()
 TOKEN = os.environ.get("LIVE_IDENTITY_TOKEN", "").strip()
@@ -69,6 +76,8 @@ _ready_error: str | None = "model not loaded"
 _dim = 512
 _match_ms: list[float] = []
 _MATCH_MS_CAP = 64
+_trained_model: TrainedModel | None = None
+_pipeline: str = "unknown"
 
 
 def _device() -> torch.device:
@@ -86,8 +95,37 @@ DEVICE = _device()
 
 
 def _load() -> None:
-  global _model, _preprocess, _index, _meta, _ready_error, _dim
+  global _model, _preprocess, _index, _meta, _ready_error, _dim, _trained_model, _pipeline
   try:
+    # Load meta first (shared by both pipelines)
+    if not INDEX_DIR.is_dir():
+      _ready_error = "LIVE_IDENTITY_INDEX missing"
+      return
+    meta_path = INDEX_DIR / "meta.json"
+    if not meta_path.is_file():
+      _ready_error = "index meta.json missing"
+      return
+    meta = json.loads(meta_path.read_text())
+    rows = meta.get("rows") if isinstance(meta, dict) else None
+    if not isinstance(rows, list) or not rows:
+      _ready_error = "meta.json has no rows"
+      return
+    _meta = rows
+    
+    # Build card names dict for trained model
+    card_names = {row["tcgdexId"]: row.get("name", "") for row in rows}
+    
+    # Try trained model first
+    trained = load_trained_model(DEVICE, card_names)
+    if trained is not None:
+      _trained_model = trained
+      _pipeline = "trained_dinov2"
+      _ready_error = None
+      print(f"[serve] Using trained DINOv2-S pipeline (accept={trained.accept}, margin={trained.margin})")
+      return
+    
+    # Fall back to OpenCLIP
+    print("[serve] Trained model not configured, falling back to OpenCLIP")
     model, _, preprocess = open_clip.create_model_and_transforms(
       EMBED_MODEL, pretrained=EMBED_PRETRAINED, device=DEVICE
     )
@@ -95,18 +133,9 @@ def _load() -> None:
     _model = model
     _preprocess = preprocess
 
-    if not INDEX_DIR.is_dir():
-      _ready_error = "LIVE_IDENTITY_INDEX missing"
-      return
-    meta_path = INDEX_DIR / "meta.json"
     bin_path = INDEX_DIR / "hnsw.bin"
-    if not meta_path.is_file() or not bin_path.is_file():
-      _ready_error = "index files missing (hnsw.bin + meta.json)"
-      return
-    meta = json.loads(meta_path.read_text())
-    rows = meta.get("rows") if isinstance(meta, dict) else None
-    if not isinstance(rows, list) or not rows:
-      _ready_error = "meta.json has no rows"
+    if not bin_path.is_file():
+      _ready_error = "index hnsw.bin missing"
       return
     dim = int(meta.get("dim") or _dim)
     index = hnswlib.Index(space="cosine", dim=dim)
@@ -114,11 +143,14 @@ def _load() -> None:
     # ef=64 missed the true neighbor on phone stills (~20k cards).
     index.set_ef(max(200, TOPK * 16))
     _index = index
-    _meta = rows
     _dim = dim
+    _pipeline = "openclip_hnsw"
     _ready_error = None
+    print(f"[serve] Using OpenCLIP pipeline (accept={ACCEPT}, margin={MARGIN})")
   except Exception as exc:  # noqa: BLE001 — surface boot error on /health
     _ready_error = str(exc)
+    import traceback
+    traceback.print_exc()
 
 
 @app.on_event("startup")
@@ -164,24 +196,42 @@ def _embed(image: Image.Image) -> np.ndarray:
 
 @app.get("/health")
 def health() -> JSONResponse:
-  body = {
-    "ok": _ready_error is None,
-    "service": "cardflow-live-identity-openclip",
-    "pipeline": "openclip_hnsw",
-    "model": EMBED_MODEL,
-    "device": str(DEVICE),
-    "indexed": len(_meta),
-    "accept": ACCEPT,
-    "margin": MARGIN,
-    "liveFloor": LIVE_FLOOR,
-    "liveFloorMargin": LIVE_FLOOR_MARGIN,
-    "orb": "fail_soft",
-    "warp": WARP,
-    "matchSamples": len(_match_ms),
-    "matchP50Ms": _percentile_ms(50),
-    "matchP95Ms": _percentile_ms(95),
-    "error": _ready_error,
-  }
+  if _trained_model:
+    body = {
+      "ok": _ready_error is None,
+      "service": "cardflow-live-identity",
+      "pipeline": _pipeline,
+      "model": "dinov2_s_subcenter_arcface",
+      "device": str(DEVICE),
+      "indexed": len(_meta),
+      "accept": _trained_model.accept,
+      "margin": _trained_model.margin,
+      "orb": "not_applicable",
+      "warp": WARP,
+      "matchSamples": len(_match_ms),
+      "matchP50Ms": _percentile_ms(50),
+      "matchP95Ms": _percentile_ms(95),
+      "error": _ready_error,
+    }
+  else:
+    body = {
+      "ok": _ready_error is None,
+      "service": "cardflow-live-identity",
+      "pipeline": _pipeline,
+      "model": EMBED_MODEL,
+      "device": str(DEVICE),
+      "indexed": len(_meta),
+      "accept": ACCEPT,
+      "margin": MARGIN,
+      "liveFloor": LIVE_FLOOR,
+      "liveFloorMargin": LIVE_FLOOR_MARGIN,
+      "orb": "fail_soft",
+      "warp": WARP,
+      "matchSamples": len(_match_ms),
+      "matchP50Ms": _percentile_ms(50),
+      "matchP95Ms": _percentile_ms(95),
+      "error": _ready_error,
+    }
   return JSONResponse(body, status_code=200 if _ready_error is None else 503)
 
 
@@ -305,8 +355,10 @@ async def match(
   x_cardflow_token: str | None = Header(default=None, alias="X-CardFlow-Token"),
 ) -> JSONResponse:
   _check_token(authorization, x_cardflow_token)
-  if _ready_error or _index is None or _model is None:
+  if _ready_error:
     raise HTTPException(status_code=503, detail=_ready_error or "not ready")
+  if not _trained_model and (not _index or not _model):
+    raise HTTPException(status_code=503, detail="model not loaded")
 
   received = time.perf_counter()
   raw = await crop.read()
@@ -326,6 +378,57 @@ async def match(
       image = straightened
       warped = True
   started = time.perf_counter()
+  
+  # Use trained model if available
+  if _trained_model:
+    candidates, embed_timings = _trained_model.match(image)
+    accept_at = _trained_model.accept
+    margin_threshold = _trained_model.margin
+    orb_mode = "not_applicable"
+    finished = time.perf_counter()
+    _note_match_ms((finished - started) * 1000)
+    
+    top = candidates[0] if candidates else None
+    runner_up = float(candidates[1]["similarity"]) if len(candidates) > 1 else 0.0
+    margin = round(float(top["similarity"]) - runner_up, 4) if top else None
+    
+    # Simple accept logic for trained model
+    accepted = False
+    reason = "below_threshold"
+    if top and margin is not None:
+      if float(top["similarity"]) >= accept_at and margin >= margin_threshold:
+        accepted = True
+        reason = "accepted"
+      elif float(top["similarity"]) >= accept_at:
+        reason = "ambiguous"
+    
+    def ms(a: float, b: float) -> float:
+      return round((b - a) * 1000, 2)
+    
+    timings = {
+      "decodeMs": ms(received, decoded),
+      "warpMs": ms(decoded, started),
+      **embed_timings,
+      "orbMs": 0.0,
+      "totalMs": ms(received, finished),
+    }
+    return JSONResponse(
+      {
+        "ok": True,
+        "pipeline": _pipeline,
+        "accepted": accepted,
+        "reason": reason,
+        "orb": orb_mode,
+        "tcgdexId": top["tcgdexId"] if accepted else None,
+        "similarity": top["similarity"] if top else None,
+        "margin": margin,
+        "warped": warped,
+        "timings": timings,
+        "candidates": candidates,
+      }
+    )
+  
+  # OpenCLIP fallback
   query = _embed(image)
   embedded = time.perf_counter()
   hints = _name_hints(name, names)
@@ -374,7 +477,7 @@ async def match(
   return JSONResponse(
     {
       "ok": True,
-      "pipeline": "openclip_hnsw",
+      "pipeline": _pipeline,
       "accepted": accepted,
       "reason": reason,
       "orb": orb_mode,

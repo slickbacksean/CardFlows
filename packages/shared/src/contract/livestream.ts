@@ -49,6 +49,8 @@ export const livestreamRoutes = {
       ok: z.literal(true),
       identity: LiveVideoIdentitySchema,
       timing: Timing.optional(),
+      ocrNames: z.array(z.string()).optional(),
+      ocrNumber: z.string().nullable().optional(),
     }),
   }),
   getLivestreamTiming: defineRoute({
