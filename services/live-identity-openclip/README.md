@@ -1,10 +1,49 @@
-# PokeSniper livestream identity — OpenCLIP sidecar
+# PokeSniper livestream identity — trained DINOv2-S or OpenCLIP
 
-Pipeline inspired by [t-sinclair2500/pokemon-scanner](https://github.com/t-sinclair2500/pokemon-scanner) (**MIT**): OpenCLIP ViT-B/32 embeddings + HNSW cosine search.
+**Primary**: Trained DINOv2-S + SubCenterArcFace (when `TRAINED_MODEL_*` env vars set)  
+**Fallback**: OpenCLIP ViT-B/32 + HNSW cosine search
+
+OpenCLIP pipeline inspired by [t-sinclair2500/pokemon-scanner](https://github.com/t-sinclair2500/pokemon-scanner) (**MIT**).
 
 PokeSniper does **not** vendor that repo. Index keys are English **`tcgdex_id`** (TCGdex art), not pokemontcg.io ids. PokéCollector Gemini is never used here.
 
-## Setup
+## Trained Model (Recommended)
+
+The trained DINOv2-S model delivers **+4.5pp improvement on streams** (0.79 → 0.835) and **+10pp on eBay** (0.69 → 0.79) when combined with temporal voting + OCR pooling.
+
+### Setup
+
+1. **Upload model files** to Railway volume (see `docs/RAILWAY_VOLUME_SETUP.md`):
+   - `b1_best.pt`: PyTorch checkpoint (~148 MB)
+   - `cat_full_b1.npy`: Full-card catalog embeddings
+   - `cat_art_b1.npy`: Art-crop catalog embeddings
+   - `cat_ids.json`: TCGdex ID mapping
+
+2. **Set environment variables**:
+   ```bash
+   TRAINED_MODEL_WEIGHTS=/data/trained-model/b1_best.pt
+   TRAINED_MODEL_CAT_FULL=/data/trained-model/cat_full_b1.npy
+   TRAINED_MODEL_CAT_ART=/data/trained-model/cat_art_b1.npy
+   TRAINED_MODEL_CAT_IDS=/data/trained-model/cat_ids.json
+   TRAINED_MODEL_ACCEPT=0.68   # Optional: similarity threshold
+   TRAINED_MODEL_MARGIN=0.02   # Optional: min margin
+   ```
+
+3. **Deploy**: The sidecar will use the trained model if all files are available, otherwise falls back to OpenCLIP.
+
+4. **Verify**: Check `/health` → `"pipeline": "trained_dinov2"`
+
+### Architecture
+
+- **Backbone**: DINOv2-S (vit_small_patch14_dinov2.lvd142m)
+- **Training**: Last 8 blocks + norm unfrozen
+- **Head**: Residual linear (384→384, zero-init): `x + A(x)`, L2 normalize
+- **Matching**: Average of full-card + art-crop cosine similarities
+- **Name pooling**: Max score per card name (handles reprints)
+
+See `trained_dinov2.py` for implementation details.
+
+## OpenCLIP (Fallback)
 
 ```bash
 cd services/live-identity-openclip
@@ -43,9 +82,35 @@ CARD_FLOW_LIVE_IDENTITY_OPENCLIP_URL=http://127.0.0.1:8092
 CARD_FLOW_LIVE_IDENTITY_OPENCLIP_TOKEN=dev-shared-secret   # if set on the sidecar
 ```
 
-When the URL is set and the mobile/native path posts `identityCropJpeg`, `/v1/livestream/identify` prefers OpenCLIP. Otherwise it keeps the RGB pHash index.
+When the URL is set and the mobile/native path posts `identityCropJpeg`, `/v1/livestream/identify` prefers this sidecar (trained model or OpenCLIP). Otherwise it keeps the RGB pHash index.
 
 CI stays on pHash fixtures / mocks. Fail soft: sidecar down → pHash (or unidentified).
+
+## Testing
+
+Run unit tests with tiny random model (no real weights needed):
+```bash
+pytest test_trained_dinov2.py -v
+```
+
+## ONNX Export (Optional)
+
+For faster inference and lower memory:
+```bash
+python scripts/export_onnx.py \
+  --weights /path/to/b1_best.pt \
+  --output b1_dinov2.onnx \
+  --check \
+  --benchmark
+```
+
+Benefits:
+- ~30-50% smaller file size
+- ~20-40% faster inference
+- Lower memory footprint
+- Better CPU optimization
+
+See `scripts/export_onnx.py` for details.
 ## Straightened crops (warp before matching)
 
 When the phone sends `quad` (8 numbers: the card's TL, TR, BR, BL corners in the
