@@ -32,6 +32,10 @@ export interface LiveVoteThresholds {
   autoShowMinMargin: number;
   /** Soft floor for the pick-one tier. */
   pickOneMinSimilarity: number;
+  /** Use temporal voting: average similarities + best frame's score. */
+  useTemporal?: boolean;
+  /** Minimum combined score (mean + max) for temporal auto-show. */
+  temporalMinCombinedScore?: number;
 }
 
 export const LIVE_VOTE_DEFAULTS: LiveVoteThresholds = {
@@ -40,6 +44,8 @@ export const LIVE_VOTE_DEFAULTS: LiveVoteThresholds = {
   autoShowMinSimilarity: 0.86,
   autoShowMinMargin: 0.02,
   pickOneMinSimilarity: 0.74,
+  useTemporal: false,
+  temporalMinCombinedScore: 1.65,
 };
 
 export type LiveVoteTier = "auto_show" | "pick_one" | "waiting";
@@ -53,6 +59,10 @@ export interface LiveVoteResult {
   copy: typeof LIVE_VOTE_WAITING_COPY | typeof LIVE_VOTE_PICK_ONE_COPY | null;
   votes: number;
   observations: number;
+  /** Temporal voting: combined score (mean + max similarity). */
+  combinedScore?: number;
+  /** Temporal voting: mean similarity across frames. */
+  meanSimilarity?: number;
 }
 
 function tally(observations: readonly LiveVoteObservation[]): Map<string, { votes: number; bestSim: number }> {
@@ -96,9 +106,57 @@ function rankedCandidates(
     .map(([tcgdexId, similarity]) => ({ tcgdexId, similarity }));
 }
 
+interface TemporalScore {
+  tcgdexId: string;
+  combinedScore: number;
+  meanSimilarity: number;
+  maxSimilarity: number;
+  frameCount: number;
+}
+
+function computeTemporalScores(
+  observations: readonly LiveVoteObservation[],
+): Map<string, TemporalScore> {
+  const byCard = new Map<string, number[]>();
+  for (const obs of observations) {
+    if (!obs.tcgdexId) continue;
+    const sim = typeof obs.similarity === "number" && Number.isFinite(obs.similarity) ? obs.similarity : 0;
+    const sims = byCard.get(obs.tcgdexId) ?? [];
+    sims.push(sim);
+    byCard.set(obs.tcgdexId, sims);
+  }
+  const scores = new Map<string, TemporalScore>();
+  for (const [tcgdexId, sims] of byCard) {
+    const maxSim = Math.max(...sims);
+    const meanSim = sims.reduce((sum, sim) => sum + sim, 0) / sims.length;
+    const combined = meanSim + maxSim;
+    scores.set(tcgdexId, {
+      tcgdexId,
+      combinedScore: combined,
+      meanSimilarity: meanSim,
+      maxSimilarity: maxSim,
+      frameCount: sims.length,
+    });
+  }
+  return scores;
+}
+
+function rankedTemporalCandidates(
+  temporalScores: Map<string, TemporalScore>,
+): LiveVoteCandidate[] {
+  return [...temporalScores.values()]
+    .sort((a, b) => b.combinedScore - a.combinedScore)
+    .slice(0, 3)
+    .map((score) => ({ tcgdexId: score.tcgdexId, similarity: score.maxSimilarity }));
+}
+
 /**
  * Combine sharp-frame observations into an auto-show / pick-one / waiting decision.
  * Does not invent catalog ids. Empty or incomplete windows stay on waiting.
+ * 
+ * When useTemporal is true, averages per-frame embedding similarities and adds
+ * the best single frame's score (temporal mean + max voting). This improves
+ * accuracy on holds where the card is stable across multiple frames.
  */
 export function voteLiveIdentity(
   observations: readonly LiveVoteObservation[],
@@ -116,6 +174,11 @@ export function voteLiveIdentity(
       observations: window.length,
     };
   }
+
+  if (opts.useTemporal) {
+    return voteTemporalIdentity(window, opts);
+  }
+
   const tallies = tally(window);
   const ranked = rankedCandidates(window, tallies);
   const leader = ranked[0] ?? null;
@@ -163,6 +226,70 @@ export function voteLiveIdentity(
     copy: LIVE_VOTE_WAITING_COPY,
     votes: leaderVotes,
     observations: window.length,
+  };
+}
+
+function voteTemporalIdentity(
+  window: readonly LiveVoteObservation[],
+  opts: LiveVoteThresholds,
+): LiveVoteResult {
+  const temporalScores = computeTemporalScores(window);
+  const ranked = rankedTemporalCandidates(temporalScores);
+  const leader = ranked[0];
+  const leaderScore = leader ? temporalScores.get(leader.tcgdexId) : null;
+
+  if (!leader || !leaderScore) {
+    return {
+      tier: "waiting",
+      tcgdexId: null,
+      top3: ranked,
+      copy: LIVE_VOTE_WAITING_COPY,
+      votes: 0,
+      observations: window.length,
+    };
+  }
+
+  const secondScore = ranked[1] ? temporalScores.get(ranked[1].tcgdexId) : null;
+  const margin = secondScore ? leaderScore.maxSimilarity - secondScore.maxSimilarity : 1;
+
+  if (
+    leaderScore.combinedScore >= (opts.temporalMinCombinedScore ?? LIVE_VOTE_DEFAULTS.temporalMinCombinedScore!) &&
+    (ranked.length < 2 || margin >= opts.autoShowMinMargin)
+  ) {
+    return {
+      tier: "auto_show",
+      tcgdexId: leader.tcgdexId,
+      top3: ranked,
+      copy: null,
+      votes: leaderScore.frameCount,
+      observations: window.length,
+      combinedScore: leaderScore.combinedScore,
+      meanSimilarity: leaderScore.meanSimilarity,
+    };
+  }
+
+  if (ranked.length >= 2 && leaderScore.maxSimilarity >= opts.pickOneMinSimilarity) {
+    return {
+      tier: "pick_one",
+      tcgdexId: null,
+      top3: ranked,
+      copy: LIVE_VOTE_PICK_ONE_COPY,
+      votes: leaderScore.frameCount,
+      observations: window.length,
+      combinedScore: leaderScore.combinedScore,
+      meanSimilarity: leaderScore.meanSimilarity,
+    };
+  }
+
+  return {
+    tier: "waiting",
+    tcgdexId: null,
+    top3: ranked,
+    copy: LIVE_VOTE_WAITING_COPY,
+    votes: leaderScore.frameCount,
+    observations: window.length,
+    combinedScore: leaderScore.combinedScore,
+    meanSimilarity: leaderScore.meanSimilarity,
   };
 }
 

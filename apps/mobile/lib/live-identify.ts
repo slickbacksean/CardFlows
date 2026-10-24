@@ -50,8 +50,19 @@ const TIMING_ENABLED = process.env.EXPO_PUBLIC_CARD_FLOW_LIVESTREAM_TIMING === "
 const timingLog = createLiveScanTimingLog(300);
 /** Up to 3 IoU tracks; one vendor/model match per tracked card until recheck. */
 const tracker = createLiveCardTracker();
-/** Vote across 3 sharp identify results before auto-showing a match. */
-const voter = createLiveIdentityVoter();
+/**
+ * Temporal voting: averages per-frame similarities + best frame's score across hold.
+ * Off by default; enable with EXPO_PUBLIC_CARD_FLOW_LIVESTREAM_TEMPORAL_VOTING=1.
+ * Research shows +4.5pp on streams and +10pp on eBay vs. single-frame matching.
+ */
+const TEMPORAL_VOTING_ENABLED = process.env.EXPO_PUBLIC_CARD_FLOW_LIVESTREAM_TEMPORAL_VOTING === "1";
+const TEMPORAL_FRAME_COUNT = TEMPORAL_VOTING_ENABLED ? 12 : 3;
+/** Vote across frames before auto-showing a match. */
+const voter = createLiveIdentityVoter({
+  sharpFrames: TEMPORAL_FRAME_COUNT,
+  useTemporal: TEMPORAL_VOTING_ENABLED,
+  temporalMinCombinedScore: 1.65,
+});
 /** Do not re-announce the same card within 60 s. */
 const announceDedupe = createLiveAnnounceDedupe();
 let latestVote: LiveVoteResult | null = null;
