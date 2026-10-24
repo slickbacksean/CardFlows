@@ -22,10 +22,10 @@ from __future__ import annotations
 import io
 import json
 import os
+import re
 from pathlib import Path
 from typing import Any
 
-import httpx
 import numpy as np
 import timm
 import torch
@@ -97,6 +97,12 @@ class TrainedModel:
             self.head.load_state_dict(checkpoint["head"])
         self.head.eval()
 
+        # Build timm transform (same as eval_b1.py)
+        cfg = timm.data.resolve_data_config({}, model=self.model)
+        cfg["input_size"] = (3, 224, 224)
+        cfg["crop_pct"] = 1.0
+        self.pre = timm.data.create_transform(**cfg)
+
         # Load and normalize catalog embeddings
         self.cat_full = cat_full.astype(np.float32)
         self.cat_art = cat_art.astype(np.float32)
@@ -111,11 +117,9 @@ class TrainedModel:
 
     def preprocess(self, image: Image.Image, art_crop: bool = False) -> torch.Tensor:
         """
-        Preprocess image following train_b1.py:
+        Preprocess image following eval_b1.py:
         1. Optional art crop (0.09, 0.10, 0.91, 0.50)
-        2. Resize short side to 224 (bicubic)
-        3. Center crop 224x224
-        4. Convert RGB, normalize with ImageNet mean/std
+        2. Apply timm transform (short side->224, center crop, normalize)
         """
         if art_crop:
             w, h = image.size
@@ -124,27 +128,8 @@ class TrainedModel:
                 (int(x0 * w), int(y0 * h), int(x1 * w), int(y1 * h))
             )
 
-        # Resize short side to 224 (bicubic)
-        w, h = image.size
-        scale = 224 / min(w, h)
-        new_w = max(224, round(w * scale))
-        new_h = max(224, round(h * scale))
-        image = image.resize((new_w, new_h), Image.BICUBIC)
-
-        # Center crop 224x224
-        w, h = image.size
-        left = (w - 224) // 2
-        top = (h - 224) // 2
-        image = image.crop((left, top, left + 224, top + 224))
-
-        # Convert to array, RGB, float32
-        arr = np.array(image.convert("RGB")).astype(np.float32) / 255.0
-
-        # Normalize with ImageNet mean/std
-        arr = (arr - MEAN) / STD
-
-        # Convert to tensor (C, H, W)
-        tensor = torch.from_numpy(arr.transpose(2, 0, 1)).float()
+        # Use timm transform (matches eval_b1.py exactly)
+        tensor = self.pre(image.convert("RGB"))
         return tensor.unsqueeze(0)  # Add batch dimension
 
     def embed(self, image: Image.Image, art_crop: bool = False) -> np.ndarray:
@@ -186,10 +171,11 @@ class TrainedModel:
         sim = (sim_full + sim_art) / 2  # Average of both views
         timings["searchMs"] = round((time.perf_counter() - start) * 1000, 2)
 
-        # Name-pooled: max score per name
+        # Name-pooled: max score per name (normalized like eval_b1.py)
         name_scores: dict[str, tuple[str, float]] = {}  # name -> (tcgdexId, score)
         for i, tcgdex_id in enumerate(self.cat_ids):
-            name = self.card_names.get(tcgdex_id, "").strip().lower()
+            name_raw = self.card_names.get(tcgdex_id, "")
+            name = re.sub(r"[^a-z0-9]", "", name_raw.lower())
             if not name:
                 continue
             score = float(sim[i])
@@ -215,6 +201,8 @@ class TrainedModel:
 
 def _download_file(url: str, dest: Path) -> None:
     """Download file from URL to dest path."""
+    import httpx  # Lazy import
+    
     print(f"[trained_dinov2] Downloading {dest.name}...")
     dest.parent.mkdir(parents=True, exist_ok=True)
     with httpx.stream("GET", url, follow_redirects=True, timeout=300) as response:
@@ -243,53 +231,6 @@ def _ensure_file(url_or_path: str, cache_name: str, cache_dir: Path) -> Path:
     return cached
 
 
-def _parse_npy(path: Path) -> np.ndarray:
-    """Parse NumPy .npy file (simple format: magic + header + data)."""
-    with path.open("rb") as f:
-        # Read magic + version
-        magic = f.read(6)
-        if magic != b"\x93NUMPY":
-            raise ValueError(f"Invalid .npy magic: {magic}")
-
-        version = f.read(2)
-        major, minor = version[0], version[1]
-
-        # Read header length
-        if major == 1:
-            header_len = int.from_bytes(f.read(2), "little")
-        elif major in (2, 3):
-            header_len = int.from_bytes(f.read(4), "little")
-        else:
-            raise ValueError(f"Unsupported .npy version: {major}.{minor}")
-
-        # Read header (Python literal dict)
-        header_bytes = f.read(header_len)
-        header_str = header_bytes.decode("latin1").strip()
-        # Parse header dict (simple eval for now)
-        header = eval(header_str.replace("\n", ""))
-
-        # Parse dtype and shape
-        dtype_str = header["descr"]
-        shape = tuple(header["shape"])
-        fortran_order = header.get("fortran_order", False)
-
-        if fortran_order:
-            raise ValueError("Fortran-order arrays not supported")
-
-        # Map dtype string to numpy dtype
-        dtype_map = {
-            "<f2": np.float16,
-            "<f4": np.float32,
-            "<f8": np.float64,
-            ">f2": ">f2",
-            ">f4": ">f4",
-            ">f8": ">f8",
-        }
-        dtype = dtype_map.get(dtype_str, np.dtype(dtype_str))
-
-        # Read array data
-        data = np.frombuffer(f.read(), dtype=dtype)
-        return data.reshape(shape)
 
 
 def load_trained_model(
@@ -309,6 +250,11 @@ def load_trained_model(
         return None
 
     try:
+        # Set torch threads (1 thread avoids tail latency spikes)
+        num_threads = int(os.environ.get("TRAINED_MODEL_TORCH_THREADS", "1"))
+        torch.set_num_threads(num_threads)
+        print(f"[trained_dinov2] torch.set_num_threads({num_threads})")
+        
         cache_dir = Path(os.environ.get("TRAINED_MODEL_CACHE_DIR", ".cache/trained-model")).expanduser()
         cache_dir.mkdir(parents=True, exist_ok=True)
 
@@ -320,8 +266,8 @@ def load_trained_model(
 
         # Load catalog
         print("[trained_dinov2] Loading catalog embeddings...")
-        cat_full = _parse_npy(cat_full_path)
-        cat_art = _parse_npy(cat_art_path)
+        cat_full = np.load(str(cat_full_path))
+        cat_art = np.load(str(cat_art_path))
         cat_ids = json.loads(cat_ids_path.read_text())
 
         print(

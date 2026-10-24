@@ -15,7 +15,6 @@ from PIL import Image
 from trained_dinov2 import (
     ResidualHead,
     TrainedModel,
-    _parse_npy,
     load_trained_model,
 )
 
@@ -32,32 +31,6 @@ def test_residual_head():
     assert out.shape == (1, 384)
     # Check L2 normalized
     assert torch.allclose(torch.norm(out, dim=-1), torch.ones(1), atol=1e-5)
-
-
-def test_parse_npy():
-    """Test NumPy .npy file parsing."""
-    with tempfile.TemporaryDirectory() as tmpdir:
-        # Create a test .npy file
-        arr = np.random.randn(10, 20).astype(np.float32)
-        npy_path = Path(tmpdir) / "test.npy"
-        np.save(npy_path, arr)
-        
-        # Parse it
-        parsed = _parse_npy(npy_path)
-        assert parsed.shape == arr.shape
-        assert np.allclose(parsed, arr)
-
-
-def test_parse_npy_float16():
-    """Test .npy parsing with float16 (catalog format)."""
-    with tempfile.TemporaryDirectory() as tmpdir:
-        arr = np.random.randn(100, 384).astype(np.float16)
-        npy_path = Path(tmpdir) / "test_f16.npy"
-        np.save(npy_path, arr)
-        
-        parsed = _parse_npy(npy_path)
-        assert parsed.shape == arr.shape
-        assert parsed.dtype == np.float16
 
 
 def _create_tiny_checkpoint(dim: int = 384) -> dict:
