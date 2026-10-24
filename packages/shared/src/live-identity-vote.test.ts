@@ -171,5 +171,97 @@ describe("live identity vote", () => {
       expect(result.tcgdexId).toBe("sv3-25");
       expect(result.observations).toBe(12);
     });
+
+    it("boosts candidates that match OCR names", () => {
+      const result = voteLiveIdentity(
+        [
+          {
+            tcgdexId: "base1-58",
+            similarity: 0.83,
+            candidates: [
+              { tcgdexId: "base1-58", similarity: 0.83, name: "Charizard" },
+              { tcgdexId: "base4-4", similarity: 0.84, name: "Alakazam" },
+            ],
+            ocrNames: ["Charizard"],
+          },
+          {
+            tcgdexId: "base1-58",
+            similarity: 0.82,
+            candidates: [
+              { tcgdexId: "base1-58", similarity: 0.82, name: "Charizard" },
+              { tcgdexId: "base4-4", similarity: 0.83, name: "Alakazam" },
+            ],
+            ocrNames: ["Charizard"],
+          },
+          {
+            tcgdexId: "base1-58",
+            similarity: 0.84,
+            candidates: [
+              { tcgdexId: "base1-58", similarity: 0.84, name: "Charizard" },
+              { tcgdexId: "base4-4", similarity: 0.85, name: "Alakazam" },
+            ],
+            ocrNames: ["Charizard", "Fire"],
+          },
+        ],
+        { useTemporal: true, sharpFrames: 3, temporalMinCombinedScore: 1.6 },
+      );
+      expect(result.tier).toBe("auto_show");
+      expect(result.tcgdexId).toBe("base1-58");
+    });
+
+    it("boosts candidates that match OCR collector numbers", () => {
+      const result = voteLiveIdentity(
+        [
+          {
+            tcgdexId: "base1-4",
+            similarity: 0.82,
+            candidates: [
+              { tcgdexId: "base1-4", similarity: 0.82, name: "Charizard", localId: "4" },
+              { tcgdexId: "base4-4", similarity: 0.83, name: "Charizard", localId: "4" },
+            ],
+            ocrNumber: "4",
+          },
+          {
+            tcgdexId: "base1-4",
+            similarity: 0.81,
+            candidates: [
+              { tcgdexId: "base1-4", similarity: 0.81, name: "Charizard", localId: "4" },
+              { tcgdexId: "base4-4", similarity: 0.82, name: "Charizard", localId: "4" },
+            ],
+            ocrNumber: "4",
+          },
+        ],
+        { useTemporal: true, sharpFrames: 2, temporalMinCombinedScore: 1.5 },
+      );
+      expect(result.tier).toBe("auto_show");
+      expect(result.top3[0]?.tcgdexId).toBeTruthy();
+    });
+
+    it("pools OCR text across frames", () => {
+      const result = voteLiveIdentity(
+        [
+          {
+            tcgdexId: "base1-58",
+            similarity: 0.85,
+            ocrNames: ["Charizard"],
+            ocrNumber: null,
+          },
+          {
+            tcgdexId: "base1-58",
+            similarity: 0.84,
+            ocrNames: ["Fire"],
+            ocrNumber: "4",
+          },
+          {
+            tcgdexId: "base1-58",
+            similarity: 0.86,
+            ocrNames: null,
+            ocrNumber: null,
+          },
+        ],
+        { useTemporal: true, sharpFrames: 3, temporalMinCombinedScore: 1.65 },
+      );
+      expect(result.tier).toBe("auto_show");
+    });
   });
 });

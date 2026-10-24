@@ -1666,6 +1666,8 @@ export function createApp(
     let openclipTcgdexId: string | null = null;
     let openclipCandidates: { tcgdexId: string; similarity: number }[] = [];
     let openclipSimilarity: number | null = null;
+    let ocrNames: string[] = [];
+    let ocrNumber: string | null = null;
     if (livestreamIdentify === "yolo_identity" && liveIdentityOpenclip) {
       const decodeStart = performance.now();
       const crop = decodeIdentityCropJpeg(identityCropJpeg);
@@ -1690,6 +1692,45 @@ export function createApp(
         if (match?.accepted && match.tcgdexId) {
           openclipTcgdexId = normalizeLiveVideoTcgdexId(match.tcgdexId);
         }
+        
+        // OCR extraction for temporal voting: run in parallel on macOS, skip elsewhere
+        if (process.platform === "darwin") {
+          try {
+            const ocrStart = performance.now();
+            const { decodeScanStill } = await import("./obb-phash-decode");
+            const { encodePngStill } = await import("./obb-phash-decode");
+            const { bitmapForOcr, cardNameCandidatesFromOcr, printedCollectorNumberFromOcr, recognizeCardText } = await import("./scan-card-name");
+            const bitmap = await decodeScanStill(crop.bytes, crop.mimeType);
+            if (bitmap) {
+              const ocrBitmap = bitmapForOcr(bitmap);
+              const ocrPng = encodePngStill(ocrBitmap);
+              const ocrText = await recognizeCardText(ocrPng);
+              if (ocrText) {
+                ocrNames = cardNameCandidatesFromOcr(ocrText).slice(0, 4);
+                const printed = printedCollectorNumberFromOcr(ocrText);
+                ocrNumber = printed ? printed.localId : null;
+              }
+            }
+            stages.orb = (stages.orb ?? 0) + (performance.now() - ocrStart);
+          } catch {
+            // OCR unavailable or failed: continue without it
+          }
+        }
+      }
+    }
+    
+    // Enrich candidates with card metadata for OCR reranking on the client
+    const enrichedCandidates: Array<{ tcgdexId: string; similarity: number; name?: string; localId?: string }> = [];
+    for (const candidate of openclipCandidates.slice(0, 5)) {
+      try {
+        const card = await catalog.getCardById(candidate.tcgdexId, "en");
+        enrichedCandidates.push({
+          ...candidate,
+          name: card?.name,
+          localId: card?.localId,
+        });
+      } catch {
+        enrichedCandidates.push(candidate);
       }
     }
 
@@ -1721,8 +1762,10 @@ export function createApp(
       classifier: livestreamIdentify === "yolo_identity" ? "yolo_identity" : "none",
     });
     const extras = {
-      ...(openclipCandidates.length ? { candidates: openclipCandidates } : {}),
+      ...(enrichedCandidates.length ? { candidates: enrichedCandidates } : {}),
       ...(openclipSimilarity != null ? { similarity: openclipSimilarity } : {}),
+      ...(ocrNames.length ? { ocrNames } : {}),
+      ...(ocrNumber ? { ocrNumber } : {}),
     };
     if (!livestreamTiming) return c.json({ ok: true, identity, ...extras });
     stages.server = performance.now() - startedAt;

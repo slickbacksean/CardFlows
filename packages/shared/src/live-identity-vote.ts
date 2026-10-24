@@ -11,6 +11,10 @@ export interface LiveVoteCandidate {
   tcgdexId: string;
   /** Cosine similarity when the matcher returns one; optional for majority-only votes. */
   similarity?: number | null;
+  /** Card name (for OCR reranking). */
+  name?: string | null;
+  /** Collector number (for OCR reranking). */
+  localId?: string | null;
 }
 
 export interface LiveVoteObservation {
@@ -19,6 +23,10 @@ export interface LiveVoteObservation {
   similarity?: number | null;
   /** Optional runners-up from the matcher (used for the pick-one tier). */
   candidates?: readonly LiveVoteCandidate[] | null;
+  /** OCR-extracted card names from this frame (for temporal reranking). */
+  ocrNames?: readonly string[] | null;
+  /** OCR-extracted collector number from this frame (for temporal reranking). */
+  ocrNumber?: string | null;
 }
 
 export interface LiveVoteThresholds {
@@ -114,6 +122,27 @@ interface TemporalScore {
   frameCount: number;
 }
 
+interface PooledOcr {
+  names: Set<string>;
+  numbers: Set<string>;
+}
+
+function poolOcrAcrossFrames(observations: readonly LiveVoteObservation[]): PooledOcr {
+  const names = new Set<string>();
+  const numbers = new Set<string>();
+  for (const obs of observations) {
+    if (obs.ocrNames) {
+      for (const name of obs.ocrNames) {
+        if (name.trim()) names.add(name.trim().toLowerCase());
+      }
+    }
+    if (obs.ocrNumber?.trim()) {
+      numbers.add(obs.ocrNumber.trim().replace(/^0+/, "") || "0");
+    }
+  }
+  return { names, numbers };
+}
+
 function computeTemporalScores(
   observations: readonly LiveVoteObservation[],
 ): Map<string, TemporalScore> {
@@ -141,13 +170,100 @@ function computeTemporalScores(
   return scores;
 }
 
+function normalizeForMatch(text: string): string {
+  return text
+    .normalize("NFKC")
+    .trim()
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, "");
+}
+
+function matchesOcr(
+  candidate: LiveVoteCandidate,
+  pooledOcr: PooledOcr,
+): boolean {
+  if (pooledOcr.names.size === 0 && pooledOcr.numbers.size === 0) return false;
+  
+  // Match by name
+  if (candidate.name && pooledOcr.names.size > 0) {
+    const normalizedName = normalizeForMatch(candidate.name);
+    if (normalizedName.length >= 4) {
+      for (const ocrName of pooledOcr.names) {
+        if (normalizedName.includes(ocrName) || ocrName.includes(normalizedName)) {
+          return true;
+        }
+      }
+    }
+  }
+  
+  // Match by collector number
+  if (candidate.localId && pooledOcr.numbers.size > 0) {
+    const normalizedNumber = candidate.localId.replace(/^0+/, "") || "0";
+    if (pooledOcr.numbers.has(normalizedNumber)) {
+      return true;
+    }
+  }
+  
+  return false;
+}
+
 function rankedTemporalCandidates(
   temporalScores: Map<string, TemporalScore>,
+  pooledOcr: PooledOcr,
+  observations: readonly LiveVoteObservation[],
 ): LiveVoteCandidate[] {
-  return [...temporalScores.values()]
-    .sort((a, b) => b.combinedScore - a.combinedScore)
+  // Collect all candidates with metadata from observations
+  const candidateMetadata = new Map<string, { name?: string; localId?: string }>();
+  for (const obs of observations) {
+    for (const candidate of obs.candidates ?? []) {
+      if (!candidateMetadata.has(candidate.tcgdexId)) {
+        candidateMetadata.set(candidate.tcgdexId, {
+          name: candidate.name ?? undefined,
+          localId: candidate.localId ?? undefined,
+        });
+      }
+    }
+  }
+  
+  // Build candidates with scores
+  const candidates = [...temporalScores.values()].map((score) => {
+    const metadata = candidateMetadata.get(score.tcgdexId);
+    return {
+      tcgdexId: score.tcgdexId,
+      similarity: score.maxSimilarity,
+      name: metadata?.name,
+      localId: metadata?.localId,
+      combinedScore: score.combinedScore,
+      ocrMatch: false,
+    };
+  });
+  
+  // Apply OCR boost: increase combined score by 0.15 for OCR matches
+  const OCR_BOOST = 0.15;
+  for (const candidate of candidates) {
+    if (matchesOcr(candidate, pooledOcr)) {
+      candidate.ocrMatch = true;
+      const score = temporalScores.get(candidate.tcgdexId);
+      if (score) {
+        score.combinedScore += OCR_BOOST;
+      }
+    }
+  }
+  
+  // Sort by combined score (now including OCR boost) and return top 3
+  return candidates
+    .sort((a, b) => {
+      const scoreA = temporalScores.get(a.tcgdexId)?.combinedScore ?? 0;
+      const scoreB = temporalScores.get(b.tcgdexId)?.combinedScore ?? 0;
+      return scoreB - scoreA;
+    })
     .slice(0, 3)
-    .map((score) => ({ tcgdexId: score.tcgdexId, similarity: score.maxSimilarity }));
+    .map((c) => ({
+      tcgdexId: c.tcgdexId,
+      similarity: c.similarity,
+      name: c.name,
+      localId: c.localId,
+    }));
 }
 
 /**
@@ -234,7 +350,8 @@ function voteTemporalIdentity(
   opts: LiveVoteThresholds,
 ): LiveVoteResult {
   const temporalScores = computeTemporalScores(window);
-  const ranked = rankedTemporalCandidates(temporalScores);
+  const pooledOcr = poolOcrAcrossFrames(window);
+  const ranked = rankedTemporalCandidates(temporalScores, pooledOcr, window);
   const leader = ranked[0];
   const leaderScore = leader ? temporalScores.get(leader.tcgdexId) : null;
 

@@ -277,13 +277,17 @@ async function identifyFrame(frame: LiveVideoFrame, key: string, pullMs: number)
     });
     if (response.identity.reason === "identified" || response.identity.reason === "unidentified") {
       const extra = response as {
-        candidates?: { tcgdexId: string; similarity?: number }[];
+        candidates?: { tcgdexId: string; similarity?: number; name?: string; localId?: string }[];
         similarity?: number | null;
+        ocrNames?: string[];
+        ocrNumber?: string | null;
       };
       const vote = voter.add({
         tcgdexId: response.identity.reason === "identified" ? response.identity.tcgdexId : null,
         similarity: typeof extra.similarity === "number" ? extra.similarity : null,
         candidates: Array.isArray(extra.candidates) ? extra.candidates : null,
+        ocrNames: Array.isArray(extra.ocrNames) ? extra.ocrNames : null,
+        ocrNumber: typeof extra.ocrNumber === "string" ? extra.ocrNumber : null,
       });
       latestVote = vote;
       if (vote.tier === "auto_show" && vote.tcgdexId) {
