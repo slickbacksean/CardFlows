@@ -22,6 +22,7 @@ import { createStoreFromEnv } from "./store-env";
 import { loadOptionalPhashIndex } from "./obb-phash-provider";
 import { resolveLiveIdentityOpenclipFromEnv } from "./live-identity-openclip";
 import { resolveLiveVideoObbDetector } from "./live-video-obb";
+import { resolveRapidOCRFromEnv, initRapidOCR } from "./live-identity-rapidocr";
 import type { ObbDetector } from "@cardflow/shared";
 import { opsMetrics, webhookAlertSink } from "./ops-metrics";
 import { assertProductionConfig } from "./production-config";
@@ -126,6 +127,16 @@ void resolveLiveVideoObbDetector().then((detector) => {
     `Live video YOLO: ${detector ? "on" : "off"} (${detector ? "AGPL accepted, weights loaded" : "needs CARD_FLOW_ULTRALYTICS_AGPL_ACCEPTED=true and CARD_FLOW_OBB_ONNX_PATH"})`,
   );
 });
+
+// Initialize RapidOCR for Linux-compatible OCR (temporal voting)
+const rapidOCRConfig = resolveRapidOCRFromEnv();
+if (rapidOCRConfig.enabled) {
+  void initRapidOCR()
+    .then(() => console.log(`RapidOCR: on (Linux-compatible OCR for temporal voting)`))
+    .catch((error) => console.error(`RapidOCR: failed to initialize:`, error));
+} else {
+  console.log(`RapidOCR: off (${rapidOCRConfig.reason})`);
+}
 
 const server = serve({ fetch: app.fetch, port }, (info) => {
   console.log(`CardFlow API listening on http://localhost:${info.port}`);

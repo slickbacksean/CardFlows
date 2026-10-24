@@ -1693,10 +1693,32 @@ export function createApp(
           openclipTcgdexId = normalizeLiveVideoTcgdexId(match.tcgdexId);
         }
         
-        // OCR extraction for temporal voting: run in parallel on macOS, skip elsewhere
-        if (process.platform === "darwin") {
-          try {
-            const ocrStart = performance.now();
+        // OCR extraction for temporal voting: RapidOCR on Linux, Apple Vision on macOS
+        let ocrMethod: "rapidocr" | "vision" | null = null;
+        try {
+          const ocrStart = performance.now();
+          
+          // Try RapidOCR first (Linux-compatible)
+          if (process.platform === "linux") {
+            const { isRapidOCRAvailable, recognizeCardTextRapidOCR, cardNameCandidatesFromRapidOCR, printedCollectorNumberFromRapidOCR } = await import("./live-identity-rapidocr");
+            if (isRapidOCRAvailable()) {
+              const { decodeScanStill } = await import("./obb-phash-decode");
+              const { encodePngStill } = await import("./obb-phash-decode");
+              const bitmap = await decodeScanStill(crop.bytes, crop.mimeType);
+              if (bitmap) {
+                const ocrPng = encodePngStill(bitmap);
+                const ocrText = await recognizeCardTextRapidOCR(ocrPng);
+                if (ocrText) {
+                  ocrNames = cardNameCandidatesFromRapidOCR(ocrText).slice(0, 4);
+                  ocrNumber = printedCollectorNumberFromRapidOCR(ocrText);
+                  ocrMethod = "rapidocr";
+                }
+              }
+            }
+          }
+          
+          // Fall back to Apple Vision on macOS
+          if (!ocrMethod && process.platform === "darwin") {
             const { decodeScanStill } = await import("./obb-phash-decode");
             const { encodePngStill } = await import("./obb-phash-decode");
             const { bitmapForOcr, cardNameCandidatesFromOcr, printedCollectorNumberFromOcr, recognizeCardText } = await import("./scan-card-name");
@@ -1709,12 +1731,14 @@ export function createApp(
                 ocrNames = cardNameCandidatesFromOcr(ocrText).slice(0, 4);
                 const printed = printedCollectorNumberFromOcr(ocrText);
                 ocrNumber = printed ? printed.localId : null;
+                ocrMethod = "vision";
               }
             }
-            stages.orb = (stages.orb ?? 0) + (performance.now() - ocrStart);
-          } catch {
-            // OCR unavailable or failed: continue without it
           }
+          
+          stages.orb = (stages.orb ?? 0) + (performance.now() - ocrStart);
+        } catch {
+          // OCR unavailable or failed: continue without it
         }
       }
     }
