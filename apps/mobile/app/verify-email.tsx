@@ -14,6 +14,7 @@ import { PreferencesScreenHeader } from "@/components/ui/preferences-screen-head
 import { PrimaryButton } from "@/components/ui/primary-button";
 import { InlineError } from "@/components/ui/screen-state";
 import { confirmEmailVerification, requestEmailVerification } from "@/lib/api";
+import { checkAndPromptUsername } from "@/lib/username-check";
 import { colors } from "@/lib/theme";
 
 /** Sean: confirm the emailed 6-digit code before pre-grade estimates. Resend once a minute. */
@@ -77,7 +78,15 @@ export default function VerifyEmailScreen() {
           {notice}
         </Text>
         {verified ? (
-          <PrimaryButton label="Done" onPress={() => router.back()} />
+          <PrimaryButton 
+            label="Done" 
+            onPress={async () => {
+              const hasUsername = await checkAndPromptUsername();
+              if (hasUsername) {
+                router.back();
+              }
+            }} 
+          />
         ) : (
           <>
             <TextInput

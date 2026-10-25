@@ -59,8 +59,15 @@ export default function SignUpScreen() {
       const session = await signUpWithEmail(email.trim(), password, mode, mode === "sign_up" && over18, (mode === "sign_up" || termsNeeded) && agreed);
       void flushScanQueue();
       // Sean: new accounts confirm their email (6-digit code) before pre-grade estimates.
-      if (session.emailVerified === false) router.replace({ pathname: "/verify-email", params: { email: email.trim() } });
-      else router.replace("/(tabs)/collection");
+      if (session.emailVerified === false) {
+        router.replace({ pathname: "/verify-email", params: { email: email.trim() } });
+      } else {
+        // Check for username after successful auth
+        const hasUsername = await checkAndPromptUsername();
+        if (hasUsername) {
+          router.replace("/(tabs)/collection");
+        }
+      }
     } catch (caught) {
       if ((caught as { code?: string }).code === TERMS_REQUIRED_CODE) {
         setTermsNeeded(true);
@@ -79,7 +86,12 @@ export default function SignUpScreen() {
       await signInWithSocial({ ...token, ageConfirmed18Plus: over18, termsAccepted: agreed });
       setPendingSocial(null);
       void flushScanQueue();
-      router.replace("/(tabs)/collection");
+      
+      // Check for username after successful social auth
+      const hasUsername = await checkAndPromptUsername();
+      if (hasUsername) {
+        router.replace("/(tabs)/collection");
+      }
     } catch (caught) {
       if ((caught as { code?: string }).code === TERMS_REQUIRED_CODE) {
         // Existing account from before the Terms: accept them, then Continue.
