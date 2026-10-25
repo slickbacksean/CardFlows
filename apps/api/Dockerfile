@@ -43,8 +43,8 @@ RUN pnpm install --frozen-lockfile --prod --filter "@cardflow/api..." --config.n
 COPY packages/shared packages/shared
 COPY apps/api apps/api
 COPY apps/admin apps/admin
-# Build admin SPA - install from workspace root to get proper dependencies
-RUN pnpm install --filter @cardflow/admin --frozen-lockfile
+# Build admin SPA - install dev dependencies (not in prod lockfile) and build
+RUN pnpm install --filter @cardflow/admin
 RUN pnpm --filter @cardflow/admin build
 # Copy admin build to API public directory
 RUN mkdir -p apps/api/public/admin && cp -r apps/admin/dist/* apps/api/public/admin/
