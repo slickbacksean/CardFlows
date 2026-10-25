@@ -234,10 +234,18 @@ export const userAccounts = sqliteTable(
     username: text("username"),
     usernameLower: text("username_lower"),
     usernameChangedAt: text("username_changed_at"),
+    /** Sean (Oct 25): Admin role for privileged operations (default 'user'). */
+    role: text("role").notNull().default("user"),
+    /** Sean (Oct 25): Creator/affiliate code entered at sign-up for attribution. */
+    creatorCode: text("creator_code"),
+    creatorCodeEnteredAt: text("creator_code_entered_at"),
   },
   (table) => [
     unique("user_accounts_email").on(table.email),
     uniqueIndex("user_accounts_username_lower_uidx").on(table.usernameLower).where(sql`${table.usernameLower} IS NOT NULL`),
+    index("user_accounts_role_idx").on(table.role),
+    index("user_accounts_creator_code_idx").on(table.creatorCode, table.createdAt),
+    check("user_accounts_role_chk", sql`${table.role} in ('user', 'admin')`),
   ],
 );
 
@@ -674,6 +682,77 @@ export const reservedUsernames = sqliteTable("reserved_usernames", {
   createdAt: text("created_at").notNull(),
 });
 
+/** Sean (Oct 25): Admin actions audit log for all admin operations. */
+export const adminActions = sqliteTable(
+  "admin_actions",
+  {
+    actionId: text("action_id").primaryKey(),
+    adminUserId: text("admin_user_id").notNull(),
+    actionType: text("action_type").notNull(),
+    targetType: text("target_type"),
+    targetId: text("target_id"),
+    detailsJson: text("details_json").notNull().default("{}"),
+    createdAt: text("created_at").notNull(),
+  },
+  (table) => [
+    index("admin_actions_admin_idx").on(table.adminUserId, table.createdAt),
+    index("admin_actions_type_idx").on(table.actionType, table.createdAt),
+    index("admin_actions_target_idx").on(table.targetType, table.targetId),
+    check(
+      "admin_actions_action_type_chk",
+      sql`${table.actionType} in ('report_resolve', 'content_remove', 'user_suspend', 'user_ban', 'creator_create', 'creator_update', 'creator_delete', 'stats_export', 'admin_grant', 'admin_revoke')`,
+    ),
+  ],
+);
+
+/** Sean (Oct 25): Creators/affiliates for tracking sign-ups and engagement. */
+export const creators = sqliteTable(
+  "creators",
+  {
+    creatorId: text("creator_id").primaryKey(),
+    name: text("name").notNull(),
+    platform: text("platform").notNull(),
+    handle: text("handle").notNull(),
+    inviteCode: text("invite_code").notNull(),
+    notes: text("notes").notNull().default(""),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+    archivedAt: text("archived_at"),
+  },
+  (table) => [
+    uniqueIndex("creators_invite_code_uidx")
+      .on(table.inviteCode)
+      .where(sql`${table.archivedAt} IS NULL`),
+    index("creators_platform_idx").on(table.platform),
+    index("creators_archived_idx").on(table.archivedAt),
+    check(
+      "creators_platform_chk",
+      sql`${table.platform} in ('twitch', 'youtube', 'tiktok', 'instagram', 'twitter', 'facebook', 'other')`,
+    ),
+  ],
+);
+
+/** Sean (Oct 25): Creator stats snapshots computed daily for performance. */
+export const creatorStatsSnapshots = sqliteTable(
+  "creator_stats_snapshots",
+  {
+    creatorId: text("creator_id").notNull(),
+    snapshotDate: text("snapshot_date").notNull(),
+    signupsCount: integer("signups_count").notNull().default(0),
+    verifiedSignupsCount: integer("verified_signups_count").notNull().default(0),
+    activatedUsersCount: integer("activated_users_count").notNull().default(0),
+    d7RetainedCount: integer("d7_retained_count").notNull().default(0),
+    totalScans: integer("total_scans").notNull().default(0),
+    totalPurchases: integer("total_purchases").notNull().default(0),
+    premiumConversions: integer("premium_conversions").notNull().default(0),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.creatorId, table.snapshotDate] }),
+    index("creator_stats_date_idx").on(table.snapshotDate),
+  ],
+);
+
 /** Sean (Oct 25): Community sharing settings (off/anonymous by default). */
 export const communitySettings = sqliteTable(
   "community_settings",
@@ -920,6 +999,9 @@ export const schema = {
   purchaseEvents,
   idempotencyKeys,
   reservedUsernames,
+  adminActions,
+  creators,
+  creatorStatsSnapshots,
   communitySettings,
   communityPosts,
   postReactions,
