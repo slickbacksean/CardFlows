@@ -148,7 +148,7 @@ describe("P0-07 photo privacy", () => {
         return { report: { gates: [] }, cropBytes: Buffer.from([0xff, 0xd8, 0xff, 0xd9]) };
       },
     };
-    const app = createApp(undefined, { cardgrading: runner, gradeUploads: cache });
+    const app = createApp(undefined, { gradingEnabled: () => true,  cardgrading: runner, gradeUploads: cache  });
     const dirty = jpegWithGpsExif();
     const frontForm = new FormData();
     frontForm.append("image", new File([dirty], "front.jpg", { type: "image/jpeg" }));
@@ -244,7 +244,7 @@ describe("P0-07 photo privacy", () => {
       imageMimeType: savedScan.mimeType,
     });
 
-    const app = createApp(store);
+    const app = createApp(store, { gradingEnabled: () => true });
     const deleted = await app.request("/v1/account/delete", { method: "POST" });
     expect(deleted.status).toBe(200);
     expect(await deleted.json()).toMatchObject({ ok: true, photosDeleted: expect.any(Number) });
