@@ -30,12 +30,12 @@ describe("Creator Code Attribution", () => {
     });
 
     expect(response.status).toBe(200);
-    const result = await response.json();
+    const result = await response.json() as { ok: boolean; identity?: { userId: string } };
     expect(result.ok).toBe(true);
     expect(result.identity?.userId).toBeTruthy();
 
     // Verify creator code is stored
-    const account = store.accounts.getAccount(result.identity.userId);
+    const account = result.identity?.userId ? store.accounts.getAccount(result.identity.userId) : null;
     expect(account?.creatorCode).toBe(creatorCode);
     expect(account?.creatorCodeEnteredAt).toBeTruthy();
   });
@@ -58,11 +58,11 @@ describe("Creator Code Attribution", () => {
     });
 
     expect(response.status).toBe(200);
-    const result = await response.json();
+    const result = await response.json() as { ok: boolean; identity?: { userId: string } };
     expect(result.ok).toBe(true);
 
     // Verify no creator code
-    const account = store.accounts.getAccount(result.identity.userId);
+    const account = result.identity?.userId ? store.accounts.getAccount(result.identity.userId) : null;
     expect(account?.creatorCode).toBeNull();
   });
 
@@ -86,9 +86,9 @@ describe("Creator Code Attribution", () => {
     });
 
     expect(response.status).toBe(200);
-    const result = await response.json();
+    const result = await response.json() as { identity?: { userId: string } };
 
-    const account = store.accounts.getAccount(result.identity.userId);
+    const account = result.identity?.userId ? store.accounts.getAccount(result.identity.userId) : null;
     expect(account?.creatorCode).toBe("TRIMMED_CODE");
   });
 
@@ -111,9 +111,9 @@ describe("Creator Code Attribution", () => {
     });
 
     expect(response.status).toBe(200);
-    const result = await response.json();
+    const result = await response.json() as { identity?: { userId: string } };
 
-    const account = store.accounts.getAccount(result.identity.userId);
+    const account = result.identity?.userId ? store.accounts.getAccount(result.identity.userId) : null;
     expect(account?.creatorCode).toBeNull();
   });
 });

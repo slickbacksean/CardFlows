@@ -3,7 +3,8 @@ import { useCallback, useState } from "react";
 import { ActivityIndicator, FlatList, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useFocusEffect } from "expo-router";
 import { colors, radii, space } from "@/lib/theme";
-import { apiUrl, peekSessionToken } from "@/lib/api";
+import { apiUrl } from "@/lib/api";
+import { peekActiveUserId } from "@/lib/identity";
 
 interface DashboardStats {
   users: {
@@ -43,11 +44,7 @@ export default function AdminDashboardScreen() {
   async function loadStats() {
     setLoading(true);
     try {
-      const response = await fetch(`${apiUrl()}/v1/admin/stats/dashboard`, {
-        headers: { Authorization: `Bearer ${peekSessionToken()}` },
-      });
-      if (!response.ok) throw new Error("Failed to load stats");
-      const data = await response.json();
+      const data = await getDashboardStats();
       setStats(data);
     } catch (caught) {
       console.error("Failed to load admin stats:", caught);
@@ -189,7 +186,7 @@ const styles = StyleSheet.create({
   },
   statLabel: { color: colors.text, fontSize: 15 },
   statValue: { color: colors.muted, fontSize: 15, fontWeight: "700" },
-  statAlert: { color: colors.destructive },
+  statAlert: { color: colors.danger },
   actionButton: {
     backgroundColor: colors.card,
     borderWidth: 1,

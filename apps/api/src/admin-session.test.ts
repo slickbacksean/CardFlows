@@ -57,9 +57,10 @@ describe("Admin Session Management", () => {
 
     // Manually set session to expired
     const { adminSessions } = await import("./db/schema");
+    const { eq } = await import("drizzle-orm");
     await store.db.update(adminSessions)
       .set({ expiresAt: new Date(Date.now() - 1000).toISOString() })
-      .where({ sessionId: session.sessionId });
+      .where(eq(adminSessions.sessionId, session.sessionId));
 
     const retrieved = await getAdminSession(token, store);
     expect(retrieved).toBeNull();
@@ -93,18 +94,18 @@ describe("Admin Session Management", () => {
 
     // Expire session1
     const { adminSessions } = await import("./db/schema");
+    const { eq } = await import("drizzle-orm");
     await store.db.update(adminSessions)
       .set({ expiresAt: new Date(Date.now() - 1000).toISOString() })
-      .where({ sessionId: session1.sessionId });
+      .where(eq(adminSessions.sessionId, session1.sessionId));
 
     const cleaned = await cleanupExpiredAdminSessions(store);
     expect(cleaned).toBe(1);
 
     // Verify session2 still exists
-    const { adminSessions: sessions2 } = await import("./db/schema");
     const [remaining] = await store.db.select()
-      .from(sessions2)
-      .where({ sessionId: session2.sessionId });
+      .from(adminSessions)
+      .where(eq(adminSessions.sessionId, session2.sessionId));
     expect(remaining).toBeTruthy();
   });
 
