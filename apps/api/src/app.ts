@@ -215,6 +215,19 @@ import {
   resolveReport,
   getModerationNotices,
 } from "./routes/community";
+import {
+  subscribe,
+  unsubscribe,
+  getSubscription,
+  createDraft,
+  getIssue,
+  previewIssue,
+  sendTest,
+  approveAndSend,
+  listIssues,
+  handleBounce,
+} from "./routes/newsletter";
+import { createEmailProvider } from "./email-provider";
 import { REQUEST_ID_HEADER, resolveRequestId } from "./request-id";
 import { captureApiException } from "./sentry";
 import {
@@ -2869,6 +2882,27 @@ export function createApp(
     
     // Moderation notices
     app.get("/v1/community/moderation/notices", (c) => getModerationNotices(c, sqliteStore));
+
+    // Newsletter routes (subscriptions, admin, webhooks)
+    const emailProvider = createEmailProvider({
+      RESEND_API_KEY: process.env.RESEND_API_KEY,
+    });
+
+    app.post("/v1/newsletter/subscribe", (c) => subscribe(c, c.get("userId"), sqliteStore));
+    app.post("/v1/newsletter/unsubscribe", (c) => unsubscribe(c, sqliteStore));
+    app.get("/v1/newsletter/unsubscribe", (c) => unsubscribe(c, sqliteStore));
+    app.get("/v1/newsletter/subscription", (c) => getSubscription(c, c.get("userId"), sqliteStore));
+
+    // Admin
+    app.post("/v1/newsletter/admin/draft", (c) => createDraft(c, c.get("userId"), sqliteStore));
+    app.get("/v1/newsletter/admin/issues", (c) => listIssues(c, c.get("userId"), sqliteStore));
+    app.get("/v1/newsletter/admin/issues/:issueId", (c) => getIssue(c, c.get("userId"), sqliteStore));
+    app.get("/v1/newsletter/admin/issues/:issueId/preview", (c) => previewIssue(c, c.get("userId"), sqliteStore));
+    app.post("/v1/newsletter/admin/issues/:issueId/test", (c) => sendTest(c, c.get("userId"), sqliteStore, emailProvider));
+    app.post("/v1/newsletter/admin/issues/:issueId/approve-send", (c) => approveAndSend(c, c.get("userId"), sqliteStore, emailProvider));
+
+    // Webhooks
+    app.post("/v1/newsletter/webhook/bounce", (c) => handleBounce(c, sqliteStore));
   }
 
   app.post("/v1/scans", bodyLimit({

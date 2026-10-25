@@ -834,6 +834,53 @@ export const setTrendSnapshots = sqliteTable(
   ],
 );
 
+/** Sean (Oct 25): Newsletter subscriptions with opt-in consent and unsubscribe tokens. */
+export const newsletterSubscriptions = sqliteTable("newsletter_subscriptions", {
+  userId: text("user_id").primaryKey(),
+  email: text("email").notNull(),
+  subscribedAt: text("subscribed_at").notNull(),
+  unsubscribedAt: text("unsubscribed_at"),
+  unsubscribeToken: text("unsubscribe_token").notNull(),
+  updatedAt: text("updated_at").notNull(),
+});
+
+/** Sean (Oct 25): Newsletter issues (drafts until approved). */
+export const newsletterIssues = sqliteTable("newsletter_issues", {
+  issueId: text("issue_id").primaryKey(),
+  weekStart: text("week_start").notNull(),
+  weekEnd: text("week_end").notNull(),
+  status: text("status").notNull(),
+  contentSnapshot: text("content_snapshot", { mode: "json" }),
+  createdAt: text("created_at").notNull(),
+  approvedAt: text("approved_at"),
+  approvedBy: text("approved_by"),
+  sentAt: text("sent_at"),
+  updatedAt: text("updated_at").notNull(),
+});
+
+/** Sean (Oct 25): Newsletter send log for idempotent sends and bounce tracking. */
+export const newsletterSendLog = sqliteTable(
+  "newsletter_send_log",
+  {
+    sendId: text("send_id").primaryKey(),
+    issueId: text("issue_id")
+      .notNull()
+      .references(() => newsletterIssues.issueId),
+    userId: text("user_id").notNull(),
+    email: text("email").notNull(),
+    status: text("status").notNull(),
+    providerMessageId: text("provider_message_id"),
+    sentAt: text("sent_at"),
+    bouncedAt: text("bounced_at"),
+    complaintAt: text("complaint_at"),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (table) => [
+    index("newsletter_send_log_issue_idx").on(table.issueId),
+    index("newsletter_send_log_user_idx").on(table.userId),
+  ],
+);
+
 export const schema = {
   ageConfirmations,
   authIdentities,
@@ -882,4 +929,7 @@ export const schema = {
   commentRateLimits,
   cardPriceHistory,
   setTrendSnapshots,
+  newsletterSubscriptions,
+  newsletterIssues,
+  newsletterSendLog,
 };
