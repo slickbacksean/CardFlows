@@ -1,11 +1,12 @@
 /**
  * Admin API routes
  * Sean (Oct 25): Admin dashboard, creator tracking, and audit log endpoints
+ * Sean (Oct 25): Added CSRF protection, rate limiting, and session management
  */
 
 import type { Context } from "hono";
 import type { SqliteStorePort } from "./sqlite-store";
-import { requireAdminRole, logAdminAction, getAdminActions } from "./admin-auth";
+import { requireAdminRole, logAdminAction, getAdminActions, isAdmin } from "./admin-auth";
 import { getUserStats, getScanStats, getPurchaseStats, getCommunityStats } from "./admin-stats";
 import {
   createCreator,
@@ -15,6 +16,86 @@ import {
   computeCreatorStats,
   getCreatorLeaderboard,
 } from "./admin-creators";
+import {
+  createAdminSession,
+  deleteAdminSession,
+  requireAdminSession,
+  setAdminSessionCookie,
+  clearAdminSessionCookie,
+} from "./admin-session";
+import {
+  rateLimitAdminLogin,
+  checkAdminRateLimits,
+} from "./admin-rate-limit";
+
+/**
+ * POST /v1/admin/login
+ * Create admin session for authenticated admin user.
+ * Requires regular user authentication, checks admin role, then creates admin session.
+ */
+export async function adminLogin(c: Context, store: SqliteStorePort): Promise<Response> {
+  // Rate limit login attempts
+  const rateLimitResponse = rateLimitAdminLogin(c);
+  if (rateLimitResponse) return rateLimitResponse;
+
+  // Check regular user authentication
+  const userId = c.get("userId") as string | undefined;
+  if (!userId) {
+    return c.json({ error: "Authentication required" }, 401);
+  }
+
+  // Check admin role
+  const admin = await isAdmin(userId, store);
+  if (!admin) {
+    return c.json({ error: "Admin access required" }, 403);
+  }
+
+  // Create admin session
+  const { token, csrfToken, session } = await createAdminSession(userId, store);
+
+  // Set secure cookie
+  setAdminSessionCookie(c, token);
+
+  // Log admin action
+  await logAdminAction(store, {
+    adminUserId: userId,
+    actionType: "admin_grant",
+    details: { action: "login" },
+  });
+
+  return c.json({
+    success: true,
+    csrfToken,
+    expiresAt: session.expiresAt,
+  });
+}
+
+/**
+ * POST /v1/admin/logout
+ * Logout admin and clear session.
+ */
+export async function adminLogout(c: Context, store: SqliteStorePort): Promise<Response> {
+  const auth = await requireAdminSession(c, store);
+  if (!auth.ok) return auth.response;
+
+  // Delete session
+  const token = c.req.header("cookie")?.match(/admin_session=([^;]+)/)?.[1];
+  if (token) {
+    await deleteAdminSession(token, store);
+  }
+
+  // Clear cookie
+  clearAdminSessionCookie(c);
+
+  // Log admin action
+  await logAdminAction(store, {
+    adminUserId: auth.userId,
+    actionType: "admin_revoke",
+    details: { action: "logout" },
+  });
+
+  return c.json({ success: true });
+}
 
 /**
  * GET /v1/admin/check
@@ -26,8 +107,7 @@ export async function checkAdminStatus(c: Context, store: SqliteStorePort): Prom
     return c.json({ isAdmin: false });
   }
 
-  const { isAdmin: isAdminFn } = await import("../admin-auth");
-  const admin = await isAdminFn(userId, store);
+  const admin = await isAdmin(userId, store);
 
   return c.json({ isAdmin: admin });
 }
@@ -37,8 +117,16 @@ export async function checkAdminStatus(c: Context, store: SqliteStorePort): Prom
  * Get all dashboard stats in one call.
  */
 export async function getDashboardStats(c: Context, store: SqliteStorePort): Promise<Response> {
+  // Check rate limits
+  const rateLimitResponse = checkAdminRateLimits(c);
+  if (rateLimitResponse) return rateLimitResponse;
+
   const auth = await requireAdminRole(c, store);
   if (!auth.ok) return auth.response;
+
+  // Additional rate limit per user
+  const userRateLimit = checkAdminRateLimits(c, auth.userId);
+  if (userRateLimit) return userRateLimit;
 
   const [userStats, scanStats, purchaseStats, communityStats] = await Promise.all([
     getUserStats(store),
@@ -110,8 +198,17 @@ export async function getAdminCommunityStats(c: Context, store: SqliteStorePort)
  * Body: { name, platform, handle, notes?, inviteCode? }
  */
 export async function createAdminCreator(c: Context, store: SqliteStorePort): Promise<Response> {
-  const auth = await requireAdminRole(c, store);
+  // Check rate limits
+  const rateLimitResponse = checkAdminRateLimits(c);
+  if (rateLimitResponse) return rateLimitResponse;
+
+  // Require admin session with CSRF protection
+  const auth = await requireAdminSession(c, store, { requireCsrf: true });
   if (!auth.ok) return auth.response;
+
+  // Additional rate limit per user
+  const userRateLimit = checkAdminRateLimits(c, auth.userId);
+  if (userRateLimit) return userRateLimit;
 
   const body = await c.req.json();
   const { name, platform, handle, notes, inviteCode } = body;
@@ -186,8 +283,17 @@ export async function getAdminCreator(c: Context, store: SqliteStorePort): Promi
  * Body: { name?, platform?, handle?, notes? }
  */
 export async function updateAdminCreator(c: Context, store: SqliteStorePort): Promise<Response> {
-  const auth = await requireAdminRole(c, store);
+  // Check rate limits
+  const rateLimitResponse = checkAdminRateLimits(c);
+  if (rateLimitResponse) return rateLimitResponse;
+
+  // Require admin session with CSRF protection
+  const auth = await requireAdminSession(c, store, { requireCsrf: true });
   if (!auth.ok) return auth.response;
+
+  // Additional rate limit per user
+  const userRateLimit = checkAdminRateLimits(c, auth.userId);
+  if (userRateLimit) return userRateLimit;
 
   const { creatorId } = c.req.param();
   const body = await c.req.json();
@@ -210,8 +316,17 @@ export async function updateAdminCreator(c: Context, store: SqliteStorePort): Pr
  * Archive a creator.
  */
 export async function deleteAdminCreator(c: Context, store: SqliteStorePort): Promise<Response> {
-  const auth = await requireAdminRole(c, store);
+  // Check rate limits
+  const rateLimitResponse = checkAdminRateLimits(c);
+  if (rateLimitResponse) return rateLimitResponse;
+
+  // Require admin session with CSRF protection
+  const auth = await requireAdminSession(c, store, { requireCsrf: true });
   if (!auth.ok) return auth.response;
+
+  // Additional rate limit per user
+  const userRateLimit = checkAdminRateLimits(c, auth.userId);
+  if (userRateLimit) return userRateLimit;
 
   const { creatorId } = c.req.param();
 

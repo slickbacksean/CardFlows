@@ -225,6 +225,13 @@
       "when": 1793030000000,
       "tag": "0032_admin_creator_tracking",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "6",
+      "when": 1793116800000,
+      "tag": "0033_admin_sessions",
+      "breakpoints": true
     }
   ]
 }

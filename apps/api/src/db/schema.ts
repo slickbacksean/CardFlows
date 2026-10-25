@@ -683,6 +683,24 @@ export const reservedUsernames = sqliteTable("reserved_usernames", {
 });
 
 /** Sean (Oct 25): Admin actions audit log for all admin operations. */
+/** Sean (Oct 25): Admin sessions with CSRF tokens and 8-hour TTL. */
+export const adminSessions = sqliteTable(
+  "admin_sessions",
+  {
+    sessionId: text("session_id").primaryKey(),
+    userId: text("user_id").notNull(),
+    tokenHash: text("token_hash").notNull(),
+    csrfToken: text("csrf_token").notNull(),
+    createdAt: text("created_at").notNull(),
+    expiresAt: text("expires_at").notNull(),
+  },
+  (table) => [
+    unique("admin_sessions_token_hash").on(table.tokenHash),
+    index("admin_sessions_user_idx").on(table.userId),
+    index("admin_sessions_expiry_idx").on(table.expiresAt),
+  ],
+);
+
 export const adminActions = sqliteTable(
   "admin_actions",
   {
@@ -997,6 +1015,7 @@ export const schema = {
   userCardSales,
   gradeEstimateHistory,
   purchaseEvents,
+  adminSessions,
   idempotencyKeys,
   reservedUsernames,
   adminActions,
