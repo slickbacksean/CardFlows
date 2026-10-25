@@ -917,6 +917,8 @@ export interface StorePort {
   saveUserPriceSnapshot: (userId: string, snapshot: UserPriceSnapshot) => UserPriceSnapshot;
   listUserPriceSnapshots: (userId: string, tcgdexId: string, variant?: string | null) => UserPriceSnapshot[];
   deleteUserPriceSnapshots: (userId: string) => number;
+  /** Sean (Oct 25): Training data consent, corrections, and image retention. */
+  trainingData?: import("./training-data-store").TrainingDataStorePort;
 }
 
 const DEFAULT_GRADE_ACCOUNT: GradeAccountRecord = { plan: "free", extraCredits: 0 };
