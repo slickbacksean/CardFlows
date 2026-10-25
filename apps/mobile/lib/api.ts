@@ -1515,3 +1515,19 @@ export async function getSetTrends(window: "7d" | "30d" = "7d") {
   
   return response.json();
 }
+
+/** Admin & Moderation */
+export async function getModerationNotices() {
+  const url = `${apiUrl()}/v1/community/moderation/notices`;
+  const token = peekSessionToken();
+  
+  if (!token) {
+    throw new Error("Not authenticated");
+  }
+  
+  const response = await fetch(url, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  
+  return response.json();
+}

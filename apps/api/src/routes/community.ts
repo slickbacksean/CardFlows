@@ -5,7 +5,7 @@
 
 import { randomUUID } from "node:crypto";
 import type { Context } from "hono";
-import { eq, and, sql, desc, isNull, lt } from "drizzle-orm";
+import { eq, and, sql, desc, isNull, isNotNull, lt, gte } from "drizzle-orm";
 import type { SqliteStorePort } from "../sqlite-store";
 import { validateUsername, validateCommentText, filterText } from "../text-filter";
 import {
@@ -989,4 +989,139 @@ export async function getSetTrends(c: Context, store: SqliteStorePort): Promise<
     updatedAt: new Date().toISOString(),
     message: "Set trend data not yet available",
   }, 200);
+}
+
+/**
+ * Admin: list pending moderation reports.
+ * GET /v1/community/admin/reports?limit=50&offset=0
+ */
+export async function listReports(c: Context, store: SqliteStorePort): Promise<Response> {
+  // TODO: Check admin role
+  const limit = Math.min(parseInt(c.req.query("limit") || "50", 10), 100);
+  const offset = parseInt(c.req.query("offset") || "0", 10);
+
+  const reports = await store.db
+    .select({
+      reportId: contentReports.reportId,
+      targetType: contentReports.targetType,
+      targetId: contentReports.targetId,
+      reason: contentReports.reason,
+      note: contentReports.note,
+      reporterUserId: contentReports.reporterUserId,
+      createdAt: contentReports.createdAt,
+      resolvedAt: contentReports.resolvedAt,
+      resolvedBy: contentReports.resolvedBy,
+      action: contentReports.action,
+    })
+    .from(contentReports)
+    .where(isNull(contentReports.resolvedAt))
+    .orderBy(desc(contentReports.createdAt))
+    .limit(limit)
+    .offset(offset);
+
+  return c.json({ reports });
+}
+
+/**
+ * Admin: resolve a moderation report with action.
+ * POST /v1/community/admin/reports/:reportId/resolve
+ * Body: { action: "remove" | "warn" | "suspend" | "ban" | "dismiss", notifyUser?: boolean }
+ */
+export async function resolveReport(c: Context, store: SqliteStorePort): Promise<Response> {
+  // TODO: Check admin role
+  const { reportId } = c.req.param();
+  const { action, notifyUser } = await c.req.json();
+  const adminUserId = c.get("userId");
+
+  if (!["remove", "warn", "suspend", "ban", "dismiss"].includes(action)) {
+    return c.json({ error: "Invalid action" }, 400);
+  }
+
+  // Resolve the report
+  await store.db
+    .update(contentReports)
+    .set({
+      resolvedAt: new Date().toISOString(),
+      resolvedBy: adminUserId,
+      action,
+    })
+    .where(eq(contentReports.reportId, reportId));
+
+  // Get the report to find target
+  const [report] = await store.db
+    .select()
+    .from(contentReports)
+    .where(eq(contentReports.reportId, reportId))
+    .limit(1);
+
+  if (!report) {
+    return c.json({ error: "Report not found" }, 404);
+  }
+
+  // Apply action
+  if (action === "remove") {
+    if (report.targetType === "post") {
+      await store.db
+        .update(communityPosts)
+        .set({ removedAt: new Date().toISOString() })
+        .where(eq(communityPosts.postId, report.targetId));
+    } else if (report.targetType === "comment") {
+      await store.db
+        .update(postComments)
+        .set({ removedAt: new Date().toISOString() })
+        .where(eq(postComments.commentId, report.targetId));
+    }
+  }
+
+  // TODO: If notifyUser, send in-app notice to author
+
+  return c.json({ success: true });
+}
+
+/**
+ * Get moderation notices for current user.
+ * GET /v1/community/moderation/notices
+ */
+export async function getModerationNotices(c: Context, store: SqliteStorePort): Promise<Response> {
+  const userId = c.get("userId");
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+
+  const [removedPosts, removedComments] = await Promise.all([
+    store.db
+      .select({
+        type: sql<string>`'post'`,
+        id: communityPosts.postId,
+        createdAt: communityPosts.createdAt,
+        removedAt: communityPosts.removedAt,
+      })
+      .from(communityPosts)
+      .where(
+        and(
+          eq(communityPosts.userId, userId),
+          sql`${communityPosts.removedAt} IS NOT NULL`,
+          sql`${communityPosts.removedAt} >= ${thirtyDaysAgo}`
+        )
+      ),
+    store.db
+      .select({
+        type: sql<string>`'comment'`,
+        id: postComments.commentId,
+        createdAt: postComments.createdAt,
+        removedAt: postComments.removedAt,
+      })
+      .from(postComments)
+      .where(
+        and(
+          eq(postComments.userId, userId),
+          sql`${postComments.removedAt} IS NOT NULL`,
+          sql`${postComments.removedAt} >= ${thirtyDaysAgo}`
+        )
+      ),
+  ]);
+
+  const notices = [...removedPosts, ...removedComments].sort(
+    (a, b) => new Date(b.removedAt!).getTime() - new Date(a.removedAt!).getTime()
+  );
+
+  return c.json({ notices });
 }

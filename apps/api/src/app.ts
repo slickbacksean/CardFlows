@@ -211,6 +211,9 @@ import {
   getWhatsBuying,
   getWhatsSelling,
   getSetTrends,
+  listReports,
+  resolveReport,
+  getModerationNotices,
 } from "./routes/community";
 import { REQUEST_ID_HEADER, resolveRequestId } from "./request-id";
 import { captureApiException } from "./sentry";
@@ -2859,6 +2862,13 @@ export function createApp(
     app.get("/v1/community/market/buying", (c) => getWhatsBuying(c, sqliteStore));
     app.get("/v1/community/market/selling", (c) => getWhatsSelling(c, sqliteStore));
     app.get("/v1/community/market/sets", (c) => getSetTrends(c, sqliteStore));
+    
+    // Admin moderation
+    app.get("/v1/community/admin/reports", (c) => listReports(c, sqliteStore));
+    app.post("/v1/community/admin/reports/:reportId/resolve", (c) => resolveReport(c, sqliteStore));
+    
+    // Moderation notices
+    app.get("/v1/community/moderation/notices", (c) => getModerationNotices(c, sqliteStore));
   }
 
   app.post("/v1/scans", bodyLimit({
