@@ -478,7 +478,7 @@ export default function CommunityScreen() {
           </View>
 
           <Text style={styles.marketDisclaimer}>
-            Prices are estimates from public sales data. Not financial advice. Past prices don't
+            Prices are estimates from public sales data. Not financial advice. Past prices don&apos;t
             predict future value.
           </Text>
 
@@ -520,7 +520,7 @@ export default function CommunityScreen() {
           )}
 
           {/* What's Buying */}
-          <Text style={styles.sectionTitle}>What's Buying</Text>
+          <Text style={styles.sectionTitle}>What&apos;s Buying</Text>
           {buying.length === 0 ? (
             <View style={styles.unavailable}>
               <Text style={styles.unavailableText}>
@@ -540,7 +540,7 @@ export default function CommunityScreen() {
           )}
 
           {/* What's Selling */}
-          <Text style={styles.sectionTitle}>What's Selling</Text>
+          <Text style={styles.sectionTitle}>What&apos;s Selling</Text>
           {selling.length === 0 ? (
             <View style={styles.unavailable}>
               <Text style={styles.unavailableText}>
