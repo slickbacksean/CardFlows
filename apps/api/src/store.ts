@@ -1479,5 +1479,17 @@ function createMemoryAccountStore(
         user_accounts: accounts.has(userId) ? 1 : 0,
       };
     },
+    // Stub training data store for memory store (contract compliance)
+    trainingData: {
+      hasOptedOut: () => false,
+      optOut: () => {},
+      optIn: () => {},
+      saveTrainingImage: () => ({ imageId: "", userId: "", pseudonymousUserId: "", scanId: "", retentionReason: "correction" as const, capturedAt: "", storageRef: "", imageMimeType: "", expiresAt: "", termsVersion: "", usedInTrainingAt: null, deletedAt: null, createdAt: "" }),
+      saveCorrectionFeedback: () => ({ feedbackId: "", pseudonymousUserId: "", scanId: "", chosenCardflowCardId: "", chosenTcgdexId: "", predictedTcgdexId: null, confidence: null, modelVersion: "", recognitionProvider: "", wasCorrection: false, createdAt: "", trainingImageId: null }),
+      deleteUserTrainingImages: () => ({ deleted: 0, storageRefs: [] }),
+      purgeExpiredTrainingImages: () => ({ deleted: 0, storageRefs: [] }),
+      physicallyDeleteTrainingImages: () => ({ deleted: 0, storageRefs: [] }),
+      markTrainingImageUsed: () => {},
+    },
   };
 }

@@ -2852,26 +2852,29 @@ export function createApp(
     ? path.dirname(path.resolve(store.sqlitePath))
     : null;
   
-  if ("trainingData" in store && store.trainingData) {
+  const trainingDataStore = "trainingData" in store ? store.trainingData : null;
+  if (trainingDataStore) {
     registerTrainingDataRoutes(app, { 
-      trainingData: store.trainingData, 
+      trainingData: trainingDataStore, 
       storageDir 
     });
     
-    registerAdminExportRoutes(app, {
-      store: store as import("./sqlite-store").SqliteStorePort,
-      isAdmin: (userId: string) => INVITED_USERS.some((u) => u.userId === userId),
-    });
-    
-    // Start training data retention job (purge expired images every hour)
-    if (storageDir) {
-      startTrainingDataRetentionJob({
-        trainingDataStore: store.trainingData,
-        storageDir,
-        onPurge: (result) => {
-          console.log(`Training data purge: ${result.expiredDeleted} expired, ${result.physicallyDeleted} physically deleted, ${result.filesDeleted} files deleted`);
-        },
+    if (isSqliteStore) {
+      registerAdminExportRoutes(app, {
+        store: store as import("./sqlite-store").SqliteStorePort,
+        isAdmin: (userId: string) => INVITED_USERS.some((u) => u.userId === userId),
       });
+      
+      // Start training data retention job (purge expired images every hour)
+      if (storageDir) {
+        startTrainingDataRetentionJob({
+          trainingDataStore,
+          storageDir,
+          onPurge: (result) => {
+            console.log(`Training data purge: ${result.expiredDeleted} expired, ${result.physicallyDeleted} physically deleted, ${result.filesDeleted} files deleted`);
+          },
+        });
+      }
     }
   }
   
