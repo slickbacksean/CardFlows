@@ -1,8 +1,7 @@
 import { TRAINING_DATA_RETENTION_COPY } from "@cardflow/shared";
 import { useRouter } from "expo-router";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { ActivityIndicator, ScrollView, StyleSheet, Switch, Text, View } from "react-native";
-import { useFocusEffect } from "@react-navigation/native";
 import { PreferencesScreenHeader } from "@/components/ui/preferences-screen-header";
 import { InfoRow } from "@/components/ui/screen-state";
 import { getTrainingDataStatus, optInToTrainingData, optOutOfTrainingData } from "@/lib/api";
@@ -29,11 +28,9 @@ export default function TrainingDataScreen() {
       });
   }, []);
 
-  useFocusEffect(
-    useCallback(() => {
-      loadStatus();
-    }, [loadStatus]),
-  );
+  useEffect(() => {
+    loadStatus();
+  }, [loadStatus]);
 
   const handleToggle = useCallback(
     (value: boolean) => {
@@ -66,7 +63,7 @@ export default function TrainingDataScreen() {
             <Switch
               disabled={toggling}
               onValueChange={handleToggle}
-              trackColor={{ false: colors.mutedBg, true: colors.accent }}
+              trackColor={{ false: colors.elevated, true: colors.accent }}
               value={!optedOut}
             />
           </View>
