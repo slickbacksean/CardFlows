@@ -2,9 +2,9 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { BrowserRouter, Routes, Route, Link } from 'react-router-dom';
 import { Layout } from './components/Layout';
-import AuditLog from './pages/AuditLog';
-import Creators from './pages/Creators';
-import Moderation from './pages/Moderation';
+import { AuditLog } from './pages/AuditLog';
+import { Creators } from './pages/Creators';
+import { Moderation } from './pages/Moderation';
 
 function App() {
   return (
