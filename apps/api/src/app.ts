@@ -164,6 +164,7 @@ import {
 import { Hono, type Context as HonoContext } from "hono";
 import { cors } from "hono/cors";
 import { bodyLimit } from "hono/body-limit";
+import { serveStatic } from "@hono/node-server/serve-static";
 import { getConnInfo } from "@hono/node-server/conninfo";
 import {
   clientIp,
@@ -4322,6 +4323,29 @@ export function createApp(
       ok: true,
       clipboard: clipboardForDraft(draft),
     });
+  });
+
+  // Admin SPA: serve static files from public/admin
+  app.use(
+    "/admin/*",
+    serveStatic({ root: "./public" }),
+  );
+  
+  // Admin SPA: fallback to index.html for client-side routing
+  app.get("/admin", async (c) => {
+    return c.redirect("/admin/", 301);
+  });
+  
+  app.get("/admin/*", async (c) => {
+    try {
+      const fs = await import("node:fs/promises");
+      const path = await import("node:path");
+      const indexPath = path.join(process.cwd(), "public", "admin", "index.html");
+      const html = await fs.readFile(indexPath, "utf-8");
+      return c.html(html);
+    } catch {
+      return c.text("Admin dashboard not found", 404);
+    }
   });
 
   return app;

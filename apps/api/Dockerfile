@@ -28,6 +28,7 @@ COPY patches patches
 COPY packages/shared/package.json packages/shared/
 COPY apps/api/package.json apps/api/
 COPY apps/mobile/package.json apps/mobile/
+COPY apps/admin/package.json apps/admin/
 COPY legacy/api/package.json legacy/api/
 COPY legacy/cardflows-shared/package.json legacy/cardflows-shared/
 # The repo uses node-linker=hoisted for React Native, which ignores --filter and would pull
@@ -41,9 +42,14 @@ RUN pnpm install --frozen-lockfile --prod --filter "@cardflow/api..." --config.n
            node_modules/.pnpm/onnxruntime-node@*/node_modules/onnxruntime-node/bin/napi-v3/win32
 COPY packages/shared packages/shared
 COPY apps/api apps/api
+COPY apps/admin apps/admin
+# Build admin SPA
+RUN cd apps/admin && pnpm install && pnpm build && cd ../..
+# Copy admin build to API public directory
+RUN mkdir -p apps/api/public/admin && cp -r apps/admin/dist/* apps/api/public/admin/
 # Runs from TypeScript source with tsx (a production dependency). @cardflow/shared
 # ships TS source, so there is no separate compile step.
-RUN rm -rf apps/api/.venv apps/api/data apps/api/models \
+RUN rm -rf apps/api/.venv apps/api/data apps/api/models apps/admin \
  && find . -name '*.test.ts' -not -path '*/node_modules/*' -delete
 
 #################################
