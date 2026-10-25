@@ -12,7 +12,7 @@ import {
 } from "@cardflow/shared";
 import * as WebBrowser from "expo-web-browser";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useState, useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import * as Linking from "expo-linking";
 import { authStyles } from "@/components/ui/auth-styles";
