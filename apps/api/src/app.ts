@@ -188,6 +188,7 @@ import { corsOriginsFromEnv } from "./cors-env";
 import { registerGradeQuotaRoutes } from "./routes/grade-quota";
 import { registerPreferenceRoutes } from "./routes/preferences";
 import { registerGradeJobRoutes, type GradeJobRoutes } from "./routes/grade-jobs";
+import { registerTrainingDataRoutes } from "./routes/training-data";
 import { registerStatusRoutes } from "./routes/status";
 import { registerSalesRoutes } from "./routes/sales";
 import { premiumRequiredBody, recordGradeEstimate, registerGradeHistoryRoutes } from "./routes/grade-history";
@@ -2840,6 +2841,7 @@ export function createApp(
   app.use("/v1/inventory/:inventoryItemId/grade-history", async (c, next) => (c.req.method === "POST" ? replayableWrite(c, next) : next()));
 
   registerPreferenceRoutes(app, { getPreferences, setPreferences });
+  registerTrainingDataRoutes(app, { trainingData: store.trainingData });
   registerSalesRoutes(app, {
     sales: store.sales,
     ownsInventoryItem: (userId, inventoryItemId) =>

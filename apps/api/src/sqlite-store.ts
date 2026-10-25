@@ -44,6 +44,9 @@ import { createSqliteAgeConfirmationStore } from "./age-store";
 import { createSqliteConsentStore } from "./consent-store";
 import { createSqliteIdempotencyStore } from "./idempotency-store";
 import { createSqliteGradeHistoryStore } from "./grade-history-store";
+import { createTrainingDataStore } from "./training-data-store";
+import type { TrainingDataStorePort } from "./training-data-store";
+import { serverPepper } from "./server-pepper";
 import { applyMvpMigrations, isMemorySqlitePath } from "./db/migrate";
 import {
   gradeImageStorageCandidates,
@@ -117,6 +120,8 @@ export interface SqliteStorePort extends StorePort {
   ping(): { ok: boolean; journalMode: string };
   /** Drizzle database handle for direct queries (community features, admin tools). */
   readonly db: ReturnType<typeof applyMvpMigrations>["db"];
+  /** Training data consent and retention for model improvement. */
+  readonly trainingData: TrainingDataStorePort;
 }
 
 interface PersistedRecognitionEnvelope {
@@ -268,6 +273,7 @@ function catalogImageFromRow(card: {
 export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStorePort {
   const { sqlite, db } = applyMvpMigrations(options.sqlitePath);
   const purchaseLedger = createSqlitePurchaseLedger(db);
+  const trainingDataStore = createTrainingDataStore(db, serverPepper());
   const memoryImages = new Map<string, ScanImageBytes>();
   /** Backend review L1 (P4): save time of each in-memory image, for the sweep's age cutoff. */
   const memoryImageSavedAt = new WeakMap<ScanImageBytes, number>();
@@ -964,6 +970,8 @@ export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStor
     for (const scan of listScans(userId)) {
       if (deleteScanImage(userId, scan.scanId)) deleted += 1;
     }
+    const trainingResult = trainingDataStore.deleteUserTrainingImages(userId);
+    deleted += trainingResult.deleted;
     return { deleted };
   }
 
@@ -2244,5 +2252,6 @@ export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStor
     saveUserPriceSnapshot,
     listUserPriceSnapshots,
     deleteUserPriceSnapshots,
+    trainingData: trainingDataStore,
   };
 }
