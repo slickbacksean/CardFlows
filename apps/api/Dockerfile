@@ -45,7 +45,8 @@ COPY apps/api apps/api
 # Build admin SPA first with its own isolated install
 COPY apps/admin apps/admin
 WORKDIR /repo/apps/admin
-RUN pnpm install --config.node-linker=hoisted && pnpm build
+# Install and build admin SPA ignoring workspace (it's a standalone package)
+RUN pnpm install --ignore-workspace --config.node-linker=hoisted && pnpm run build
 WORKDIR /repo
 # Copy admin build to API public directory
 RUN mkdir -p apps/api/public/admin && cp -r apps/admin/dist/* apps/api/public/admin/
