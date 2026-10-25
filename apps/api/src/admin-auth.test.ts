@@ -170,7 +170,7 @@ describe("Admin role system", () => {
     const result = await requireAdminRole(mockContext, store);
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.userId).toBe("acct_admin");
+      expect(result.userId).toBe(admin.userId);
     }
   });
 });

@@ -1,12 +1,5 @@
--- Admin system: role field, audit logging, and creator/affiliate tracking
---> statement-breakpoint
--- Add role to user_accounts (default 'user')
-ALTER TABLE user_accounts ADD COLUMN role TEXT NOT NULL DEFAULT 'user' CHECK (role IN ('user', 'admin'));
---> statement-breakpoint
-CREATE INDEX user_accounts_role_idx ON user_accounts(role);
---> statement-breakpoint
-
--- Admin actions audit log (all admin operations)
+ALTER TABLE user_accounts ADD COLUMN role TEXT NOT NULL DEFAULT 'user' CHECK (role IN ('user', 'admin'));--> statement-breakpoint
+CREATE INDEX user_accounts_role_idx ON user_accounts(role);--> statement-breakpoint
 CREATE TABLE admin_actions (
   action_id TEXT PRIMARY KEY,
   admin_user_id TEXT NOT NULL,
@@ -28,8 +21,6 @@ CREATE INDEX admin_actions_type_idx ON admin_actions(action_type, created_at);
 --> statement-breakpoint
 CREATE INDEX admin_actions_target_idx ON admin_actions(target_type, target_id);
 --> statement-breakpoint
-
--- Creators/affiliates for tracking
 CREATE TABLE creators (
   creator_id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
@@ -49,16 +40,12 @@ CREATE INDEX creators_platform_idx ON creators(platform);
 --> statement-breakpoint
 CREATE INDEX creators_archived_idx ON creators(archived_at);
 --> statement-breakpoint
-
--- Track sign-ups attributed to creators
 ALTER TABLE user_accounts ADD COLUMN creator_code TEXT;
 --> statement-breakpoint
 ALTER TABLE user_accounts ADD COLUMN creator_code_entered_at TEXT;
 --> statement-breakpoint
 CREATE INDEX user_accounts_creator_code_idx ON user_accounts(creator_code, created_at);
 --> statement-breakpoint
-
--- Creator stats snapshots (computed daily for performance)
 CREATE TABLE creator_stats_snapshots (
   creator_id TEXT NOT NULL,
   snapshot_date TEXT NOT NULL,
@@ -75,8 +62,6 @@ CREATE TABLE creator_stats_snapshots (
 --> statement-breakpoint
 CREATE INDEX creator_stats_date_idx ON creator_stats_snapshots(snapshot_date);
 --> statement-breakpoint
-
--- Admin sessions with CSRF tokens and 8-hour TTL
 CREATE TABLE admin_sessions (
   session_id TEXT PRIMARY KEY,
   user_id TEXT NOT NULL,
