@@ -1057,11 +1057,11 @@ export async function resolveReport(c: Context, store: SqliteStorePort): Promise
     .where(eq(contentReports.reportId, reportId));
 
   // Get the report to find target
-  const [report] = await store.db
+  const report = await store.db
     .select()
     .from(contentReports)
     .where(eq(contentReports.reportId, reportId))
-    .limit(1);
+    .get();
 
   if (!report) {
     return c.json({ error: "Report not found" }, 404);
