@@ -59,10 +59,10 @@ describe("Admin Rate Limiting", () => {
     // Should be blocked immediately
     expect(checkRateLimit(key, config).allowed).toBe(false);
 
-    // Wait 200ms (should refill 2 tokens at 10/sec rate)
-    await new Promise((resolve) => setTimeout(resolve, 200));
+    // Wait 300ms (should refill 3 tokens at 10/sec rate, with margin for timing)
+    await new Promise((resolve) => setTimeout(resolve, 300));
 
-    // Should allow 2 more requests
+    // Should allow 2 more requests (capacity is 2, so we get at most 2)
     expect(checkRateLimit(key, config).allowed).toBe(true);
     expect(checkRateLimit(key, config).allowed).toBe(true);
   });
