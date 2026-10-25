@@ -7,7 +7,7 @@ import { createApp } from "./app";
 import { createSqliteStore } from "./sqlite-store";
 
 describe("Creator Code Attribution", () => {
-  const store = createSqliteStore(":memory:");
+  const store = createSqliteStore({ sqlitePath: ":memory:" });
   const app = createApp(store, {});
 
   it("stores creator code on email sign-up", async () => {

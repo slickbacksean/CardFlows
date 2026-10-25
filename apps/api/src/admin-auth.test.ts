@@ -40,58 +40,60 @@ describe("Admin role system", () => {
   let store: ReturnType<typeof createSqliteStore>;
 
   beforeEach(() => {
-    store = createSqliteStore(":memory:");
+    store = createSqliteStore({ sqlitePath: ":memory:" });
   });
 
   test("bootstrapAdminRoles grants role by user ID", async () => {
     // Create test users
-    const { insertUserAccount } = await import("./account-store");
-    await insertUserAccount(store, {
+    const at = new Date().toISOString();
+    const user1 = store.accounts.createAccount({
       email: "user1@test.com",
       passwordHash: "hash1",
-      userId: "acct_user1",
-      createdAt: new Date().toISOString(),
+      at,
     });
-    await insertUserAccount(store, {
+    const user2 = store.accounts.createAccount({
       email: "user2@test.com",
       passwordHash: "hash2",
-      userId: "acct_user2",
-      createdAt: new Date().toISOString(),
+      at,
     });
 
-    const result = await bootstrapAdminRoles(store, { ADMIN_USER_IDS: "acct_user1" });
+    if (!user1 || !user2) throw new Error("Failed to create test users");
+
+    const result = await bootstrapAdminRoles(store, { ADMIN_USER_IDS: user1.userId });
     expect(result.granted).toBe(1);
 
-    const isAdminUser1 = await isAdmin("acct_user1", store);
-    const isAdminUser2 = await isAdmin("acct_user2", store);
+    const isAdminUser1 = await isAdmin(user1.userId, store);
+    const isAdminUser2 = await isAdmin(user2.userId, store);
     expect(isAdminUser1).toBe(true);
     expect(isAdminUser2).toBe(false);
   });
 
   test("bootstrapAdminRoles grants role by email (case-insensitive)", async () => {
-    const { insertUserAccount } = await import("./account-store");
-    await insertUserAccount(store, {
+    const at = new Date().toISOString();
+    const admin = store.accounts.createAccount({
       email: "Admin@Test.COM",
       passwordHash: "hash1",
-      userId: "acct_admin",
-      createdAt: new Date().toISOString(),
+      at,
     });
+
+    if (!admin) throw new Error("Failed to create test user");
 
     const result = await bootstrapAdminRoles(store, { ADMIN_EMAILS: "admin@test.com" });
     expect(result.granted).toBe(1);
 
-    const isAdminUser = await isAdmin("acct_admin", store);
+    const isAdminUser = await isAdmin(admin.userId, store);
     expect(isAdminUser).toBe(true);
   });
 
   test("bootstrapAdminRoles is idempotent", async () => {
-    const { insertUserAccount } = await import("./account-store");
-    await insertUserAccount(store, {
+    const at = new Date().toISOString();
+    const admin = store.accounts.createAccount({
       email: "admin@test.com",
       passwordHash: "hash",
-      userId: "acct_admin",
-      createdAt: new Date().toISOString(),
+      at,
     });
+
+    if (!admin) throw new Error("Failed to create test user");
 
     const result1 = await bootstrapAdminRoles(store, { ADMIN_EMAILS: "admin@test.com" });
     expect(result1.granted).toBe(1);
@@ -101,15 +103,16 @@ describe("Admin role system", () => {
   });
 
   test("isAdmin returns false for non-admin user", async () => {
-    const { insertUserAccount } = await import("./account-store");
-    await insertUserAccount(store, {
+    const at = new Date().toISOString();
+    const user = store.accounts.createAccount({
       email: "user@test.com",
       passwordHash: "hash",
-      userId: "acct_user",
-      createdAt: new Date().toISOString(),
+      at,
     });
 
-    const result = await isAdmin("acct_user", store);
+    if (!user) throw new Error("Failed to create test user");
+
+    const result = await isAdmin(user.userId, store);
     expect(result).toBe(false);
   });
 
@@ -127,16 +130,17 @@ describe("Admin role system", () => {
   });
 
   test("requireAdminRole returns 403 when not admin", async () => {
-    const { insertUserAccount } = await import("./account-store");
-    await insertUserAccount(store, {
+    const at = new Date().toISOString();
+    const user = store.accounts.createAccount({
       email: "user@test.com",
       passwordHash: "hash",
-      userId: "acct_user",
-      createdAt: new Date().toISOString(),
+      at,
     });
 
+    if (!user) throw new Error("Failed to create test user");
+
     const mockContext = {
-      get: (key: string) => (key === "userId" ? "acct_user" : undefined),
+      get: (key: string) => (key === "userId" ? user.userId : undefined),
       json: (data: unknown, status?: number) => ({ json: data, status }),
     } as unknown as Context;
 
@@ -148,17 +152,19 @@ describe("Admin role system", () => {
   });
 
   test("requireAdminRole succeeds for admin user", async () => {
-    const { insertUserAccount } = await import("./account-store");
-    await insertUserAccount(store, {
+    const at = new Date().toISOString();
+    const admin = store.accounts.createAccount({
       email: "admin@test.com",
       passwordHash: "hash",
-      userId: "acct_admin",
-      createdAt: new Date().toISOString(),
+      at,
     });
-    await bootstrapAdminRoles(store, { ADMIN_USER_IDS: "acct_admin" });
+
+    if (!admin) throw new Error("Failed to create test user");
+
+    await bootstrapAdminRoles(store, { ADMIN_USER_IDS: admin.userId });
 
     const mockContext = {
-      get: (key: string) => (key === "userId" ? "acct_admin" : undefined),
+      get: (key: string) => (key === "userId" ? admin.userId : undefined),
     } as unknown as Context;
 
     const result = await requireAdminRole(mockContext, store);
@@ -173,7 +179,7 @@ describe("Admin audit log", () => {
   let store: ReturnType<typeof createSqliteStore>;
 
   beforeEach(() => {
-    store = createSqliteStore(":memory:");
+    store = createSqliteStore({ sqlitePath: ":memory:" });
   });
 
   test("logAdminAction records action", async () => {

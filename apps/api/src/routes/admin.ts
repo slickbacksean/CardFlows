@@ -261,7 +261,9 @@ export async function getAdminCreator(c: Context, store: SqliteStorePort): Promi
   const auth = await requireAdminRole(c, store);
   if (!auth.ok) return auth.response;
 
-  const { creatorId } = c.req.param();
+  const creatorId = c.req.param("creatorId");
+  if (!creatorId) return c.json({ error: "Creator ID required" }, 400);
+  
   const creators = await listCreators(store, { includeArchived: true });
   const creator = creators.find((c) => c.creatorId === creatorId);
 
@@ -295,7 +297,9 @@ export async function updateAdminCreator(c: Context, store: SqliteStorePort): Pr
   const userRateLimit = checkAdminRateLimits(c, auth.userId);
   if (userRateLimit) return userRateLimit;
 
-  const { creatorId } = c.req.param();
+  const creatorId = c.req.param("creatorId");
+  if (!creatorId) return c.json({ error: "Creator ID required" }, 400);
+  
   const body = await c.req.json();
 
   await updateCreator(store, creatorId, body);
@@ -328,7 +332,8 @@ export async function deleteAdminCreator(c: Context, store: SqliteStorePort): Pr
   const userRateLimit = checkAdminRateLimits(c, auth.userId);
   if (userRateLimit) return userRateLimit;
 
-  const { creatorId } = c.req.param();
+  const creatorId = c.req.param("creatorId");
+  if (!creatorId) return c.json({ error: "Creator ID required" }, 400);
 
   await archiveCreator(store, creatorId);
 
@@ -366,7 +371,9 @@ export async function exportCreatorStats(c: Context, store: SqliteStorePort): Pr
   const auth = await requireAdminRole(c, store);
   if (!auth.ok) return auth.response;
 
-  const { creatorId } = c.req.param();
+  const creatorId = c.req.param("creatorId");
+  if (!creatorId) return c.json({ error: "Creator ID required" }, 400);
+  
   const creators = await listCreators(store, { includeArchived: true });
   const creator = creators.find((c) => c.creatorId === creatorId);
 

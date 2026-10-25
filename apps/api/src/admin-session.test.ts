@@ -17,7 +17,7 @@ import {
 import type { AdminSession } from "./admin-session";
 
 describe("Admin Session Management", () => {
-  const store = createSqliteStore(":memory:");
+  const store = createSqliteStore({ sqlitePath: ":memory:" });
 
   beforeEach(async () => {
     // Clean up admin sessions before each test

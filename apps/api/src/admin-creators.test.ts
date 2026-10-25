@@ -17,7 +17,7 @@ describe("Creator management", () => {
   let store: ReturnType<typeof createSqliteStore>;
 
   beforeEach(() => {
-    store = createSqliteStore(":memory:");
+    store = createSqliteStore({ sqlitePath: ":memory:" });
   });
 
   test("generateInviteCode generates 6-char uppercase alphanumeric code", () => {

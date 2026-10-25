@@ -74,4 +74,21 @@ CREATE TABLE creator_stats_snapshots (
 );
 --> statement-breakpoint
 CREATE INDEX creator_stats_date_idx ON creator_stats_snapshots(snapshot_date);
+--> statement-breakpoint
+
+-- Admin sessions with CSRF tokens and 8-hour TTL
+CREATE TABLE admin_sessions (
+  session_id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  token_hash TEXT NOT NULL,
+  csrf_token TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  expires_at TEXT NOT NULL
+);
+--> statement-breakpoint
+CREATE UNIQUE INDEX admin_sessions_token_hash ON admin_sessions(token_hash);
+--> statement-breakpoint
+CREATE INDEX admin_sessions_user_idx ON admin_sessions(user_id);
+--> statement-breakpoint
+CREATE INDEX admin_sessions_expiry_idx ON admin_sessions(expires_at);
 

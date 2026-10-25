@@ -22,6 +22,9 @@ export interface AccountRecord {
   /** Sean (Oct 19): Terms of Service version accepted at sign-up, and when. */
   termsVersion?: string | null;
   termsAcceptedAt?: string | null;
+  /** Sean (Oct 25): Creator/affiliate code for attribution. */
+  creatorCode?: string | null;
+  creatorCodeEnteredAt?: string | null;
 }
 
 export type SocialProvider = "apple" | "google";
