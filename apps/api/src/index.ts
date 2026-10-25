@@ -138,6 +138,16 @@ if (rapidOCRConfig.enabled) {
   console.log(`RapidOCR: off (${rapidOCRConfig.reason})`);
 }
 
+// Newsletter weekly draft job (creates drafts only, never sends automatically)
+import { startWeeklyNewsletterJob } from "./newsletter-job";
+let newsletterJob: { stop: () => void } | null = null;
+if (selection.kind === "sqlite") {
+  const sqliteStore = store as any;
+  if (sqliteStore.db) {
+    newsletterJob = startWeeklyNewsletterJob(sqliteStore);
+  }
+}
+
 const server = serve({ fetch: app.fetch, port }, (info) => {
   console.log(`CardFlow API listening on http://localhost:${info.port}`);
   console.log(`Backups: litestream ${litestreamModeFromEnv()}`);
@@ -174,6 +184,7 @@ function shutdown(signal: string) {
   const startedAt = Date.now();
   photoRetention.stop();
   diskMonitor?.stop();
+  newsletterJob?.stop();
   const finish = () => {
     try {
       (store as { close?: () => void }).close?.();
