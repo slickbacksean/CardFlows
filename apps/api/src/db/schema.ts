@@ -881,6 +881,93 @@ export const newsletterSendLog = sqliteTable(
   ],
 );
 
+/**
+ * Sean (Oct 25): Training data opt-out preference. By accepting Terms, users consent to training
+ * data retention (ON by default). This table tracks users who opted out via Settings toggle.
+ * Opt-out stops new retention and deletes saved training images.
+ */
+export const trainingDataOptOuts = sqliteTable(
+  "training_data_opt_outs",
+  {
+    userId: text("user_id").primaryKey(),
+    optedOutAt: text("opted_out_at").notNull(),
+  },
+);
+
+/**
+ * Sean (Oct 25): Scan correction feedback. When a user corrects or confirms a scan result,
+ * store what was chosen, model's prediction, confidence, and model version. No user identity
+ * beyond pseudonymous internal ID. Used to measure and improve model accuracy.
+ */
+export const scanCorrectionFeedback = sqliteTable(
+  "scan_correction_feedback",
+  {
+    feedbackId: text("feedback_id").primaryKey(),
+    /** Pseudonymous user ID (HMAC of real userId). */
+    pseudonymousUserId: text("pseudonymous_user_id").notNull(),
+    scanId: text("scan_id").notNull(),
+    /** What the user chose. */
+    chosenCardflowCardId: text("chosen_cardflow_card_id").notNull(),
+    chosenTcgdexId: text("chosen_tcgdex_id").notNull(),
+    /** What the model predicted (top result). */
+    predictedTcgdexId: text("predicted_tcgdex_id"),
+    confidence: text("confidence"),
+    modelVersion: text("model_version").notNull(),
+    recognitionProvider: text("recognition_provider").notNull(),
+    /** Whether this was a correction (user picked different) or confirmation (same as prediction). */
+    wasCorrection: integer("was_correction", { mode: "boolean" }).notNull(),
+    createdAt: text("created_at").notNull(),
+    /** Linked training image ID if scan photo was kept. */
+    trainingImageId: text("training_image_id"),
+  },
+  (table) => [
+    index("scan_correction_feedback_created_idx").on(table.createdAt),
+    index("scan_correction_feedback_pseudo_user_idx").on(table.pseudonymousUserId),
+    index("scan_correction_feedback_model_idx").on(table.modelVersion),
+  ],
+);
+
+/**
+ * Sean (Oct 25): Training images retained for model improvement. Scan frames that help training:
+ * user corrections, low-confidence results, failures/no-match. Kept for limited period (default
+ * 180 days), then auto-deleted, OR once used in a training run (whichever first). Separate storage,
+ * cropped to card, EXIF/location stripped. Deleted within 30 days of opt-out or account deletion.
+ * Never CardSight outputs, never livestream/Live Scan frames.
+ */
+export const trainingImages = sqliteTable(
+  "training_images",
+  {
+    imageId: text("image_id").primaryKey(),
+    userId: text("user_id").notNull(),
+    /** Pseudonymous user ID for export (HMAC of real userId). */
+    pseudonymousUserId: text("pseudonymous_user_id").notNull(),
+    scanId: text("scan_id").notNull(),
+    /** Why this image was kept: correction | low_confidence | no_match */
+    retentionReason: text("retention_reason").notNull(),
+    capturedAt: text("captured_at").notNull(),
+    /** Storage path in training bucket/volume. */
+    storageRef: text("storage_ref").notNull(),
+    imageMimeType: text("image_mime_type").notNull(),
+    /** When this image expires (capturedAt + retention period). */
+    expiresAt: text("expires_at").notNull(),
+    /** Terms version that included training consent when image was captured. */
+    termsVersion: text("terms_version").notNull(),
+    /** Set when image is used in a training run (can delete after use). */
+    usedInTrainingAt: text("used_in_training_at"),
+    /** Soft delete marker (opt-out, account deletion, or used in training). */
+    deletedAt: text("deleted_at"),
+    createdAt: text("created_at").notNull(),
+  },
+  (table) => [
+    index("training_images_user_idx").on(table.userId),
+    index("training_images_pseudo_user_idx").on(table.pseudonymousUserId),
+    index("training_images_expires_idx").on(table.expiresAt),
+    index("training_images_deleted_idx").on(table.deletedAt),
+    index("training_images_retention_reason_idx").on(table.retentionReason),
+    check("training_images_retention_reason_chk", sql`${table.retentionReason} in ('correction', 'low_confidence', 'no_match')`),
+  ],
+);
+
 export const schema = {
   ageConfirmations,
   authIdentities,
@@ -932,4 +1019,7 @@ export const schema = {
   newsletterSubscriptions,
   newsletterIssues,
   newsletterSendLog,
+  trainingDataOptOuts,
+  scanCorrectionFeedback,
+  trainingImages,
 };
