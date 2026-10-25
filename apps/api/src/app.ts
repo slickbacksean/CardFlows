@@ -193,6 +193,7 @@ import { registerTrainingDataRoutes } from "./routes/training-data";
 import { registerAdminExportRoutes } from "./routes/admin-export";
 import { startTrainingDataRetentionJob } from "./training-data-retention-job";
 import { isMemorySqlitePath } from "./db/migrate";
+import { isAdmin } from "./admin-auth";
 import { registerStatusRoutes } from "./routes/status";
 import { registerSalesRoutes } from "./routes/sales";
 import { premiumRequiredBody, recordGradeEstimate, registerGradeHistoryRoutes } from "./routes/grade-history";
@@ -2862,7 +2863,7 @@ export function createApp(
     if (isSqliteStore) {
       registerAdminExportRoutes(app, {
         store: store as import("./sqlite-store").SqliteStorePort,
-        isAdmin: (userId: string) => INVITED_USERS.some((u) => u.userId === userId),
+        isAdmin,
       });
       
       // Start training data retention job (purge expired images every hour)

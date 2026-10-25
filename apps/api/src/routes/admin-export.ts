@@ -1,6 +1,6 @@
 /**
  * Sean (Oct 25): Admin export endpoint for training data corrections and images.
- * Admin-only access. Returns JSON with correction feedback records and training image metadata.
+ * Admin-only access via ADMIN_USER_IDS / ADMIN_EMAILS (compatible with PR #122).
  */
 import { desc, eq, isNull } from "drizzle-orm";
 import type { CardFlowApp } from "../app-env";
@@ -9,7 +9,7 @@ import type { SqliteStorePort } from "../sqlite-store";
 
 export interface AdminExportRouteDeps {
   store: SqliteStorePort;
-  isAdmin: (userId: string) => boolean;
+  isAdmin: (userId: string, email?: string | null) => boolean;
 }
 
 export function registerAdminExportRoutes(
@@ -20,8 +20,9 @@ export function registerAdminExportRoutes(
 
   app.get("/v1/admin/training-data/export", (c) => {
     const userId = c.get("userId");
+    const email = store.accounts.findById(userId)?.email ?? null;
     
-    if (!isAdmin(userId)) {
+    if (!isAdmin(userId, email)) {
       return c.json({ ok: false, error: "Admin access required" }, 403);
     }
 
@@ -56,9 +57,10 @@ export function registerAdminExportRoutes(
 
   app.get("/v1/admin/training-data/corrections/:feedbackId", (c) => {
     const userId = c.get("userId");
+    const email = store.accounts.findById(userId)?.email ?? null;
     const feedbackId = c.req.param("feedbackId");
     
-    if (!isAdmin(userId)) {
+    if (!isAdmin(userId, email)) {
       return c.json({ ok: false, error: "Admin access required" }, 403);
     }
 
