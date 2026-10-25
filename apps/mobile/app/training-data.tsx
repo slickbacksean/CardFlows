@@ -1,5 +1,4 @@
 import { TRAINING_DATA_RETENTION_COPY } from "@cardflow/shared";
-import { useRouter } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import { ActivityIndicator, ScrollView, StyleSheet, Switch, Text, View } from "react-native";
 import { PreferencesScreenHeader } from "@/components/ui/preferences-screen-header";
@@ -8,15 +7,12 @@ import { getTrainingDataStatus, optInToTrainingData, optOutOfTrainingData } from
 import { colors, space } from "@/lib/theme";
 
 export default function TrainingDataScreen() {
-  const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [optedOut, setOptedOut] = useState(false);
   const [toggling, setToggling] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    setLoading(true);
-    setError(null);
     void getTrainingDataStatus()
       .then((result) => {
         setOptedOut(result.optedOut);
