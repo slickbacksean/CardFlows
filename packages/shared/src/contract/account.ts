@@ -42,6 +42,8 @@ const SignUpBody = z.object({
   /** Sean (Oct 19): required "I agree to the Terms of Service and Privacy Policy" checkbox. */
   termsAccepted: z.literal(true).optional(),
   termsVersion: z.string().optional(),
+  /** Sean (Oct 25): optional creator/affiliate code for attribution. */
+  creatorCode: z.string().optional(),
 });
 
 /** Sean (Oct 19): Sign in with Apple / Google. New accounts also send the 18+ and Terms fields. */
@@ -55,6 +57,8 @@ const SocialSignInBody = z.object({
   ageGateVersion: z.string().optional(),
   termsAccepted: z.literal(true).optional(),
   termsVersion: z.string().optional(),
+  /** Sean (Oct 25): optional creator/affiliate code for attribution. */
+  creatorCode: z.string().optional(),
 });
 
 const money = z.union([z.string(), z.number()]).nullable().optional();

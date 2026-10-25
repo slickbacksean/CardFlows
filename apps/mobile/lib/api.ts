@@ -1079,8 +1079,13 @@ export function confirmEmailVerification(code: string) {
 }
 
 /** Sean (Oct 17): sign-up sends the required 18+ checkbox (never a birth date). */
-export function createAccount(email: string, password: string, ageConfirmed18Plus: boolean, termsAccepted = false) {
-  const base: { email: string; password: string; ageConfirmed18Plus?: true; ageGateVersion?: string } = ageConfirmed18Plus ? { email, password, ageConfirmed18Plus: true, ageGateVersion: AGE_GATE_VERSION } : { email, password };
+export function createAccount(email: string, password: string, ageConfirmed18Plus: boolean, termsAccepted = false, creatorCode?: string) {
+  const base: { email: string; password: string; ageConfirmed18Plus?: true; ageGateVersion?: string; creatorCode?: string } = {
+    email,
+    password,
+    ...(ageConfirmed18Plus ? { ageConfirmed18Plus: true, ageGateVersion: AGE_GATE_VERSION } : {}),
+    ...(creatorCode ? { creatorCode } : {}),
+  };
   // Sean (Oct 19): the required Terms of Service + Privacy Policy checkbox.
   return callApi(apiContract.createAccount, {
     body: termsAccepted ? { ...base, termsAccepted: true, termsVersion: TERMS_VERSION } : base,
@@ -1095,6 +1100,7 @@ export function signInWithSocialToken(input: {
   authorizationCode?: string;
   ageConfirmed18Plus: boolean;
   termsAccepted: boolean;
+  creatorCode?: string;
 }) {
   return callApi(apiContract.signInWithSocial, {
     body: {
@@ -1104,6 +1110,7 @@ export function signInWithSocialToken(input: {
       ...(input.authorizationCode ? { authorizationCode: input.authorizationCode } : {}),
       ...(input.ageConfirmed18Plus ? { ageConfirmed18Plus: true as const, ageGateVersion: AGE_GATE_VERSION } : {}),
       ...(input.termsAccepted ? { termsAccepted: true as const, termsVersion: TERMS_VERSION } : {}),
+      ...(input.creatorCode ? { creatorCode: input.creatorCode } : {}),
     },
   });
 }

@@ -2110,6 +2110,7 @@ export function createApp(
     const bodyConfirmed = signUpBody.ageConfirmed18Plus === true && signUpBody.ageGateVersion === AGE_GATE_VERSION;
     if (ageGate && !bodyConfirmed) return ageRequired(c);
     const termsAccepted = termsAcceptedIn(signUpBody);
+    const creatorCode = typeof signUpBody.creatorCode === "string" ? signUpBody.creatorCode.trim() : undefined;
     const existingForEmail = store.accounts.findByEmail(email);
     // A new account must accept the Terms (an existing email just signs in below).
     if (termsGate && !termsAccepted && !existingForEmail) return termsRequired(c);
@@ -2120,6 +2121,7 @@ export function createApp(
       passwordHash,
       at: signUpAt,
       ...(termsAccepted ? { terms: { version: TERMS_VERSION, acceptedAt: signUpAt } } : {}),
+      ...(creatorCode ? { creatorCode } : {}),
     });
     let account = created;
     if (!account) {
@@ -2263,12 +2265,14 @@ export function createApp(
         400,
       );
     }
+    const creatorCode = typeof socialBody.creatorCode === "string" ? socialBody.creatorCode.trim() : undefined;
     const created = store.accounts.createAccount({
       email,
       passwordHash: NO_PASSWORD_HASH,
       at,
       emailVerified: true,
       ...(termsOk ? { terms: { version: TERMS_VERSION, acceptedAt: at } } : {}),
+      ...(creatorCode ? { creatorCode } : {}),
     });
     if (!created) return c.json({ ok: false, error: ACCOUNT_AUTH_COPY.signInFailed }, 400);
     store.accounts.linkSocial({ provider, subject: verified.subject, userId: created.userId, email, at });

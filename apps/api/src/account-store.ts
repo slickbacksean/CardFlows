@@ -49,6 +49,8 @@ export interface AccountStore {
     terms?: { version: string; acceptedAt: string };
     /** Apple/Google already verified the email. */
     emailVerified?: boolean;
+    /** Creator/affiliate code for attribution (optional). */
+    creatorCode?: string;
   }): AccountRecord | null;
   /** Sean (Oct 19): Apple/Google subject → account. */
   findUserBySocial(provider: SocialProvider, subject: string): string | null;
@@ -278,7 +280,7 @@ export function createSqliteAccountStore(
     }
   };
   return {
-    createAccount({ email, passwordHash, at, terms, emailVerified }) {
+    createAccount({ email, passwordHash, at, terms, emailVerified, creatorCode }) {
       const normalized = normalizeEmail(email);
       const record: AccountRecord = {
         userId: `acct_${crypto.randomUUID()}`,
@@ -287,9 +289,10 @@ export function createSqliteAccountStore(
         createdAt: at,
         ...(terms ? { termsVersion: terms.version, termsAcceptedAt: terms.acceptedAt } : {}),
         ...(emailVerified ? { emailVerifiedAt: at } : {}),
+        ...(creatorCode ? { creatorCode, creatorCodeEnteredAt: at } : {}),
       };
       const inserted = db.insert(userAccounts).values(record).onConflictDoNothing().run();
-      return inserted.changes === 1 ? { termsVersion: null, termsAcceptedAt: null, emailVerifiedAt: null, ...record } : null;
+      return inserted.changes === 1 ? { termsVersion: null, termsAcceptedAt: null, emailVerifiedAt: null, creatorCode: null, creatorCodeEnteredAt: null, ...record } : null;
     },
     findUserBySocial(provider, subject) {
       const row = db
