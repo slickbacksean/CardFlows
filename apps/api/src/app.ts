@@ -2266,7 +2266,7 @@ export function createApp(
         400,
       );
     }
-    const creatorCode = typeof socialBody.creatorCode === "string" ? socialBody.creatorCode.trim() : undefined;
+    const creatorCode = typeof body.creatorCode === "string" ? body.creatorCode.trim() : undefined;
     const created = store.accounts.createAccount({
       email,
       passwordHash: NO_PASSWORD_HASH,

@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect, beforeEach } from "vitest";
-import { testStore } from "./test-helpers";
+import { createSqliteStore } from "./sqlite-store";
 import {
   createAdminSession,
   getAdminSession,
@@ -17,7 +17,7 @@ import {
 import type { AdminSession } from "./admin-session";
 
 describe("Admin Session Management", () => {
-  const store = testStore();
+  const store = createSqliteStore(":memory:");
 
   beforeEach(async () => {
     // Clean up admin sessions before each test

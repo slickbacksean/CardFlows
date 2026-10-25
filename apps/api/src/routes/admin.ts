@@ -5,9 +5,9 @@
  */
 
 import type { Context } from "hono";
-import type { SqliteStorePort } from "./sqlite-store";
-import { requireAdminRole, logAdminAction, getAdminActions, isAdmin } from "./admin-auth";
-import { getUserStats, getScanStats, getPurchaseStats, getCommunityStats } from "./admin-stats";
+import type { SqliteStorePort } from "../sqlite-store";
+import { requireAdminRole, logAdminAction, getAdminActions, isAdmin } from "../admin-auth";
+import { getUserStats, getScanStats, getPurchaseStats, getCommunityStats } from "../admin-stats";
 import {
   createCreator,
   updateCreator,
@@ -15,18 +15,18 @@ import {
   listCreators,
   computeCreatorStats,
   getCreatorLeaderboard,
-} from "./admin-creators";
+} from "../admin-creators";
 import {
   createAdminSession,
   deleteAdminSession,
   requireAdminSession,
   setAdminSessionCookie,
   clearAdminSessionCookie,
-} from "./admin-session";
+} from "../admin-session";
 import {
   rateLimitAdminLogin,
   checkAdminRateLimits,
-} from "./admin-rate-limit";
+} from "../admin-rate-limit";
 
 /**
  * POST /v1/admin/login

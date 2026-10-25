@@ -4,11 +4,11 @@
 
 import { describe, it, expect } from "vitest";
 import { createApp } from "./app";
-import { testStore } from "./test-helpers";
+import { createSqliteStore } from "./sqlite-store";
 
 describe("Creator Code Attribution", () => {
-  const store = testStore();
-  const app = createApp(store, { disableRecording: true });
+  const store = createSqliteStore(":memory:");
+  const app = createApp(store, {});
 
   it("stores creator code on email sign-up", async () => {
     const email = `test-${Date.now()}@example.com`;
