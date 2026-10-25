@@ -20,7 +20,7 @@ export function registerAdminExportRoutes(
 
   app.get("/v1/admin/training-data/export", (c) => {
     const userId = c.get("userId");
-    const email = store.accounts.findById(userId)?.email ?? null;
+    const email = store.accounts.getAccount(userId)?.email ?? null;
     
     if (!isAdmin(userId, email)) {
       return c.json({ ok: false, error: "Admin access required" }, 403);
@@ -57,7 +57,7 @@ export function registerAdminExportRoutes(
 
   app.get("/v1/admin/training-data/corrections/:feedbackId", (c) => {
     const userId = c.get("userId");
-    const email = store.accounts.findById(userId)?.email ?? null;
+    const email = store.accounts.getAccount(userId)?.email ?? null;
     const feedbackId = c.req.param("feedbackId");
     
     if (!isAdmin(userId, email)) {
