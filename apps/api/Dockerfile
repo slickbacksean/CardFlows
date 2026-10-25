@@ -42,10 +42,11 @@ RUN pnpm install --frozen-lockfile --prod --filter "@cardflow/api..." --config.n
            node_modules/.pnpm/onnxruntime-node@*/node_modules/onnxruntime-node/bin/napi-v3/win32
 COPY packages/shared packages/shared
 COPY apps/api apps/api
+# Build admin SPA first with its own isolated install
 COPY apps/admin apps/admin
-# Build admin SPA - install dev dependencies (not in prod lockfile) and build
-RUN pnpm install --filter @cardflow/admin
-RUN pnpm --filter @cardflow/admin build
+WORKDIR /repo/apps/admin
+RUN pnpm install --config.node-linker=hoisted && pnpm build
+WORKDIR /repo
 # Copy admin build to API public directory
 RUN mkdir -p apps/api/public/admin && cp -r apps/admin/dist/* apps/api/public/admin/
 # Runs from TypeScript source with tsx (a production dependency). @cardflow/shared
