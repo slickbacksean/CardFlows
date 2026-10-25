@@ -49,6 +49,7 @@ export const PUBLIC_ENV_VARS: ReadonlyArray<{
   { name: "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID", purpose: "Google sign-in OAuth web client ID (optional; public)", profiles: APP_ENVS },
   { name: "EXPO_PUBLIC_CARD_FLOW_IAP_ENABLED", purpose: "In-app purchases (true/1; off hides every price)", profiles: APP_ENVS },
   { name: "EXPO_PUBLIC_CARD_FLOW_LIVESTREAM_TCGPLAYER_LINK", purpose: "HUD shows See prices on TCGplayer instead of estimate (=1)", profiles: APP_ENVS },
+  { name: "EXPO_PUBLIC_CARD_FLOW_LIVESTREAM_TEMPORAL_VOTING", purpose: "Multi-frame temporal voting (=1; averages similarities across hold)", profiles: APP_ENVS },
 ];
 
 type Env = Record<string, string | undefined>;

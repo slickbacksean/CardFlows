@@ -49,6 +49,7 @@ Repeat for `preview`, and for `development` if wanted. `apps/mobile/.env.example
 | `EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID` | Google sign-in, Android OAuth client ID (public) | all | Google button hidden on Android |
 | `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID` | Google sign-in, web OAuth client ID (public) | all | Google button hidden on web |
 | `EXPO_PUBLIC_CARD_FLOW_LIVESTREAM_TIMING` | Livestream timing logs (`=1`) | development, preview (**enforced**: a production build fails) | off |
+| `EXPO_PUBLIC_CARD_FLOW_LIVESTREAM_TEMPORAL_VOTING` | Multi-frame temporal voting: averages per-frame similarities + best frame's score across hold (`=1`). Research shows +4.5pp on streams, +10pp on eBay. | all | off |
 | `EXPO_PUBLIC_CARD_FLOW_LIVESTREAM_PRICE_SNAPSHOT` | Bulk livestream price snapshot (`=1`) | development, preview (**enforced**: production fails). Default **off** — TCGplayer on-device cache is under Policy review. | off |
 | `EXPO_PUBLIC_CARD_FLOW_LIVESTREAM_TCGPLAYER_LINK` | HUD link-out “See prices on TCGplayer” (`=1`) | all | off |
 
