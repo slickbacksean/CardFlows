@@ -19,6 +19,9 @@ importers:
 
   apps/admin:
     dependencies:
+      '@tanstack/react-query':
+        specifier: ^5.66.1
+        version: 5.104.2(react@18.3.1)
       react:
         specifier: ^18.3.1
         version: 18.3.1
@@ -8600,7 +8603,9 @@ snapshots:
       metro-runtime: 0.84.5
     transitivePeerDependencies:
       - '@babel/core'
+      - bufferutil
       - supports-color
+      - utf-8-validate
 
   '@react-native/normalize-colors@0.74.89': {}
 
@@ -8847,6 +8852,11 @@ snapshots:
   '@sinclair/typebox@0.27.12': {}
 
   '@tanstack/query-core@5.104.2': {}
+
+  '@tanstack/react-query@5.104.2(react@18.3.1)':
+    dependencies:
+      '@tanstack/query-core': 5.104.2
+      react: 18.3.1
 
   '@tanstack/react-query@5.104.2(react@19.2.3)':
     dependencies:
