@@ -102,6 +102,10 @@ export default function SettingsScreen() {
         <Text style={styles.body}>{identity?.label ?? "Not signed in"}</Text>
         <JobRow label="Switch account" onPress={() => router.push("/sign-up")} />
 
+        <Text style={styles.section}>Data</Text>
+        <JobRow label="P&L" onPress={() => router.push("/pnl")} />
+        <JobRow label="Export all my data" onPress={() => router.push("/export-data")} />
+
         <JobRow
           label={PRACTICE_COPY.entryLabel}
           onPress={() => router.push("/practice")}

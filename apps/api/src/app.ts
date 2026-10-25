@@ -191,6 +191,30 @@ import { registerGradeJobRoutes, type GradeJobRoutes } from "./routes/grade-jobs
 import { registerStatusRoutes } from "./routes/status";
 import { registerSalesRoutes } from "./routes/sales";
 import { premiumRequiredBody, recordGradeEstimate, registerGradeHistoryRoutes } from "./routes/grade-history";
+import {
+  checkUsernameAvailability,
+  setUsername,
+  getUsername,
+  getCommunitySettings,
+  updateCommunitySettings,
+  getFeed,
+  reactToPost,
+  deleteReaction,
+  getComments,
+  postComment,
+  deleteComment,
+  reportContent,
+  blockUser,
+  unblockUser,
+  getBlockedUsers,
+  getMarketMovers,
+  getWhatsBuying,
+  getWhatsSelling,
+  getSetTrends,
+  listReports,
+  resolveReport,
+  getModerationNotices,
+} from "./routes/community";
 import { REQUEST_ID_HEADER, resolveRequestId } from "./request-id";
 import { captureApiException } from "./sentry";
 import {
@@ -2814,6 +2838,38 @@ export function createApp(
       getInventoryItem(userId, inventoryItemId)?.intent === "purchased",
     isPremium: (userId) => resolveAccountPlan(userId, getGradeAccount(userId).plan) === "premium",
   });
+
+  // Community routes (username, settings, feed, reactions, comments, reports, blocks, market)
+  // Only available when using SQLite store (not memory store)
+  const sqliteStore = store as any;
+  if (sqliteStore.db) {
+    app.get("/v1/community/username/check", (c) => checkUsernameAvailability(c, sqliteStore));
+    app.get("/v1/community/username", (c) => getUsername(c, c.get("userId"), sqliteStore));
+    app.post("/v1/community/username", (c) => setUsername(c, c.get("userId"), sqliteStore));
+    app.get("/v1/community/settings", (c) => getCommunitySettings(c, c.get("userId"), sqliteStore));
+    app.patch("/v1/community/settings", (c) => updateCommunitySettings(c, c.get("userId"), sqliteStore));
+    app.get("/v1/community/feed", (c) => getFeed(c, c.get("userId"), sqliteStore));
+    app.put("/v1/community/posts/:postId/reaction", (c) => reactToPost(c, c.get("userId"), sqliteStore));
+    app.delete("/v1/community/posts/:postId/reaction", (c) => deleteReaction(c, c.get("userId"), sqliteStore));
+    app.get("/v1/community/posts/:postId/comments", (c) => getComments(c, c.get("userId"), sqliteStore));
+    app.post("/v1/community/posts/:postId/comments", (c) => postComment(c, c.get("userId"), sqliteStore));
+    app.delete("/v1/community/comments/:commentId", (c) => deleteComment(c, c.get("userId"), sqliteStore));
+    app.post("/v1/community/reports", (c) => reportContent(c, c.get("userId"), sqliteStore));
+    app.post("/v1/community/blocks/:userId", (c) => blockUser(c, c.get("userId"), sqliteStore));
+    app.delete("/v1/community/blocks/:userId", (c) => unblockUser(c, c.get("userId"), sqliteStore));
+    app.get("/v1/community/blocks", (c) => getBlockedUsers(c, c.get("userId"), sqliteStore));
+    app.get("/v1/community/market/movers", (c) => getMarketMovers(c, sqliteStore));
+    app.get("/v1/community/market/buying", (c) => getWhatsBuying(c, sqliteStore));
+    app.get("/v1/community/market/selling", (c) => getWhatsSelling(c, sqliteStore));
+    app.get("/v1/community/market/sets", (c) => getSetTrends(c, sqliteStore));
+    
+    // Admin moderation
+    app.get("/v1/community/admin/reports", (c) => listReports(c, sqliteStore));
+    app.post("/v1/community/admin/reports/:reportId/resolve", (c) => resolveReport(c, sqliteStore));
+    
+    // Moderation notices
+    app.get("/v1/community/moderation/notices", (c) => getModerationNotices(c, sqliteStore));
+  }
 
   app.post("/v1/scans", bodyLimit({
       maxSize: SCAN_IMAGE_MAX_BYTES,

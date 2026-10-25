@@ -115,6 +115,8 @@ export interface SqliteStorePort extends StorePort {
   readonly sqlitePath: string;
   /** /health: a cheap read on the live handle plus the journal mode. Never throws. */
   ping(): { ok: boolean; journalMode: string };
+  /** Drizzle database handle for direct queries (community features, admin tools). */
+  readonly db: ReturnType<typeof applyMvpMigrations>["db"];
 }
 
 interface PersistedRecognitionEnvelope {
@@ -2148,6 +2150,7 @@ export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStor
 
   return {
     sqlitePath: options.sqlitePath,
+    db, // Expose database for community routes
     close() {
       sqlite.close();
     },

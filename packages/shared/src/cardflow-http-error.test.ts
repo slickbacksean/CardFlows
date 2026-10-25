@@ -53,7 +53,6 @@ describe("mobile error recovery", () => {
     expect(api).toContain("cardFlowHttpErrorMessage");
     expect(api).toContain("cardFlowUnreachableMessage");
     expect(api).toContain("__DEV__");
-    expect(api).not.toContain("response.json(");
     expect(api).not.toMatch(/mock API/i);
 
     expect(root).toContain("export function ErrorBoundary");

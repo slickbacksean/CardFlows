@@ -37,7 +37,7 @@ UX rule for every tab: one primary job, one primary action, honest empty state. 
 +------------------------------------+
 |           [ tab body ]             |
 +------------------------------------+
-| Collection  (O)  Shop  Grade Export|
+| Collection  (O)  Shop  Grade Community|
 +------------------------------------+
 ```
 
@@ -307,25 +307,6 @@ The returned grade the user types is the **actual** cert result. Do not overwrit
 
 ---
 
-## 5. Export
-
-**Job:** Get listing text out of PokeSniper. Clipboard only for private beta.
-
-**Primary action:** Open a purchased draft that can Copy.
-
-**References:** Collectr’s export/sold-listings *placement* (a dedicated surface for getting data out). Leave CSV, analytics dump, and marketplace publish.
-
-### Layout
-
-1. Title: `Export`.
-2. Constraint: `Clipboard copy omits private notes. PokeSniper did not publish this.`
-3. **Destination list:**
-
-| Row | State | Tap |
-|-----|--------|-----|
-| Copy listing | Enabled if any purchased draft exists | That draft (or Collection purchased) |
-| CSV | Disabled | `Not in private beta` |
-| Publish to marketplace | Disabled | `No` |
 
 4. **Ready to copy** section (only if drafts exist): 1-column rows of purchased drafts (`title`, `ready_for_review` vs `draft`). Tap → existing draft screen. Copy still omits notes.
 
@@ -356,8 +337,10 @@ The returned grade the user types is the **actual** cert result. Do not overwrit
 | Know what I can pay | Live market | User reference + Max Buy guidance |
 | Pre-grade before I mail | TCG Grading AI 1–10 | Manual four-pillar checklist on Grading → Prepare |
 | Track a PSA order | PSA app submissions | Grading → Submitted / Returned, user-typed IDs |
-| List it for sale | Collectr marketplace / PSA eBay | Export → Copy listing draft · no publish |
+| List it for sale | Collectr marketplace / PSA eBay | CSV export from MyDEX share icon · no publish |
 | Live show hunting | Whatnot/eBay live + Brickify-style overlay | In-app browser + live-video identify (YOLO + card-identity) + PokéCollector estimate / Max Buy. No scrape, no auto-bid |
+| See market trends | Collectr Performance / HoloDex charts | Community Market tab (movers, buying, selling, set trends) with est. pricing |
+| Share pulls | TCG social media / Discord | Community Feed (anonymous by default, opt-in sharing, reactions, comments) |
 
 ---
 
@@ -366,7 +349,7 @@ The returned grade the user types is the **actual** cert result. Do not overwrit
 Do **not** implement from this list. Use [TAB_LAYOUT_TASKS.md](./TAB_LAYOUT_TASKS.md) (Tasks 1–19).
 
 1. **Collection** — add the counts row; keep scan strip, search, segments, grid, empty/error. Do not restyle.
-2. **Export** — destination list + ready-to-copy rows wired to existing drafts. Fastest honest tab.
+2. **Community** — Market & Feed segments with pricing disclaimers, anonymous sharing by default, moderation flows. Relocated P&L and CSV export.
 3. **Shop** — three job rows, no fake catalog.
 4. **Grading** — Prepare / Submitted / Returned as **local layout + user fields**. Persistence can wait on the mock API until a later task; do not invent a PSA client.
 5. **Livestream** — layout: in-app browser + overlay strip ([TAB_LAYOUT_TASKS.md](./TAB_LAYOUT_TASKS.md)). Identify: live video, not this layout file ([VALIDATION_ITEMS_TASKS.md](./VALIDATION_ITEMS_TASKS.md) Phase 6).
