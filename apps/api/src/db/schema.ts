@@ -230,8 +230,15 @@ export const userAccounts = sqliteTable(
     /** Sean (Oct 19): Terms of Service version accepted at sign-up, and when (0028). */
     termsVersion: text("terms_version"),
     termsAcceptedAt: text("terms_accepted_at"),
+    /** Sean (Oct 25): Username for community features (3-20 chars, case-insensitive unique). */
+    username: text("username"),
+    usernameLower: text("username_lower"),
+    usernameChangedAt: text("username_changed_at"),
   },
-  (table) => [unique("user_accounts_email").on(table.email)],
+  (table) => [
+    unique("user_accounts_email").on(table.email),
+    uniqueIndex("user_accounts_username_lower_uidx").on(table.usernameLower).where(sql`${table.usernameLower} IS NOT NULL`),
+  ],
 );
 
 /**
@@ -660,6 +667,173 @@ export const authIdentities = sqliteTable(
   (table) => [primaryKey({ columns: [table.provider, table.subject] }), index("auth_identities_user_idx").on(table.userId)],
 );
 
+/** Sean (Oct 25): Reserved usernames (admin, pokesniper, support, moderator, etc.). */
+export const reservedUsernames = sqliteTable("reserved_usernames", {
+  usernameLower: text("username_lower").primaryKey(),
+  reason: text("reason").notNull(),
+  createdAt: text("created_at").notNull(),
+});
+
+/** Sean (Oct 25): Community sharing settings (off/anonymous by default). */
+export const communitySettings = sqliteTable(
+  "community_settings",
+  {
+    userId: text("user_id").primaryKey(),
+    shareNew: integer("share_new", { mode: "boolean" }).notNull().default(false),
+    showAs: text("show_as").notNull().default("anonymous"),
+    sharePrice: integer("share_price", { mode: "boolean" }).notNull().default(false),
+    rulesAccepted: integer("rules_accepted", { mode: "boolean" }).notNull().default(false),
+    rulesAcceptedAt: text("rules_accepted_at"),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (table) => [check("community_settings_show_as_chk", sql`${table.showAs} in ('anonymous', 'username')`)],
+);
+
+/** Sean (Oct 25): Community posts (shared purchases with optional price). */
+export const communityPosts = sqliteTable(
+  "community_posts",
+  {
+    postId: text("post_id").primaryKey(),
+    userId: text("user_id").notNull(),
+    cardflowCardId: text("cardflow_card_id")
+      .notNull()
+      .references(() => cardflowCards.cardflowCardId),
+    inventoryItemId: text("inventory_item_id").notNull(),
+    pricePaidCents: integer("price_paid_cents"),
+    showAs: text("show_as").notNull(),
+    createdAt: text("created_at").notNull(),
+    hiddenAt: text("hidden_at"),
+    removedAt: text("removed_at"),
+  },
+  (table) => [
+    index("community_posts_created_idx").on(table.createdAt),
+    index("community_posts_user_idx").on(table.userId),
+    index("community_posts_card_idx").on(table.cardflowCardId),
+  ],
+);
+
+/** Sean (Oct 25): Post reactions (5 fixed emoji, one per user per post). */
+export const postReactions = sqliteTable(
+  "post_reactions",
+  {
+    userId: text("user_id").notNull(),
+    postId: text("post_id")
+      .notNull()
+      .references(() => communityPosts.postId),
+    emoji: text("emoji").notNull(),
+    createdAt: text("created_at").notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.userId, table.postId] }),
+    index("post_reactions_post_idx").on(table.postId),
+    check("post_reactions_emoji_chk", sql`${table.emoji} in ('fire', 'eyes', 'gem', 'open_mouth', 'clap')`),
+  ],
+);
+
+/** Sean (Oct 25): Post comments (v2, text only, 280 chars max). */
+export const postComments = sqliteTable(
+  "post_comments",
+  {
+    commentId: text("comment_id").primaryKey(),
+    postId: text("post_id")
+      .notNull()
+      .references(() => communityPosts.postId),
+    userId: text("user_id").notNull(),
+    text: text("text").notNull(),
+    createdAt: text("created_at").notNull(),
+    hiddenAt: text("hidden_at"),
+    removedAt: text("removed_at"),
+  },
+  (table) => [
+    index("post_comments_post_idx").on(table.postId, table.createdAt),
+    index("post_comments_user_idx").on(table.userId),
+  ],
+);
+
+/** Sean (Oct 25): Content reports (posts, comments, usernames). */
+export const contentReports = sqliteTable(
+  "content_reports",
+  {
+    reportId: text("report_id").primaryKey(),
+    reporterUserId: text("reporter_user_id").notNull(),
+    targetType: text("target_type").notNull(),
+    targetId: text("target_id").notNull(),
+    reason: text("reason").notNull(),
+    note: text("note"),
+    createdAt: text("created_at").notNull(),
+    resolvedAt: text("resolved_at"),
+    resolution: text("resolution"),
+  },
+  (table) => [
+    index("content_reports_target_idx").on(table.targetType, table.targetId),
+    index("content_reports_created_idx").on(table.createdAt),
+    index("content_reports_resolved_idx").on(table.resolvedAt),
+    check("content_reports_target_type_chk", sql`${table.targetType} in ('post', 'comment', 'username')`),
+    check("content_reports_reason_chk", sql`${table.reason} in ('spam', 'harassment', 'offensive', 'scam', 'other')`),
+  ],
+);
+
+/** Sean (Oct 25): User blocks (two-way, immediate effect). */
+export const userBlocks = sqliteTable(
+  "user_blocks",
+  {
+    blockerUserId: text("blocker_user_id").notNull(),
+    blockedUserId: text("blocked_user_id").notNull(),
+    createdAt: text("created_at").notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.blockerUserId, table.blockedUserId] }),
+    index("user_blocks_blocked_idx").on(table.blockedUserId),
+  ],
+);
+
+/** Sean (Oct 25): Comment rate limiting (10 per hour per user). */
+export const commentRateLimits = sqliteTable(
+  "comment_rate_limits",
+  {
+    userId: text("user_id").notNull(),
+    hourKey: text("hour_key").notNull(),
+    count: integer("count").notNull().default(0),
+  },
+  (table) => [primaryKey({ columns: [table.userId, table.hourKey] })],
+);
+
+/** Sean (Oct 25): Card price history for movers calculation. */
+export const cardPriceHistory = sqliteTable(
+  "card_price_history",
+  {
+    cardflowCardId: text("cardflow_card_id")
+      .notNull()
+      .references(() => cardflowCards.cardflowCardId),
+    source: text("source").notNull(),
+    windowStart: text("window_start").notNull(),
+    windowEnd: text("window_end").notNull(),
+    priceCents: integer("price_cents").notNull(),
+    salesCount: integer("sales_count").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.cardflowCardId, table.source, table.windowEnd] }),
+    index("card_price_history_updated_idx").on(table.updatedAt),
+  ],
+);
+
+/** Sean (Oct 25): Set trends index tracking. */
+export const setTrendSnapshots = sqliteTable(
+  "set_trend_snapshots",
+  {
+    tcgdexSetId: text("tcgdex_set_id").notNull(),
+    windowStart: text("window_start").notNull(),
+    windowEnd: text("window_end").notNull(),
+    indexChangePct: real("index_change_pct").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.tcgdexSetId, table.windowEnd] }),
+    index("set_trend_snapshots_updated_idx").on(table.updatedAt),
+  ],
+);
+
 export const schema = {
   ageConfirmations,
   authIdentities,
@@ -698,4 +872,14 @@ export const schema = {
   gradeEstimateHistory,
   purchaseEvents,
   idempotencyKeys,
+  reservedUsernames,
+  communitySettings,
+  communityPosts,
+  postReactions,
+  postComments,
+  contentReports,
+  userBlocks,
+  commentRateLimits,
+  cardPriceHistory,
+  setTrendSnapshots,
 };
