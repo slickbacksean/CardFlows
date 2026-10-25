@@ -46,6 +46,16 @@ export default function SignUpScreen() {
   const [termsNeeded, setTermsNeeded] = useState(false);
   const signedIn = !!peekActiveUserId();
 
+  const extractCreatorCode = useCallback((url: string): string | null => {
+    try {
+      // Match pokesniper.app/c/<code> or deep link format
+      const match = url.match(/\/c\/([a-zA-Z0-9_-]+)/);
+      return match?.[1] || null;
+    } catch {
+      return null;
+    }
+  }, []);
+
   // Handle deep-link attribution from pokesniper.app/c/<code>
   useEffect(() => {
     async function handleInitialUrl() {
@@ -66,27 +76,30 @@ export default function SignUpScreen() {
     return () => {
       subscription.remove();
     };
-  }, []);
+  }, [extractCreatorCode]);
 
-  function extractCreatorCode(url: string): string | null {
-    try {
-      // Match pokesniper.app/c/<code> or deep link format
-      const match = url.match(/\/c\/([a-zA-Z0-9_-]+)/);
-      return match?.[1] || null;
-    } catch {
-      return null;
+  const submit = useCallback(async () => {
+    if (!isValidEmail(email)) {
+      setError(ACCOUNT_AUTH_COPY.badEmail);
+      return;
     }
-  }
-
-  async function submit() {
-    if (!isValidEmail(email)) return setError(ACCOUNT_AUTH_COPY.badEmail);
     if (mode === "sign_up") {
       const problem = passwordProblem(password);
-      if (problem) return setError(problem);
-      if (!over18) return setError(AGE_GATE_COPY.required);
-      if (!agreed) return setError(TERMS_COPY.required);
+      if (problem) {
+        setError(problem);
+        return;
+      }
+      if (!over18) {
+        setError(AGE_GATE_COPY.required);
+        return;
+      }
+      if (!agreed) {
+        setError(TERMS_COPY.required);
+        return;
+      }
     } else if (termsNeeded && !agreed) {
-      return setError(TERMS_COPY.required);
+      setError(TERMS_COPY.required);
+      return;
     }
     setSaving(true);
     setError(null);
@@ -106,15 +119,16 @@ export default function SignUpScreen() {
     } catch (caught) {
       if ((caught as { code?: string }).code === TERMS_REQUIRED_CODE) {
         setTermsNeeded(true);
-        return setError(TERMS_COPY.required);
+        setError(TERMS_COPY.required);
+        return;
       }
       setError(actionErrorMessage(caught, mode === "sign_up" ? ACCOUNT_AUTH_COPY.signUpFailed : ACCOUNT_AUTH_COPY.signInFailed));
     } finally {
       setSaving(false);
     }
-  }
+  }, [email, password, mode, over18, agreed, creatorCode, termsNeeded, router]);
 
-  async function social(token: SocialToken) {
+  const social = useCallback(async (token: SocialToken) => {
     setSaving(true);
     setError(null);
     try {
@@ -145,7 +159,7 @@ export default function SignUpScreen() {
     } finally {
       setSaving(false);
     }
-  }
+  }, [over18, agreed, creatorCode, router]);
 
   // The 18+ box is for new accounts; the Terms box also shows when an existing account needs it.
   const showAge = mode === "sign_up" || (pendingSocial !== null && !termsNeeded);
