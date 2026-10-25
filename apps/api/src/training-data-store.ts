@@ -259,7 +259,7 @@ export function createTrainingDataStore(
     return { deleted: result.changes, storageRefs: imagesToDelete.map((img) => img.storageRef) };
   }
 
-  function physicallyDeleteTrainingImages(graceDays: number = 30): { deleted: number } {
+  function physicallyDeleteTrainingImages(graceDays: number = 30): { deleted: number; storageRefs: string[] } {
     const cutoff = new Date(Date.now() - graceDays * 24 * 60 * 60 * 1000).toISOString();
     
     const imagesToPhysicallyDelete = db

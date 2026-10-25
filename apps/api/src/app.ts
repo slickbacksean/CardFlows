@@ -2847,9 +2847,9 @@ export function createApp(
   registerPreferenceRoutes(app, { getPreferences, setPreferences });
   
   // Sean (Oct 25): Training data routes and admin export
-  const isSqliteStore = "sqlitePath" in store && typeof store.sqlitePath === "string";
-  const storageDir = isSqliteStore && !isMemorySqlitePath(store.sqlitePath)
-    ? path.dirname(path.resolve(store.sqlitePath))
+  const isSqliteStore = "sqlitePath" in store && typeof (store as any).sqlitePath === "string";
+  const storageDir = isSqliteStore && !isMemorySqlitePath((store as any).sqlitePath)
+    ? path.dirname(path.resolve((store as any).sqlitePath as string))
     : null;
   
   const trainingDataStore = "trainingData" in store ? store.trainingData : null;

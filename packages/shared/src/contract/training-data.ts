@@ -8,6 +8,7 @@ export const trainingDataRoutes = {
   getTrainingDataStatus: defineRoute({
     method: "GET",
     path: "/v1/training-data/status",
+    bodyKind: "none",
     response: z.object({
       ok: z.literal(true),
       optedOut: z.boolean(),
@@ -16,13 +17,13 @@ export const trainingDataRoutes = {
   optOutOfTrainingData: defineRoute({
     method: "POST",
     path: "/v1/training-data/opt-out",
-    bodyKind: "empty",
-    response: z.object({ ok: z.literal(true) }),
+    bodyKind: "none",
+    response: z.object({ ok: z.literal(true), imagesMarkedForDeletion: z.number() }),
   }),
   optInToTrainingData: defineRoute({
     method: "POST",
     path: "/v1/training-data/opt-in",
-    bodyKind: "empty",
+    bodyKind: "none",
     response: z.object({ ok: z.literal(true) }),
   }),
 } as const;

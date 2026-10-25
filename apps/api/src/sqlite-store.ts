@@ -88,6 +88,7 @@ import {
   crmSessions,
   crmPokecollectorUsers,
   userPreferences as userPreferencesTable,
+  userAccounts,
 } from "./db/schema";
 import {
   hashSessionToken,
@@ -1187,7 +1188,7 @@ export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStor
       const predictedTcgdexId = mappingForConfirm?.tcgdexId ?? null;
       const confidence = mappingForConfirm?.confidence ?? null;
       const wasCorrection = predictedTcgdexId !== null && predictedTcgdexId !== input.selectedTcgdexId;
-      const modelVersion = input.scan.recognition?.provider === "obb" ? "obb-v1" : "unknown";
+      const modelVersion = input.scan.recognition?.provider ? `${input.scan.recognition.provider}-v1` : "unknown";
       const recognitionProvider = input.scan.recognition?.provider ?? "unknown";
 
       // Determine if we should retain this scan image for training
