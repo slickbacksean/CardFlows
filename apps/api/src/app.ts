@@ -216,6 +216,23 @@ import {
   getModerationNotices,
 } from "./routes/community";
 import {
+  getDashboardStats,
+  getAdminUserStats,
+  getAdminScanStats,
+  getAdminPurchaseStats,
+  getAdminCommunityStats,
+  createAdminCreator,
+  listAdminCreators,
+  getAdminCreator,
+  updateAdminCreator,
+  deleteAdminCreator,
+  getAdminCreatorLeaderboard,
+  exportCreatorStats,
+  getAdminAuditLog,
+  checkAdminStatus,
+} from "./routes/admin";
+import { bootstrapAdminRoles } from "./admin-auth";
+import {
   subscribe,
   unsubscribe,
   getSubscription,
