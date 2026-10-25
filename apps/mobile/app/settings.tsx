@@ -121,6 +121,9 @@ export default function SettingsScreen() {
         {/* Policy Reviewer (P4): off by default (opt-in), gates Sentry; independent of Usage analytics. */}
         <JobRow label={CRASH_REPORTS_COPY.label} onPress={() => router.push("/crash-reports")} />
 
+        {/* Sean (Oct 25): Training data opt-out toggle. */}
+        <JobRow label="Use my scans to improve recognition" onPress={() => router.push("/training-data")} />
+
         {/* P4: in-app account deletion (Apple 5.1.1(v)). */}
         <JobRow label={ACCOUNT_DELETION_COPY.settingsRow} onPress={() => router.push("/delete-account")} />
         <JobRow

@@ -1531,3 +1531,51 @@ export async function getModerationNotices() {
   
   return response.json();
 }
+
+/** Training Data Consent */
+export async function getTrainingDataStatus(): Promise<{ ok: boolean; optedOut: boolean }> {
+  const url = `${apiUrl()}/v1/training-data/status`;
+  const token = peekSessionToken();
+  
+  if (!token) {
+    throw new Error("Not authenticated");
+  }
+  
+  const response = await fetch(url, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  
+  return response.json();
+}
+
+export async function optOutOfTrainingData(): Promise<{ ok: boolean }> {
+  const url = `${apiUrl()}/v1/training-data/opt-out`;
+  const token = peekSessionToken();
+  
+  if (!token) {
+    throw new Error("Not authenticated");
+  }
+  
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  
+  return response.json();
+}
+
+export async function optInToTrainingData(): Promise<{ ok: boolean }> {
+  const url = `${apiUrl()}/v1/training-data/opt-in`;
+  const token = peekSessionToken();
+  
+  if (!token) {
+    throw new Error("Not authenticated");
+  }
+  
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  
+  return response.json();
+}

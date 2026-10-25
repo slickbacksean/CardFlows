@@ -2,7 +2,7 @@
 
 > **Draft — not legal advice; review before launch.**
 
-Version 2026-10-19.1 · Effective October 19, 2026
+Version 2026-10-25.1 · Effective October 25, 2026
 
 ## 1. Agreement
 
@@ -26,15 +26,25 @@ CardSight is not part of PokeSniper, and we don't control how CardSight keeps or
 
 ## 5. Photos
 
-Your card photos are used only to identify or grade the card and are deleted right after, within 24 hours at most. Grade results are kept; the photos aren't.
+Your card photos are used to identify or grade the card and are deleted right after, within 24 hours at most. With your consent (given when you accept our Terms), we may keep scan photos that help train our model (like corrections or scans we couldn't identify) for up to 180 days. You can opt out anytime in Settings. Grade results are kept; regular photos aren't.
 
-Scan and grade photos are temporary. PokeSniper deletes them right after use, and a cleanup removes anything left within 24 hours. This doesn't apply to copies CardSight already received under section 4.
+Scan and grade photos are temporary. PokeSniper deletes them right after use, and a cleanup removes anything left within 24 hours. This doesn't apply to copies CardSight already received under section 4, or to training data you've consented to under section 6.
 
-## 6. Pre-grade estimates
+## 6. Model training and scan data (optional)
+
+By accepting these Terms, you consent to our use of your scan photos to improve PokeSniper's card-recognition model. This is on by default but you can opt out anytime in Settings > Use my scans to improve recognition.
+
+What we keep: Scan photos that help improve our model—like when you correct our identification, when we had low confidence, or when we couldn't identify a card. We crop the image to the card and remove location and other metadata. We never keep photos from CardSight or from Live Scan/livestream sessions.
+
+How long: Up to 180 days from when the photo was taken, or until we use it in a training run (whichever comes first). Images are deleted within 30 days of opting out or deleting your account (and from backups within our 14-day backup retention).
+
+Not sold or used for ads: Training data is used only to improve PokeSniper's card recognition. We don't sell it or use it for advertising.
+
+## 7. Pre-grade estimates
 
 Estimate only. Not an official grade. Pre-grade estimates are PokeSniper's own guess at a card's condition from your photos. They are not a grade from any grading company, and a grading company may grade the same card differently. Don't rely on an estimate as a guarantee of any grade or value.
 
-## 7. Prices and TCGplayer data
+## 8. Prices and TCGplayer data
 
 This product uses TCGplayer data but is not endorsed or certified by TCGplayer.
 
@@ -42,7 +52,7 @@ Prices shown in PokeSniper are for information only. They come from third-party 
 
 PokeSniper does not promise any profit, resale value or return. Buying, selling and grading decisions are yours alone.
 
-## 8. Live Scan
+## 9. Live Scan
 
 Live Scan is an optional tool you start yourself. While you watch a livestream in PokeSniper's in-app browser, it identifies Pokémon cards shown on screen so you can look up the card. You can stop it at any time.
 
@@ -52,40 +62,40 @@ PokeSniper is not affiliated with, endorsed by or sponsored by Whatnot. Your use
 
 We may turn Live Scan off or change it at any time.
 
-## 9. Credits, subscriptions and purchases
+## 10. Credits, subscriptions and purchases
 
 PokeSniper doesn't currently sell subscriptions, credits or other in-app purchases. If we offer them later, prices, billing periods and renewal terms will be shown before you pay, and purchases will be handled by the App Store or Google Play under their terms.
 
 Credits you buy never expire. Only a subscription's monthly allowance resets. Subscriptions renew automatically until you cancel them in your App Store or Google Play settings. Deleting your account doesn't cancel a subscription, and unused credits are lost when you delete your account.
 
-## 10. Pokémon and other trademarks
+## 11. Pokémon and other trademarks
 
 PokeSniper is an independent app. It is not affiliated with, endorsed by or sponsored by Nintendo, The Pokémon Company, Creatures Inc. or Game Freak. Pokémon and Pokémon card names and images are trademarks and copyrights of their respective owners. Card images shown in PokeSniper belong to their owners.
 
 PokeSniper is also not affiliated with CardSight, TCGplayer, Whatnot or eBay. Their names are used only to describe how PokeSniper works.
 
-## 11. Acceptable use
+## 12. Acceptable use
 
 Don't: scrape, crawl or bulk-download PokeSniper data or prices; resell or redistribute PokeSniper data; reverse engineer, decompile or try to get the source code of PokeSniper (except where the law allows it); get around rate limits, usage limits, the age check or other protections; access other people's accounts; upload anything illegal or that you don't have the right to share; or abuse, overload or interfere with PokeSniper or the services it uses.
 
 We may suspend or close accounts that break these Terms.
 
-## 12. Deleting your account
+## 13. Deleting your account
 
 You can delete your account anytime in Settings > Delete account. This permanently deletes your account and the data in it, as described in the Privacy Policy. It doesn't remove photos CardSight already has, and it doesn't cancel an App Store or Google Play subscription.
 
-## 13. Disclaimers
+## 14. Disclaimers
 
 PokeSniper is provided "as is" and "as available", without warranties of any kind, to the fullest extent the law allows. We don't promise that card identification, estimates or prices are accurate, complete or available at any time.
 
-## 14. Limitation of liability
+## 15. Limitation of liability
 
 To the fullest extent the law allows, PokeSniper and its owners won't be liable for any indirect, incidental, special, consequential or punitive damages, or for lost profits, lost data or losses from buying, selling or grading decisions. Our total liability for any claim about PokeSniper is limited to the greater of the amount you paid us in the 12 months before the claim or US$50. Some places don't allow these limits, so they may not apply to you.
 
-## 15. Changes to these Terms
+## 16. Changes to these Terms
 
 We may update these Terms. When we make a material change, we'll ask you to agree to the new version in the app. If you keep using PokeSniper after a change, the new Terms apply. The version and date are shown at the top.
 
-## 16. Contact
+## 17. Contact
 
 Questions about these Terms: support@pokesniper.app.
