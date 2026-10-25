@@ -1211,3 +1211,91 @@ export function listDexSets() {
 export function getDexSet(setId: string) {
   return callApi(apiContract.getDexSet, { params: { setId } });
 }
+
+/** Community: Username management */
+export async function checkUsernameAvailability(username: string): Promise<{ available: boolean; reason?: string }> {
+  const url = `${apiUrl()}/v1/community/username/check?username=${encodeURIComponent(username)}`;
+  const token = peekSessionToken();
+  
+  const response = await fetch(url, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  
+  return response.json();
+}
+
+export async function setUsername(username: string): Promise<{ username: string } | { error: string }> {
+  const url = `${apiUrl()}/v1/community/username`;
+  const token = peekSessionToken();
+  
+  if (!token) {
+    throw new Error("Not authenticated");
+  }
+  
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ username }),
+  });
+  
+  return response.json();
+}
+
+export async function getUsername(): Promise<{ username: string | null; usernameChangedAt: string | null } | { error: string }> {
+  const url = `${apiUrl()}/v1/community/username`;
+  const token = peekSessionToken();
+  
+  if (!token) {
+    throw new Error("Not authenticated");
+  }
+  
+  const response = await fetch(url, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  
+  return response.json();
+}
+
+/** Community: Settings */
+export async function getCommunitySettings() {
+  const url = `${apiUrl()}/v1/community/settings`;
+  const token = peekSessionToken();
+  
+  if (!token) {
+    throw new Error("Not authenticated");
+  }
+  
+  const response = await fetch(url, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  
+  return response.json();
+}
+
+export async function updateCommunitySettings(settings: {
+  shareNew?: boolean;
+  showAs?: "anonymous" | "username";
+  sharePrice?: boolean;
+  rulesAccepted?: boolean;
+}) {
+  const url = `${apiUrl()}/v1/community/settings`;
+  const token = peekSessionToken();
+  
+  if (!token) {
+    throw new Error("Not authenticated");
+  }
+  
+  const response = await fetch(url, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(settings),
+  });
+  
+  return response.json();
+}
