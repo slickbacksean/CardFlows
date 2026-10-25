@@ -51,7 +51,7 @@ describe("Settings entry points", () => {
     expect(tabs).toContain('name="scan-tab"');
     expect(tabs).toContain('title: "Livestream Screener"');
     expect(tabs).toContain('name="grading"');
-    expect(tabs).toContain('name="export"');
+    expect(tabs).toContain('name="community"');
     expect(tabs).not.toMatch(/name="settings"/);
     expect(tabs).not.toMatch(/tabBarLabel: "Settings"/);
     expect(tabs).not.toMatch(/name="about"/);
