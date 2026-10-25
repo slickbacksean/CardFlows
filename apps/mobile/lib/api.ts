@@ -1347,3 +1347,126 @@ export async function unblockUser(userId: string) {
   
   return response.json();
 }
+
+/** Community: Feed */
+export async function getFeed(filter: "all" | "sets" = "all", cursor?: string) {
+  const url = `${apiUrl()}/v1/community/feed?filter=${filter}${cursor ? `&cursor=${cursor}` : ""}`;
+  const token = peekSessionToken();
+  
+  if (!token) {
+    throw new Error("Not authenticated");
+  }
+  
+  const response = await fetch(url, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  
+  return response.json();
+}
+
+export async function reactToPost(postId: string, emoji: string) {
+  const url = `${apiUrl()}/v1/community/posts/${postId}/reaction`;
+  const token = peekSessionToken();
+  
+  if (!token) {
+    throw new Error("Not authenticated");
+  }
+  
+  const response = await fetch(url, {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ emoji }),
+  });
+  
+  return response.json();
+}
+
+export async function deleteReaction(postId: string) {
+  const url = `${apiUrl()}/v1/community/posts/${postId}/reaction`;
+  const token = peekSessionToken();
+  
+  if (!token) {
+    throw new Error("Not authenticated");
+  }
+  
+  const response = await fetch(url, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  
+  return response.json();
+}
+
+export async function getComments(postId: string, cursor?: string) {
+  const url = `${apiUrl()}/v1/community/posts/${postId}/comments${cursor ? `?cursor=${cursor}` : ""}`;
+  const token = peekSessionToken();
+  
+  if (!token) {
+    throw new Error("Not authenticated");
+  }
+  
+  const response = await fetch(url, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  
+  return response.json();
+}
+
+export async function postComment(postId: string, text: string) {
+  const url = `${apiUrl()}/v1/community/posts/${postId}/comments`;
+  const token = peekSessionToken();
+  
+  if (!token) {
+    throw new Error("Not authenticated");
+  }
+  
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ text }),
+  });
+  
+  return response.json();
+}
+
+export async function deleteComment(commentId: string) {
+  const url = `${apiUrl()}/v1/community/comments/${commentId}`;
+  const token = peekSessionToken();
+  
+  if (!token) {
+    throw new Error("Not authenticated");
+  }
+  
+  const response = await fetch(url, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  
+  return response.json();
+}
+
+export async function reportContent(targetType: "post" | "comment" | "username", targetId: string, reason: string, note?: string) {
+  const url = `${apiUrl()}/v1/community/reports`;
+  const token = peekSessionToken();
+  
+  if (!token) {
+    throw new Error("Not authenticated");
+  }
+  
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ targetType, targetId, reason, note }),
+  });
+  
+  return response.json();
+}
