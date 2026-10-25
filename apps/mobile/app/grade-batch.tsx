@@ -101,7 +101,7 @@ export default function GradeBatchScreen() {
     return (
       <ScrollView contentContainerStyle={styles.content} style={styles.flex}>
         <Stack.Screen options={{ title: BATCH_QUEUE_TITLE }} />
-        <View style={[styles.card, { alignItems: "center", justifyContent: "center", padding: space.xl }]}>
+        <View style={[styles.card, { alignItems: "center", justifyContent: "center", padding: space.lg }]}>
           <Text style={[styles.muted, { textAlign: "center" }]}>Card grading is temporarily unavailable.</Text>
         </View>
       </ScrollView>
