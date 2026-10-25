@@ -14,7 +14,7 @@ export default function TrainingDataScreen() {
   const [toggling, setToggling] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const loadStatus = useCallback(() => {
+  useEffect(() => {
     setLoading(true);
     setError(null);
     void getTrainingDataStatus()
@@ -27,10 +27,6 @@ export default function TrainingDataScreen() {
         setLoading(false);
       });
   }, []);
-
-  useEffect(() => {
-    loadStatus();
-  }, [loadStatus]);
 
   const handleToggle = useCallback(
     (value: boolean) => {
