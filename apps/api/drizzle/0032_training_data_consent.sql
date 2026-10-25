@@ -7,7 +7,7 @@ CREATE TABLE `training_data_opt_outs` (
 	`user_id` text PRIMARY KEY NOT NULL,
 	`opted_out_at` text NOT NULL
 );
-
+--> statement-breakpoint
 CREATE TABLE `scan_correction_feedback` (
 	`feedback_id` text PRIMARY KEY NOT NULL,
 	`pseudonymous_user_id` text NOT NULL,
@@ -22,7 +22,7 @@ CREATE TABLE `scan_correction_feedback` (
 	`created_at` text NOT NULL,
 	`training_image_id` text
 );
-
+--> statement-breakpoint
 CREATE TABLE `training_images` (
 	`image_id` text PRIMARY KEY NOT NULL,
 	`user_id` text NOT NULL,
@@ -39,12 +39,19 @@ CREATE TABLE `training_images` (
 	`created_at` text NOT NULL,
 	CHECK(`retention_reason` in ('correction', 'low_confidence', 'no_match'))
 );
-
+--> statement-breakpoint
 CREATE INDEX `scan_correction_feedback_created_idx` ON `scan_correction_feedback` (`created_at`);
+--> statement-breakpoint
 CREATE INDEX `scan_correction_feedback_pseudo_user_idx` ON `scan_correction_feedback` (`pseudonymous_user_id`);
+--> statement-breakpoint
 CREATE INDEX `scan_correction_feedback_model_idx` ON `scan_correction_feedback` (`model_version`);
+--> statement-breakpoint
 CREATE INDEX `training_images_user_idx` ON `training_images` (`user_id`);
+--> statement-breakpoint
 CREATE INDEX `training_images_pseudo_user_idx` ON `training_images` (`pseudonymous_user_id`);
+--> statement-breakpoint
 CREATE INDEX `training_images_expires_idx` ON `training_images` (`expires_at`);
+--> statement-breakpoint
 CREATE INDEX `training_images_deleted_idx` ON `training_images` (`deleted_at`);
+--> statement-breakpoint
 CREATE INDEX `training_images_retention_reason_idx` ON `training_images` (`retention_reason`);
