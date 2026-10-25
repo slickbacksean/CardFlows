@@ -8,16 +8,30 @@ import {
   Image, 
   Pressable, 
   RefreshControl,
+  ScrollView,
   StyleSheet, 
   Text, 
   TextInput,
   View 
 } from "react-native";
-import { getFeed, reactToPost, deleteReaction, blockUser, reportContent, getCommunitySettings, updateCommunitySettings } from "@/lib/api";
+import { 
+  getFeed, 
+  reactToPost, 
+  deleteReaction, 
+  blockUser, 
+  reportContent, 
+  getCommunitySettings, 
+  updateCommunitySettings,
+  getMarketMovers,
+  getWhatsBuying,
+  getWhatsSelling,
+  getSetTrends,
+} from "@/lib/api";
 import { colors, radii, space } from "@/lib/theme";
 
 type Segment = "market" | "feed";
 type FeedFilter = "all" | "sets";
+type MarketWindow = "24h" | "7d" | "30d";
 
 interface Post {
   postId: string;
@@ -60,6 +74,7 @@ const REACTION_LABELS = {
 export default function CommunityScreen() {
   const [segment, setSegment] = useState<Segment>("market");
   const [feedFilter, setFeedFilter] = useState<FeedFilter>("all");
+  const [marketWindow, setMarketWindow] = useState<MarketWindow>("7d");
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -67,6 +82,40 @@ export default function CommunityScreen() {
   const [cursor, setCursor] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(true);
   const [showFirstTimeCard, setShowFirstTimeCard] = useState(false);
+  
+  // Market state
+  const [marketLoading, setMarketLoading] = useState(false);
+  const [risingMovers, setRisingMovers] = useState<any[]>([]);
+  const [fallingMovers, setFallingMovers] = useState<any[]>([]);
+  const [buying, setBuying] = useState<any[]>([]);
+  const [selling, setSelling] = useState<any[]>([]);
+  const [setTrendsData, setSetTrendsData] = useState<any[]>([]);
+
+  const loadMarket = useCallback(async () => {
+    if (segment !== "market") return;
+    
+    setMarketLoading(true);
+    
+    try {
+      const [risingResult, fallingResult, buyingResult, sellingResult, trendsResult] = await Promise.all([
+        getMarketMovers(marketWindow, "up"),
+        getMarketMovers(marketWindow, "down"),
+        getWhatsBuying(marketWindow),
+        getWhatsSelling(marketWindow),
+        getSetTrends(marketWindow === "30d" ? "30d" : "7d"),
+      ]);
+      
+      setRisingMovers(risingResult.movers || []);
+      setFallingMovers(fallingResult.movers || []);
+      setBuying(buyingResult.buying || []);
+      setSelling(sellingResult.selling || []);
+      setSetTrendsData(trendsResult.sets || []);
+    } catch (caught) {
+      // Silently handle, show unavailable states per section
+    } finally {
+      setMarketLoading(false);
+    }
+  }, [segment, marketWindow]);
 
   const loadFeed = useCallback(async (refresh = false) => {
     if (segment !== "feed") return;
@@ -113,8 +162,10 @@ export default function CommunityScreen() {
             setShowFirstTimeCard(true);
           }
         });
+      } else if (segment === "market") {
+        void loadMarket();
       }
-    }, [segment])
+    }, [segment, marketWindow])
   );
 
   async function handleReaction(post: Post, emoji: keyof typeof REACTION_EMOJI) {
@@ -408,12 +459,126 @@ export default function CommunityScreen() {
           />
         </>
       ) : (
-        <View style={styles.placeholder}>
-          <Text style={styles.placeholderTitle}>Market Coming Soon</Text>
-          <Text style={styles.placeholderBody}>
-            See biggest movers, what's buying, what's selling, and set trends.
+        <ScrollView 
+          contentContainerStyle={styles.marketContent}
+          refreshControl={<RefreshControl refreshing={marketLoading} onRefresh={() => void loadMarket()} />}
+        >
+          <View style={styles.windowPicker}>
+            {(["24h", "7d", "30d"] as MarketWindow[]).map((w) => (
+              <Pressable
+                key={w}
+                onPress={() => setMarketWindow(w)}
+                style={[styles.windowChip, marketWindow === w && styles.windowChipActive]}
+              >
+                <Text style={[styles.windowChipText, marketWindow === w && styles.windowChipTextActive]}>
+                  {w === "24h" ? "24 h" : w === "7d" ? "7 d" : "30 d"}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+
+          <Text style={styles.marketDisclaimer}>
+            Prices are estimates from public sales data. Not financial advice. Past prices don't
+            predict future value.
           </Text>
-        </View>
+
+          {/* Biggest Movers */}
+          <Text style={styles.sectionTitle}>Biggest Movers</Text>
+          
+          <Text style={styles.subsectionTitle}>Rising</Text>
+          {risingMovers.length === 0 ? (
+            <View style={styles.unavailable}>
+              <Text style={styles.unavailableText}>
+                Not enough sales data for this window. Try 7 days.
+              </Text>
+            </View>
+          ) : (
+            risingMovers.map((mover, idx) => (
+              <View key={idx} style={styles.moverRow}>
+                <Text style={styles.moverName}>{mover.name}</Text>
+                <Text style={styles.moverChange}>▲ {mover.changePct}% (+${mover.change})</Text>
+              </View>
+            ))
+          )}
+
+          <Text style={styles.subsectionTitle}>Falling</Text>
+          {fallingMovers.length === 0 ? (
+            <View style={styles.unavailable}>
+              <Text style={styles.unavailableText}>
+                Not enough sales data for this window.
+              </Text>
+            </View>
+          ) : (
+            fallingMovers.map((mover, idx) => (
+              <View key={idx} style={styles.moverRow}>
+                <Text style={styles.moverName}>{mover.name}</Text>
+                <Text style={[styles.moverChange, { color: colors.danger }]}>
+                  ▼ {Math.abs(mover.changePct)}% (−${Math.abs(mover.change)})
+                </Text>
+              </View>
+            ))
+          )}
+
+          {/* What's Buying */}
+          <Text style={styles.sectionTitle}>What's Buying</Text>
+          {buying.length === 0 ? (
+            <View style={styles.unavailable}>
+              <Text style={styles.unavailableText}>
+                No aggregate buying data available yet. At least 5 distinct users must purchase a
+                card for it to appear here.
+              </Text>
+            </View>
+          ) : (
+            buying.map((item, idx) => (
+              <View key={idx} style={styles.buyingRow}>
+                <Text style={styles.buyingName}>{item.card.name}</Text>
+                <Text style={styles.buyingDetail}>
+                  Bought by {item.distinctBuyers} users · est. ${(item.medianPaid / 100).toFixed(2)}
+                </Text>
+              </View>
+            ))
+          )}
+
+          {/* What's Selling */}
+          <Text style={styles.sectionTitle}>What's Selling</Text>
+          {selling.length === 0 ? (
+            <View style={styles.unavailable}>
+              <Text style={styles.unavailableText}>
+                Public sales data not yet available. Check back soon.
+              </Text>
+            </View>
+          ) : (
+            selling.map((item, idx) => (
+              <View key={idx} style={styles.sellingRow}>
+                <Text style={styles.sellingName}>{item.card.name}</Text>
+                <Text style={styles.sellingDetail}>
+                  {item.salesCount} sales · est. ${(item.medianSale / 100).toFixed(2)}
+                </Text>
+              </View>
+            ))
+          )}
+
+          {/* Set Trends */}
+          <Text style={styles.sectionTitle}>Set Trends</Text>
+          {setTrendsData.length === 0 ? (
+            <View style={styles.unavailable}>
+              <Text style={styles.unavailableText}>
+                Set trend data not yet calculated. Check back soon.
+              </Text>
+            </View>
+          ) : (
+            <View style={styles.setTrends}>
+              {setTrendsData.map((trend, idx) => (
+                <View key={idx} style={styles.trendChip}>
+                  <Text style={styles.trendName}>{trend.name}</Text>
+                  <Text style={[styles.trendChange, trend.indexChangePct > 0 && { color: colors.accent }]}>
+                    {trend.indexChangePct > 0 ? "▲" : "▼"} {Math.abs(trend.indexChangePct)}%
+                  </Text>
+                </View>
+              ))}
+            </View>
+          )}
+        </ScrollView>
       )}
     </View>
   );
@@ -551,19 +716,101 @@ const styles = StyleSheet.create({
   },
   emptyStateTitle: { color: colors.text, fontSize: 18, fontWeight: "800" },
   emptyStateText: { color: colors.muted, fontSize: 15, textAlign: "center", lineHeight: 22 },
-  placeholder: { 
-    flex: 1, 
-    alignItems: "center", 
-    justifyContent: "center", 
-    gap: space.md, 
-    paddingHorizontal: space.lg 
+  
+  // Market styles
+  marketContent: { padding: space.lg, gap: space.md },
+  windowPicker: {
+    flexDirection: "row",
+    gap: space.xs,
+    marginBottom: space.sm,
   },
-  placeholderTitle: { color: colors.text, fontSize: 20, fontWeight: "800" },
-  placeholderBody: { 
-    color: colors.muted, 
-    fontSize: 15, 
-    textAlign: "center", 
-    maxWidth: 280, 
-    lineHeight: 22 
+  windowChip: {
+    paddingHorizontal: space.md,
+    paddingVertical: space.xs,
+    borderRadius: radii.pill,
+    backgroundColor: colors.chip,
+  },
+  windowChipActive: { backgroundColor: colors.accent },
+  windowChipText: { color: colors.muted, fontSize: 14, fontWeight: "700" },
+  windowChipTextActive: { color: colors.accentText },
+  marketDisclaimer: {
+    color: colors.muted,
+    fontSize: 11,
+    lineHeight: 16,
+    marginBottom: space.md,
+    fontStyle: "italic",
+  },
+  sectionTitle: {
+    color: colors.text,
+    fontSize: 20,
+    fontWeight: "800",
+    marginTop: space.md,
+    marginBottom: space.sm,
+  },
+  subsectionTitle: {
+    color: colors.text,
+    fontSize: 16,
+    fontWeight: "700",
+    marginTop: space.sm,
+    marginBottom: space.xs,
+  },
+  moverRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: space.xs,
+    paddingHorizontal: space.sm,
+    backgroundColor: colors.card,
+    borderRadius: radii.md,
+    marginBottom: space.xs,
+  },
+  moverName: { color: colors.text, fontSize: 14, fontWeight: "700", flex: 1 },
+  moverChange: { color: colors.accent, fontSize: 14, fontWeight: "800" },
+  buyingRow: {
+    paddingVertical: space.sm,
+    paddingHorizontal: space.sm,
+    backgroundColor: colors.card,
+    borderRadius: radii.md,
+    marginBottom: space.xs,
+  },
+  buyingName: { color: colors.text, fontSize: 15, fontWeight: "700", marginBottom: 2 },
+  buyingDetail: { color: colors.muted, fontSize: 12 },
+  sellingRow: {
+    paddingVertical: space.sm,
+    paddingHorizontal: space.sm,
+    backgroundColor: colors.card,
+    borderRadius: radii.md,
+    marginBottom: space.xs,
+  },
+  sellingName: { color: colors.text, fontSize: 15, fontWeight: "700", marginBottom: 2 },
+  sellingDetail: { color: colors.muted, fontSize: 12 },
+  setTrends: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: space.xs,
+  },
+  trendChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: space.sm,
+    paddingVertical: space.xs,
+    backgroundColor: colors.card,
+    borderRadius: radii.pill,
+  },
+  trendName: { color: colors.text, fontSize: 13, fontWeight: "700" },
+  trendChange: { color: colors.danger, fontSize: 12, fontWeight: "800" },
+  unavailable: {
+    paddingVertical: space.md,
+    paddingHorizontal: space.md,
+    backgroundColor: colors.chip,
+    borderRadius: radii.md,
+    marginBottom: space.sm,
+  },
+  unavailableText: {
+    color: colors.muted,
+    fontSize: 13,
+    lineHeight: 19,
+    fontStyle: "italic",
   },
 });

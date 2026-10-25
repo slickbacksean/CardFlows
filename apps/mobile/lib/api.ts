@@ -1470,3 +1470,48 @@ export async function reportContent(targetType: "post" | "comment" | "username",
   
   return response.json();
 }
+
+/** Community: Market */
+export async function getMarketMovers(window: "24h" | "7d" | "30d" = "7d", direction: "up" | "down" = "up") {
+  const url = `${apiUrl()}/v1/community/market/movers?window=${window}&direction=${direction}&limit=10`;
+  const token = peekSessionToken();
+  
+  const response = await fetch(url, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  
+  return response.json();
+}
+
+export async function getWhatsBuying(window: "24h" | "7d" | "30d" = "7d") {
+  const url = `${apiUrl()}/v1/community/market/buying?window=${window}&limit=10`;
+  const token = peekSessionToken();
+  
+  const response = await fetch(url, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  
+  return response.json();
+}
+
+export async function getWhatsSelling(window: "24h" | "7d" | "30d" = "7d") {
+  const url = `${apiUrl()}/v1/community/market/selling?window=${window}&limit=10`;
+  const token = peekSessionToken();
+  
+  const response = await fetch(url, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  
+  return response.json();
+}
+
+export async function getSetTrends(window: "7d" | "30d" = "7d") {
+  const url = `${apiUrl()}/v1/community/market/sets?window=${window}&limit=20`;
+  const token = peekSessionToken();
+  
+  const response = await fetch(url, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  
+  return response.json();
+}
