@@ -32,10 +32,10 @@ function foldersUpTo(lastTag: string): string {
   return dir;
 }
 
-describe("migrations 0000–0028", () => {
-  it("journal is ordered: idx 0..25 in order, `when` strictly increasing, files exist", () => {
+describe("migrations 0000–0030", () => {
+  it("journal is ordered: idx 0..29 in order, `when` strictly increasing, files exist", () => {
     const j = journal();
-    expect(j.entries.map((e) => e.idx)).toEqual(Array.from({ length: 29 }, (_, i) => i));
+    expect(j.entries.map((e) => e.idx)).toEqual(Array.from({ length: 30 }, (_, i) => i));
     for (let i = 1; i < j.entries.length; i += 1) expect(j.entries[i]!.when).toBeGreaterThan(j.entries[i - 1]!.when);
     expect(j.entries.slice(14).map((e) => e.tag)).toEqual([
       "0014_accounts_guest_sessions",
@@ -60,7 +60,7 @@ describe("migrations 0000–0028", () => {
   it("applies all of them to a fresh database", () => {
     const { sqlite } = applyMvpMigrations(path.join(tmp(), "fresh.sqlite"));
     const applied = sqlite.prepare("SELECT COUNT(*) AS n FROM __drizzle_migrations").get() as { n: number };
-    expect(applied.n).toBe(29);
+    expect(applied.n).toBe(30);
     sqlite.close();
   });
 
