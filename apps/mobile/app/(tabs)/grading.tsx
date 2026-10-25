@@ -308,7 +308,22 @@ export default function GradingScreen() {
 
   // The photo pre-grade pane never depends on the inventory load, so a load error can't
   // unmount it or drop its photos (UX review P0-2).
-  if (pane === "photo" && gradingEnabled) {
+  if (pane === "photo") {
+    if (!gradingEnabled) {
+      return (
+        <View style={styles.flex}>
+          <View style={styles.toolbar}>
+            <View style={styles.titleRow}>
+              <Text style={styles.title}>Grading</Text>
+            </View>
+            <StatusBanner />
+          </View>
+          <View style={[styles.content, { justifyContent: "center", alignItems: "center" }]}>
+            <Text style={styles.disabledMessage}>Card grading is temporarily unavailable.</Text>
+          </View>
+        </View>
+      );
+    }
     return <PhotoGradeFlow onOpenPipeline={() => setPane("pipeline")} />;
   }
 
