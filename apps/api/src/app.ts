@@ -2837,25 +2837,29 @@ export function createApp(
   });
 
   // Community routes (username, settings, feed, reactions, comments, reports, blocks, market)
-  app.get("/v1/community/username/check", (c) => checkUsernameAvailability(c, store));
-  app.get("/v1/community/username", (c) => getUsername(c, c.get("userId"), store));
-  app.post("/v1/community/username", (c) => setUsername(c, c.get("userId"), store));
-  app.get("/v1/community/settings", (c) => getCommunitySettings(c, c.get("userId"), store));
-  app.patch("/v1/community/settings", (c) => updateCommunitySettings(c, c.get("userId"), store));
-  app.get("/v1/community/feed", (c) => getFeed(c, c.get("userId"), store));
-  app.put("/v1/community/posts/:postId/reaction", (c) => reactToPost(c, c.get("userId"), store));
-  app.delete("/v1/community/posts/:postId/reaction", (c) => deleteReaction(c, c.get("userId"), store));
-  app.get("/v1/community/posts/:postId/comments", (c) => getComments(c, c.get("userId"), store));
-  app.post("/v1/community/posts/:postId/comments", (c) => postComment(c, c.get("userId"), store));
-  app.delete("/v1/community/comments/:commentId", (c) => deleteComment(c, c.get("userId"), store));
-  app.post("/v1/community/reports", (c) => reportContent(c, c.get("userId"), store));
-  app.post("/v1/community/blocks/:userId", (c) => blockUser(c, c.get("userId"), store));
-  app.delete("/v1/community/blocks/:userId", (c) => unblockUser(c, c.get("userId"), store));
-  app.get("/v1/community/blocks", (c) => getBlockedUsers(c, c.get("userId"), store));
-  app.get("/v1/community/market/movers", (c) => getMarketMovers(c, store));
-  app.get("/v1/community/market/buying", (c) => getWhatsBuying(c, store));
-  app.get("/v1/community/market/selling", (c) => getWhatsSelling(c, store));
-  app.get("/v1/community/market/sets", (c) => getSetTrends(c, store));
+  // Only available when using SQLite store (not memory store)
+  const sqliteStore = store as any;
+  if (sqliteStore.db) {
+    app.get("/v1/community/username/check", (c) => checkUsernameAvailability(c, sqliteStore));
+    app.get("/v1/community/username", (c) => getUsername(c, c.get("userId"), sqliteStore));
+    app.post("/v1/community/username", (c) => setUsername(c, c.get("userId"), sqliteStore));
+    app.get("/v1/community/settings", (c) => getCommunitySettings(c, c.get("userId"), sqliteStore));
+    app.patch("/v1/community/settings", (c) => updateCommunitySettings(c, c.get("userId"), sqliteStore));
+    app.get("/v1/community/feed", (c) => getFeed(c, c.get("userId"), sqliteStore));
+    app.put("/v1/community/posts/:postId/reaction", (c) => reactToPost(c, c.get("userId"), sqliteStore));
+    app.delete("/v1/community/posts/:postId/reaction", (c) => deleteReaction(c, c.get("userId"), sqliteStore));
+    app.get("/v1/community/posts/:postId/comments", (c) => getComments(c, c.get("userId"), sqliteStore));
+    app.post("/v1/community/posts/:postId/comments", (c) => postComment(c, c.get("userId"), sqliteStore));
+    app.delete("/v1/community/comments/:commentId", (c) => deleteComment(c, c.get("userId"), sqliteStore));
+    app.post("/v1/community/reports", (c) => reportContent(c, c.get("userId"), sqliteStore));
+    app.post("/v1/community/blocks/:userId", (c) => blockUser(c, c.get("userId"), sqliteStore));
+    app.delete("/v1/community/blocks/:userId", (c) => unblockUser(c, c.get("userId"), sqliteStore));
+    app.get("/v1/community/blocks", (c) => getBlockedUsers(c, c.get("userId"), sqliteStore));
+    app.get("/v1/community/market/movers", (c) => getMarketMovers(c, sqliteStore));
+    app.get("/v1/community/market/buying", (c) => getWhatsBuying(c, sqliteStore));
+    app.get("/v1/community/market/selling", (c) => getWhatsSelling(c, sqliteStore));
+    app.get("/v1/community/market/sets", (c) => getSetTrends(c, sqliteStore));
+  }
 
   app.post("/v1/scans", bodyLimit({
       maxSize: SCAN_IMAGE_MAX_BYTES,

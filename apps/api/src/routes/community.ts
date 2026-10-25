@@ -6,8 +6,8 @@
 import { randomUUID } from "node:crypto";
 import type { Context } from "hono";
 import { eq, and, sql, desc, isNull, lt } from "drizzle-orm";
-import type { Store } from "./store";
-import { validateUsername, validateCommentText, filterText } from "./text-filter";
+import type { SqliteStorePort } from "../sqlite-store";
+import { validateUsername, validateCommentText, filterText } from "../text-filter";
 import {
   userAccounts,
   reservedUsernames,
@@ -22,7 +22,7 @@ import {
   setTrendSnapshots,
   cardflowCards,
   crmInventoryItems,
-} from "./db/schema";
+} from "../db/schema";
 
 const USERNAME_CHANGE_COOLDOWN_DAYS = 30;
 const COMMENT_RATE_LIMIT = 10; // per hour
@@ -33,7 +33,7 @@ const MIN_BUYERS_FOR_AGGREGATE = 5;
  * Check username availability (debounced client-side).
  * GET /v1/community/username/check?username=foo
  */
-export async function checkUsernameAvailability(c: Context, store: Store): Promise<Response> {
+export async function checkUsernameAvailability(c: Context, store: SqliteStorePort): Promise<Response> {
   const username = c.req.query("username");
   if (!username) {
     return c.json({ available: false, reason: "Username required" }, 400);
@@ -75,7 +75,7 @@ export async function checkUsernameAvailability(c: Context, store: Store): Promi
  * Set username (once at sign-up, or change with 30-day cooldown).
  * POST /v1/community/username { username: string }
  */
-export async function setUsername(c: Context, userId: string, store: Store): Promise<Response> {
+export async function setUsername(c: Context, userId: string, store: SqliteStorePort): Promise<Response> {
   const body = await c.req.json();
   const { username } = body;
 
@@ -160,7 +160,7 @@ export async function setUsername(c: Context, userId: string, store: Store): Pro
  * Get current user's username.
  * GET /v1/community/username
  */
-export async function getUsername(c: Context, userId: string, store: Store): Promise<Response> {
+export async function getUsername(c: Context, userId: string, store: SqliteStorePort): Promise<Response> {
   const user = await store.db
     .select({ username: userAccounts.username, usernameChangedAt: userAccounts.usernameChangedAt })
     .from(userAccounts)
@@ -184,7 +184,7 @@ export async function getUsername(c: Context, userId: string, store: Store): Pro
 export async function getCommunitySettings(
   c: Context,
   userId: string,
-  store: Store
+  store: SqliteStorePort
 ): Promise<Response> {
   let settings = await store.db
     .select()
@@ -228,7 +228,7 @@ export async function getCommunitySettings(
 export async function updateCommunitySettings(
   c: Context,
   userId: string,
-  store: Store
+  store: SqliteStorePort
 ): Promise<Response> {
   const body = await c.req.json();
   const { shareNew, showAs, sharePrice, rulesAccepted } = body;
@@ -291,7 +291,7 @@ export async function updateCommunitySettings(
  * Get community feed with pagination.
  * GET /v1/community/feed?filter=all|sets&cursor=<postId>&limit=20
  */
-export async function getFeed(c: Context, userId: string, store: Store): Promise<Response> {
+export async function getFeed(c: Context, userId: string, store: SqliteStorePort): Promise<Response> {
   const filter = c.req.query("filter") || "all";
   const cursor = c.req.query("cursor");
   const limit = Math.min(parseInt(c.req.query("limit") || "20", 10), 50);
@@ -457,7 +457,7 @@ export async function getFeed(c: Context, userId: string, store: Store): Promise
 export async function reactToPost(
   c: Context,
   userId: string,
-  store: Store
+  store: SqliteStorePort
 ): Promise<Response> {
   const postId = c.req.param("postId");
   const body = await c.req.json();
@@ -526,7 +526,7 @@ export async function reactToPost(
 export async function deleteReaction(
   c: Context,
   userId: string,
-  store: Store
+  store: SqliteStorePort
 ): Promise<Response> {
   const postId = c.req.param("postId");
 
@@ -545,7 +545,7 @@ export async function deleteReaction(
 export async function getComments(
   c: Context,
   userId: string,
-  store: Store
+  store: SqliteStorePort
 ): Promise<Response> {
   const postId = c.req.param("postId");
   const cursor = c.req.query("cursor");
@@ -624,7 +624,7 @@ export async function getComments(
 export async function postComment(
   c: Context,
   userId: string,
-  store: Store
+  store: SqliteStorePort
 ): Promise<Response> {
   const postId = c.req.param("postId");
   const body = await c.req.json();
@@ -711,7 +711,7 @@ export async function postComment(
 export async function deleteComment(
   c: Context,
   userId: string,
-  store: Store
+  store: SqliteStorePort
 ): Promise<Response> {
   const commentId = c.req.param("commentId");
 
@@ -745,7 +745,7 @@ export async function deleteComment(
 export async function reportContent(
   c: Context,
   userId: string,
-  store: Store
+  store: SqliteStorePort
 ): Promise<Response> {
   const body = await c.req.json();
   const { targetType, targetId, reason, note } = body;
@@ -813,7 +813,7 @@ export async function reportContent(
 export async function blockUser(
   c: Context,
   userId: string,
-  store: Store
+  store: SqliteStorePort
 ): Promise<Response> {
   const blockedUserId = c.req.param("userId");
 
@@ -841,7 +841,7 @@ export async function blockUser(
 export async function unblockUser(
   c: Context,
   userId: string,
-  store: Store
+  store: SqliteStorePort
 ): Promise<Response> {
   const blockedUserId = c.req.param("userId");
 
@@ -862,7 +862,7 @@ export async function unblockUser(
 export async function getBlockedUsers(
   c: Context,
   userId: string,
-  store: Store
+  store: SqliteStorePort
 ): Promise<Response> {
   const blocks = await store.db
     .select({
@@ -882,7 +882,7 @@ export async function getBlockedUsers(
  * Market movers (rising/falling cards).
  * GET /v1/community/market/movers?window=24h|7d|30d&direction=up|down&limit=10
  */
-export async function getMarketMovers(c: Context, store: Store): Promise<Response> {
+export async function getMarketMovers(c: Context, store: SqliteStorePort): Promise<Response> {
   const window = c.req.query("window") || "7d";
   const direction = c.req.query("direction") || "up";
   const limit = Math.min(parseInt(c.req.query("limit") || "10", 10), 50);
@@ -900,7 +900,7 @@ export async function getMarketMovers(c: Context, store: Store): Promise<Respons
  * What's buying aggregate (min 5 distinct users).
  * GET /v1/community/market/buying?window=24h|7d|30d&limit=10
  */
-export async function getWhatsBuying(c: Context, store: Store): Promise<Response> {
+export async function getWhatsBuying(c: Context, store: SqliteStorePort): Promise<Response> {
   const window = c.req.query("window") || "7d";
   const limit = Math.min(parseInt(c.req.query("limit") || "10", 10), 50);
 
@@ -961,7 +961,7 @@ export async function getWhatsBuying(c: Context, store: Store): Promise<Response
  * What's selling (public sales data).
  * GET /v1/community/market/selling?window=24h|7d|30d&limit=10
  */
-export async function getWhatsSelling(c: Context, store: Store): Promise<Response> {
+export async function getWhatsSelling(c: Context, store: SqliteStorePort): Promise<Response> {
   const window = c.req.query("window") || "7d";
   const limit = Math.min(parseInt(c.req.query("limit") || "10", 10), 50);
 
@@ -978,7 +978,7 @@ export async function getWhatsSelling(c: Context, store: Store): Promise<Respons
  * Set trends.
  * GET /v1/community/market/sets?window=7d&limit=20
  */
-export async function getSetTrends(c: Context, store: Store): Promise<Response> {
+export async function getSetTrends(c: Context, store: SqliteStorePort): Promise<Response> {
   const window = c.req.query("window") || "7d";
   const limit = Math.min(parseInt(c.req.query("limit") || "20", 10), 50);
 
