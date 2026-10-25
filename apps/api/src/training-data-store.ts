@@ -5,7 +5,7 @@
  */
 import { createHmac } from "node:crypto";
 import type { Database } from "better-sqlite3";
-import { and, eq, isNull, lte } from "drizzle-orm";
+import { and, eq, isNotNull, isNull, lte } from "drizzle-orm";
 import {
   scanCorrectionFeedback,
   trainingDataOptOuts,
@@ -83,8 +83,9 @@ export interface TrainingDataStorePort {
     wasCorrection: boolean;
     trainingImageId?: string | null;
   }): ScanCorrectionRecord;
-  deleteUserTrainingImages(userId: string): { deleted: number };
-  purgeExpiredTrainingImages(now: Date): { deleted: number };
+  deleteUserTrainingImages(userId: string): { deleted: number; storageRefs: string[] };
+  purgeExpiredTrainingImages(now: Date): { deleted: number; storageRefs: string[] };
+  physicallyDeleteTrainingImages(graceDays?: number): { deleted: number; storageRefs: string[] };
   markTrainingImageUsed(imageId: string): void;
 }
 
@@ -202,6 +203,19 @@ export function createTrainingDataStore(
 
   function deleteUserTrainingImages(userId: string): { deleted: number } {
     const now = new Date().toISOString();
+    
+    // Get images before marking as deleted for physical file cleanup
+    const imagesToDelete = db
+      .select()
+      .from(trainingImages)
+      .where(
+        and(
+          eq(trainingImages.userId, userId),
+          isNull(trainingImages.deletedAt),
+        ),
+      )
+      .all();
+    
     const result = db
       .update(trainingImages)
       .set({ deletedAt: now })
@@ -212,11 +226,25 @@ export function createTrainingDataStore(
         ),
       )
       .run();
-    return { deleted: result.changes };
+    
+    return { deleted: result.changes, storageRefs: imagesToDelete.map((img) => img.storageRef) };
   }
 
-  function purgeExpiredTrainingImages(now: Date): { deleted: number } {
+  function purgeExpiredTrainingImages(now: Date): { deleted: number; storageRefs: string[] } {
     const nowIso = now.toISOString();
+    
+    // Get images before marking as deleted for physical file cleanup
+    const imagesToDelete = db
+      .select()
+      .from(trainingImages)
+      .where(
+        and(
+          isNull(trainingImages.deletedAt),
+          lte(trainingImages.expiresAt, nowIso),
+        ),
+      )
+      .all();
+    
     const result = db
       .update(trainingImages)
       .set({ deletedAt: nowIso })
@@ -227,7 +255,41 @@ export function createTrainingDataStore(
         ),
       )
       .run();
-    return { deleted: result.changes };
+    
+    return { deleted: result.changes, storageRefs: imagesToDelete.map((img) => img.storageRef) };
+  }
+
+  function physicallyDeleteTrainingImages(graceDays: number = 30): { deleted: number } {
+    const cutoff = new Date(Date.now() - graceDays * 24 * 60 * 60 * 1000).toISOString();
+    
+    const imagesToPhysicallyDelete = db
+      .select()
+      .from(trainingImages)
+      .where(
+        and(
+          isNotNull(trainingImages.deletedAt),
+          lte(trainingImages.deletedAt, cutoff),
+        ),
+      )
+      .all();
+    
+    let deleted = 0;
+    for (const image of imagesToPhysicallyDelete) {
+      // Physical file deletion is handled by the caller
+      deleted++;
+    }
+    
+    // Remove database records
+    db.delete(trainingImages)
+      .where(
+        and(
+          isNotNull(trainingImages.deletedAt),
+          lte(trainingImages.deletedAt, cutoff),
+        ),
+      )
+      .run();
+    
+    return { deleted, storageRefs: imagesToPhysicallyDelete.map((img) => img.storageRef) };
   }
 
   function markTrainingImageUsed(imageId: string): void {
@@ -246,6 +308,7 @@ export function createTrainingDataStore(
     saveCorrectionFeedback,
     deleteUserTrainingImages,
     purgeExpiredTrainingImages,
+    physicallyDeleteTrainingImages,
     markTrainingImageUsed,
   };
 }

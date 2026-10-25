@@ -47,6 +47,7 @@ import { createSqliteGradeHistoryStore } from "./grade-history-store";
 import { createTrainingDataStore } from "./training-data-store";
 import type { TrainingDataStorePort } from "./training-data-store";
 import { serverPepper } from "./server-pepper";
+import { shouldRetainForTraining, saveTrainingImage } from "./training-image-storage";
 import { applyMvpMigrations, isMemorySqlitePath } from "./db/migrate";
 import {
   gradeImageStorageCandidates,
@@ -1179,6 +1180,72 @@ export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStor
         })
         .run();
     })();
+
+    // Sean (Oct 25): Capture scan correction feedback and retain training images
+    // This runs after the transaction to handle file I/O
+    if (!trainingDataStore.hasOptedOut(scan.userId)) {
+      const predictedTcgdexId = mappingForConfirm?.tcgdexId ?? null;
+      const confidence = mappingForConfirm?.confidence ?? null;
+      const wasCorrection = predictedTcgdexId !== null && predictedTcgdexId !== input.selectedTcgdexId;
+      const modelVersion = input.scan.recognition?.provider === "obb" ? "obb-v1" : "unknown";
+      const recognitionProvider = input.scan.recognition?.provider ?? "unknown";
+
+      // Determine if we should retain this scan image for training
+      const retention = shouldRetainForTraining({
+        recognitionProvider,
+        confidence,
+        captureMethod: input.scan.captureMethod,
+        wasCorrection,
+      });
+
+      let trainingImageId: string | null = null;
+
+      if (retention.retain && retention.reason && input.scan.imageStorageRef && sqliteDir) {
+        // Save the training image
+        const scanImage = readStoredScanImage(input.scan.userId, input.scan.scanId);
+        if (scanImage) {
+          const termsVersion = db
+            .select({ termsVersion: userAccounts.termsVersion })
+            .from(userAccounts)
+            .where(eq(userAccounts.userId, input.scan.userId))
+            .get()?.termsVersion ?? "2026-10-25.1";
+
+          const imageId = crypto.randomUUID();
+          const saved = saveTrainingImage(
+            sqliteDir,
+            input.scan.userId,
+            imageId,
+            scanImage
+          );
+
+          const trainingImage = trainingDataStore.saveTrainingImage({
+            userId: input.scan.userId,
+            scanId: input.scan.scanId,
+            retentionReason: retention.reason,
+            capturedAt: input.scan.capturedAt,
+            storageRef: saved.storageRef,
+            imageMimeType: saved.mimeType,
+            termsVersion,
+          });
+
+          trainingImageId = trainingImage.imageId;
+        }
+      }
+
+      // Save correction feedback (always, whether or not we retained the image)
+      trainingDataStore.saveCorrectionFeedback({
+        userId: input.scan.userId,
+        scanId: input.scan.scanId,
+        chosenCardflowCardId: confirmation.cardflowCardId,
+        chosenTcgdexId: input.selectedTcgdexId,
+        predictedTcgdexId,
+        confidence,
+        modelVersion,
+        recognitionProvider,
+        wasCorrection,
+        trainingImageId,
+      });
+    }
 
     return { scan, confirmation, canonicalCard };
   }

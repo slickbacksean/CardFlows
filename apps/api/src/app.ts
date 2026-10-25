@@ -1,6 +1,7 @@
 import { FEATURE_DISABLED_HEADER, featureDisabledBody, livestreamEnabledFromEnv } from "@cardflow/shared";
 import { buildDexSet, dexOwnedCountsBySet, type DexCatalogCard, type DexSetSummary, type TcgdexSetBrief } from "@cardflow/shared";
 import { createHash, randomBytes, randomInt, timingSafeEqual } from "node:crypto";
+import path from "node:path";
 import { emailSenderFromEnv, type EmailSender } from "./email-sender";
 import { cardSightMonthKey, consentState, hasActiveConsent } from "./consent-store";
 import {
@@ -189,6 +190,9 @@ import { registerGradeQuotaRoutes } from "./routes/grade-quota";
 import { registerPreferenceRoutes } from "./routes/preferences";
 import { registerGradeJobRoutes, type GradeJobRoutes } from "./routes/grade-jobs";
 import { registerTrainingDataRoutes } from "./routes/training-data";
+import { registerAdminExportRoutes } from "./routes/admin-export";
+import { startTrainingDataRetentionJob } from "./training-data-retention-job";
+import { isMemorySqlitePath } from "./db/migrate";
 import { registerStatusRoutes } from "./routes/status";
 import { registerSalesRoutes } from "./routes/sales";
 import { premiumRequiredBody, recordGradeEstimate, registerGradeHistoryRoutes } from "./routes/grade-history";
@@ -2841,7 +2845,36 @@ export function createApp(
   app.use("/v1/inventory/:inventoryItemId/grade-history", async (c, next) => (c.req.method === "POST" ? replayableWrite(c, next) : next()));
 
   registerPreferenceRoutes(app, { getPreferences, setPreferences });
-  registerTrainingDataRoutes(app, { trainingData: store.trainingData });
+  
+  // Sean (Oct 25): Training data routes and admin export
+  const isSqliteStore = "sqlitePath" in store && typeof store.sqlitePath === "string";
+  const storageDir = isSqliteStore && !isMemorySqlitePath(store.sqlitePath)
+    ? path.dirname(path.resolve(store.sqlitePath))
+    : null;
+  
+  if ("trainingData" in store && store.trainingData) {
+    registerTrainingDataRoutes(app, { 
+      trainingData: store.trainingData, 
+      storageDir 
+    });
+    
+    registerAdminExportRoutes(app, {
+      store: store as import("./sqlite-store").SqliteStorePort,
+      isAdmin: (userId: string) => INVITED_USERS.some((u) => u.userId === userId),
+    });
+    
+    // Start training data retention job (purge expired images every hour)
+    if (storageDir) {
+      startTrainingDataRetentionJob({
+        trainingDataStore: store.trainingData,
+        storageDir,
+        onPurge: (result) => {
+          console.log(`Training data purge: ${result.expiredDeleted} expired, ${result.physicallyDeleted} physically deleted, ${result.filesDeleted} files deleted`);
+        },
+      });
+    }
+  }
+  
   registerSalesRoutes(app, {
     sales: store.sales,
     ownsInventoryItem: (userId, inventoryItemId) =>
