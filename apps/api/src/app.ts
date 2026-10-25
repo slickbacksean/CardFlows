@@ -2876,6 +2876,8 @@ export function createApp(
         });
       }
     }
+  } else if (process.env.VITEST) {
+    console.log("[DEBUG] No trainingDataStore found. 'trainingData' in store:", "trainingData" in store, "Type:", typeof (store as any).trainingData);
   }
   
   registerSalesRoutes(app, {
