@@ -343,19 +343,45 @@ export default function CollectionScreen() {
   return (
     <View style={styles.flex}>
       <View style={styles.toolbar}>
-        <View style={styles.searchBox}>
-          <Ionicons color={colors.muted} name="search" size={16} />
-          <TextInput
-            accessibilityLabel="Search MyDEX"
-            autoCapitalize="none"
-            autoCorrect={false}
-            clearButtonMode="while-editing"
-            onChangeText={setQuery}
-            placeholder="Search cards"
-            placeholderTextColor={colors.muted}
-            style={styles.searchInput}
-            value={query}
-          />
+        <View style={styles.toolbarHeader}>
+          <View style={styles.searchBox}>
+            <Ionicons color={colors.muted} name="search" size={16} />
+            <TextInput
+              accessibilityLabel="Search MyDEX"
+              autoCapitalize="none"
+              autoCorrect={false}
+              clearButtonMode="while-editing"
+              onChangeText={setQuery}
+              placeholder="Search cards"
+              placeholderTextColor={colors.muted}
+              style={styles.searchInput}
+              value={query}
+            />
+          </View>
+          
+          <View style={styles.headerButtons}>
+            {segment === "purchased" && purchasedCount > 0 ? (
+              <Pressable
+                accessibilityLabel="Export CSV"
+                accessibilityRole="button"
+                onPress={() => router.push("/collection-export")}
+                style={styles.iconButton}
+              >
+                <Ionicons color={colors.text} name="share-outline" size={22} />
+              </Pressable>
+            ) : null}
+            
+            {segment === "purchased" ? (
+              <Pressable
+                accessibilityLabel="P&L"
+                accessibilityRole="button"
+                onPress={() => router.push("/pnl")}
+                style={styles.iconButton}
+              >
+                <Ionicons color={colors.text} name="analytics-outline" size={22} />
+              </Pressable>
+            ) : null}
+          </View>
         </View>
 
         <View accessibilityRole="tablist" style={styles.segments}>
@@ -721,5 +747,17 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: space.md,
+  },
+  toolbarHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.sm,
+  },
+  headerButtons: {
+    flexDirection: "row",
+    gap: space.xs,
+  },
+  iconButton: {
+    padding: space.xs,
   },
 });
