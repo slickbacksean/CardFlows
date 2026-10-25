@@ -450,10 +450,11 @@ export async function getFeed(c: Context, userId: string, store: SqliteStorePort
     };
   });
 
+  const lastPost = posts[posts.length - 1];
   return c.json(
     {
       posts: formatted,
-      nextCursor: hasMore ? posts[posts.length - 1].postId : null,
+      nextCursor: hasMore && lastPost ? lastPost.postId : null,
     },
     200
   );
@@ -469,6 +470,10 @@ export async function reactToPost(
   store: SqliteStorePort
 ): Promise<Response> {
   const postId = c.req.param("postId");
+  if (!postId) {
+    return c.json({ error: "Post ID required" }, 400);
+  }
+
   const body = await c.req.json();
   const { emoji } = body;
 
@@ -538,6 +543,9 @@ export async function deleteReaction(
   store: SqliteStorePort
 ): Promise<Response> {
   const postId = c.req.param("postId");
+  if (!postId) {
+    return c.json({ error: "Post ID required" }, 400);
+  }
 
   await store.db
     .delete(postReactions)
@@ -557,6 +565,10 @@ export async function getComments(
   store: SqliteStorePort
 ): Promise<Response> {
   const postId = c.req.param("postId");
+  if (!postId) {
+    return c.json({ error: "Post ID required" }, 400);
+  }
+
   const cursor = c.req.query("cursor");
   const limit = Math.min(parseInt(c.req.query("limit") || "50", 10), 100);
 
@@ -619,10 +631,11 @@ export async function getComments(
     hidden: !!c.hiddenAt && !c.removedAt,
   }));
 
+  const lastComment = comments[comments.length - 1];
   return c.json(
     {
       comments: formatted,
-      nextCursor: hasMore ? comments[comments.length - 1].commentId : null,
+      nextCursor: hasMore && lastComment ? lastComment.commentId : null,
     },
     200
   );
@@ -638,6 +651,10 @@ export async function postComment(
   store: SqliteStorePort
 ): Promise<Response> {
   const postId = c.req.param("postId");
+  if (!postId) {
+    return c.json({ error: "Post ID required" }, 400);
+  }
+
   const body = await c.req.json();
   const { text } = body;
 
@@ -725,6 +742,9 @@ export async function deleteComment(
   store: SqliteStorePort
 ): Promise<Response> {
   const commentId = c.req.param("commentId");
+  if (!commentId) {
+    return c.json({ error: "Comment ID required" }, 400);
+  }
 
   const comment = await store.db
     .select()
@@ -827,6 +847,9 @@ export async function blockUser(
   store: SqliteStorePort
 ): Promise<Response> {
   const blockedUserId = c.req.param("userId");
+  if (!blockedUserId) {
+    return c.json({ error: "User ID required" }, 400);
+  }
 
   if (blockedUserId === userId) {
     return c.json({ error: "Cannot block yourself" }, 400);
@@ -855,6 +878,9 @@ export async function unblockUser(
   store: SqliteStorePort
 ): Promise<Response> {
   const blockedUserId = c.req.param("userId");
+  if (!blockedUserId) {
+    return c.json({ error: "User ID required" }, 400);
+  }
 
   await store.db
     .delete(userBlocks)
@@ -1039,7 +1065,11 @@ export async function listReports(c: Context, store: SqliteStorePort): Promise<R
  */
 export async function resolveReport(c: Context, store: SqliteStorePort): Promise<Response> {
   // TODO: Check admin role
-  const { reportId } = c.req.param();
+  const reportId = c.req.param("reportId");
+  if (!reportId) {
+    return c.json({ error: "Report ID required" }, 400);
+  }
+
   const { action, notifyUser } = await c.req.json();
   const adminUserId = c.get("userId");
 
