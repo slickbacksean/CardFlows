@@ -63,7 +63,7 @@ describe("migrations 0000–0031", () => {
   it("applies all of them to a fresh database", () => {
     const { sqlite } = applyMvpMigrations(path.join(tmp(), "fresh.sqlite"));
     const applied = sqlite.prepare("SELECT COUNT(*) AS n FROM __drizzle_migrations").get() as { n: number };
-    expect(applied.n).toBe(31);
+    expect(applied.n).toBe(32);
     sqlite.close();
   });
 
@@ -106,7 +106,7 @@ describe("migrations 0000–0031", () => {
     expect(usage("alex", alexPeriod.key)).toBe(3);
     expect(sqlite.prepare("SELECT anchor_at FROM grade_accounts WHERE user_id = 'jordan'").get()).toEqual({ anchor_at: jordanAnchor });
     expect(usage("jordan", quotaPeriodFor(jordanAnchor, new Date()).key)).toBe(2);
-    expect((sqlite.prepare("SELECT COUNT(*) AS n FROM __drizzle_migrations").get() as { n: number }).n).toBe(31);
+    expect((sqlite.prepare("SELECT COUNT(*) AS n FROM __drizzle_migrations").get() as { n: number }).n).toBe(32);
     sqlite.close();
   });
 
