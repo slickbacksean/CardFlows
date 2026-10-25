@@ -82,7 +82,7 @@ export default function BlockedUsersScreen() {
         <View style={styles.empty}>
           <Text style={styles.emptyTitle}>No Blocked Users</Text>
           <Text style={styles.emptyBody}>
-            When you block someone, they won't see your posts and you won't see theirs.
+            When you block someone, they won&apos;t see your posts and you won&apos;t see theirs.
           </Text>
         </View>
       ) : (

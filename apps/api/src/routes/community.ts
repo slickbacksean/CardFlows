@@ -5,7 +5,7 @@
 
 import { randomUUID } from "node:crypto";
 import type { Context } from "hono";
-import { eq, and, sql, desc, isNull, isNotNull, lt, gte } from "drizzle-orm";
+import { eq, and, sql, desc, isNull, isNotNull, lt, gte, inArray } from "drizzle-orm";
 import type { SqliteStorePort } from "../sqlite-store";
 import { validateUsername, validateCommentText, filterText } from "../text-filter";
 import {
@@ -315,7 +315,25 @@ export async function getFeed(c: Context, userId: string, store: SqliteStorePort
   const blockerUserIds = new Set(blockers.map((b) => b.blockerUserId));
 
   // Build query
-  let query = store.db
+  // Build where conditions
+  const whereConditions = [
+    isNull(communityPosts.hiddenAt),
+    isNull(communityPosts.removedAt)
+  ];
+
+  if (cursor) {
+    const cursorPost = await store.db
+      .select({ createdAt: communityPosts.createdAt })
+      .from(communityPosts)
+      .where(eq(communityPosts.postId, cursor))
+      .get();
+
+    if (cursorPost) {
+      whereConditions.push(lt(communityPosts.createdAt, cursorPost.createdAt));
+    }
+  }
+
+  let posts = await store.db
     .select({
       postId: communityPosts.postId,
       userId: communityPosts.userId,
@@ -335,28 +353,10 @@ export async function getFeed(c: Context, userId: string, store: SqliteStorePort
     .from(communityPosts)
     .innerJoin(cardflowCards, eq(communityPosts.cardflowCardId, cardflowCards.cardflowCardId))
     .leftJoin(userAccounts, eq(communityPosts.userId, userAccounts.userId))
-    .where(
-      and(
-        isNull(communityPosts.hiddenAt),
-        isNull(communityPosts.removedAt)
-      )
-    )
+    .where(and(...whereConditions))
     .orderBy(desc(communityPosts.createdAt))
-    .limit(limit + 1);
-
-  if (cursor) {
-    const cursorPost = await store.db
-      .select({ createdAt: communityPosts.createdAt })
-      .from(communityPosts)
-      .where(eq(communityPosts.postId, cursor))
-      .get();
-
-    if (cursorPost) {
-      query = query.where(lt(communityPosts.createdAt, cursorPost.createdAt)) as any;
-    }
-  }
-
-  let posts = await query.all();
+    .limit(limit + 1)
+    .all();
 
   // Filter out blocked users
   posts = posts.filter(
@@ -368,6 +368,15 @@ export async function getFeed(c: Context, userId: string, store: SqliteStorePort
 
   // Get reaction counts and user's reactions
   const postIds = posts.map((p) => p.postId);
+  
+  if (postIds.length === 0) {
+    return c.json({
+      posts: [],
+      hasMore: false,
+      nextCursor: null,
+    });
+  }
+
   const reactions = await store.db
     .select({
       postId: postReactions.postId,
@@ -375,9 +384,9 @@ export async function getFeed(c: Context, userId: string, store: SqliteStorePort
       count: sql<number>`count(*)`,
     })
     .from(postReactions)
-    .where(sql`${postReactions.postId} IN (${postIds.map(() => "?").join(",")})`)
+    .where(inArray(postReactions.postId, postIds))
     .groupBy(postReactions.postId, postReactions.emoji)
-    .all(...postIds);
+    .all();
 
   const myReactions = await store.db
     .select({ postId: postReactions.postId, emoji: postReactions.emoji })
@@ -385,10 +394,10 @@ export async function getFeed(c: Context, userId: string, store: SqliteStorePort
     .where(
       and(
         eq(postReactions.userId, userId),
-        sql`${postReactions.postId} IN (${postIds.map(() => "?").join(",")})`
+        inArray(postReactions.postId, postIds)
       )
     )
-    .all(...postIds);
+    .all();
 
   const myReactionMap = new Map(myReactions.map((r) => [r.postId, r.emoji]));
 
@@ -401,12 +410,12 @@ export async function getFeed(c: Context, userId: string, store: SqliteStorePort
     .from(postComments)
     .where(
       and(
-        sql`${postComments.postId} IN (${postIds.map(() => "?").join(",")})`,
+        inArray(postComments.postId, postIds),
         isNull(postComments.removedAt)
       )
     )
     .groupBy(postComments.postId)
-    .all(...postIds);
+    .all();
 
   const commentCountMap = new Map(commentCounts.map((c) => [c.postId, c.count]));
 
@@ -441,10 +450,11 @@ export async function getFeed(c: Context, userId: string, store: SqliteStorePort
     };
   });
 
+  const lastPost = posts[posts.length - 1];
   return c.json(
     {
       posts: formatted,
-      nextCursor: hasMore ? posts[posts.length - 1].postId : null,
+      nextCursor: hasMore && lastPost ? lastPost.postId : null,
     },
     200
   );
@@ -460,6 +470,10 @@ export async function reactToPost(
   store: SqliteStorePort
 ): Promise<Response> {
   const postId = c.req.param("postId");
+  if (!postId) {
+    return c.json({ error: "Post ID required" }, 400);
+  }
+
   const body = await c.req.json();
   const { emoji } = body;
 
@@ -529,6 +543,9 @@ export async function deleteReaction(
   store: SqliteStorePort
 ): Promise<Response> {
   const postId = c.req.param("postId");
+  if (!postId) {
+    return c.json({ error: "Post ID required" }, 400);
+  }
 
   await store.db
     .delete(postReactions)
@@ -548,6 +565,10 @@ export async function getComments(
   store: SqliteStorePort
 ): Promise<Response> {
   const postId = c.req.param("postId");
+  if (!postId) {
+    return c.json({ error: "Post ID required" }, 400);
+  }
+
   const cursor = c.req.query("cursor");
   const limit = Math.min(parseInt(c.req.query("limit") || "50", 10), 100);
 
@@ -560,8 +581,23 @@ export async function getComments(
 
   const blockedUserIds = new Set(blocks.map((b) => b.blockedUserId));
 
+  // Build where conditions
+  const whereConditions = [eq(postComments.postId, postId)];
+
+  if (cursor) {
+    const cursorComment = await store.db
+      .select({ createdAt: postComments.createdAt })
+      .from(postComments)
+      .where(eq(postComments.commentId, cursor))
+      .get();
+
+    if (cursorComment) {
+      whereConditions.push(sql`${postComments.createdAt} > ${cursorComment.createdAt}`);
+    }
+  }
+
   // Get comments
-  let query = store.db
+  let comments = await store.db
     .select({
       commentId: postComments.commentId,
       userId: postComments.userId,
@@ -573,23 +609,10 @@ export async function getComments(
     })
     .from(postComments)
     .leftJoin(userAccounts, eq(postComments.userId, userAccounts.userId))
-    .where(eq(postComments.postId, postId))
+    .where(and(...whereConditions))
     .orderBy(postComments.createdAt)
-    .limit(limit + 1);
-
-  if (cursor) {
-    const cursorComment = await store.db
-      .select({ createdAt: postComments.createdAt })
-      .from(postComments)
-      .where(eq(postComments.commentId, cursor))
-      .get();
-
-    if (cursorComment) {
-      query = query.where(sql`${postComments.createdAt} > ${cursorComment.createdAt}`) as any;
-    }
-  }
-
-  let comments = await query.all();
+    .limit(limit + 1)
+    .all();
 
   // Filter blocked users
   comments = comments.filter((c) => !blockedUserIds.has(c.userId));
@@ -608,10 +631,11 @@ export async function getComments(
     hidden: !!c.hiddenAt && !c.removedAt,
   }));
 
+  const lastComment = comments[comments.length - 1];
   return c.json(
     {
       comments: formatted,
-      nextCursor: hasMore ? comments[comments.length - 1].commentId : null,
+      nextCursor: hasMore && lastComment ? lastComment.commentId : null,
     },
     200
   );
@@ -627,6 +651,10 @@ export async function postComment(
   store: SqliteStorePort
 ): Promise<Response> {
   const postId = c.req.param("postId");
+  if (!postId) {
+    return c.json({ error: "Post ID required" }, 400);
+  }
+
   const body = await c.req.json();
   const { text } = body;
 
@@ -714,6 +742,9 @@ export async function deleteComment(
   store: SqliteStorePort
 ): Promise<Response> {
   const commentId = c.req.param("commentId");
+  if (!commentId) {
+    return c.json({ error: "Comment ID required" }, 400);
+  }
 
   const comment = await store.db
     .select()
@@ -816,6 +847,9 @@ export async function blockUser(
   store: SqliteStorePort
 ): Promise<Response> {
   const blockedUserId = c.req.param("userId");
+  if (!blockedUserId) {
+    return c.json({ error: "User ID required" }, 400);
+  }
 
   if (blockedUserId === userId) {
     return c.json({ error: "Cannot block yourself" }, 400);
@@ -844,6 +878,9 @@ export async function unblockUser(
   store: SqliteStorePort
 ): Promise<Response> {
   const blockedUserId = c.req.param("userId");
+  if (!blockedUserId) {
+    return c.json({ error: "User ID required" }, 400);
+  }
 
   await store.db
     .delete(userBlocks)
@@ -1010,8 +1047,7 @@ export async function listReports(c: Context, store: SqliteStorePort): Promise<R
       reporterUserId: contentReports.reporterUserId,
       createdAt: contentReports.createdAt,
       resolvedAt: contentReports.resolvedAt,
-      resolvedBy: contentReports.resolvedBy,
-      action: contentReports.action,
+      resolution: contentReports.resolution,
     })
     .from(contentReports)
     .where(isNull(contentReports.resolvedAt))
@@ -1029,7 +1065,11 @@ export async function listReports(c: Context, store: SqliteStorePort): Promise<R
  */
 export async function resolveReport(c: Context, store: SqliteStorePort): Promise<Response> {
   // TODO: Check admin role
-  const { reportId } = c.req.param();
+  const reportId = c.req.param("reportId");
+  if (!reportId) {
+    return c.json({ error: "Report ID required" }, 400);
+  }
+
   const { action, notifyUser } = await c.req.json();
   const adminUserId = c.get("userId");
 
@@ -1042,17 +1082,16 @@ export async function resolveReport(c: Context, store: SqliteStorePort): Promise
     .update(contentReports)
     .set({
       resolvedAt: new Date().toISOString(),
-      resolvedBy: adminUserId,
-      action,
+      resolution: action,
     })
     .where(eq(contentReports.reportId, reportId));
 
   // Get the report to find target
-  const [report] = await store.db
+  const report = await store.db
     .select()
     .from(contentReports)
     .where(eq(contentReports.reportId, reportId))
-    .limit(1);
+    .get();
 
   if (!report) {
     return c.json({ error: "Report not found" }, 404);

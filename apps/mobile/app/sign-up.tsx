@@ -23,6 +23,7 @@ import { SocialSignInButtons, type SocialToken } from "@/components/ui/social-si
 import { peekActiveUserId, signInWithSocial, signUpWithEmail } from "@/lib/identity";
 import { flushScanQueue } from "@/lib/scan-queue";
 import { colors } from "@/lib/theme";
+import { checkAndPromptUsername } from "@/lib/username-check";
 
 /** Open sign-up / sign-in. First screen when signed out (Sean, Oct 18). Email and password only. */
 export default function SignUpScreen() {

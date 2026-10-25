@@ -1,6 +1,6 @@
 import { Stack, useRouter } from "expo-router";
-import { useCallback, useEffect, useState } from "react";
-import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { useEffect, useRef, useState } from "react";
+import { ActivityIndicator, StyleSheet, Text, TextInput, View } from "react-native";
 import { PreferencesScreenHeader } from "@/components/ui/preferences-screen-header";
 import { PrimaryButton } from "@/components/ui/primary-button";
 import { InlineError } from "@/components/ui/screen-state";
@@ -19,23 +19,24 @@ export default function UsernameSetupScreen() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [availability, setAvailability] = useState<{ available: boolean; reason?: string } | null>(null);
-  const [checkTimer, setCheckTimer] = useState<NodeJS.Timeout | null>(null);
+  const checkTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Debounced availability check
   useEffect(() => {
-    if (checkTimer) {
-      clearTimeout(checkTimer);
+    if (checkTimerRef.current) {
+      clearTimeout(checkTimerRef.current);
     }
 
     const trimmed = username.trim();
     if (trimmed.length < 3) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setAvailability(null);
       setChecking(false);
       return;
     }
 
     setChecking(true);
-    const timer = setTimeout(() => {
+    checkTimerRef.current = setTimeout(() => {
       void checkUsernameAvailability(trimmed)
         .then((result) => {
           setAvailability(result);
@@ -46,10 +47,8 @@ export default function UsernameSetupScreen() {
         });
     }, 500);
 
-    setCheckTimer(timer);
-
     return () => {
-      if (timer) clearTimeout(timer);
+      if (checkTimerRef.current) clearTimeout(checkTimerRef.current);
     };
   }, [username]);
 
@@ -86,7 +85,7 @@ export default function UsernameSetupScreen() {
       <View style={styles.content}>
         <Text style={styles.title}>Pick your username</Text>
         <Text style={styles.body}>
-          Your username is how you'll appear when you share purchases in the Community feed. You can
+          Your username is how you&apos;ll appear when you share purchases in the Community feed. You can
           keep it anonymous or show your username.
         </Text>
 
