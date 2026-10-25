@@ -89,13 +89,13 @@ export default function TabsLayout() {
           }}
         />
         <Tabs.Screen
-          name="export"
+          name="community"
           options={{
-            title: "Export",
-            tabBarLabel: "Export",
+            title: "Community",
+            tabBarLabel: "Community",
             tabBarIcon: ({ color, focused, size }) => (
               <Ionicons
-                name={focused ? "download" : "download-outline"}
+                name={focused ? "people" : "people-outline"}
                 size={size}
                 color={color}
               />

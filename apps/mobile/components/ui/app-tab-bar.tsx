@@ -18,7 +18,7 @@ import { colors } from "@/lib/theme";
 type AppTabBarProps = Parameters<NonNullable<ComponentProps<typeof Tabs>["tabBar"]>>[0];
 
 const LEFT_TAB_NAMES = ["collection", "shop"];
-const RIGHT_TAB_NAMES = ["grading", "export"];
+const RIGHT_TAB_NAMES = ["grading", "community"];
 
 function routesByName(
   routes: AppTabBarProps["state"]["routes"],
