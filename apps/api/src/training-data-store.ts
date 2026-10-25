@@ -201,7 +201,7 @@ export function createTrainingDataStore(
     return record;
   }
 
-  function deleteUserTrainingImages(userId: string): { deleted: number } {
+  function deleteUserTrainingImages(userId: string): { deleted: number; storageRefs: string[] } {
     const now = new Date().toISOString();
     
     // Get images before marking as deleted for physical file cleanup
@@ -227,7 +227,7 @@ export function createTrainingDataStore(
       )
       .run();
     
-    return { deleted: result.changes, storageRefs: imagesToDelete.map((img) => img.storageRef) };
+    return { deleted: result.changes, storageRefs: imagesToDelete.map((img: typeof trainingImages.$inferSelect) => img.storageRef) };
   }
 
   function purgeExpiredTrainingImages(now: Date): { deleted: number; storageRefs: string[] } {
@@ -256,7 +256,7 @@ export function createTrainingDataStore(
       )
       .run();
     
-    return { deleted: result.changes, storageRefs: imagesToDelete.map((img) => img.storageRef) };
+    return { deleted: result.changes, storageRefs: imagesToDelete.map((img: typeof trainingImages.$inferSelect) => img.storageRef) };
   }
 
   function physicallyDeleteTrainingImages(graceDays: number = 30): { deleted: number; storageRefs: string[] } {
@@ -289,7 +289,7 @@ export function createTrainingDataStore(
       )
       .run();
     
-    return { deleted, storageRefs: imagesToPhysicallyDelete.map((img) => img.storageRef) };
+    return { deleted, storageRefs: imagesToPhysicallyDelete.map((img: typeof trainingImages.$inferSelect) => img.storageRef) };
   }
 
   function markTrainingImageUsed(imageId: string): void {
