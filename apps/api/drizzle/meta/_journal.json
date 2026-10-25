@@ -204,6 +204,13 @@
       "when": 1791955200000,
       "tag": "0028_terms_social_sign_in",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "6",
+      "when": 1792041600000,
+      "tag": "0030_community_username",
+      "breakpoints": true
     }
   ]
 }
