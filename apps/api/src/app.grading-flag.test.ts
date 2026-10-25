@@ -8,48 +8,48 @@ describe("grading feature flag", () => {
   it("returns 503 feature_disabled on all grading routes when off", async () => {
     const app = createApp(createMemoryStore(), { gradingEnabled: () => false, devAutoSession: true });
 
-    const routes = [
-      "/v1/grading",
-      "/v1/grading/submitted",
-      "/v1/grading/returned",
-      "/v1/grade/quota",
-      "/v1/grade/credits",
-      "/v1/grade/credits/consume",
-      "/v1/grade/detect",
-      "/v1/grade/pregrade",
-      "/v1/grade/extra",
+    const routes: Array<[string, string, unknown?]> = [
+      ["GET", "/v1/grading"],
+      ["POST", "/v1/grading/submitted", { inventoryItemId: "item123", name: "Pikachu" }],
+      ["PATCH", "/v1/grading/submitted/item123", { status: "sent" }],
+      ["POST", "/v1/grading/returned", { inventoryItemId: "item123" }],
+      ["PATCH", "/v1/grading/returned/item123", { certNumber: "12345" }],
     ];
 
-    for (const route of routes) {
-      const method = route.includes("quota") && !route.includes("consume") ? "GET" : "POST";
-      const response = await app.request(route, { method, body: method === "POST" ? new FormData() : undefined });
+    for (const [method, route, body] of routes) {
+      const response = await app.request(route, {
+        method,
+        headers: body ? { "content-type": "application/json" } : undefined,
+        body: body ? JSON.stringify(body) : undefined,
+      });
       expect(response.status, `${method} ${route}`).toBe(503);
-      const body = (await response.json()) as { ok: boolean; code?: string; error?: string; feature?: string };
-      expect(body.ok, `${method} ${route}`).toBe(false);
-      expect(body.code, `${method} ${route}`).toBe(FEATURE_DISABLED_CODE);
-      expect(body.feature, `${method} ${route}`).toBe("grading");
-      expect(body.error, `${method} ${route}`).toBe(GRADING_DISABLED_COPY);
+      const json = (await response.json()) as { ok: boolean; code?: string; error?: string; feature?: string };
+      expect(json.ok, `${method} ${route}`).toBe(false);
+      expect(json.code, `${method} ${route}`).toBe(FEATURE_DISABLED_CODE);
+      expect(json.feature, `${method} ${route}`).toBe("grading");
+      expect(json.error, `${method} ${route}`).toBe(GRADING_DISABLED_COPY);
       expect(response.headers.get("x-cardflow-feature-disabled")).toBe("grading");
     }
   });
 
-  it("returns 503 on inventory grade routes when off", async () => {
+  it("returns 503 on grade estimate routes when off", async () => {
     const app = createApp(createMemoryStore(), { gradingEnabled: () => false, devAutoSession: true });
 
+    const form = new FormData();
+    form.append("photo", new Blob(["fake-image"], { type: "image/jpeg" }), "test.jpg");
+
     const routes = [
-      "/v1/inventory/item123/grade-estimate",
-      "/v1/inventory/item123/grade-jobs",
-      "/v1/inventory/item123/grade-history",
-      "/v1/inventory/item123/grade-photos/front",
+      ["/v1/grade/detect", form],
+      ["/v1/grade/pregrade", form],
+      ["/v1/inventory/item123/grade-estimate", form],
     ];
 
-    for (const route of routes) {
-      const method = route.includes("photos") || route.includes("history") || route === "/v1/inventory/item123/grade-jobs" ? "GET" : "POST";
-      const response = await app.request(route, { method, body: method === "POST" ? new FormData() : undefined });
-      expect(response.status, `${method} ${route}`).toBe(503);
-      const body = (await response.json()) as { ok: boolean; code?: string; feature?: string };
-      expect(body.code, `${method} ${route}`).toBe(FEATURE_DISABLED_CODE);
-      expect(body.feature, `${method} ${route}`).toBe("grading");
+    for (const [route, body] of routes) {
+      const response = await app.request(route as string, { method: "POST", body: body as FormData });
+      expect(response.status, `POST ${route}`).toBe(503);
+      const json = (await response.json()) as { ok: boolean; code?: string; feature?: string };
+      expect(json.code, `POST ${route}`).toBe(FEATURE_DISABLED_CODE);
+      expect(json.feature, `POST ${route}`).toBe("grading");
     }
   });
 
@@ -87,3 +87,4 @@ describe("grading feature flag", () => {
     expect(gradingEnabledFromEnv("YES")).toBe(true);
   });
 });
+

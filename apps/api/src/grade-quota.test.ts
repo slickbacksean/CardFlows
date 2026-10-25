@@ -49,7 +49,7 @@ describe("monthly grade quotas", () => {
   });
 
   it("shows remaining grades and spends the free monthly allowance first", async () => {
-    const app = createApp(createMemoryStore(), { gradingEnabled: () => true,  devAutoSession: true, gradeQuota: true  });
+    const app = createApp(createMemoryStore(), { devAutoSession: true, gradeQuota: true });
     const listed = await json<QuotaBody>(app, "/v1/grade/quota");
     expect(listed.status).toBe(200);
     expect(listed.body.quota).toMatchObject({
@@ -76,7 +76,7 @@ describe("monthly grade quotas", () => {
     const store = createMemoryStore();
     store.ensureGradeAnchor(DEFAULT_INVITED_USER_ID, "2026-10-13T00:00:00.000Z");
     store.addGradeCredits(DEFAULT_INVITED_USER_ID, 2, "2026-10-13T00:00:00.000Z", "2026-10-13");
-    const app = createApp(store, { gradingEnabled: () => true,  devAutoSession: true, gradeQuota: true, now: () => new Date("2026-10-20T00:00:00Z")  });
+    const app = createApp(store, { devAutoSession: true, gradeQuota: true, now: () => new Date("2026-10-20T00:00:00Z") });
     for (let i = 0; i < GRADE_QUOTA_FREE_PER_MONTH + 2; i += 1) {
       expect(
         (await json<QuotaBody>(app, "/v1/grade/credits/consume", { method: "POST", body: "{}" })).status,
@@ -90,7 +90,7 @@ describe("monthly grade quotas", () => {
   it("gives premium accounts unlimited quick estimates (Sean, Oct 18)", async () => {
     const store = createMemoryStore();
     store.setGradePlan(DEFAULT_INVITED_USER_ID, "premium", "2026-10-13T00:00:00.000Z");
-    const app = createApp(store, { gradingEnabled: () => true,  devAutoSession: true, gradeQuota: true  });
+    const app = createApp(store, { devAutoSession: true, gradeQuota: true });
     const listed = await json<QuotaBody>(app, "/v1/grade/quota");
     expect(listed.body.quota?.monthlyLimit).toBe(GRADE_QUOTA_UNLIMITED_LIMIT);
     expect(listed.body.quota?.unlimited).toBe(true);
@@ -140,14 +140,14 @@ describe("monthly grade quotas", () => {
     const store = createMemoryStore();
     store.ensureGradeAnchor(DEFAULT_INVITED_USER_ID, "2026-01-05T00:00:00.000Z");
     store.setBillingAnchor(DEFAULT_INVITED_USER_ID, "2026-03-20T08:00:00.000Z", "2026-03-20T08:00:00.000Z");
-    const app = createApp(store, { gradingEnabled: () => true,  devAutoSession: true, gradeQuota: true, now: () => new Date("2026-10-25T00:00:00Z")  });
+    const app = createApp(store, { devAutoSession: true, gradeQuota: true, now: () => new Date("2026-10-25T00:00:00Z") });
     const listed = await json<QuotaBody>(app, "/v1/grade/quota");
     expect(listed.body.quota).toMatchObject({ month: "2026-10-20", resetsAt: "2026-11-20T08:00:00.000Z" });
   });
 
   it("enforces the quota on pregrade after photos parse, and leaves detect free", async () => {
     const store = createMemoryStore();
-    const app = createApp(store, { gradingEnabled: () => true,  devAutoSession: true, gradeQuota: true  });
+    const app = createApp(store, { devAutoSession: true, gradeQuota: true });
     for (let i = 0; i < GRADE_QUOTA_FREE_PER_MONTH; i += 1) {
       await json<QuotaBody>(app, "/v1/grade/credits/consume", { method: "POST", body: "{}" });
     }
@@ -159,7 +159,7 @@ describe("monthly grade quotas", () => {
   });
 
   it("keeps per-IP rate limiting next to the monthly quota", async () => {
-    const app = createApp(createMemoryStore(, { gradingEnabled: () => true }), {
+    const app = createApp(createMemoryStore(), {
       devAutoSession: true,
       gradeQuota: true,
       gradeRateLimit: { perMinute: 1, perDay: 100 },
@@ -172,7 +172,7 @@ describe("monthly grade quotas", () => {
   });
 
   it("leaves purchases unimplemented unless the IAP stub is on", async () => {
-    const closed = createApp(createMemoryStore(), { gradingEnabled: () => true,  devAutoSession: true, gradeQuota: true  });
+    const closed = createApp(createMemoryStore(), { devAutoSession: true, gradeQuota: true });
     const denied = await json<QuotaBody>(closed, "/v1/grade/credits", {
       method: "POST",
       body: JSON.stringify({ credits: 3 }),
@@ -180,7 +180,7 @@ describe("monthly grade quotas", () => {
     expect(denied.status).toBe(503);
     expect(denied.body.error).toBe(GRADE_QUOTA_COPY.iapUnavailable);
 
-    const stub = createApp(createMemoryStore(, { gradingEnabled: () => true }), {
+    const stub = createApp(createMemoryStore(), {
       devAutoSession: true,
       gradeQuota: true,
       gradeIap: { enabled: false, stub: true },
@@ -194,7 +194,7 @@ describe("monthly grade quotas", () => {
   });
 
   it("free users can't buy credit packs (Premium-only)", async () => {
-    const stub = createApp(createMemoryStore(, { gradingEnabled: () => true }), {
+    const stub = createApp(createMemoryStore(), {
       devAutoSession: true,
       gradeQuota: true,
       gradeIap: { enabled: false, stub: true },
@@ -239,7 +239,7 @@ describe("monthly grade quotas", () => {
   });
 
   it("requires the app API key when configured", async () => {
-    const app = createApp(createMemoryStore(, { gradingEnabled: () => true }), {
+    const app = createApp(createMemoryStore(), {
       devAutoSession: true,
       appApiKey: "speed-bump",
     });

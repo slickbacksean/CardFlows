@@ -20,10 +20,10 @@ describe("Live Scan kill switch", () => {
   it("reports the flag on /v1/status and flips without a restart", async () => {
     let on = true;
     const app = createApp(undefined, { livestreamEnabled: () => on, statusCacheMs: 60_000 });
-    const read = async () => ((await (await app.request("/v1/status")).json()) as { features?: { livestream: boolean } }).features;
-    expect(await read()).toEqual({ livestream: true });
+    const read = async () => ((await (await app.request("/v1/status")).json()) as { features?: { livestream: boolean; grading: boolean } }).features;
+    expect(await read()).toEqual({ livestream: true, grading: true });
     on = false;
-    expect(await read()).toEqual({ livestream: false });
+    expect(await read()).toEqual({ livestream: false, grading: true });
     expect((await app.request("/v1/livestream/access")).status).toBe(503);
   });
 
