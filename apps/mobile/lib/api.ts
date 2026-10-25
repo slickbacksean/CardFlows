@@ -1299,3 +1299,51 @@ export async function updateCommunitySettings(settings: {
   
   return response.json();
 }
+
+/** Community: Blocks */
+export async function getBlockedUsers() {
+  const url = `${apiUrl()}/v1/community/blocks`;
+  const token = peekSessionToken();
+  
+  if (!token) {
+    throw new Error("Not authenticated");
+  }
+  
+  const response = await fetch(url, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  
+  return response.json();
+}
+
+export async function blockUser(userId: string) {
+  const url = `${apiUrl()}/v1/community/blocks/${userId}`;
+  const token = peekSessionToken();
+  
+  if (!token) {
+    throw new Error("Not authenticated");
+  }
+  
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  
+  return response.json();
+}
+
+export async function unblockUser(userId: string) {
+  const url = `${apiUrl()}/v1/community/blocks/${userId}`;
+  const token = peekSessionToken();
+  
+  if (!token) {
+    throw new Error("Not authenticated");
+  }
+  
+  const response = await fetch(url, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  
+  return response.json();
+}
