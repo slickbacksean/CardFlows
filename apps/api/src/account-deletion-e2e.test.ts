@@ -250,6 +250,7 @@ describe("Backend review M5: every user table and file on a real temp-dir store"
     side: "front",
     via: "candidate",
     status: "draft",
+    show_as: "anonymous",
   };
   const KIND: Record<string, string> = { purchase_events: "recorded", consent_events: "grant" };
 

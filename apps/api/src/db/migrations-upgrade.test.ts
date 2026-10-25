@@ -53,6 +53,7 @@ describe("migrations 0000–0030", () => {
       "0026_livestream_trials",
       "0027_drop_livestream_trials",
       "0028_terms_social_sign_in",
+      "0030_community_username",
     ]);
     for (const e of j.entries) expect(readFileSync(path.join(mvpMigrationsFolder(), `${e.tag}.sql`), "utf8").length).toBeGreaterThan(0);
   });
