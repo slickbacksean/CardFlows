@@ -4,7 +4,6 @@ import { ActivityIndicator, FlatList, Pressable, RefreshControl, ScrollView, Sty
 import { useFocusEffect } from "expo-router";
 import { colors, radii, space } from "@/lib/theme";
 import { apiUrl } from "@/lib/api";
-import { peekActiveUserId } from "@/lib/identity";
 
 interface DashboardStats {
   users: {
@@ -44,7 +43,11 @@ export default function AdminDashboardScreen() {
   async function loadStats() {
     setLoading(true);
     try {
-      const data = await getDashboardStats();
+      const response = await fetch(`${apiUrl()}/v1/admin/stats/dashboard`, {
+        credentials: 'include',
+      });
+      if (!response.ok) throw new Error("Failed to load stats");
+      const data = await response.json() as DashboardStats;
       setStats(data);
     } catch (caught) {
       console.error("Failed to load admin stats:", caught);
