@@ -52,7 +52,7 @@ async function confirmPurchased(app: App) {
 
 describe("durable grading copies", () => {
   it("persists submitted and returned per user without PSA HTTP", async () => {
-    const app = createApp(createMemoryStore());
+    const app = createApp(createMemoryStore(), { gradingEnabled: () => true });
     const inventoryItemId = await confirmPurchased(app);
 
     const submitted = await json<{
@@ -94,7 +94,7 @@ describe("durable grading copies", () => {
   });
 
   it("blocks watchlist submits and survives a sqlite reopen", async () => {
-    const app = createApp(createMemoryStore());
+    const app = createApp(createMemoryStore(), { gradingEnabled: () => true });
     const blocked = await json<{ error: string }>(app, "/v1/grading/submitted", {
       method: "POST",
       body: JSON.stringify({
@@ -107,7 +107,7 @@ describe("durable grading copies", () => {
     expect(blocked.body.error).toBe(WATCHLIST_CANNOT_SUBMIT_MESSAGE);
 
     const first = createSqliteStore({ sqlitePath: ":memory:" });
-    const sqliteApp = createApp(first);
+    const sqliteApp = createApp(first, { gradingEnabled: () => true });
     const inventoryItemId = await confirmPurchased(sqliteApp);
     await json(sqliteApp, "/v1/grading/submitted", {
       method: "POST",
@@ -132,7 +132,7 @@ describe("durable grading copies", () => {
     const sqlitePath = path.join(dir, "cardflow.sqlite");
     const store = createSqliteStore({ sqlitePath });
     try {
-      const app = createApp(store);
+      const app = createApp(store, { gradingEnabled: () => true });
       const inventoryItemId = await confirmPurchased(app);
       await json(app, "/v1/grading/submitted", {
         method: "POST",
@@ -177,7 +177,7 @@ describe("durable grading copies", () => {
     const sqlitePath = path.join(dir, "cardflow.sqlite");
     const first = createSqliteStore({ sqlitePath });
     try {
-      const app = createApp(first);
+      const app = createApp(first, { gradingEnabled: () => true });
       const inventoryItemId = await confirmPurchased(app);
       await json(app, "/v1/grading/submitted", {
         method: "POST",
@@ -199,7 +199,7 @@ describe("durable grading copies", () => {
       first.close();
       const second = createSqliteStore({ sqlitePath });
       try {
-        const reopened = createApp(second);
+        const reopened = createApp(second, { gradingEnabled: () => true });
         const listed = await json<{
           submitted: unknown[];
           returned: Array<{ returnedGrade: string; certNumber: string }>;

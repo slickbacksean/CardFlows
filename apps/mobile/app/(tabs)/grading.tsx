@@ -40,6 +40,7 @@ import {
 import { loadActiveIdentity, peekActiveUserId } from "@/lib/identity";
 import { requireAccount } from "@/lib/signup-prompt";
 import { colors, radii, space } from "@/lib/theme";
+import { useGradingEnabled } from "@/lib/feature-flags";
 
 function inventoryMaxBuyAmount(item: InventoryItem): string | null {
   return item.purchase?.maxBuy.maxBuyAmount ?? item.targetMaxBuyAmount ?? null;
@@ -65,6 +66,7 @@ function matchesSearch(item: InventoryItem, query: string): boolean {
 }
 
 export default function GradingScreen() {
+  const gradingEnabled = useGradingEnabled();
   const [pane, setPane] = useState<"photo" | "pipeline">("photo");
   const [segment, setSegment] = useState<Segment>("prepare");
   const [items, setItems] = useState<InventoryItem[]>([]);
@@ -306,8 +308,25 @@ export default function GradingScreen() {
 
   // The photo pre-grade pane never depends on the inventory load, so a load error can't
   // unmount it or drop its photos (UX review P0-2).
-  if (pane === "photo") {
+  if (pane === "photo" && gradingEnabled) {
     return <PhotoGradeFlow onOpenPipeline={() => setPane("pipeline")} />;
+  }
+
+  // Grading is disabled: show a simple message.
+  if (!gradingEnabled) {
+    return (
+      <View style={styles.flex}>
+        <View style={styles.toolbar}>
+          <View style={styles.titleRow}>
+            <Text style={styles.title}>Grading</Text>
+          </View>
+          <StatusBanner />
+        </View>
+        <View style={[styles.content, { justifyContent: "center", alignItems: "center" }]}>
+          <Text style={styles.disabledMessage}>Card grading is temporarily unavailable.</Text>
+        </View>
+      </View>
+    );
   }
 
   return (
@@ -691,6 +710,7 @@ const styles = StyleSheet.create({
   },
   content: { padding: space.lg, gap: space.md, paddingBottom: 48 },
   error: { color: colors.danger, fontSize: 14 },
+  disabledMessage: { color: colors.muted, fontSize: 16, textAlign: "center", paddingHorizontal: space.lg },
   titleRow: {
     flexDirection: "row",
     alignItems: "center",

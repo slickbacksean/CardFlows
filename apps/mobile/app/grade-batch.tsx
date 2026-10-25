@@ -13,6 +13,7 @@ import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from
 import { PrimaryButton } from "@/components/ui/primary-button";
 import { isPremiumRequired, listInventory, requestGradeEstimate, startGradeBatch, type InventoryItem } from "@/lib/api";
 import { colors, radii, space } from "@/lib/theme";
+import { useGradingEnabled } from "@/lib/feature-flags";
 
 /** Batch scan session start, kept for the app session only. */
 let sessionStartedAt: string | null = null;
@@ -27,6 +28,7 @@ const STATUS_COPY: Record<BatchItem["status"], string> = {
 };
 
 export default function GradeBatchScreen() {
+  const gradingEnabled = useGradingEnabled();
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [session, setSession] = useState<string | null>(sessionStartedAt);
   const [results, setResults] = useState<BatchItem[]>([]);
@@ -94,6 +96,17 @@ export default function GradeBatchScreen() {
     results.length > 0
       ? results
       : queue.map((item) => ({ inventoryItemId: item.inventoryItemId, status: "queued", display: null }));
+
+  if (!gradingEnabled) {
+    return (
+      <ScrollView contentContainerStyle={styles.content} style={styles.flex}>
+        <Stack.Screen options={{ title: BATCH_QUEUE_TITLE }} />
+        <View style={[styles.card, { alignItems: "center", justifyContent: "center", padding: space.xl }]}>
+          <Text style={[styles.muted, { textAlign: "center" }]}>Card grading is temporarily unavailable.</Text>
+        </View>
+      </ScrollView>
+    );
+  }
 
   return (
     <ScrollView contentContainerStyle={styles.content} style={styles.flex}>

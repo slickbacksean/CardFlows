@@ -4,6 +4,11 @@ import { createApp } from "./app";
 import { createMemoryStore } from "./store";
 
 type App = ReturnType<typeof createApp>;
+
+// Helper to create an app with grading enabled by default for tests
+function testApp(store = createMemoryStore(), options: Parameters<typeof createApp>[1] = {}) {
+  return createApp(store, { gradingEnabled: () => true, ...options });
+}
 const TINY_JPEG = Uint8Array.from([0xff, 0xd8, 0xff, 0xd9]);
 
 async function purchasedWithStill(app: App) {
@@ -34,13 +39,13 @@ const getJob = (app: App, jobId: string) => async () =>
 
 describe("P1-07 async grade jobs", () => {
   it("is off by default", async () => {
-    const app = createApp(createMemoryStore());
+    const app = testApp();
     expect((await app.request("/v1/inventory/x/grade-jobs", { method: "POST" })).status).toBe(404);
     expect((await app.request("/v1/grade-jobs/x")).status).toBe(404);
   });
 
   it("returns a job ID at once and the polled result matches the synchronous route", async () => {
-    const app = createApp(createMemoryStore(), { gradeJobs: true });
+    const app = testApp(createMemoryStore(), { gradeJobs: true });
     const id = await purchasedWithStill(app);
     const created = await app.request(`/v1/inventory/${id}/grade-jobs`, {
       method: "POST",
@@ -65,7 +70,7 @@ describe("P1-07 async grade jobs", () => {
 
   it("queue full shows waiting with the server's wait time, then finishes", async () => {
     let full = true;
-    const app = createApp(createMemoryStore(), { gradeJobs: true, gradeGate: { isFull: () => full } });
+    const app = testApp(createMemoryStore(), { gradeJobs: true, gradeGate: { isFull: () => full } });
     const id = await purchasedWithStill(app);
     const created = (await (
       await app.request(`/v1/inventory/${id}/grade-jobs`, {
@@ -95,13 +100,13 @@ describe("P1-07 async grade jobs", () => {
   }, 40_000);
 
   it("another user cannot read a job", async () => {
-    const app = createApp(createMemoryStore(), { gradeJobs: true });
+    const app = testApp(createMemoryStore(), { gradeJobs: true });
     expect((await app.request("/v1/grade-jobs/not-a-job")).status).toBe(404);
   });
 
   it("job IDs are 256-bit random, unfinished jobs are capped, and expired jobs 404 (client retries)", async () => {
     let full = true;
-    const app = createApp(createMemoryStore(), {
+    const app = testApp(createMemoryStore(), {
       gradeJobs: true,
       gradeGate: { isFull: () => full },
       gradeJobLimits: { maxActiveJobsPerUser: 2, ttlMs: 50, sweepMs: 0 },
@@ -135,7 +140,7 @@ const getJob404 = (app: App, jobId: string) => async () => {
 
 describe("grade jobs backend review", () => {
   it("finishes without re-sending the user's auth headers (app key on, no dev session leak)", async () => {
-    const inner = createApp(createMemoryStore(), { gradeJobs: true, appApiKey: "app-key-1" });
+    const inner = testApp(createMemoryStore(), { gradeJobs: true, appApiKey: "app-key-1" });
     const app = {
       request: (url: string, init: RequestInit = {}) =>
         inner.request(url, { ...init, headers: { ...(init.headers as Record<string, string> | undefined), "x-cardflow-app-key": "app-key-1" } }),
@@ -155,7 +160,7 @@ describe("grade jobs backend review", () => {
   });
 
   it("caps stored jobs including finished ones and has a body limit", async () => {
-    const app = createApp(createMemoryStore(), { gradeJobs: true, gradeJobLimits: { maxStoredJobs: 2, sweepMs: 0 } });
+    const app = testApp(createMemoryStore(), { gradeJobs: true, gradeJobLimits: { maxStoredJobs: 2, sweepMs: 0 } });
     const id = await purchasedWithStill(app);
     const post = () =>
       app.request(`/v1/inventory/${id}/grade-jobs`, {
@@ -189,14 +194,14 @@ describe("server-enforced batch pre-grade", () => {
     });
 
   it("a batch-marked estimate is 403 premium_required for free accounts, allowed for premium", async () => {
-    const free = createApp(createMemoryStore(), { gradeJobs: true, premiumUserIds: [] });
+    const free = testApp(createMemoryStore(), { gradeJobs: true, premiumUserIds: [] });
     const freeId = await purchasedWithStill(free);
     for (const route of ["grade-estimate", "grade-jobs"] as const) {
       const res = await batchPost(free, freeId, route);
       expect(res.status).toBe(403);
       expect(await res.json()).toMatchObject({ code: "premium_required", feature: "batch_grading" });
     }
-    const premium = createApp(createMemoryStore(), { gradeJobs: true, premiumUserIds: [DEFAULT_INVITED_USER_ID] });
+    const premium = testApp(createMemoryStore(), { gradeJobs: true, premiumUserIds: [DEFAULT_INVITED_USER_ID] });
     const premiumId = await purchasedWithStill(premium);
     expect((await batchPost(premium, premiumId, "grade-estimate")).status).toBe(200);
     expect((await batchPost(premium, premiumId, "grade-jobs")).status).toBe(202);
