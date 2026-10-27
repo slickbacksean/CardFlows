@@ -11,6 +11,8 @@ export default defineConfig({
       CARD_FLOW_INVITE_JORDAN: "jordan-beta",
       // Fast scrypt in tests only (production is 2^17; see password.ts).
       CARD_FLOW_SCRYPT_N: "16384",
+      // Grading enabled by default in tests (production default is off).
+      CARD_FLOW_GRADING_ENABLED: "true",
     },
   },
 });

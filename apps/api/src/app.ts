@@ -1,4 +1,4 @@
-import { FEATURE_DISABLED_HEADER, featureDisabledBody, livestreamEnabledFromEnv } from "@cardflow/shared";
+import { FEATURE_DISABLED_CODE, FEATURE_DISABLED_HEADER, featureDisabledBody, gradingEnabledFromEnv, GRADING_DISABLED_COPY, livestreamEnabledFromEnv } from "@cardflow/shared";
 import { buildDexSet, dexOwnedCountsBySet, type DexCatalogCard, type DexSetSummary, type TcgdexSetBrief } from "@cardflow/shared";
 import { createHash, randomBytes, randomInt, timingSafeEqual } from "node:crypto";
 import { emailSenderFromEnv, type EmailSender } from "./email-sender";
@@ -161,7 +161,7 @@ import {
   type GradeQuotaSnapshot,
   BATCH_GRADE_HEADER,
 } from "@cardflow/shared";
-import { Hono, type Context as HonoContext } from "hono";
+import { Hono, type Context as HonoContext, type Next } from "hono";
 import { cors } from "hono/cors";
 import { bodyLimit } from "hono/body-limit";
 import { serveStatic } from "@hono/node-server/serve-static";
@@ -549,6 +549,11 @@ export interface CreateAppOptions {
    * read per request. Off: /v1/livestream/* answers 503 feature_disabled; /v1/status reports it.
    */
   livestreamEnabled?: () => boolean;
+  /**
+   * Grading remote kill switch. Defaults to `CARD_FLOW_GRADING_ENABLED` (off unless 1/true/on/yes),
+   * read per request. Off: grading routes answer 503 feature_disabled; /v1/status reports it.
+   */
+  gradingEnabled?: () => boolean;
   /** YOLO on livestream frames. Empty until the AGPL flag and weights file are both set. */
   liveVideoObb?: () => ObbDetector | null;
   /** Prepare photo-estimate provider. Tests default to mock; flag off injects unavailable. */
@@ -1212,6 +1217,8 @@ export function createApp(
 
   const livestreamEnabled =
     options.livestreamEnabled ?? (() => livestreamEnabledFromEnv(process.env.CARD_FLOW_LIVESTREAM_ENABLED));
+  const gradingEnabled =
+    options.gradingEnabled ?? (() => gradingEnabledFromEnv(process.env.CARD_FLOW_GRADING_ENABLED));
   // Policy Reviewer (Oct 20): remote off switch for Live Scan, ahead of auth and body parsing.
   app.use("/v1/livestream/*", async (c, next) => {
     if (!livestreamEnabled()) {
@@ -1221,6 +1228,19 @@ export function createApp(
     }
     return next();
   });
+
+  // Grading kill switch: all grading routes return 503 feature_disabled when off.
+  const gradingGate = async (c: HonoContext<AppEnv>, next: Next) => {
+    if (!gradingEnabled()) {
+      c.header(FEATURE_DISABLED_HEADER, "grading");
+      return c.json({ ok: false, code: FEATURE_DISABLED_CODE, feature: "grading", error: GRADING_DISABLED_COPY, userFacing: true }, 503);
+    }
+    return next();
+  };
+  app.use("/v1/grading", gradingGate);
+  app.use("/v1/grading/*", gradingGate);
+  app.use("/v1/grade/*", gradingGate);
+  app.use("/v1/inventory/:inventoryItemId/grade-*", gradingGate);
 
   app.use("/v1/*", async (c, next) => {
     if (c.req.method === "GET" || c.req.method === "HEAD") return next();
@@ -1464,7 +1484,7 @@ export function createApp(
 
   registerStatusRoutes(app, {
     cacheMs: options.statusCacheMs,
-    features: () => ({ livestream: livestreamEnabled() }),
+    features: () => ({ livestream: livestreamEnabled(), grading: gradingEnabled() }),
     inputs: async () => {
       const engine = gradeEngineProbe ? await boundedProbe(gradeEngineProbe) : null;
       return {

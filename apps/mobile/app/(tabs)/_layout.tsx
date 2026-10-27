@@ -6,6 +6,7 @@ import { AppHeader } from "@/components/ui/app-header";
 import { AppTabBar } from "@/components/ui/app-tab-bar";
 import { TAB_ROW_HEIGHT } from "@/components/ui/tab-bar-metrics";
 import { colors } from "@/lib/theme";
+import { useGradingEnabled } from "@/lib/feature-flags";
 
 export const unstable_settings = {
   initialRouteName: "collection",
@@ -14,6 +15,7 @@ export const unstable_settings = {
 export default function TabsLayout() {
   const insets = useSafeAreaInsets();
   const pathname = usePathname();
+  const gradingEnabled = useGradingEnabled();
   const isScreenerOpen = pathname === "/scan-tab";
   const isShopDrillIn = /\/shop\/.+/.test(pathname);
   const isShopCard = /\/shop\/card(?:\/|$)/.test(pathname);
@@ -86,6 +88,7 @@ export default function TabsLayout() {
                 color={color}
               />
             ),
+            href: gradingEnabled ? undefined : null,
           }}
         />
         <Tabs.Screen

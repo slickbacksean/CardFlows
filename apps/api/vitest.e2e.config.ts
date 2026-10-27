@@ -9,6 +9,8 @@ export default defineConfig({
     hookTimeout: 120_000,
     env: {
       CARD_FLOW_STORE: "memory",
+      // Grading enabled for e2e tests (production default is off).
+      CARD_FLOW_GRADING_ENABLED: "true",
     },
   },
 });

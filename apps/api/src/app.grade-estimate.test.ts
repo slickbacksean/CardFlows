@@ -26,6 +26,11 @@ const TINY_JPEG = Uint8Array.from([0xff, 0xd8, 0xff, 0xd9]);
 
 type App = ReturnType<typeof createApp>;
 
+// Helper to create an app with grading enabled by default for tests
+function testApp(store = createMemoryStore(), options: Parameters<typeof createApp>[1] = {}) {
+  return createApp(store, { gradingEnabled: () => true, ...options });
+}
+
 async function json<T>(
   app: App,
   pathName: string,
@@ -147,7 +152,7 @@ describe("POST /v1/inventory/:id/grade-estimate", () => {
   });
 
   it("reports mock gradeEstimate on /health without keys or slab pricing", async () => {
-    const health = await json<Record<string, unknown>>(createApp(createMemoryStore()), "/health");
+    const health = await json<Record<string, unknown>>(testApp(), "/health");
     expect(health.status).toBe(200);
     expect(health.body.gradeEstimate).toBe("mock");
     expect(health.body).toHaveProperty("slabPricing", "off");
@@ -162,7 +167,7 @@ describe("POST /v1/inventory/:id/grade-estimate", () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(() => {
       throw new Error("grade estimate mock must not call the network");
     });
-    const app = createApp(createMemoryStore(), { grading: mockCardGradingProvider });
+    const app = testApp(createMemoryStore(), { grading: mockCardGradingProvider });
     const confirmation = await confirmCard(app);
     const inventoryItemId = await savePurchased(app, confirmation.confirmationId);
 
@@ -192,7 +197,7 @@ describe("POST /v1/inventory/:id/grade-estimate", () => {
   });
 
   it("fails soft to an empty DTO without a front still", async () => {
-    const app = createApp(createMemoryStore());
+    const app = testApp();
     const confirmation = await confirmCard(app);
     const inventoryItemId = await savePurchased(app, confirmation.confirmationId);
 
@@ -215,7 +220,7 @@ describe("POST /v1/inventory/:id/grade-estimate", () => {
         return mockCardGradingProvider.estimateGrade(req);
       },
     };
-    const app = createApp(createMemoryStore(), { grading });
+    const app = testApp(createMemoryStore(), { grading });
     const confirmation = await confirmCardWithStill(app, jpegFile("front.jpg", TINY_JPEG));
     const inventoryItemId = await savePurchased(app, confirmation.confirmationId);
 
@@ -254,7 +259,7 @@ describe("POST /v1/inventory/:id/grade-estimate", () => {
   });
 
   it("rejects watchlist copies with the existing watchlist copy", async () => {
-    const app = createApp(createMemoryStore());
+    const app = testApp();
     const confirmation = await confirmCard(app);
     const inventoryItemId = await saveWatchlist(app, confirmation.confirmationId);
 
@@ -264,7 +269,7 @@ describe("POST /v1/inventory/:id/grade-estimate", () => {
   });
 
   it("requires an invite session", async () => {
-    const app = createApp(createMemoryStore(), { devAutoSession: false });
+    const app = testApp(createMemoryStore(), { devAutoSession: false });
     const missing = await json<{ error: string }>(
       app,
       "/v1/inventory/item-1/grade-estimate",
@@ -275,7 +280,7 @@ describe("POST /v1/inventory/:id/grade-estimate", () => {
   });
 
   it("rejects gif and oversize stills", async () => {
-    const app = createApp(createMemoryStore());
+    const app = testApp();
     const confirmation = await confirmCard(app);
     const inventoryItemId = await savePurchased(app, confirmation.confirmationId);
 
@@ -295,7 +300,7 @@ describe("POST /v1/inventory/:id/grade-estimate", () => {
   });
 
   it("returns empty when the provider is off or throws", async () => {
-    const offApp = createApp(createMemoryStore(), { grading: createOffCardGradingProvider() });
+    const offApp = testApp(createMemoryStore(), { grading: createOffCardGradingProvider() });
     const offHealth = await json<Record<string, unknown>>(offApp, "/health");
     expect(offHealth.status).toBe(200);
     expect(offHealth.body.gradeEstimate).toBe("off");
@@ -330,7 +335,7 @@ describe("POST /v1/inventory/:id/grade-estimate", () => {
         throw new Error("grader down");
       },
     };
-    const failApp = createApp(createMemoryStore(), { grading: throwing });
+    const failApp = testApp(createMemoryStore(), { grading: throwing });
     const failConfirm = await confirmCard(failApp);
     const failId = await savePurchased(failApp, failConfirm.confirmationId);
     const failed = await postEstimate(failApp, failId, { front: jpegFile() });
@@ -354,7 +359,7 @@ describe("POST /v1/inventory/:id/grade-estimate", () => {
       },
     };
     const fetchSpy = vi.spyOn(globalThis, "fetch");
-    const app = createApp(createMemoryStore(), { grading: createCardgradingProvider(runner) });
+    const app = testApp(createMemoryStore(), { grading: createCardgradingProvider(runner) });
     const health = await json<Record<string, unknown>>(app, "/health");
     expect(health.body.gradeEstimate).toBe("cardgrading");
     expect(healthLeaksSecrets(health.body)).toBe(false);
@@ -445,7 +450,7 @@ describe("Task 8 grading Prepare HTTP loop", () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(() => {
       throw new Error("grade estimate mock must not call the network");
     });
-    const app = createApp(createMemoryStore(), { grading: mockCardGradingProvider });
+    const app = testApp(createMemoryStore(), { grading: mockCardGradingProvider });
 
     const health = await json<Record<string, unknown>>(app, "/health");
     expect(health.status).toBe(200);
@@ -536,7 +541,7 @@ describe("Task 8 grading Prepare HTTP loop", () => {
         return mockCardGradingProvider.estimateGrade(req);
       },
     };
-    const app = createApp(createMemoryStore(), { grading });
+    const app = testApp(createMemoryStore(), { grading });
     const confirmation = await confirmCard(app);
     const inventoryItemId = await savePurchased(app, confirmation.confirmationId);
     const first = await postEstimate(app, inventoryItemId, {
