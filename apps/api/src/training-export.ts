@@ -83,13 +83,14 @@ export function exportTrainingSamples(options: {
     lines.push(
       JSON.stringify({
         file: `images/${file}`,
-        card_id: meta.chosenTcgdexId || "unknown",
+        retention_reason: meta.retentionReason,
         label_source: meta.labelSource || "unknown",
         crop_box: meta.cropBox || null,
         source: "scan_a_card",
         user_hash: meta.pseudonymousUserId,
         terms_version: meta.termsVersion,
         captured_at: meta.capturedAt,
+        scan_id: meta.scanId,
       }),
     );
   }

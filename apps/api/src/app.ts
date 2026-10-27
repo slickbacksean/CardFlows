@@ -2923,9 +2923,20 @@ export function createApp(
     });
     
     if (isSqliteStore) {
+      const sqliteStore = store as import("./sqlite-store").SqliteStorePort;
+      // Wrapper for admin check compatible with PR 122's database-backed admin roles
+      const isAdminSync = (userId: string, _email?: string | null): boolean => {
+        // For now, check environment-based admin lists (simplified)
+        // In a real implementation, this would need async handling or caching
+        const adminUserIds = new Set((process.env.ADMIN_USER_IDS ?? "").split(",").map(id => id.trim()).filter(Boolean));
+        const adminEmails = new Set((process.env.ADMIN_EMAILS ?? "").split(",").map(email => email.trim().toLowerCase()).filter(Boolean));
+        if (adminUserIds.has(userId)) return true;
+        if (_email && adminEmails.has(_email.toLowerCase())) return true;
+        return false;
+      };
       registerAdminExportRoutes(app, {
-        store: store as import("./sqlite-store").SqliteStorePort,
-        isAdmin,
+        store: sqliteStore,
+        isAdmin: isAdminSync,
       });
       
       // Start training data retention job (purge expired images every hour)
@@ -3385,7 +3396,7 @@ export function createApp(
         predictedTcgdexId: mappingForConfirm.tcgdexId ?? mappingForConfirm.canonicalCard?.tcgdexId ?? null,
         candidateTcgdexIds: mappingForConfirm.candidates.map((card) => card.tcgdexId),
         chosenTcgdexId: body.tcgdexId,
-        recognitionProvider: mappingForConfirm.provider,
+        recognitionProvider: mappingForConfirm.provider ?? null,
       });
       if (correction) recordScanCorrection(correction);
       
@@ -3395,8 +3406,8 @@ export function createApp(
         scan,
         tcgdexId: body.tcgdexId,
         selectedVariant: body.selectedVariant ?? null,
-        via: body.via,
-        recognitionProvider: mappingForConfirm.provider,
+        via: body.via ?? null,
+        recognitionProvider: mappingForConfirm.provider ?? null,
         shownTcgdexIds: mappingForConfirm.candidates.map((card) => card.tcgdexId),
         confidence: mappingForConfirm.confidence ?? null,
       });
