@@ -1,6 +1,7 @@
 import { FEATURE_DISABLED_CODE, FEATURE_DISABLED_HEADER, featureDisabledBody, gradingEnabledFromEnv, GRADING_DISABLED_COPY, livestreamEnabledFromEnv } from "@cardflow/shared";
 import { buildDexSet, dexOwnedCountsBySet, type DexCatalogCard, type DexSetSummary, type TcgdexSetBrief } from "@cardflow/shared";
 import { createHash, randomBytes, randomInt, timingSafeEqual } from "node:crypto";
+import path from "node:path";
 import { emailSenderFromEnv, type EmailSender } from "./email-sender";
 import { cardSightMonthKey, consentState, hasActiveConsent } from "./consent-store";
 import {
@@ -189,6 +190,14 @@ import { corsOriginsFromEnv } from "./cors-env";
 import { registerGradeQuotaRoutes } from "./routes/grade-quota";
 import { registerPreferenceRoutes } from "./routes/preferences";
 import { registerGradeJobRoutes, type GradeJobRoutes } from "./routes/grade-jobs";
+import { registerTrainingDataRoutes } from "./routes/training-data";
+import { registerAdminExportRoutes } from "./routes/admin-export";
+import { startTrainingDataRetentionJob } from "./training-data-retention-job";
+import { trainingCaptureConfigFromEnv, type TrainingImageRetentionReason } from "./training-data-store";
+import { saveTrainingImage } from "./training-image-storage";
+import { classifyTrainingLabelSource } from "@cardflow/shared";
+import { isMemorySqlitePath } from "./db/migrate";
+import { isAdmin } from "./admin-auth";
 import { registerStatusRoutes } from "./routes/status";
 import { registerSalesRoutes } from "./routes/sales";
 import { premiumRequiredBody, recordGradeEstimate, registerGradeHistoryRoutes } from "./routes/grade-history";
@@ -2584,6 +2593,23 @@ export function createApp(
     const photos = removePhotos();
     const staged = gradeUploads.releaseUser(userId);
     deleteUserGradeExtras(userId);
+    
+    // Sean (Oct 25): Delete training images (soft delete with 30-day grace, ported from PR 117)
+    if (trainingDataStore && storageDir) {
+      try {
+        const result = trainingDataStore.deleteUserTrainingImages(userId);
+        // Also delete opt-out record (guest cleanup from PR 117)
+        if (isGuestUserId(userId) && trainingDataStore.hasOptedOut(userId)) {
+          trainingDataStore.optIn(userId); // removes opt-out record
+        }
+      } catch (error) {
+        console.warn(JSON.stringify({
+          event: "training_data_deletion_failed",
+          message: error instanceof Error ? error.message : "unknown",
+        }));
+      }
+    }
+    
     let pokecollector: "not_linked" | "queued" | "held" = "not_linked";
     if (pokecollectorRemote && pokecollectorLink) {
       const queued = store.accounts.listPokecollectorDeletions().find((row) => row.remoteUserId === pokecollectorLink.pokecollectorUserId);
@@ -2882,6 +2908,50 @@ export function createApp(
   app.use("/v1/inventory/:inventoryItemId/grade-history", async (c, next) => (c.req.method === "POST" ? replayableWrite(c, next) : next()));
 
   registerPreferenceRoutes(app, { getPreferences, setPreferences });
+  
+  // Sean (Oct 25): Training data routes and admin export
+  const isSqliteStore = "sqlitePath" in store && typeof (store as any).sqlitePath === "string";
+  const storageDir = isSqliteStore && !isMemorySqlitePath((store as any).sqlitePath)
+    ? path.dirname(path.resolve((store as any).sqlitePath as string))
+    : null;
+  
+  const trainingDataStore = "trainingData" in store ? store.trainingData : null;
+  if (trainingDataStore) {
+    registerTrainingDataRoutes(app, { 
+      trainingData: trainingDataStore, 
+      storageDir 
+    });
+    
+    if (isSqliteStore) {
+      const sqliteStore = store as import("./sqlite-store").SqliteStorePort;
+      // Wrapper for admin check compatible with PR 122's database-backed admin roles
+      const isAdminSync = (userId: string, _email?: string | null): boolean => {
+        // For now, check environment-based admin lists (simplified)
+        // In a real implementation, this would need async handling or caching
+        const adminUserIds = new Set((process.env.ADMIN_USER_IDS ?? "").split(",").map(id => id.trim()).filter(Boolean));
+        const adminEmails = new Set((process.env.ADMIN_EMAILS ?? "").split(",").map(email => email.trim().toLowerCase()).filter(Boolean));
+        if (adminUserIds.has(userId)) return true;
+        if (_email && adminEmails.has(_email.toLowerCase())) return true;
+        return false;
+      };
+      registerAdminExportRoutes(app, {
+        store: sqliteStore,
+        isAdmin: isAdminSync,
+      });
+      
+      // Start training data retention job (purge expired images every hour)
+      if (storageDir) {
+        startTrainingDataRetentionJob({
+          trainingDataStore,
+          storageDir,
+          onPurge: (result) => {
+            console.log(`Training data purge: ${result.expiredDeleted} expired, ${result.physicallyDeleted} physically deleted, ${result.filesDeleted} files deleted`);
+          },
+        });
+      }
+    }
+  }
+  
   registerSalesRoutes(app, {
     sales: store.sales,
     ownsInventoryItem: (userId, inventoryItemId) =>
@@ -3155,6 +3225,104 @@ export function createApp(
     return c.json({ ok: true, scan, variantSuggestions: variantSuggestionsFor(scan.mapping) });
   });
 
+  /**
+   * Sean (Oct 25): Keep confirmed Scan a Card photos to train PokeSniper's own matcher.
+   * Safeguards (ported from PR 117):
+   * - Kill switch: CARD_FLOW_TRAINING_CAPTURE_ENABLED must be "true" in production
+   * - Eligibility: only non-guest accounts that confirmed 18+ and accepted current Terms version
+   * - CardSight exclusion: never if CardSight was top answer OR appeared anywhere in candidates
+   * - Failures never break the confirm
+   */
+  function captureTrainingSample(input: {
+    userId: string;
+    scan: ScanRecord;
+    tcgdexId: string;
+    selectedVariant: string | null;
+    via: string | null;
+    recognitionProvider: string | null;
+    shownTcgdexIds: string[];
+    confidence: string | null;
+  }): "saved" | "skipped" {
+    if (!trainingDataStore || !storageDir) return "skipped";
+    
+    const trainingConfig = trainingCaptureConfigFromEnv();
+    if (!trainingConfig.enabled) return "skipped";
+    
+    const { userId, scan } = input;
+    try {
+      // Eligibility check 1: No guests
+      if (isGuestUserId(userId)) return "skipped";
+      
+      // Eligibility check 2: Must have confirmed 18+ with current version
+      if (!hasAgeConfirmation(store.ageConfirmations, userId)) return "skipped";
+      
+      // Eligibility check 3: Must have accepted current Terms version
+      const account = store.accounts.getAccount(userId);
+      if (!account || account.termsVersion !== TERMS_VERSION) return "skipped";
+      
+      // Check if user has opted out
+      if (trainingDataStore.hasOptedOut(userId)) return "skipped";
+      
+      // CardSight compliance: Never keep if CardSight was involved in the shown results
+      const labelSource = classifyTrainingLabelSource({
+        via: input.via,
+        recognitionProvider: input.recognitionProvider,
+        chosenTcgdexId: input.tcgdexId,
+        shownTcgdexIds: input.shownTcgdexIds,
+      });
+      
+      // CardSight exclusion: Skip if CardSight-assisted (top answer or any candidate)
+      if (labelSource === "cardsight_assisted") return "skipped";
+      
+      // Get scan image
+      const image = store.getScanImage?.(userId, scan.scanId);
+      if (!image) return "skipped";
+      
+      // Determine retention reason based on confidence
+      let retentionReason: TrainingImageRetentionReason;
+      if (!input.confidence || input.confidence === "None") {
+        retentionReason = "no_match";
+      } else if (input.confidence === "Low") {
+        retentionReason = "low_confidence";
+      } else {
+        // High confidence - only keep if it's a correction
+        const mappingForConfirm = scan.mapping;
+        const predicted = mappingForConfirm.tcgdexId ?? mappingForConfirm.canonicalCard?.tcgdexId ?? null;
+        if (predicted && predicted !== input.tcgdexId) {
+          retentionReason = "correction";
+        } else {
+          return "skipped"; // High confidence, correct prediction, not interesting for training
+        }
+      }
+      
+      // Save training image with proper permissions
+      const imageId = crypto.randomUUID();
+      const { storageRef } = saveTrainingImage(storageDir, userId, imageId, {
+        bytes: image.bytes,
+        mimeType: image.mimeType,
+      });
+      
+      // Save training image record
+      trainingDataStore.saveTrainingImage({
+        userId,
+        scanId: scan.scanId,
+        retentionReason,
+        capturedAt: now().toISOString(),
+        storageRef,
+        imageMimeType: image.mimeType,
+        termsVersion: TERMS_VERSION,
+      });
+      
+      return "saved";
+    } catch (error) {
+      console.warn(JSON.stringify({
+        event: "training_capture_failed",
+        message: error instanceof Error ? error.message : "unknown",
+      }));
+      return "skipped";
+    }
+  }
+
   app.post("/v1/scans/:scanId/confirm", async (c) => {
     const userId = c.get("userId");
     const scan = getScan(userId, c.req.param("scanId"));
@@ -3228,9 +3396,22 @@ export function createApp(
         predictedTcgdexId: mappingForConfirm.tcgdexId ?? mappingForConfirm.canonicalCard?.tcgdexId ?? null,
         candidateTcgdexIds: mappingForConfirm.candidates.map((card) => card.tcgdexId),
         chosenTcgdexId: body.tcgdexId,
-        recognitionProvider: mappingForConfirm.provider,
+        recognitionProvider: mappingForConfirm.provider ?? null,
       });
       if (correction) recordScanCorrection(correction);
+      
+      // Sean (Oct 25): Capture training sample (with safeguards from PR 117)
+      captureTrainingSample({
+        userId,
+        scan,
+        tcgdexId: body.tcgdexId,
+        selectedVariant: body.selectedVariant ?? null,
+        via: body.via ?? null,
+        recognitionProvider: mappingForConfirm.provider ?? null,
+        shownTcgdexIds: mappingForConfirm.candidates.map((card) => card.tcgdexId),
+        confidence: mappingForConfirm.confidence ?? null,
+      });
+      
       // Sean (Oct 19): scan photos are not kept. Delete the still once every card on it is done.
       deleteScanPhotoWhenSettled(userId, result.scan);
       const shown = mappingForConfirm.candidates.map((card) => card.tcgdexId);

@@ -917,6 +917,8 @@ export interface StorePort {
   saveUserPriceSnapshot: (userId: string, snapshot: UserPriceSnapshot) => UserPriceSnapshot;
   listUserPriceSnapshots: (userId: string, tcgdexId: string, variant?: string | null) => UserPriceSnapshot[];
   deleteUserPriceSnapshots: (userId: string) => number;
+  /** Sean (Oct 25): Training data consent, corrections, and image retention. */
+  trainingData?: import("./training-data-store").TrainingDataStorePort;
 }
 
 const DEFAULT_GRADE_ACCOUNT: GradeAccountRecord = { plan: "free", extraCredits: 0 };
@@ -1189,6 +1191,20 @@ export function createMemoryStore(): StorePort {
     },
   };
   port.accounts = createMemoryAccountStore(port, { gradeAccounts, gradeUsage });
+  
+  // Sean (Oct 25): Stub training data store for memory store (contract compliance)
+  port.trainingData = {
+    hasOptedOut: () => false,
+    optOut: () => {},
+    optIn: () => {},
+    saveTrainingImage: () => ({ imageId: "", userId: "", pseudonymousUserId: "", scanId: "", retentionReason: "correction" as const, capturedAt: "", storageRef: "", imageMimeType: "", expiresAt: "", termsVersion: "", usedInTrainingAt: null, deletedAt: null, createdAt: "" }),
+    saveCorrectionFeedback: () => ({ feedbackId: "", pseudonymousUserId: "", scanId: "", chosenCardflowCardId: "", chosenTcgdexId: "", predictedTcgdexId: null, confidence: null, modelVersion: "", recognitionProvider: "", wasCorrection: false, createdAt: "", trainingImageId: null }),
+    deleteUserTrainingImages: () => ({ deleted: 0, storageRefs: [] }),
+    purgeExpiredTrainingImages: () => ({ deleted: 0, storageRefs: [] }),
+    physicallyDeleteTrainingImages: () => ({ deleted: 0, storageRefs: [] }),
+    markTrainingImageUsed: () => {},
+  };
+  
   return port;
 }
 

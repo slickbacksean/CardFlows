@@ -277,3 +277,23 @@ Read from the pinned `ghcr.io/git-romer/pokecollector-backend:1.51.0` source (un
 | `CARD_FLOW_APPLE_CLIENT_ID` | Apple client ID for token exchange/revoke | `app.pokesniper.mobile` |
 
 Apple sign-in is only offered when `CARD_FLOW_APPLE_SIGNIN=true` **and** the three Apple key variables are set, because account deletion must revoke the user's Apple token (App Review 5.1.1(v)). Apple refresh tokens are stored AES-GCM encrypted with a key derived from `CARD_FLOW_SERVER_PEPPER`, and revoked + deleted with the account. Google client IDs are not secrets. Tokens are verified against Apple's and Google's public JWKS.
+
+## Training capture (Sean, Oct 25)
+
+| Variable | Default | Notes |
+| --- | --- | --- |
+| `CARD_FLOW_TRAINING_CAPTURE_ENABLED` | off in production, on elsewhere | **Production kill switch.** Keep confirmed Scan a Card photos to train PokeSniper's own matcher. Leave unset/false in production until storage is secure and store privacy labels are updated. |
+| `CARD_FLOW_TRAINING_RETENTION_DAYS` | `180` | Days to keep training samples before auto-deletion. Keep in sync with Terms if changed. |
+
+**Safeguards (ported from PR 117):**
+- **Kill switch**: `CARD_FLOW_TRAINING_CAPTURE_ENABLED` must be explicitly `"true"` in production. Unset = off in production (safe default), on in dev/staging.
+- **Eligibility**: Only non-guest accounts that confirmed 18+ and accepted the current Terms version. Guests are never captured.
+- **CardSight exclusion**: Never keep samples where CardSight was the top answer OR appeared anywhere in shown candidates. We don't own CardSight's outputs.
+- **Private file permissions**: Directories 0700, files 0600.
+- **Pseudonymous export**: User IDs are HMAC-hashed (with `CARD_FLOW_SERVER_PEPPER`) in exports and database records.
+- **Guest cleanup**: Training samples and opt-out records deleted on account deletion.
+- **Retention**: Soft delete with 30-day grace period (can be restored within 30 days), then physical deletion.
+
+Training images are stored separately from regular scans/grades, with EXIF/GPS stripped. Live Scan video frames are never kept (Whatnot's terms). Grade photos follow their existing 24h retention policy.
+
+Users consent via Terms acceptance (ON by default) and can opt out in Settings > Card recognition > Help improve card recognition. Opt-out stops new capture and deletes existing samples.
