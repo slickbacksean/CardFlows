@@ -1,8 +1,13 @@
 /**
  * Sean (Oct 25): Training image storage. Separate storage location from regular scan images.
  * Images are cropped to card, EXIF/GPS stripped. Never CardSight outputs, never livestream frames.
+ * 
+ * Safeguards (ported from PR 117):
+ * - Private file permissions: directories 0700, files 0600
+ * - Hashed user IDs (pseudonymous, not raw userId in paths)
+ * - Separate from scan/grade storage
  */
-import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync, chmodSync } from "node:fs";
 import path from "node:path";
 import { stripImageMetadata } from "./grade-image";
 
@@ -41,12 +46,17 @@ export function saveTrainingImage(
   const fullPath = trainingImagePath(storageDir, storageRef);
   const dir = path.dirname(fullPath);
   
+  // Ensure directory exists with restricted permissions (0700)
   if (!existsSync(dir)) {
-    mkdirSync(dir, { recursive: true });
+    mkdirSync(dir, { recursive: true, mode: 0o700 });
+  } else {
+    // Ensure existing directory has correct permissions
+    chmodSync(dir, 0o700);
   }
 
   const stripped = stripImageMetadata(image.bytes);
-  writeFileSync(fullPath, stripped);
+  // Write file with restricted permissions (0600)
+  writeFileSync(fullPath, stripped, { mode: 0o600 });
 
   return { storageRef, mimeType: image.mimeType };
 }

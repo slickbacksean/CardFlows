@@ -2,6 +2,13 @@
  * Sean (Oct 25): Training data consent and retention for model improvement.
  * Consent via Terms acceptance (ON by default). Users can opt out via Settings toggle.
  * Training images: corrections, low-confidence, no-match. Kept 180 days or until used in training.
+ * 
+ * Safeguards (ported from PR 117):
+ * - Production kill switch: CARD_FLOW_TRAINING_CAPTURE_ENABLED must be "true" in production
+ * - Eligibility: only non-guest accounts that confirmed 18+ and accepted current Terms version
+ * - CardSight exclusion: never keep samples where CardSight was shown (top answer or any candidate)
+ * - Private file permissions: 0700 directories, 0600 files
+ * - Guest cleanup: samples deleted when guest account is forgotten
  */
 import { createHmac } from "node:crypto";
 import type { Database } from "better-sqlite3";
@@ -15,6 +22,8 @@ import {
 export const TRAINING_DATA_RETENTION_DAYS = 180;
 export const TRAINING_IMAGE_DELETION_GRACE_DAYS = 30;
 
+export type TrainingLabelSource = "in_house_suggestion" | "manual_search" | "cardsight_assisted";
+
 /** Environment variable for training data retention period in days. */
 export function trainingDataRetentionDaysFromEnv(
   env: NodeJS.Dict<string | undefined> = process.env,
@@ -23,6 +32,40 @@ export function trainingDataRetentionDaysFromEnv(
   if (!raw) return TRAINING_DATA_RETENTION_DAYS;
   const n = Number(raw);
   return Number.isFinite(n) && n > 0 ? n : TRAINING_DATA_RETENTION_DAYS;
+}
+
+/**
+ * Production kill switch for training capture.
+ * CARD_FLOW_TRAINING_CAPTURE_ENABLED: "true"/"1" = on, "false"/"0" = off.
+ * Unset = on in dev/staging, OFF in production (default safe).
+ */
+export interface TrainingCaptureConfig {
+  enabled: boolean;
+  retentionDays: number;
+  reason: string;
+}
+
+export function trainingCaptureConfigFromEnv(
+  env: NodeJS.Dict<string | undefined> = process.env,
+): TrainingCaptureConfig {
+  const retentionDays = trainingDataRetentionDaysFromEnv(env);
+  const raw = env.CARD_FLOW_TRAINING_CAPTURE_ENABLED?.trim().toLowerCase();
+  const isProduction = env.NODE_ENV === "production";
+  
+  // Explicit true/false wins
+  if (raw === "true" || raw === "1") {
+    return { enabled: true, retentionDays, reason: `on (${retentionDays} day retention)` };
+  }
+  if (raw === "false" || raw === "0") {
+    return { enabled: false, retentionDays, reason: "CARD_FLOW_TRAINING_CAPTURE_ENABLED=false" };
+  }
+  
+  // Unset: on outside production, OFF in production (safe default)
+  if (isProduction) {
+    return { enabled: false, retentionDays, reason: "off by default in production" };
+  }
+  
+  return { enabled: true, retentionDays, reason: `on in ${env.NODE_ENV || "development"} (${retentionDays} day retention)` };
 }
 
 export type TrainingImageRetentionReason = "correction" | "low_confidence" | "no_match";
@@ -41,6 +84,10 @@ export interface TrainingImageRecord {
   usedInTrainingAt: string | null;
   deletedAt: string | null;
   createdAt: string;
+  // Ported from PR 117: label provenance and crop box
+  labelSource?: TrainingLabelSource;
+  cropBox?: { x: number; y: number; width: number; height: number } | null;
+  recognitionProvider?: string | null;
 }
 
 export interface ScanCorrectionRecord {
@@ -87,6 +134,7 @@ export interface TrainingDataStorePort {
   purgeExpiredTrainingImages(now: Date): { deleted: number; storageRefs: string[] };
   physicallyDeleteTrainingImages(graceDays?: number): { deleted: number; storageRefs: string[] };
   markTrainingImageUsed(imageId: string): void;
+  listTrainingImages?(): TrainingImageRecord[];
 }
 
 export function createPseudonymousUserId(
@@ -300,6 +348,30 @@ export function createTrainingDataStore(
       .run();
   }
 
+  function listTrainingImages(): TrainingImageRecord[] {
+    const images = db
+      .select()
+      .from(trainingImages)
+      .where(isNull(trainingImages.deletedAt))
+      .all();
+    
+    return images.map((img: typeof trainingImages.$inferSelect) => ({
+      imageId: img.imageId,
+      userId: img.userId,
+      pseudonymousUserId: img.pseudonymousUserId,
+      scanId: img.scanId,
+      retentionReason: img.retentionReason as TrainingImageRetentionReason,
+      capturedAt: img.capturedAt,
+      storageRef: img.storageRef,
+      imageMimeType: img.imageMimeType,
+      expiresAt: img.expiresAt,
+      termsVersion: img.termsVersion,
+      usedInTrainingAt: img.usedInTrainingAt,
+      deletedAt: img.deletedAt,
+      createdAt: img.createdAt,
+    }));
+  }
+
   return {
     hasOptedOut,
     optOut,
@@ -310,5 +382,6 @@ export function createTrainingDataStore(
     purgeExpiredTrainingImages,
     physicallyDeleteTrainingImages,
     markTrainingImageUsed,
+    listTrainingImages,
   };
 }

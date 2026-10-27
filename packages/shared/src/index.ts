@@ -892,3 +892,4 @@ export * from "./dex";
 export * from "./terms";
 export * from "./livestream-kill-switch";
 export * from "./sentry-release";
+export * from "./training-capture";
