@@ -25,9 +25,10 @@ export const TRAINING_DATA_RETENTION_COPY = {
   privacyBody: [
     "By accepting our Terms of Service, you consent to our optional training data retention to improve our card-recognition model. This is on by default but you can opt out anytime in Settings.",
     "What we keep: Scan photos that help improve our model—like when you correct our identification, when we had low confidence, or when we couldn't identify a card at all. We crop the image to the card and remove location and EXIF data. We never keep photos from CardSight (those are subject to CardSight's own policies) or from Live Scan/livestream sessions.",
+    "Eligibility: We only keep training photos for non-guest accounts that have confirmed they are 18+ and accepted our current Terms of Service. The feature is disabled by default in production until our infrastructure is ready.",
     "How long: Up to 180 days from when the photo was taken, or until we use it in a training run (whichever comes first). Once used in training, the image is deleted but the trained model can't unlearn what it learned.",
     "Your control: Opt out in Settings > Use my scans to improve recognition. Opting out stops new retention and deletes saved images within 30 days (and from backups within our standard 14-day backup window). Deleting your account also deletes your training images on the same timeline.",
-    "Security: Training images are stored separately from your regular data, with restricted access, encryption, and access logging.",
+    "Security: Training images are stored separately from your regular data, with restricted file permissions (owner-only access).",
     "Not sold or used for ads: We never sell training data or use it for advertising. It's used only to improve PokeSniper's card recognition.",
     "Privacy: We avoid retaining images with faces or other personal information visible, and we use a pseudonymous ID (not your real user ID) when exporting data for training.",
   ],
