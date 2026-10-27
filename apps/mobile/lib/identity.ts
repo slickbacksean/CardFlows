@@ -87,8 +87,9 @@ export async function signUpWithEmail(
   mode: "sign_up" | "sign_in",
   ageConfirmed18Plus = false,
   termsAccepted = false,
+  creatorCode?: string,
 ): Promise<IdentitySession> {
-  const result = mode === "sign_up" ? await createAccount(email, password, ageConfirmed18Plus, termsAccepted) : await signInWithPassword(email, password, termsAccepted);
+  const result = mode === "sign_up" ? await createAccount(email, password, ageConfirmed18Plus, termsAccepted, creatorCode) : await signInWithPassword(email, password, termsAccepted);
   cachedHasPassword = (result as { hasPassword?: boolean }).hasPassword ?? true;
   return adoptSession(result);
 }

@@ -11,6 +11,7 @@ describe("API contract coverage", () => {
     const registered = new Set(
       app.routes
         .filter((route) => route.method !== "ALL")
+        .filter((route) => !route.path.startsWith("/admin")) // Admin routes use server-rendered HTML, not contract
         .map((route) => `${route.method} ${route.path}`),
     );
     const contract = new Set(apiContractRoutes.map((route) => `${route.method} ${route.path}`));

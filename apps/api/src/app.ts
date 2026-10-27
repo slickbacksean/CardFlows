@@ -164,6 +164,7 @@ import {
 import { Hono, type Context as HonoContext, type Next } from "hono";
 import { cors } from "hono/cors";
 import { bodyLimit } from "hono/body-limit";
+import { serveStatic } from "@hono/node-server/serve-static";
 import { getConnInfo } from "@hono/node-server/conninfo";
 import {
   clientIp,
@@ -215,6 +216,23 @@ import {
   resolveReport,
   getModerationNotices,
 } from "./routes/community";
+import {
+  getDashboardStats,
+  getAdminUserStats,
+  getAdminScanStats,
+  getAdminPurchaseStats,
+  getAdminCommunityStats,
+  createAdminCreator,
+  listAdminCreators,
+  getAdminCreator,
+  updateAdminCreator,
+  deleteAdminCreator,
+  getAdminCreatorLeaderboard,
+  exportCreatorStats,
+  getAdminAuditLog,
+  checkAdminStatus,
+} from "./routes/admin";
+import { bootstrapAdminRoles } from "./admin-auth";
 import {
   subscribe,
   unsubscribe,
@@ -2113,6 +2131,7 @@ export function createApp(
     const bodyConfirmed = signUpBody.ageConfirmed18Plus === true && signUpBody.ageGateVersion === AGE_GATE_VERSION;
     if (ageGate && !bodyConfirmed) return ageRequired(c);
     const termsAccepted = termsAcceptedIn(signUpBody);
+    const creatorCode = typeof signUpBody.creatorCode === "string" ? signUpBody.creatorCode.trim() : undefined;
     const existingForEmail = store.accounts.findByEmail(email);
     // A new account must accept the Terms (an existing email just signs in below).
     if (termsGate && !termsAccepted && !existingForEmail) return termsRequired(c);
@@ -2123,6 +2142,7 @@ export function createApp(
       passwordHash,
       at: signUpAt,
       ...(termsAccepted ? { terms: { version: TERMS_VERSION, acceptedAt: signUpAt } } : {}),
+      ...(creatorCode ? { creatorCode } : {}),
     });
     let account = created;
     if (!account) {
@@ -2266,12 +2286,14 @@ export function createApp(
         400,
       );
     }
+    const creatorCode = typeof body.creatorCode === "string" ? body.creatorCode.trim() : undefined;
     const created = store.accounts.createAccount({
       email,
       passwordHash: NO_PASSWORD_HASH,
       at,
       emailVerified: true,
       ...(termsOk ? { terms: { version: TERMS_VERSION, acceptedAt: at } } : {}),
+      ...(creatorCode ? { creatorCode } : {}),
     });
     if (!created) return c.json({ ok: false, error: ACCOUNT_AUTH_COPY.signInFailed }, 400);
     store.accounts.linkSocial({ provider, subject: verified.subject, userId: created.userId, email, at });
@@ -4321,6 +4343,29 @@ export function createApp(
       ok: true,
       clipboard: clipboardForDraft(draft),
     });
+  });
+
+  // Admin SPA: serve static files from public/admin
+  app.use(
+    "/admin/*",
+    serveStatic({ root: "./public" }),
+  );
+  
+  // Admin SPA: fallback to index.html for client-side routing
+  app.get("/admin", async (c) => {
+    return c.redirect("/admin/", 301);
+  });
+  
+  app.get("/admin/*", async (c) => {
+    try {
+      const fs = await import("node:fs/promises");
+      const path = await import("node:path");
+      const indexPath = path.join(process.cwd(), "public", "admin", "index.html");
+      const html = await fs.readFile(indexPath, "utf-8");
+      return c.html(html);
+    } catch {
+      return c.text("Admin dashboard not found", 404);
+    }
   });
 
   return app;

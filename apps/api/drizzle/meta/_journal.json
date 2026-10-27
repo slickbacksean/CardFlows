@@ -218,6 +218,13 @@
       "when": 1792943437471,
       "tag": "0031_newsletter_system",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "6",
+      "when": 1793030000000,
+      "tag": "0032_admin_creator_tracking",
+      "breakpoints": true
     }
   ]
 }
