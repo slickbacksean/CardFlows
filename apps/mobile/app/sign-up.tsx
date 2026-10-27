@@ -12,8 +12,9 @@ import {
 } from "@cardflow/shared";
 import * as WebBrowser from "expo-web-browser";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import * as Linking from "expo-linking";
 import { authStyles } from "@/components/ui/auth-styles";
 import { PreferencesScreenHeader } from "@/components/ui/preferences-screen-header";
 import { PrimaryButton } from "@/components/ui/primary-button";
@@ -32,6 +33,7 @@ export default function SignUpScreen() {
   const [mode, setMode] = useState<"sign_up" | "sign_in">(() => (params.mode === "sign_in" ? "sign_in" : "sign_up"));
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [creatorCode, setCreatorCode] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   // Policy Reviewer (Oct 17): required, unchecked by default.
@@ -44,20 +46,65 @@ export default function SignUpScreen() {
   const [termsNeeded, setTermsNeeded] = useState(false);
   const signedIn = !!peekActiveUserId();
 
-  async function submit() {
-    if (!isValidEmail(email)) return setError(ACCOUNT_AUTH_COPY.badEmail);
+  const extractCreatorCode = useCallback((url: string): string | null => {
+    try {
+      // Match pokesniper.app/c/<code> or deep link format
+      const match = url.match(/\/c\/([a-zA-Z0-9_-]+)/);
+      return match?.[1] || null;
+    } catch {
+      return null;
+    }
+  }, []);
+
+  // Handle deep-link attribution from pokesniper.app/c/<code>
+  useEffect(() => {
+    async function handleInitialUrl() {
+      const url = await Linking.getInitialURL();
+      if (url) {
+        const code = extractCreatorCode(url);
+        if (code) setCreatorCode(code);
+      }
+    }
+    
+    const subscription = Linking.addEventListener("url", ({ url }) => {
+      const code = extractCreatorCode(url);
+      if (code) setCreatorCode(code);
+    });
+
+    void handleInitialUrl();
+
+    return () => {
+      subscription.remove();
+    };
+  }, [extractCreatorCode]);
+
+  const submit = useCallback(async () => {
+    if (!isValidEmail(email)) {
+      setError(ACCOUNT_AUTH_COPY.badEmail);
+      return;
+    }
     if (mode === "sign_up") {
       const problem = passwordProblem(password);
-      if (problem) return setError(problem);
-      if (!over18) return setError(AGE_GATE_COPY.required);
-      if (!agreed) return setError(TERMS_COPY.required);
+      if (problem) {
+        setError(problem);
+        return;
+      }
+      if (!over18) {
+        setError(AGE_GATE_COPY.required);
+        return;
+      }
+      if (!agreed) {
+        setError(TERMS_COPY.required);
+        return;
+      }
     } else if (termsNeeded && !agreed) {
-      return setError(TERMS_COPY.required);
+      setError(TERMS_COPY.required);
+      return;
     }
     setSaving(true);
     setError(null);
     try {
-      const session = await signUpWithEmail(email.trim(), password, mode, mode === "sign_up" && over18, (mode === "sign_up" || termsNeeded) && agreed);
+      const session = await signUpWithEmail(email.trim(), password, mode, mode === "sign_up" && over18, (mode === "sign_up" || termsNeeded) && agreed, mode === "sign_up" && creatorCode ? creatorCode.trim() : undefined);
       void flushScanQueue();
       // Sean: new accounts confirm their email (6-digit code) before pre-grade estimates.
       if (session.emailVerified === false) {
@@ -72,19 +119,20 @@ export default function SignUpScreen() {
     } catch (caught) {
       if ((caught as { code?: string }).code === TERMS_REQUIRED_CODE) {
         setTermsNeeded(true);
-        return setError(TERMS_COPY.required);
+        setError(TERMS_COPY.required);
+        return;
       }
       setError(actionErrorMessage(caught, mode === "sign_up" ? ACCOUNT_AUTH_COPY.signUpFailed : ACCOUNT_AUTH_COPY.signInFailed));
     } finally {
       setSaving(false);
     }
-  }
+  }, [email, password, mode, over18, agreed, creatorCode, termsNeeded, router]);
 
-  async function social(token: SocialToken) {
+  const social = useCallback(async (token: SocialToken) => {
     setSaving(true);
     setError(null);
     try {
-      await signInWithSocial({ ...token, ageConfirmed18Plus: over18, termsAccepted: agreed });
+      await signInWithSocial({ ...token, ageConfirmed18Plus: over18, termsAccepted: agreed, creatorCode: creatorCode ? creatorCode.trim() : undefined });
       setPendingSocial(null);
       void flushScanQueue();
       
@@ -111,7 +159,7 @@ export default function SignUpScreen() {
     } finally {
       setSaving(false);
     }
-  }
+  }, [over18, agreed, creatorCode, router]);
 
   // The 18+ box is for new accounts; the Terms box also shows when an existing account needs it.
   const showAge = mode === "sign_up" || (pendingSocial !== null && !termsNeeded);
@@ -150,6 +198,18 @@ export default function SignUpScreen() {
           textContentType={mode === "sign_up" ? "newPassword" : "password"}
           value={password}
         />
+        {mode === "sign_up" ? (
+          <TextInput
+            accessibilityLabel="Creator Code"
+            autoCapitalize="none"
+            autoCorrect={false}
+            onChangeText={setCreatorCode}
+            placeholder="Creator Code (optional)"
+            placeholderTextColor={colors.muted}
+            style={authStyles.input}
+            value={creatorCode}
+          />
+        ) : null}
         {showAge ? (
           <Pressable
             accessibilityLabel={AGE_GATE_COPY.checkbox}

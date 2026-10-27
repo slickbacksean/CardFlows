@@ -149,7 +149,7 @@ describe("hardening from the #30 review", () => {
   });
 
   it("derives the 413 copy from the real request cap", async () => {
-    const app = createApp(createMemoryStore(), { devAutoSession: true });
+    const app = createApp(createMemoryStore(), { devAutoSession: true, gradingEnabled: () => true });
     const big = new Uint8Array(32 * 1024 * 1024);
     const response = await app.request("/v1/grade/pregrade", {
       method: "POST",

@@ -60,6 +60,7 @@ function app() {
     grading: createCardgradingProvider(runner),
     gradeEngineProbe: engineProbe,
     gradeRateLimit: null,
+    gradingEnabled: () => true, // Force grading on for e2e tests
   });
 }
 

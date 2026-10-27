@@ -20,11 +20,13 @@ import {
   generateUnsubscribeToken,
 } from "../newsletter";
 import { newsletterIssues, newsletterSendLog, newsletterSubscriptions } from "../db/schema";
+import { isAdmin as checkAdminRole } from "../admin-auth";
 
-const NEWSLETTER_ADMIN_USER_ID = process.env.NEWSLETTER_ADMIN_USER_ID || "admin";
-
-function isAdmin(userId: string): boolean {
-  return userId === NEWSLETTER_ADMIN_USER_ID;
+/**
+ * Check if user has admin role
+ */
+async function isAdmin(userId: string, store: SqliteStorePort): Promise<boolean> {
+  return await checkAdminRole(userId, store);
 }
 
 /**
@@ -130,7 +132,7 @@ export async function createDraft(
   userId: string,
   store: SqliteStorePort,
 ): Promise<Response> {
-  if (!isAdmin(userId)) {
+  if (!(await isAdmin(userId, store))) {
     return c.json({ error: "Admin access required" }, 403);
   }
 
@@ -157,7 +159,7 @@ export async function getIssue(
   userId: string,
   store: SqliteStorePort,
 ): Promise<Response> {
-  if (!isAdmin(userId)) {
+  if (!(await isAdmin(userId, store))) {
     return c.json({ error: "Admin access required" }, 403);
   }
 
@@ -188,7 +190,7 @@ export async function previewIssue(
   userId: string,
   store: SqliteStorePort,
 ): Promise<Response> {
-  if (!isAdmin(userId)) {
+  if (!(await isAdmin(userId, store))) {
     return c.json({ error: "Admin access required" }, 403);
   }
 
@@ -228,7 +230,7 @@ export async function sendTest(
   store: SqliteStorePort,
   emailProvider: EmailProviderPort,
 ): Promise<Response> {
-  if (!isAdmin(userId)) {
+  if (!(await isAdmin(userId, store))) {
     return c.json({ error: "Admin access required" }, 403);
   }
 
@@ -286,7 +288,7 @@ export async function approveAndSend(
   store: SqliteStorePort,
   emailProvider: EmailProviderPort,
 ): Promise<Response> {
-  if (!isAdmin(userId)) {
+  if (!(await isAdmin(userId, store))) {
     return c.json({ error: "Admin access required" }, 403);
   }
 
@@ -339,7 +341,7 @@ export async function listIssues(
   userId: string,
   store: SqliteStorePort,
 ): Promise<Response> {
-  if (!isAdmin(userId)) {
+  if (!(await isAdmin(userId, store))) {
     return c.json({ error: "Admin access required" }, 403);
   }
 

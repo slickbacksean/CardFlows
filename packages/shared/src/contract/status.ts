@@ -18,7 +18,10 @@ export const statusRoutes = {
       banners: z.array(StatusBannerSchema),
       checkedAt: z.string(),
       /** Remote kill switches. Optional so older servers still validate. */
-      features: z.looseObject({ livestream: z.boolean() }).optional(),
+      features: z.looseObject({ 
+        livestream: z.boolean(),
+        grading: z.boolean(),
+      }).optional(),
     }),
   }),
 } as const;

@@ -37,9 +37,9 @@ describe("Sean (Oct 17): 18+ is stated at sign-up; no birth-date screen", () => 
     expect(signUp).toContain("AGE_GATE_COPY.checkbox");
     expect(signUp).toContain("AGE_GATE_COPY.signUpLine");
     expect(signUp).toContain('disabled={saving || (mode === "sign_up" && !over18) || (mode === "sign_up" && !agreed)}');
-    expect(signUp).toContain('signUpWithEmail(email.trim(), password, mode, mode === "sign_up" && over18, (mode === "sign_up" || termsNeeded) && agreed)');
+    expect(signUp).toContain('signUpWithEmail(email.trim(), password, mode, mode === "sign_up" && over18, (mode === "sign_up" || termsNeeded) && agreed, mode === "sign_up" && creatorCode ? creatorCode.trim() : undefined)');
     const api = read("apps/mobile/lib/api.ts");
-    expect(api).toContain("ageConfirmed18Plus ? { email, password, ageConfirmed18Plus: true, ageGateVersion: AGE_GATE_VERSION }");
+    expect(api).toContain("...(ageConfirmed18Plus ? { ageConfirmed18Plus: true, ageGateVersion: AGE_GATE_VERSION } : {})");
   });
 });
 
