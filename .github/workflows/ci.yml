@@ -89,9 +89,10 @@ jobs:
       - name: Grader unit tests (EXIF orientation, beige-table detect)
         run: apps/api/.venv/bin/python -m unittest apps/api/vendor/cardgrading/test_pixel_cap.py apps/api/vendor/cardgrading/test_cardflow_detect_beige.py
 
-      - name: Livestream 4-corner warp + recorded stream
+      - name: Livestream 4-corner warp + localization + recorded stream
         run: |
           apps/api/.venv/bin/python services/live-identity-openclip/scripts/test_warp.py
+          apps/api/.venv/bin/python services/live-identity-openclip/scripts/test_localize.py
           apps/api/.venv/bin/python services/live-identity-openclip/scripts/eval_recorded_stream.py
 
       - name: Real end-to-end photo grade
