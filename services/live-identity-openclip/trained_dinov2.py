@@ -8,13 +8,14 @@ Model: timm vit_small_patch14_dinov2.lvd142m, last 8 blocks + norm unfrozen,
 residual head (384->384 linear, zero-init), L2 normalize output.
 
 Env:
-  TRAINED_MODEL_WEIGHTS: Path or URL to b1_best.pt PyTorch checkpoint
+  TRAINED_MODEL_WEIGHTS: Path or URL to b1_best.pt PyTorch checkpoint (r10) or r16 checkpoint
   TRAINED_MODEL_CAT_FULL: Path or URL to cat_full_b1.npy (float16, shape: [N, 384])
   TRAINED_MODEL_CAT_ART: Path or URL to cat_art_b1.npy (float16, shape: [N, 384])
   TRAINED_MODEL_CAT_IDS: Path or URL to cat_ids.json (list of TCGdex IDs)
   TRAINED_MODEL_ACCEPT: Cosine similarity threshold (default: 0.68)
   TRAINED_MODEL_MARGIN: Min top-1 minus top-2 margin (default: 0.02)
   TRAINED_MODEL_TOPK: Top-K candidates (default: 5)
+  TRAINED_MODEL_VERSION: Model version: 'r10' (default) or 'r16'
 """
 
 from __future__ import annotations
@@ -68,6 +69,7 @@ class TrainedModel:
         accept: float = 0.68,
         margin: float = 0.02,
         topk: int = 5,
+        version: str = "r10",
     ):
         self.device = device
         self.accept = accept
@@ -75,6 +77,7 @@ class TrainedModel:
         self.topk = topk
         self.cat_ids = cat_ids
         self.card_names = card_names
+        self.version = version
 
         # Load model
         self.model = timm.create_model(
@@ -279,8 +282,9 @@ def load_trained_model(
         accept = float(os.environ.get("TRAINED_MODEL_ACCEPT", "0.68"))
         margin = float(os.environ.get("TRAINED_MODEL_MARGIN", "0.02"))
         topk = int(os.environ.get("TRAINED_MODEL_TOPK", "5"))
+        version = os.environ.get("TRAINED_MODEL_VERSION", "r10").strip().lower()
 
-        print(f"[trained_dinov2] Loading model on {device}...")
+        print(f"[trained_dinov2] Loading model {version} on {device}...")
         model = TrainedModel(
             device=device,
             weights_path=weights_path,
@@ -291,6 +295,7 @@ def load_trained_model(
             accept=accept,
             margin=margin,
             topk=topk,
+            version=version,
         )
 
         print("[trained_dinov2] Model loaded successfully")

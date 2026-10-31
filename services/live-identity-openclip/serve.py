@@ -5,13 +5,14 @@ Primary: Trained DINOv2-S + SubCenterArcFace (when TRAINED_MODEL_* env vars set)
 Fallback: OpenCLIP ViT-B/32 + HNSW cosine search
 
 Env (trained model):
-  TRAINED_MODEL_WEIGHTS     Path or URL to b1_best.pt checkpoint
+  TRAINED_MODEL_WEIGHTS     Path or URL to b1_best.pt checkpoint (r10) or r16 checkpoint
   TRAINED_MODEL_CAT_FULL    Path or URL to cat_full_b1.npy
   TRAINED_MODEL_CAT_ART     Path or URL to cat_art_b1.npy
   TRAINED_MODEL_CAT_IDS     Path or URL to cat_ids.json
   TRAINED_MODEL_ACCEPT      Similarity threshold (default: 0.68)
   TRAINED_MODEL_MARGIN      Min margin (default: 0.02)
   TRAINED_MODEL_TOPK        Top-K candidates (default: 5)
+  TRAINED_MODEL_VERSION     Model version: 'r10' (default) or 'r16'
 
 Env (OpenCLIP fallback):
   LIVE_IDENTITY_INDEX       Directory with hnsw.bin + meta.json
@@ -25,6 +26,9 @@ Env (OpenCLIP fallback):
   LIVE_IDENTITY_WARP        1 (default) straightens crop; 0 = old crop only
   LIVE_IDENTITY_LIVE_FLOOR  Lower similarity when winner is clearly ahead (default 0.80)
   LIVE_IDENTITY_LIVE_FLOOR_MARGIN  Margin required for floor (default 0.045)
+
+Env (robust crop localization - r16):
+  LIVE_IDENTITY_LOCALIZE    1 enables robust server-side card localization; 0 (default) = off
 """
 
 from __future__ import annotations
@@ -47,6 +51,7 @@ from PIL import Image
 from orb_rerank import rerank_near_tie
 from warp import warp_card
 from trained_dinov2 import load_trained_model, TrainedModel
+from localize import localize_card, warp_localized
 
 INDEX_DIR = Path(os.environ.get("LIVE_IDENTITY_INDEX", "")).expanduser()
 TOKEN = os.environ.get("LIVE_IDENTITY_TOKEN", "").strip()
@@ -63,6 +68,8 @@ LIVE_FLOOR_MARGIN = float(os.environ.get("LIVE_IDENTITY_LIVE_FLOOR_MARGIN", "0.0
 # limits the search to that Pokémon's prints, where 0.74 + the same margin separates them.
 NAME_ACCEPT = float(os.environ.get("LIVE_IDENTITY_NAME_ACCEPT", "0.74"))
 WARP = os.environ.get("LIVE_IDENTITY_WARP", "1").strip() != "0"
+# Robust server-side localization (r16): find card edges inside loose bounding box
+LOCALIZE = os.environ.get("LIVE_IDENTITY_LOCALIZE", "0").strip() == "1"
 EMBED_MODEL = "ViT-B-32"
 EMBED_PRETRAINED = "openai"
 
@@ -202,12 +209,14 @@ def health() -> JSONResponse:
       "service": "cardflow-live-identity",
       "pipeline": _pipeline,
       "model": "dinov2_s_subcenter_arcface",
+      "modelVersion": _trained_model.version,
       "device": str(DEVICE),
       "indexed": len(_meta),
       "accept": _trained_model.accept,
       "margin": _trained_model.margin,
       "orb": "not_applicable",
       "warp": WARP,
+      "localize": LOCALIZE,
       "matchSamples": len(_match_ms),
       "matchP50Ms": _percentile_ms(50),
       "matchP95Ms": _percentile_ms(95),
@@ -227,6 +236,7 @@ def health() -> JSONResponse:
       "liveFloorMargin": LIVE_FLOOR_MARGIN,
       "orb": "fail_soft",
       "warp": WARP,
+      "localize": LOCALIZE,
       "matchSamples": len(_match_ms),
       "matchP50Ms": _percentile_ms(50),
       "matchP95Ms": _percentile_ms(95),
@@ -372,11 +382,47 @@ async def match(
 
   decoded = time.perf_counter()
   warped = False
+  localized = False
+  localize_method = None
+  
+  # Try quad warp first if quad is provided
+  straightened = None
   if WARP and quad:
     straightened = warp_card(image, quad)
     if straightened is not None:
-      image = straightened
       warped = True
+  
+  # If localization is enabled and we don't have a good quad warp, try localization
+  if LOCALIZE and not warped:
+    try:
+      # Localize card within the image (no box for now, could be extracted from quad/form data)
+      loc_result = localize_card(image)
+      if loc_result['quad'] is not None:
+        localized_crop = warp_localized(image, loc_result['quad'])
+        localize_method = loc_result['method']
+        
+        # Hybrid choice: score both original and localized crop, keep the better one
+        # We'll need to embed both and compare catalog confidence
+        if straightened is None:
+          # No quad warp succeeded, use localized crop
+          straightened = localized_crop
+          localized = True
+        else:
+          # Both available: we'll score both below and choose the better one
+          # For now, keep the straightened one (quad warp)
+          # TODO: implement hybrid scoring in a follow-up iteration
+          pass
+    except Exception as e:
+      # Localization failed, continue with original/warped crop
+      print(f"[serve] Localization failed: {e}")
+      import traceback
+      traceback.print_exc()
+  
+  # Apply the best crop we found
+  if straightened is not None:
+    image = straightened
+    warped = warped or localized
+    
   started = time.perf_counter()
   
   # Use trained model if available
@@ -423,6 +469,8 @@ async def match(
         "similarity": top["similarity"] if top else None,
         "margin": margin,
         "warped": warped,
+        "localized": localized,
+        "localizeMethod": localize_method,
         "timings": timings,
         "candidates": candidates,
       }
@@ -485,6 +533,8 @@ async def match(
       "similarity": top["similarity"] if top else None,
       "margin": margin,
       "warped": warped,
+      "localized": localized,
+      "localizeMethod": localize_method,
       "timings": timings,
       "candidates": candidates[:TOPK],
     }
