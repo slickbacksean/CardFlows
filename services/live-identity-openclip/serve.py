@@ -384,6 +384,7 @@ async def match(
   warped = False
   localized = False
   localize_method = None
+  hybrid_choice = None  # 'original' | 'localized' | None
   
   # Try quad warp first if quad is provided
   straightened = None
@@ -393,6 +394,7 @@ async def match(
       warped = True
   
   # If localization is enabled and we don't have a good quad warp, try localization
+  localized_crop = None
   if LOCALIZE and not warped:
     try:
       # Localize card within the image (no box for now, could be extracted from quad/form data)
@@ -400,28 +402,66 @@ async def match(
       if loc_result['quad'] is not None:
         localized_crop = warp_localized(image, loc_result['quad'])
         localize_method = loc_result['method']
-        
-        # Hybrid choice: score both original and localized crop, keep the better one
-        # We'll need to embed both and compare catalog confidence
-        if straightened is None:
-          # No quad warp succeeded, use localized crop
-          straightened = localized_crop
-          localized = True
-        else:
-          # Both available: we'll score both below and choose the better one
-          # For now, keep the straightened one (quad warp)
-          # TODO: implement hybrid scoring in a follow-up iteration
-          pass
+        localized = True
     except Exception as e:
       # Localization failed, continue with original/warped crop
       print(f"[serve] Localization failed: {e}")
       import traceback
       traceback.print_exc()
   
-  # Apply the best crop we found
-  if straightened is not None:
+  # Hybrid rule: when localization succeeded, score BOTH crops and keep the better one
+  if LOCALIZE and localized and localized_crop is not None:
+    # We have a localized crop; now decide between original and localized
+    original_crop = straightened if straightened is not None else image
+    
+    # Score both crops against the catalog (label-free)
+    if _trained_model:
+      # Use trained model for both crops
+      original_candidates, _ = _trained_model.match(original_crop)
+      localized_candidates, _ = _trained_model.match(localized_crop)
+      
+      # Compare top-1 similarities (catalog-match confidence)
+      original_conf = float(original_candidates[0]['similarity']) if original_candidates else 0.0
+      localized_conf = float(localized_candidates[0]['similarity']) if localized_candidates else 0.0
+      
+      if localized_conf > original_conf:
+        image = localized_crop
+        hybrid_choice = 'localized'
+        warped = True
+      else:
+        image = original_crop
+        hybrid_choice = 'original'
+        warped = straightened is not None
+    else:
+      # OpenCLIP fallback: embed both and compare
+      original_emb = _embed(original_crop)
+      localized_emb = _embed(localized_crop)
+      
+      # Quick catalog similarity check
+      if _index:
+        original_labels, original_dists = _index.knn_query(original_emb, k=1)
+        localized_labels, localized_dists = _index.knn_query(localized_emb, k=1)
+        
+        original_conf = float(1.0 - original_dists[0][0])
+        localized_conf = float(1.0 - localized_dists[0][0])
+        
+        if localized_conf > original_conf:
+          image = localized_crop
+          hybrid_choice = 'localized'
+          warped = True
+        else:
+          image = original_crop
+          hybrid_choice = 'original'
+          warped = straightened is not None
+      else:
+        # No index available, fall back to localized crop
+        image = localized_crop
+        hybrid_choice = 'localized'
+        warped = True
+  elif straightened is not None:
+    # Only quad warp succeeded
     image = straightened
-    warped = warped or localized
+  # else: use original image
     
   started = time.perf_counter()
   
@@ -471,6 +511,7 @@ async def match(
         "warped": warped,
         "localized": localized,
         "localizeMethod": localize_method,
+        "hybridChoice": hybrid_choice,
         "timings": timings,
         "candidates": candidates,
       }
@@ -535,6 +576,7 @@ async def match(
       "warped": warped,
       "localized": localized,
       "localizeMethod": localize_method,
+      "hybridChoice": hybrid_choice,
       "timings": timings,
       "candidates": candidates[:TOPK],
     }

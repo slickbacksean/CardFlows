@@ -20,9 +20,9 @@ The r16 crop pipeline adds robust server-side localization:
    - Axis-aligned rectangle search for upright cards (gradient-based edge detection)
    - Sub-pixel edge refinement via RANSAC line fitting
 
-2. **Hybrid Choice**: Score both the original crop and the new localized crop, keeping whichever has higher catalog-match confidence (label-free).
+2. **Hybrid Choice** (implemented): When localization succeeds, score BOTH the original crop and the localized crop against the catalog, keeping whichever has higher match confidence (label-free). The response includes `hybridChoice: 'original' | 'localized'` to indicate which was chosen.
 
-3. **Multi-Frame Logic** (future): Embed each localized frame, split the hold where the card changes (similarity drop or position jump), choose one contiguous run of 2+ frames, drop outliers, and use the medoid frame.
+3. **Multi-Frame Hold Logic** (not in this PR): The server currently processes single frames independently. Multi-frame temporal voting (as in seg3.py: split hold at card changes, pick contiguous runs, drop outliers, use medoid) is implemented client-side in `packages/shared/src/live-identity-vote.ts`. See `MULTIFRAME_HOLD_LOGIC.md` for detailed notes on where server-side multi-frame would go if implemented.
 
 ## Environment Variables
 
@@ -98,18 +98,25 @@ When localization is enabled, the `/v1/match` endpoint returns additional fields
 
 ```json
 {
-  "localized": true,  // true if localization was used
-  "localizeMethod": "quad",  // "quad" | "rect" | "fallback" | null
-  "warped": true  // true if any crop transformation was applied
+  "localized": true,           // true if localization was attempted
+  "localizeMethod": "quad",    // "quad" | "rect" | null
+  "hybridChoice": "localized", // "original" | "localized" | null (which crop was used)
+  "warped": true               // true if any crop transformation was applied
 }
 ```
+
+**Hybrid Choice Logic**:
+- When `localized` is true, both the original box crop and localized crop are scored against the catalog
+- The crop with **higher catalog-match confidence** (top-1 similarity) is used for the final match
+- `hybridChoice` reports which was chosen: `"original"` or `"localized"`
+- No labels are used in this comparison (label-free validation)
 
 Health endpoint also reports the localization status:
 
 ```json
 {
-  "localize": true,  // current LIVE_IDENTITY_LOCALIZE setting
-  "modelVersion": "r16"  // current TRAINED_MODEL_VERSION
+  "localize": true,       // current LIVE_IDENTITY_LOCALIZE setting
+  "modelVersion": "r16"   // current TRAINED_MODEL_VERSION
 }
 ```
 
@@ -181,12 +188,15 @@ Key metrics to watch:
 4. Score = fraction of each side with strong perpendicular edge
 5. All four sides must have support
 
-### Hybrid Choice (Future Enhancement)
-1. Score both original crop and localized crop
-2. Embed both crops
-3. Compare catalog-match confidence
-4. Keep whichever has higher confidence
-5. No labels used (label-free validation)
+### Hybrid Choice (Implemented)
+1. When localization succeeds, we have two crops: original (box or quad warp) and localized
+2. Embed both crops using the trained model or OpenCLIP
+3. Score both against the catalog (top-1 similarity = catalog-match confidence)
+4. Keep whichever has **higher catalog-match confidence**
+5. Report choice in response: `hybridChoice: 'original' | 'localized'`
+6. No labels used (label-free validation)
+
+**Example**: If the original box crop scores 0.68 and the localized crop scores 0.82, the localized crop is used and `hybridChoice: 'localized'` is returned.
 
 ## Dependencies
 
