@@ -97,6 +97,32 @@ jobs:
       - name: Real end-to-end photo grade
         run: pnpm --filter @cardflow/api test:grade-e2e
 
+  site-image:
+    # Build the static site container. Nothing is pushed.
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Build site image
+        env:
+          DOCKER_BUILDKIT: "1"
+        run: docker build -f site/Dockerfile -t pokesniper-site:ci site
+
+      - name: Smoke test /healthz
+        run: |
+          docker run -d --name pokesniper-site -p 8082:8080 pokesniper-site:ci
+          sleep 2
+          if ! curl -fsS http://127.0.0.1:8082/healthz -o healthz.txt; then
+            docker logs pokesniper-site || true
+            exit 1
+          fi
+          if ! curl -fsS http://127.0.0.1:8082/ -o index.txt; then
+            docker logs pokesniper-site || true
+            exit 1
+          fi
+
   api-image:
     # Build the API container and check that /health sees OpenCV inside it. Nothing is pushed.
     runs-on: ubuntu-latest

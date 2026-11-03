@@ -41,6 +41,22 @@ Porkbun DNS: delete the parking records on `@`, `www` and `*`, then add
 - `ALIAS` · host *(blank)* · `apex-loadbalancer.netlify.com`
 - `CNAME` · host `www` · `<site-name>.netlify.app`
 
+## Option 4: Railway
+
+Railway can deploy the site as a separate service alongside the API:
+
+1. Railway dashboard → New → Deploy from GitHub repo → select `slickbacksean/CardFlows`
+2. Service settings:
+   - **Root Directory**: `site`
+   - **Builder**: Dockerfile
+   - **Healthcheck Path**: `/healthz`
+   - **Watch Paths**: `site/**`
+3. Deploy settings → Enable **Auto-Deploy** from `main`
+4. Custom domain → add **`pokesniper.app`** and **`www.pokesniper.app`**
+
+The Dockerfile uses Caddy 2 with gzip/zstd compression, clean URLs, security headers, and proper cache control.
+Railway terminates TLS, so Caddy serves plain HTTP only.
+
 ## After deploy
 
 Check https://pokesniper.app/privacy, /terms, /support and /delete-account load over HTTPS. Use
