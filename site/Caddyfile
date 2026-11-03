@@ -6,7 +6,7 @@ http://www.pokesniper.app {
 	redir https://pokesniper.app{uri} 301
 }
 
-http://pokesniper.app, :${PORT:8080} {
+http://pokesniper.app, :{$PORT:8080} {
 	root * /srv
 	
 	encode gzip zstd
