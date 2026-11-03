@@ -3,19 +3,153 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Pokémon card scanner for resellers · PokeSniper</title>
-<link rel="stylesheet" href="/style.css">
+<title>PokeSniper — Know your number before you buy</title>
+<meta name="description" content="PokeSniper helps you scan English Pokémon singles, confirm the print, and see a Max Buy from your own rules. Private beta for iOS and Android.">
+<link rel="canonical" href="https://pokesniper.app/">
+<meta name="theme-color" content="#0B0B0D">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600&family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/home.css">
 </head>
-<body>
-<header><a class="brand" href="/">PokeSniper</a><nav><a href="/privacy/">Privacy</a><a href="/terms/">Terms</a><a href="/support/">Support</a></nav></header>
-<main>
-<section class="hero">
-<h1>PokeSniper</h1>
-<p>Scan Pokémon cards, check prices and track your collection in MyDEX.</p>
-<p class="soon">Coming soon to the App Store and Google Play</p>
-</section>
-<p style="text-align:center"><a href="/privacy/">Privacy Policy</a> · <a href="/terms/">Terms of Service</a> · <a href="/support/">Support</a> · <a href="/delete-account/">Delete your account</a></p>
+<body class="home">
+<a class="skip" href="#content">Skip to content</a>
+<header class="top">
+  <a class="brand" href="/">
+    <svg width="28" height="28" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="#FFE500"/><circle cx="16" cy="16" r="7" fill="none" stroke="#14140A" stroke-width="1.6"/><path d="M16 6.5v3.2M16 22.3v3.2M6.5 16h3.2M22.3 16h3.2" stroke="#14140A" stroke-width="1.6" stroke-linecap="round"/><circle cx="16" cy="16" r="1.5" fill="#14140A"/></svg>
+    PokeSniper
+  </a>
+  <button class="menu" type="button" aria-expanded="false" aria-controls="nav">Menu</button>
+  <nav class="nav" id="nav" aria-label="Primary">
+    <a href="#product">Product</a>
+    <a href="#method">How it works</a>
+    <a href="/support/">Support</a>
+    <a class="cta" href="#beta">Request access</a>
+  </nav>
+</header>
+<main id="content">
+  <section class="hero">
+    <div>
+      <p class="kicker"><span class="dot" aria-hidden="true"></span> Private beta · iOS and Android</p>
+      <h1>Know your number <span>before you buy.</span></h1>
+      <p class="lede">PokeSniper is the desk for people who buy and resell English Pokémon singles. Scan a card, confirm the print, and see a Max Buy from your own rules — before the card is in your hand or the lot closes.</p>
+      <div class="actions">
+        <a class="btn" href="#beta">Request access</a>
+        <a class="btn quiet" href="#product">See the product</a>
+      </div>
+      <ul class="specs">
+        <li>Confirm before anything is saved</li>
+        <li>Max Buy is your rule</li>
+        <li>No bids. No auto-listing.</li>
+      </ul>
+    </div>
+    <div class="stage" aria-hidden="true">
+      <div class="phone">
+        <div class="bar"><span>PokeSniper</span><span class="pill">Example</span></div>
+        <div class="holo"><span>EN · HOLO</span><span>#058</span></div>
+        <p class="cname">English single</p>
+        <p class="meta">Confirmed print · Raw</p>
+        <dl class="quote">
+          <div><dt>Reference</dt><dd>$84.00</dd></div>
+          <div class="max"><dt>Max Buy</dt><dd>$58.46</dd></div>
+        </dl>
+        <p class="rule">20% margin · 13% fees · NM</p>
+        <div class="pacts"><span>Watchlist</span><span class="buy">Purchased</span></div>
+        <p class="fine">Example only. Not a quote or a bid.</p>
+      </div>
+    </div>
+  </section>
+  <section class="block" id="product">
+    <div class="head">
+      <p class="kicker">Product</p>
+      <h2>One loop, from the card to the draft.</h2>
+      <p>Identify the print, decide what you will pay, and keep the copy in your own inventory. PokeSniper does not place bids, log into marketplaces, or publish listings for you.</p>
+    </div>
+    <div class="bento">
+      <article class="card wide"><p class="kicker">Scan</p><h3>Photograph one English raw single.</h3><p>Fill the frame with the card. PokeSniper matches the art against the English catalog and shows you the print to confirm. You choose it. Nothing is written until you do.</p></article>
+      <article class="card"><p class="kicker">Live shows</p><h3>Read the card on the stream.</h3><p>An overlay follows the card in live video and offers a guess. Confirm it yourself. The overlay is not a bid, and it does not scrape the show.</p></article>
+      <article class="card yellow"><p class="kicker">Max Buy</p><h3>Your ceiling, calculated.</h3><p>Margin, fees buffer, and condition. PokeSniper turns a reference price into the most you want to pay. It is your rule, not a market quote.</p><p class="formula">$84.00 × (1 − 0.20) × (1 − 0.13) = <strong>$58.46</strong></p></article>
+      <article class="card"><p class="kicker">Pre-grade</p><h3>A photo estimate, not a cert.</h3><p>Photograph the front and back before you send a card out. The result is a pre-grade estimate. Estimate only. Not an official grade.</p></article>
+      <article class="card"><p class="kicker">Inventory</p><h3>Purchased, or watching.</h3><p>Save a copy with what you paid, or park it on a watchlist. Listing drafts stay in the app until you copy the title, condition, and asking price yourself.</p></article>
+      <article class="card"><p class="kicker">Portfolio</p><h3>A spread, not a promise.</h3><p>See what you hold and the gap between all-in cost and asking price. Spreads are estimates. PokeSniper does not promise a profit.</p></article>
+    </div>
+  </section>
+  <section class="block" id="method">
+    <div class="head">
+      <p class="kicker">How it works</p>
+      <h2>Four steps. You stay in charge of each one.</h2>
+    </div>
+    <ol class="steps">
+      <li><span>01</span><h3>Point</h3><p>A photo of one card, or the live video in a show you are already watching.</p></li>
+      <li><span>02</span><h3>Confirm</h3><p>Check the print, set, and language. Reject it if the match is wrong.</p></li>
+      <li><span>03</span><h3>Decide</h3><p>Max Buy sits next to the reference price and the time that price was checked.</p></li>
+      <li><span>04</span><h3>Keep</h3><p>Purchased or watchlist. Draft a listing later. Copy it when you are ready.</p></li>
+    </ol>
+  </section>
+  <section class="beta" id="beta">
+    <div>
+      <p class="kicker">Private beta</p>
+      <h2>Seats open by invite.</h2>
+      <p>Tell us how you buy cards. This prepares an email to support@pokesniper.app. We reply when a seat is open. PokeSniper is free during the beta.</p>
+      <ul class="notes">
+        <li>English Pokémon singles</li>
+        <li>iOS and Android · 18 and older</li>
+        <li>Your inventory stays yours</li>
+      </ul>
+    </div>
+    <form id="access">
+      <label>Name <input name="name" autocomplete="name" required></label>
+      <label>Email <input name="email" type="email" autocomplete="email" required></label>
+      <label>Where you buy
+        <select name="buying">
+          <option>Card shows</option>
+          <option>Shops</option>
+          <option selected>Live shows</option>
+          <option>Online listings</option>
+        </select>
+      </label>
+      <p class="err" id="err" hidden>Add your name and a valid email.</p>
+      <button class="btn" type="submit">Prepare request</button>
+      <p class="hint" id="hint">Opens your email app. This form is not stored on a server.</p>
+    </form>
+  </section>
 </main>
-<footer><p>PokeSniper is not affiliated with Nintendo, The Pokémon Company, Creatures Inc. or Game Freak. · <a href="mailto:support@pokesniper.app">support@pokesniper.app</a></p></footer>
+<footer class="foot">
+  <strong>PokeSniper · pokesniper.app</strong>
+  <p>PokeSniper is not affiliated with, endorsed by, or sponsored by Nintendo, The Pokémon Company, Creatures Inc., or Game Freak. Prices and pre-grade results are estimates. Not an official grade. Not a bid.</p>
+  <nav aria-label="Footer">
+    <a href="/privacy/">Privacy</a>
+    <a href="/terms/">Terms</a>
+    <a href="/support/">Support</a>
+    <a href="/delete-account/">Delete your account</a>
+    <a href="mailto:support@pokesniper.app">support@pokesniper.app</a>
+  </nav>
+</footer>
+<script>
+document.querySelector(".menu").addEventListener("click", function () {
+  var nav = document.getElementById("nav");
+  var open = nav.classList.toggle("open");
+  this.textContent = open ? "Close" : "Menu";
+  this.setAttribute("aria-expanded", open ? "true" : "false");
+});
+document.getElementById("access").addEventListener("submit", function (event) {
+  event.preventDefault();
+  var data = new FormData(event.currentTarget);
+  var name = String(data.get("name") || "").trim();
+  var email = String(data.get("email") || "").trim();
+  var err = document.getElementById("err");
+  var hint = document.getElementById("hint");
+  if (!name || !email.includes("@") || !email.includes(".")) {
+    err.hidden = false;
+    return;
+  }
+  err.hidden = true;
+  var body = "Name: " + name + "\nEmail: " + email + "\nBuys from: " + data.get("buying") + "\n\nI'd like a PokeSniper private beta invite.";
+  var href = "mailto:support@pokesniper.app?subject=" + encodeURIComponent("PokeSniper beta request") + "&body=" + encodeURIComponent(body);
+  hint.innerHTML = 'Ready. <a href="' + href + '">Send it from your email app</a>.';
+  location.href = href;
+});
+</script>
 </body>
 </html>
