@@ -231,10 +231,23 @@ def _embed(image: Image.Image) -> np.ndarray:
 
 @app.get("/health")
 def health() -> JSONResponse:
+  """Liveness + model status.
+
+  Always returns HTTP 200 when no trained/OpenCLIP models are loaded so a
+  fresh Railway deploy can pass the healthcheck before the ship bundle is
+  uploaded to the volume. Callers must read `ok` / `modelsPresent` /
+  `fusionLoaded` / `printRerank` for readiness — do not treat 200 alone as
+  "recognition is live". Unexpected load failures with a partial pipeline
+  still return 503.
+  """
+  fusion = isinstance(_trained_model, FusedTrainedModel)
+  models_present = _trained_model is not None or _index is not None
   if _trained_model:
-    fusion = isinstance(_trained_model, FusedTrainedModel)
     body = {
       "ok": _ready_error is None,
+      "ready": _ready_error is None,
+      "modelsPresent": True,
+      "fusionLoaded": fusion,
       "service": "cardflow-live-identity",
       "pipeline": _pipeline,
       "model": "dinov2_s_r18h2de" if fusion else "dinov2_s_subcenter_arcface",
@@ -253,6 +266,9 @@ def health() -> JSONResponse:
   else:
     body = {
       "ok": _ready_error is None,
+      "ready": _ready_error is None,
+      "modelsPresent": _index is not None,
+      "fusionLoaded": False,
       "service": "cardflow-live-identity",
       "pipeline": _pipeline,
       "model": EMBED_MODEL,
@@ -262,6 +278,7 @@ def health() -> JSONResponse:
       "margin": MARGIN,
       "liveFloor": LIVE_FLOOR,
       "liveFloorMargin": LIVE_FLOOR_MARGIN,
+      "printRerank": _print_rerank is not None,
       "orb": "fail_soft",
       "warp": WARP,
       "matchSamples": len(_match_ms),
@@ -269,6 +286,17 @@ def health() -> JSONResponse:
       "matchP95Ms": _percentile_ms(95),
       "error": _ready_error,
     }
+  # Boot without models: 200 so Railway can finish the first deploy before
+  # the volume upload. Never log secrets here.
+  if not models_present:
+    body["ok"] = False
+    body["ready"] = False
+    body["modelsPresent"] = False
+    body["fusionLoaded"] = False
+    body["printRerank"] = False
+    if not body.get("error"):
+      body["error"] = "models not loaded; mount /data/trained-model/bundle and set TRAINED_MODEL_*"
+    return JSONResponse(body, status_code=200)
   return JSONResponse(body, status_code=200 if _ready_error is None else 503)
 
 

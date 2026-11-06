@@ -1,0 +1,46 @@
+# Local envs and caches
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.cache/
+*.log
+*.pid
+live-identity.log
+live-identity.pid
+build.pid
+build-*.log
+
+# Local indexes and smoke fixtures
+data/
+smoke-index/
+*.bin
+
+# Ship bundle / weights — mount from Railway volume at runtime.
+# Keep committed reranker/model_frozen.json (tiny logistic JSON in git).
+models/
+catalog/
+bundle/
+*.pt
+*.pth
+*.onnx
+cat_full*.npy
+cat_art*.npy
+cat_ids.json
+catx_names.json
+**/hr_cat/
+**/fam.json
+
+# Tests, docs, helper scripts not needed to serve
+test_*.py
+*_test.py
+scripts/
+README.md
+.gitignore
+.dockerignore
+Dockerfile
+health.sh
+up.sh

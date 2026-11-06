@@ -184,3 +184,67 @@ jobs:
         run: |
           docker logs cardflow-api || true
           docker logs cardflow-vol || true
+
+  live-identity-image:
+    # Build the livestream identity sidecar (CPU torch). Nothing is pushed.
+    # Smoke-tests that the container boots and /health returns 200 with no models.
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Build live-identity image
+        env:
+          DOCKER_BUILDKIT: "1"
+        run: |
+          docker build -f services/live-identity-openclip/Dockerfile \
+            -t live-identity-openclip:ci \
+            services/live-identity-openclip
+          docker images live-identity-openclip:ci --format "image={{.Repository}}:{{.Tag}} size={{.Size}}"
+
+      - name: Smoke test /health without models
+        run: |
+          docker run -d --name live-identity \
+            -p 8083:8080 \
+            --memory=2g --cpus=1 \
+            -e LIVE_IDENTITY_HOST=0.0.0.0 \
+            -e PORT=8080 \
+            live-identity-openclip:ci
+          ready=0
+          for i in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:8083/health -o live-identity-health.json; then
+              ready=1
+              break
+            fi
+            sleep 3
+          done
+          echo "----- /health -----"
+          cat live-identity-health.json || true
+          echo
+          echo "----- logs -----"
+          docker logs live-identity || true
+          if [ "$ready" != 1 ]; then
+            echo "container never answered /health"
+            exit 1
+          fi
+          # Must be HTTP 200 with modelsPresent=false before the volume upload.
+          code=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8083/health)
+          test "$code" = "200"
+          node -e '
+            const h = require("./live-identity-health.json");
+            if (h.modelsPresent !== false) process.exit(2);
+            if (h.fusionLoaded !== false) process.exit(3);
+            if (h.printRerank !== false) process.exit(4);
+            if (h.ok !== false) process.exit(5);
+            if (!h.service) process.exit(6);
+            console.log("health shape ok:", JSON.stringify({
+              ok: h.ok, ready: h.ready, modelsPresent: h.modelsPresent,
+              fusionLoaded: h.fusionLoaded, printRerank: h.printRerank,
+              pipeline: h.pipeline, error: h.error
+            }));
+          '
+
+      - name: Container logs
+        if: ${{ always() }}
+        run: docker logs live-identity || true
