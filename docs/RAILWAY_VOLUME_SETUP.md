@@ -12,6 +12,39 @@ These files can be provided via:
 
 Rollback: the sidecar still loads the legacy single `TRAINED_MODEL_WEIGHTS` / `_CAT_*` path when fusion env is incomplete.
 
+## Railway service settings (`live-identity-openclip`)
+
+Create a **separate** Railway service for the sidecar (do not bake models into the API image). Configure it in the Railway dashboard — do **not** add `railway.json` / `railway.toml` (deprecated; new services cannot use them).
+
+| Setting | Value |
+|---|---|
+| Service name | `live-identity-openclip` |
+| Root directory | `services/live-identity-openclip` |
+| Builder | Dockerfile (`Dockerfile` in that root) |
+| Watch / deploy branch | `main` (or the branch Sean approves) |
+| Healthcheck path | `/health` |
+| Healthcheck timeout | ≥ 120 s (torch import on cold start) |
+| Public networking | off (private only) |
+| Internal port | `8080` (`PORT` / `LIVE_IDENTITY_PORT`) |
+| Volume mount | `/data/trained-model` |
+| Volume size | **2 GB** (ship bundle ≈ 830 MB + working space) |
+| Memory | ≥ 2 GB (fusion RSS ≈ 1.2–1.8 GB) |
+
+On the **API** service, point recognition at the private DNS name (Railway internal networking):
+
+```bash
+CARD_FLOW_LIVE_IDENTITY_OPENCLIP_URL=http://live-identity-openclip.railway.internal:8080
+```
+
+Optional shared secret (set the same value on both services; never commit it):
+
+```bash
+CARD_FLOW_LIVE_IDENTITY_OPENCLIP_TOKEN=<shared>
+LIVE_IDENTITY_TOKEN=<shared>
+```
+
+`/health` returns **HTTP 200** even when the ship bundle is not on the volume yet (`ok: false`, `modelsPresent: false`, `fusionLoaded: false`, `printRerank: false`, plus an `error` string). That lets the first deploy pass the healthcheck before you upload models. After upload + env vars, `/health` should report `ok: true`, `pipeline: "trained_dinov2_fusion"`, `printRerank: true`.
+
 ## Option 1: Railway Persistent Volume (Recommended)
 
 ### Step 1: Create Volume in Railway
