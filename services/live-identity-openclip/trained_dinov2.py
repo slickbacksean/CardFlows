@@ -140,8 +140,33 @@ class TrainedModel:
             embedding = self.head(features)  # (1, 384) L2-normalized
         return embedding.cpu().numpy().astype(np.float32)
 
-    def match(
+    def view_similarities(
         self, image: Image.Image
+    ) -> tuple[np.ndarray, dict[str, float]]:
+        """
+        Per-ID mean of full-card and art-crop cosines.
+
+        Scoring: 0.5 * (cat_full @ e_full + cat_art @ e_art)
+        Used by the three-model fusion path. Legacy match() is unchanged.
+        """
+        import time
+
+        timings: dict[str, float] = {}
+        start = time.perf_counter()
+        emb_full = self.embed(image, art_crop=False).reshape(-1)
+        timings["embedFullMs"] = round((time.perf_counter() - start) * 1000, 2)
+
+        start = time.perf_counter()
+        emb_art = self.embed(image, art_crop=True).reshape(-1)
+        timings["embedArtMs"] = round((time.perf_counter() - start) * 1000, 2)
+
+        start = time.perf_counter()
+        sim = 0.5 * (self.cat_full @ emb_full + self.cat_art @ emb_art)
+        timings["searchMs"] = round((time.perf_counter() - start) * 1000, 2)
+        return sim, timings
+
+    def match(
+        self, image: Image.Image, **_kwargs: Any
     ) -> tuple[list[dict[str, Any]], dict[str, float]]:
         """
         Match image against catalog.
@@ -149,27 +174,11 @@ class TrainedModel:
 
         Scoring: (query @ cat_full + query @ cat_art) / 2
         Name-pooled: max score per card name
+
+        Extra kwargs (name_tokens, collector_tokens, extra_frames) are ignored so
+        the legacy single-model path stays unchanged when serve.py passes OCR tokens.
         """
-        import time
-
-        timings = {}
-
-        # Embed full crop
-        start = time.perf_counter()
-        emb_full = self.embed(image, art_crop=False).reshape(-1)
-        timings["embedFullMs"] = round((time.perf_counter() - start) * 1000, 2)
-
-        # Embed art crop
-        start = time.perf_counter()
-        emb_art = self.embed(image, art_crop=True).reshape(-1)
-        timings["embedArtMs"] = round((time.perf_counter() - start) * 1000, 2)
-
-        # Compute similarities
-        start = time.perf_counter()
-        sim_full = self.cat_full @ emb_full
-        sim_art = self.cat_art @ emb_art
-        sim = (sim_full + sim_art) / 2  # Average of both views
-        timings["searchMs"] = round((time.perf_counter() - start) * 1000, 2)
+        sim, timings = self.view_similarities(image)
 
         # Name-pooled: max score per name (normalized like eval_b1.py)
         name_scores: dict[str, tuple[str, float]] = {}  # name -> (tcgdexId, score)

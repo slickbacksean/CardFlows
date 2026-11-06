@@ -1,7 +1,10 @@
 # PokeSniper livestream identity — trained DINOv2-S or OpenCLIP
 
-**Primary**: Trained DINOv2-S + SubCenterArcFace (when `TRAINED_MODEL_*` env vars set)  
-**Fallback**: OpenCLIP ViT-B/32 + HNSW cosine search
+**Primary (ship)**: three-model DINOv2 fusion `r18h×2 + d + e` when `TRAINED_MODEL_FUSION` and the H/D/E vars are set (`(2h+d+e)/4`, OCR boosts 0.15/0.10, accept 0.68, margin 0.02, optional printing rerank at `p>0.9`).  
+**Rollback**: single `TRAINED_MODEL_WEIGHTS` / `_CAT_*` (accept/margin unchanged).  
+**Fallback**: OpenCLIP ViT-B/32 + HNSW cosine search.
+
+Env vars: [docs/RELEASE_ENV.md](../../docs/RELEASE_ENV.md) (live identity sidecar) and [docs/RAILWAY_VOLUME_SETUP.md](../../docs/RAILWAY_VOLUME_SETUP.md) (upload `bundle/` to the volume; keep relative paths). Weights, catalogs, `fam.json`, and `hr_cat/` are not in this repo.
 
 OpenCLIP pipeline inspired by [t-sinclair2500/pokemon-scanner](https://github.com/t-sinclair2500/pokemon-scanner) (**MIT**).
 
@@ -91,6 +94,7 @@ CI stays on pHash fixtures / mocks. Fail soft: sidecar down → pHash (or uniden
 Run unit tests with tiny random model (no real weights needed):
 ```bash
 pytest test_trained_dinov2.py -v
+python test_ship_scanner.py   # fusion math, rerank p>0.9, missing-file fallback
 ```
 
 ## ONNX Export (Optional)
