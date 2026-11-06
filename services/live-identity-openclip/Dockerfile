@@ -29,13 +29,15 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-# OpenCV headless + hnswlib need a few system libs at runtime.
+# Runtime libs + build tools for hnswlib (compiled from source; purged below).
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
       ca-certificates \
       curl \
       libgomp1 \
       libglib2.0-0 \
+      build-essential \
+      python3-dev \
  && rm -rf /var/lib/apt/lists/* \
  && useradd --create-home --uid 10001 --shell /usr/sbin/nologin app
 
@@ -43,10 +45,14 @@ COPY requirements.txt /app/requirements.txt
 
 # Install CPU torch first so the requirements pin does not pull a CUDA wheel.
 # Drop pytest/onnx* — they are for local tests and scripts/export_onnx.py only.
+# Purge the C++ toolchain after hnswlib builds so the runtime image stays leaner.
 RUN pip install --index-url https://download.pytorch.org/whl/cpu \
       torch torchvision \
  && grep -vE '^(pytest|onnx($|>=|==)|onnxruntime)' /app/requirements.txt > /tmp/req-runtime.txt \
- && pip install -r /tmp/req-runtime.txt
+ && pip install -r /tmp/req-runtime.txt \
+ && apt-get update \
+ && apt-get purge -y --auto-remove build-essential python3-dev \
+ && rm -rf /var/lib/apt/lists/* /root/.cache /tmp/req-runtime.txt
 
 # Runtime code only — never copy models/, catalog/, or the ship bundle.
 COPY --chown=app:app \
