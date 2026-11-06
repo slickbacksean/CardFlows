@@ -94,6 +94,9 @@ jobs:
           apps/api/.venv/bin/python services/live-identity-openclip/scripts/test_warp.py
           apps/api/.venv/bin/python services/live-identity-openclip/scripts/eval_recorded_stream.py
 
+      - name: Ship scanner fusion + printing-rerank unit tests
+        run: apps/api/.venv/bin/python services/live-identity-openclip/test_ship_scanner.py
+
       - name: Real end-to-end photo grade
         run: pnpm --filter @cardflow/api test:grade-e2e
 

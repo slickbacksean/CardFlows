@@ -1,17 +1,19 @@
 """
-PokeSniper livestream identity sidecar: trained DINOv2-S or OpenCLIP.
+PokeSniper livestream identity sidecar: DINOv2 fusion, single DINOv2, or OpenCLIP.
 
-Primary: Trained DINOv2-S + SubCenterArcFace (when TRAINED_MODEL_* env vars set)
-Fallback: OpenCLIP ViT-B/32 + HNSW cosine search
+Primary (ship): r18h×2 + d + e fusion when TRAINED_MODEL_FUSION and H/D/E vars are set.
+Rollback:      single TRAINED_MODEL_WEIGHTS / _CAT_* (accept 0.68, margin 0.02 unchanged).
+Fallback:      OpenCLIP ViT-B/32 + HNSW cosine search.
 
-Env (trained model):
-  TRAINED_MODEL_WEIGHTS     Path or URL to b1_best.pt checkpoint
-  TRAINED_MODEL_CAT_FULL    Path or URL to cat_full_b1.npy
-  TRAINED_MODEL_CAT_ART     Path or URL to cat_art_b1.npy
-  TRAINED_MODEL_CAT_IDS     Path or URL to cat_ids.json
-  TRAINED_MODEL_ACCEPT      Similarity threshold (default: 0.68)
-  TRAINED_MODEL_MARGIN      Min margin (default: 0.02)
-  TRAINED_MODEL_TOPK        Top-K candidates (default: 5)
+Env (ship fusion): TRAINED_MODEL_FUSION, TRAINED_MODEL_{H,D,E}_WEIGHTS,
+  TRAINED_MODEL_{H,D,E}_CAT_FULL/_ART, TRAINED_MODEL_CAT_IDS,
+  TRAINED_MODEL_FUSION_WEIGHTS=2,1,1, TRAINED_MODEL_OCR_W=0.15,
+  TRAINED_MODEL_NUM_W=0.10, TRAINED_MODEL_ACCEPT=0.68, TRAINED_MODEL_MARGIN=0.02.
+
+Env (printing reranker): PRINT_RERANK_ENABLED, PRINT_RERANK_MODEL, PRINT_RERANK_FAM,
+  PRINT_RERANK_HR_CAT, PRINT_RERANK_THRESHOLD=0.9, PRINT_RERANK_TOPK_SAME_NAME=6.
+
+Env (legacy single-model): TRAINED_MODEL_WEIGHTS, _CAT_FULL, _CAT_ART, _CAT_IDS.
 
 Env (OpenCLIP fallback):
   LIVE_IDENTITY_INDEX       Directory with hnsw.bin + meta.json
@@ -47,6 +49,8 @@ from PIL import Image
 from orb_rerank import rerank_near_tie
 from warp import warp_card
 from trained_dinov2 import load_trained_model, TrainedModel
+from trained_dinov2_fusion import FusedTrainedModel, load_fused_model
+from printing_rerank import load_print_reranker, PrintReranker
 
 INDEX_DIR = Path(os.environ.get("LIVE_IDENTITY_INDEX", "")).expanduser()
 TOKEN = os.environ.get("LIVE_IDENTITY_TOKEN", "").strip()
@@ -76,7 +80,8 @@ _ready_error: str | None = "model not loaded"
 _dim = 512
 _match_ms: list[float] = []
 _MATCH_MS_CAP = 64
-_trained_model: TrainedModel | None = None
+_trained_model: TrainedModel | FusedTrainedModel | None = None
+_print_rerank: PrintReranker | None = None
 _pipeline: str = "unknown"
 
 
@@ -94,38 +99,68 @@ def _device() -> torch.device:
 DEVICE = _device()
 
 
+def _load_meta_names() -> tuple[dict[str, Any] | None, dict[str, str]]:
+  """Optional OpenCLIP meta.json names. Fusion can start without hnsw.bin."""
+  if not INDEX_DIR.is_dir():
+    return None, {}
+  meta_path = INDEX_DIR / "meta.json"
+  if not meta_path.is_file():
+    return None, {}
+  meta = json.loads(meta_path.read_text())
+  rows = meta.get("rows") if isinstance(meta, dict) else None
+  if not isinstance(rows, list) or not rows:
+    return meta if isinstance(meta, dict) else None, {}
+  names = {row["tcgdexId"]: row.get("name", "") for row in rows if isinstance(row, dict) and row.get("tcgdexId")}
+  return meta if isinstance(meta, dict) else None, names
+
+
+def _attach_reranker(card_names: dict[str, str]) -> None:
+  global _print_rerank
+  _print_rerank = load_print_reranker(card_names=card_names)
+  if _print_rerank is None:
+    print("[serve] printing reranker off or unavailable (fusion-only / skip)")
+
+
 def _load() -> None:
-  global _model, _preprocess, _index, _meta, _ready_error, _dim, _trained_model, _pipeline
+  global _model, _preprocess, _index, _meta, _ready_error, _dim, _trained_model, _pipeline, _print_rerank
   try:
-    # Load meta first (shared by both pipelines)
-    if not INDEX_DIR.is_dir():
-      _ready_error = "LIVE_IDENTITY_INDEX missing"
+    meta, card_names = _load_meta_names()
+    if meta and isinstance(meta.get("rows"), list) and meta["rows"]:
+      _meta = meta["rows"]
+
+    fused = load_fused_model(DEVICE, card_names)
+    if fused is not None:
+      _trained_model = fused
+      _pipeline = fused.pipeline
+      _ready_error = None
+      _attach_reranker(fused.card_names)
+      print(
+        f"[serve] Using DINOv2 fusion pipeline (accept={fused.accept}, margin={fused.margin}, "
+        f"n={fused.indexed}, rerank={_print_rerank is not None})"
+      )
       return
-    meta_path = INDEX_DIR / "meta.json"
-    if not meta_path.is_file():
-      _ready_error = "index meta.json missing"
-      return
-    meta = json.loads(meta_path.read_text())
-    rows = meta.get("rows") if isinstance(meta, dict) else None
-    if not isinstance(rows, list) or not rows:
-      _ready_error = "meta.json has no rows"
-      return
-    _meta = rows
-    
-    # Build card names dict for trained model
-    card_names = {row["tcgdexId"]: row.get("name", "") for row in rows}
-    
-    # Try trained model first
+
     trained = load_trained_model(DEVICE, card_names)
     if trained is not None:
       _trained_model = trained
       _pipeline = "trained_dinov2"
       _ready_error = None
+      _attach_reranker(card_names)
       print(f"[serve] Using trained DINOv2-S pipeline (accept={trained.accept}, margin={trained.margin})")
       return
-    
-    # Fall back to OpenCLIP
+
     print("[serve] Trained model not configured, falling back to OpenCLIP")
+    if not INDEX_DIR.is_dir():
+      _ready_error = "LIVE_IDENTITY_INDEX missing"
+      return
+    if meta is None:
+      _ready_error = "index meta.json missing"
+      return
+    rows = meta.get("rows") if isinstance(meta, dict) else None
+    if not isinstance(rows, list) or not rows:
+      _ready_error = "meta.json has no rows"
+      return
+    _meta = rows
     model, _, preprocess = open_clip.create_model_and_transforms(
       EMBED_MODEL, pretrained=EMBED_PRETRAINED, device=DEVICE
     )
@@ -197,15 +232,17 @@ def _embed(image: Image.Image) -> np.ndarray:
 @app.get("/health")
 def health() -> JSONResponse:
   if _trained_model:
+    fusion = isinstance(_trained_model, FusedTrainedModel)
     body = {
       "ok": _ready_error is None,
       "service": "cardflow-live-identity",
       "pipeline": _pipeline,
-      "model": "dinov2_s_subcenter_arcface",
+      "model": "dinov2_s_r18h2de" if fusion else "dinov2_s_subcenter_arcface",
       "device": str(DEVICE),
-      "indexed": len(_meta),
+      "indexed": getattr(_trained_model, "indexed", None) or len(getattr(_trained_model, "cat_ids", _meta)),
       "accept": _trained_model.accept,
       "margin": _trained_model.margin,
+      "printRerank": _print_rerank is not None,
       "orb": "not_applicable",
       "warp": WARP,
       "matchSamples": len(_match_ms),
@@ -345,12 +382,49 @@ def _name_hints(name: str | None, names: str | None) -> list[str]:
   return unique[:3]
 
 
+def _number_hints(number: str | None, numbers: str | None) -> list[str]:
+  hints: list[str] = []
+  if numbers:
+    hints.extend(part.strip() for part in numbers.replace(",", "\n").split("\n") if part.strip())
+  elif number and number.strip():
+    hints.append(number.strip())
+  unique: list[str] = []
+  for hint in hints:
+    if hint.lower() not in {item.lower() for item in unique}:
+      unique.append(hint)
+  return unique
+
+
+def _apply_print_rerank(
+  image: Image.Image,
+  candidates: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], dict[str, Any] | None]:
+  if _print_rerank is None or not candidates:
+    return candidates, None
+  pred = str(candidates[0].get("tcgdexId") or "")
+  if not pred:
+    return candidates, None
+  names = getattr(_trained_model, "card_names", {}) if _trained_model else {}
+  new_id, info = _print_rerank.maybe_override([image], pred, card_names=names)
+  if not new_id or new_id == pred:
+    return candidates, info
+  if isinstance(_trained_model, FusedTrainedModel):
+    return _trained_model.reorder_candidates(candidates, new_id), info
+  hit = next((c for c in candidates if c.get("tcgdexId") == new_id), None)
+  rest = [c for c in candidates if c.get("tcgdexId") != new_id]
+  if hit is None:
+    hit = {"tcgdexId": new_id, "name": names.get(new_id, ""), "similarity": candidates[0].get("similarity")}
+  return [hit, *rest], info
+
+
 @app.post("/v1/match")
 async def match(
   crop: UploadFile = File(...),
   name: str | None = Form(default=None),
   quad: str | None = Form(default=None),
   names: str | None = Form(default=None),
+  number: str | None = Form(default=None),
+  numbers: str | None = Form(default=None),
   authorization: str | None = Header(default=None),
   x_cardflow_token: str | None = Header(default=None, alias="X-CardFlow-Token"),
 ) -> JSONResponse:
@@ -379,9 +453,16 @@ async def match(
       warped = True
   started = time.perf_counter()
   
-  # Use trained model if available
+  # Use trained model if available (fusion or legacy single)
   if _trained_model:
-    candidates, embed_timings = _trained_model.match(image)
+    name_tokens = _name_hints(name, names)
+    collector_tokens = _number_hints(number, numbers)
+    candidates, embed_timings = _trained_model.match(
+      image, name_tokens=name_tokens, collector_tokens=collector_tokens
+    )
+    rerank_started = time.perf_counter()
+    candidates, _rerank_info = _apply_print_rerank(image, candidates)
+    rerank_ms = round((time.perf_counter() - rerank_started) * 1000, 2)
     accept_at = _trained_model.accept
     margin_threshold = _trained_model.margin
     orb_mode = "not_applicable"
@@ -392,10 +473,15 @@ async def match(
     runner_up = float(candidates[1]["similarity"]) if len(candidates) > 1 else 0.0
     margin = round(float(top["similarity"]) - runner_up, 4) if top else None
     
-    # Simple accept logic for trained model
+    # Exact-ID accept for fusion (last boosted vector); name-pooled for legacy.
     accepted = False
     reason = "below_threshold"
-    if top and margin is not None:
+    if isinstance(_trained_model, FusedTrainedModel) and _trained_model.last_boosted is not None:
+      accepted, reason, sim, margin = _trained_model.accepted_from_last()
+      if top is not None and sim is not None:
+        top = {**top, "similarity": sim}
+        candidates[0] = top
+    elif top and margin is not None:
       if float(top["similarity"]) >= accept_at and margin >= margin_threshold:
         accepted = True
         reason = "accepted"
@@ -410,6 +496,7 @@ async def match(
       "warpMs": ms(decoded, started),
       **embed_timings,
       "orbMs": 0.0,
+      "rerankMs": rerank_ms,
       "totalMs": ms(received, finished),
     }
     return JSONResponse(

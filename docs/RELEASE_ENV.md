@@ -70,6 +70,55 @@ A new profile must set its own `environment` and its own variable. Missing or lo
 - Apps pick it up on the next `/v1/status` poll (every `STATUS_POLL_MS`) or immediately on the next livestream call (503 `feature_disabled`). No app update needed.
 - These 503s carry `x-cardflow-feature-disabled` and are excluded from 5xx error-spike alerts and mobile Sentry.
 
+## Live identity sidecar (DINOv2 fusion ship config)
+
+The `live-identity-openclip` sidecar prefers **three-model fusion** when the H/D/E vars are complete, then the **legacy single** `TRAINED_MODEL_*` path, then OpenCLIP. Model weights, catalogs, `fam.json`, and `hr_cat/` are **not in git** — upload the ship `bundle/` to the Railway volume and keep its relative paths. See [RAILWAY_VOLUME_SETUP.md](./RAILWAY_VOLUME_SETUP.md).
+
+Loading order:
+1. `TRAINED_MODEL_FUSION` set **and** all H/D/E weight + catalog paths + `TRAINED_MODEL_CAT_IDS` exist → `r18h×2 + d + e` fusion (refuse start if catalog IDs ≠ 20339 or npy shape mismatches; do not fuse 2/3 models if one checkpoint is corrupt).
+2. Else if legacy `TRAINED_MODEL_WEIGHTS` / `_CAT_FULL` / `_CAT_ART` / `_CAT_IDS` are complete → single DINOv2 (accept **0.68**, margin **0.02**, unchanged).
+3. Else → OpenCLIP HNSW (`LIVE_IDENTITY_*`).
+
+`TRAINED_MODEL_FUSION=1` with only `TRAINED_MODEL_WEIGHTS` is **not** fusion.
+
+### Fusion (ship)
+
+| Variable | Meaning | Ship value |
+|---|---|---|
+| `TRAINED_MODEL_FUSION` | Enable multi-model fusion | `1` or `r18h2de` |
+| `TRAINED_MODEL_H_WEIGHTS` | r18h checkpoint | `bundle/models/r18h/b1_best.pt` |
+| `TRAINED_MODEL_D_WEIGHTS` | d checkpoint | `bundle/models/d/b1_best.pt` |
+| `TRAINED_MODEL_E_WEIGHTS` | e checkpoint | `bundle/models/e/b1_best.pt` |
+| `TRAINED_MODEL_H_CAT_FULL` / `_ART` | h full/art catalogs | `bundle/catalog/h/cat_*_b1.npy` |
+| `TRAINED_MODEL_D_CAT_FULL` / `_ART` | d catalogs | `bundle/catalog/d/…` |
+| `TRAINED_MODEL_E_CAT_FULL` / `_ART` | e catalogs | `bundle/catalog/e/…` |
+| `TRAINED_MODEL_CAT_IDS` | shared 20339-ID list | `bundle/catalog/cat_ids.json` |
+| `TRAINED_MODEL_CATX_NAMES` | extra id→name (optional; else `catalog/catx_names.json` next to `cat_ids.json`) | `bundle/catalog/catx_names.json` |
+| `TRAINED_MODEL_FUSION_WEIGHTS` | h,d,e fusion weights | `2,1,1` → `(2h+d+e)/4` |
+| `TRAINED_MODEL_ACCEPT` | cosine accept (post-OCR) | `0.68` |
+| `TRAINED_MODEL_MARGIN` | top1−top2 margin | `0.02` |
+| `TRAINED_MODEL_OCR_W` | name-OCR additive boost | `0.15` |
+| `TRAINED_MODEL_NUM_W` | collector-number OCR boost | `0.10` |
+
+Pass OCR tokens on `POST /v1/match` as `name`/`names` and `number`/`numbers`. Exact-ID pick (not name-pooled).
+
+### Printing reranker (r21rr)
+
+| Variable | Meaning | Ship value |
+|---|---|---|
+| `PRINT_RERANK_ENABLED` | master switch | `1` |
+| `PRINT_RERANK_MODEL` | frozen logistic JSON | `bundle/reranker/model_frozen.json` |
+| `PRINT_RERANK_FAM` | same-name families | `bundle/reranker/fam.json` |
+| `PRINT_RERANK_HR_CAT` | `{tcgdexId}.jpg` scans | `bundle/reranker/hr_cat` |
+| `PRINT_RERANK_THRESHOLD` | override only if `p > t` | `0.9` |
+| `PRINT_RERANK_TOPK_SAME_NAME` | family candidates | `6` |
+
+If the reranker model/hr_cat is missing, the sidecar serves fusion-only (warning, no crash). A throw on a frame keeps the fusion pred.
+
+### Legacy single-model (rollback)
+
+Keep `TRAINED_MODEL_WEIGHTS` / `_CAT_FULL` / `_ART` / `_CAT_IDS`. Do **not** change accept/margin defaults for this path (`0.68` / `0.02`).
+
 ## OTA updates (EAS Update): configured, needs a rebuild
 EAS Update config is in place (Oct 20), but OTA updates don't work until a new native build includes `expo-updates`:
 - `app.json`: `runtimeVersion: { "policy": "fingerprint" }` (Dev Ops: a native change gets a new runtime automatically) and `updates.url` (`https://u.expo.dev/<EAS project id>`).

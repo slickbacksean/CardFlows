@@ -2,15 +2,15 @@
 
 ## Overview
 
-The trained DINOv2-S model requires ~400-500 MB of files:
-- **b1_best.pt**: PyTorch checkpoint (~148 MB)
-- **cat_full_b1.npy**: Full-card catalog embeddings (~50-100 MB)
-- **cat_art_b1.npy**: Art-crop catalog embeddings (~50-100 MB)
-- **cat_ids.json**: TCGdex ID mapping (~100 KB)
+**Ship config** is three-model DINOv2 fusion (`r18h×2 + d + e`) plus the extended 20339-ID catalog and optional printing reranker. Upload the whole ship `bundle/` to the volume and **keep relative paths stable**. Weights, catalogs, `fam.json`, and `hr_cat/` are not in git.
+
+Approximate disk: 3 × 148 MB weights + 6 × 16 MB catalogs + 284 MB `hr_cat` ≈ **830 MB**. Use a **2 GB** volume.
 
 These files can be provided via:
 1. **Railway Persistent Volume** (recommended for faster cold starts)
 2. **Public URL** (auto-downloaded on startup, cached locally)
+
+Rollback: the sidecar still loads the legacy single `TRAINED_MODEL_WEIGHTS` / `_CAT_*` path when fusion env is incomplete.
 
 ## Option 1: Railway Persistent Volume (Recommended)
 
@@ -21,9 +21,34 @@ These files can be provided via:
 3. Click "Variables" tab
 4. Click "New Volume"
 5. Set mount path: `/data/trained-model`
-6. Size: 1 GB (plenty of space for model + embeddings)
+6. Size: **2 GB** (ship bundle ≈ 830 MB plus working space)
 
-### Step 2: Upload Files to Volume
+### Step 2: Upload the ship bundle
+
+Keep this relative layout (do not flatten it):
+
+```
+/data/trained-model/bundle/
+  MANIFEST.json
+  SIZES.tsv
+  models/
+    r18h/b1_best.pt
+    d/b1_best.pt
+    e/b1_best.pt
+  catalog/
+    cat_ids.json
+    catx_names.json
+    h/cat_full_b1.npy
+    h/cat_art_b1.npy
+    d/cat_full_b1.npy
+    d/cat_art_b1.npy
+    e/cat_full_b1.npy
+    e/cat_art_b1.npy
+  reranker/
+    model_frozen.json
+    fam.json
+    hr_cat/*.jpg
+```
 
 Railway volumes are attached to running services. Upload files via:
 
@@ -38,13 +63,11 @@ railway login
 # Link to your project
 railway link
 
-# Upload files (from your local machine)
+# Copy the local ship bundle onto the volume (keep relative paths)
 railway run bash -c "
-  mkdir -p /data/trained-model && \
-  curl -L -o /data/trained-model/b1_best.pt https://your-s3-bucket.../b1_best.pt && \
-  curl -L -o /data/trained-model/cat_full_b1.npy https://your-s3-bucket.../cat_full_b1.npy && \
-  curl -L -o /data/trained-model/cat_art_b1.npy https://your-s3-bucket.../cat_art_b1.npy && \
-  curl -L -o /data/trained-model/cat_ids.json https://your-s3-bucket.../cat_ids.json
+  mkdir -p /data/trained-model/bundle && \
+  # from a machine that already has ship1105/bundle/:
+  cp -a /workspace/ship1105/bundle/. /data/trained-model/bundle/
 "
 ```
 
@@ -77,18 +100,42 @@ async def upload(filename: str, file: UploadFile = File(...)):
 
 ### Step 3: Set Environment Variables
 
-In Railway service environment variables:
-```bash
-TRAINED_MODEL_WEIGHTS=/data/trained-model/b1_best.pt
-TRAINED_MODEL_CAT_FULL=/data/trained-model/cat_full_b1.npy
-TRAINED_MODEL_CAT_ART=/data/trained-model/cat_art_b1.npy
-TRAINED_MODEL_CAT_IDS=/data/trained-model/cat_ids.json
+In Railway service environment variables. Paths are relative to the uploaded `bundle/`:
 
-# Optional tuning
+```bash
+BUNDLE=/data/trained-model/bundle
+
+# Ship fusion (r18h×2 + d + e)
+TRAINED_MODEL_FUSION=r18h2de
+TRAINED_MODEL_H_WEIGHTS=$BUNDLE/models/r18h/b1_best.pt
+TRAINED_MODEL_D_WEIGHTS=$BUNDLE/models/d/b1_best.pt
+TRAINED_MODEL_E_WEIGHTS=$BUNDLE/models/e/b1_best.pt
+TRAINED_MODEL_H_CAT_FULL=$BUNDLE/catalog/h/cat_full_b1.npy
+TRAINED_MODEL_H_CAT_ART=$BUNDLE/catalog/h/cat_art_b1.npy
+TRAINED_MODEL_D_CAT_FULL=$BUNDLE/catalog/d/cat_full_b1.npy
+TRAINED_MODEL_D_CAT_ART=$BUNDLE/catalog/d/cat_art_b1.npy
+TRAINED_MODEL_E_CAT_FULL=$BUNDLE/catalog/e/cat_full_b1.npy
+TRAINED_MODEL_E_CAT_ART=$BUNDLE/catalog/e/cat_art_b1.npy
+TRAINED_MODEL_CAT_IDS=$BUNDLE/catalog/cat_ids.json
+TRAINED_MODEL_CATX_NAMES=$BUNDLE/catalog/catx_names.json
+TRAINED_MODEL_FUSION_WEIGHTS=2,1,1
 TRAINED_MODEL_ACCEPT=0.68
 TRAINED_MODEL_MARGIN=0.02
-TRAINED_MODEL_TOPK=5
+TRAINED_MODEL_OCR_W=0.15
+TRAINED_MODEL_NUM_W=0.10
+
+# Printing reranker (override only when p > 0.9)
+PRINT_RERANK_ENABLED=1
+PRINT_RERANK_MODEL=$BUNDLE/reranker/model_frozen.json
+PRINT_RERANK_FAM=$BUNDLE/reranker/fam.json
+PRINT_RERANK_HR_CAT=$BUNDLE/reranker/hr_cat
+PRINT_RERANK_THRESHOLD=0.9
+PRINT_RERANK_TOPK_SAME_NAME=6
 ```
+
+Railway does not expand `$BUNDLE` in the dashboard — paste the full `/data/trained-model/bundle/...` paths.
+
+**Rollback (legacy single model):** leave `TRAINED_MODEL_FUSION` unset and point the original four vars at one checkpoint + catalog pair. Accept/margin stay `0.68` / `0.02`.
 
 ### Step 4: Verify
 
@@ -97,15 +144,18 @@ After deployment, check `/health`:
 curl https://your-railway-url/health
 ```
 
-Should return:
+Ship fusion should return:
 ```json
 {
   "ok": true,
-  "pipeline": "trained_dinov2",
-  "model": "dinov2_s_subcenter_arcface",
-  "indexed": 2000
+  "pipeline": "trained_dinov2_fusion",
+  "model": "dinov2_s_r18h2de",
+  "indexed": 20339,
+  "printRerank": true
 }
 ```
+
+Legacy single-model rollback reports `"pipeline": "trained_dinov2"`.
 
 ## Option 2: Public URLs (Auto-Download)
 
@@ -142,21 +192,27 @@ Only use if you deploy rarely and want guaranteed availability.
 
 ## Fallback to OpenCLIP
 
-If trained model files are not available or fail to load, the sidecar automatically falls back to OpenCLIP. Check `/health` to see which pipeline is active:
+If fusion env is incomplete, the sidecar falls back to the legacy single `TRAINED_MODEL_*` path when those four files exist. If that is also incomplete, it uses OpenCLIP. Check `/health`:
 
 ```json
 {
-  "pipeline": "openclip_hnsw"  // Fallback active
+  "pipeline": "trained_dinov2_fusion"  // ship fusion
 }
 ```
-
-or
 
 ```json
 {
-  "pipeline": "trained_dinov2"  // Trained model active
+  "pipeline": "trained_dinov2"  // legacy single-model rollback
 }
 ```
+
+```json
+{
+  "pipeline": "openclip_hnsw"  // OpenCLIP fallback
+}
+```
+
+A corrupt h/d/e weight file **refuses fusion** (no 2/3 partial fuse) and then follows the same fallback. Missing reranker files keep fusion-only (warning, no crash). Catalog ID count ≠ 20339 or npy shape mismatch refuses fusion start.
 
 ## Troubleshooting
 
@@ -164,7 +220,7 @@ or
 
 Check:
 1. Volume is mounted at `/data/trained-model`
-2. Files exist: `ls -lh /data/trained-model/`
+2. Bundle exists: `ls -lh /data/trained-model/bundle/models/r18h /data/trained-model/bundle/catalog`
 3. Permissions are readable
 4. Env vars point to correct paths
 
@@ -185,7 +241,7 @@ If using URLs:
 
 ### Out of Memory
 
-The trained model needs ~500-700 MB RAM. If OOM:
+Three fusion models on CPU need about **1.2–1.8 GB** RSS. A single-model rollback is ~500–700 MB. If OOM:
 1. Upgrade Railway plan (Starter → Pro)
 2. Or use ONNX export (slightly smaller memory footprint)
 3. Or filter catalog to fewer cards

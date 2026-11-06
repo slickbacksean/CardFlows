@@ -6,3 +6,13 @@ live-identity.pid
 live-identity.log
 build.pid
 build-*.log
+.cache/
+# Ship bundle (weights, catalogs, fam.json, hr_cat) lives on the Railway volume.
+# Relative bundle paths stay stable; do not commit these artifacts.
+models/
+catalog/
+*.pt
+cat_full*.npy
+cat_art*.npy
+cat_ids.json
+catx_names.json
