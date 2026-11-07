@@ -18,7 +18,7 @@ import { colors } from "@/lib/theme";
 type AppTabBarProps = Parameters<NonNullable<ComponentProps<typeof Tabs>["tabBar"]>>[0];
 
 const LEFT_TAB_NAMES = ["collection", "shop"];
-const RIGHT_TAB_NAMES = ["grading", "community"];
+const RIGHT_TAB_NAMES = ["trending", "community"];
 
 function routesByName(
   routes: AppTabBarProps["state"]["routes"],
@@ -42,6 +42,9 @@ export function AppTabBar({ state, descriptors, navigation, insets }: AppTabBarP
   function renderTab(route: (typeof state.routes)[number]) {
     const index = state.routes.findIndex((item) => item.key === route.key);
     const { options } = descriptors[route.key];
+    // Expo Router hides a tab with `href: null`; React Navigation's tab-bar
+    // options type only allows `href?: string`, so read it through a narrow cast.
+    if ((options as { href?: string | null }).href === null) return null;
     const focused = state.index === index;
     const color = focused ? colors.accent : colors.muted;
     const icon = options.tabBarIcon?.({ focused, color, size: TAB_GLYPH_SIZE });

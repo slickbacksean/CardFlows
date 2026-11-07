@@ -379,6 +379,14 @@ export const SCREEN_EMPTY_COPY = {
   gradePrepareDone: { title: "No copies left to prepare", body: "Copies you've moved are under Submitted or Returned." },
   gradeSubmitted: { title: "Nothing submitted", body: "Prepare a purchased copy first." },
   gradeReturned: { title: "Nothing returned yet", body: "Copies you mark Returned show up here." },
+  trending: {
+    title: "Nothing trending yet",
+    body: "Price snapshots and PokeSniper activity will show up here once the daily job has run.",
+  },
+  trendingDisabled: {
+    title: "Trending is off",
+    body: "This tab is off until PokeSniper turns it on.",
+  },
 } as const;
 
 /** Screen-reader labels for the loading skeletons. */
@@ -387,6 +395,7 @@ export const SCREEN_LOADING_LABELS = {
   grade: "Loading your copies",
   settings: "Checking connection",
   livePage: "Loading the live page",
+  trending: "Loading trending cards",
 } as const;
 
 /** What each main screen calls its content in the generic error title. */
@@ -394,4 +403,5 @@ export const SCREEN_ERROR_WHAT = {
   collection: COLLECTION_DESTINATION_NAME,
   grade: "your copies",
   livePage: "the live page",
+  trending: "trending cards",
 } as const;

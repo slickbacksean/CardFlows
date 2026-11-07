@@ -1,4 +1,4 @@
-import { STATUS_POLL_MS, livestreamEnabledFromStatus, gradingEnabledFromStatus } from "@cardflow/shared";
+import { STATUS_POLL_MS, livestreamEnabledFromStatus, gradingEnabledFromStatus, trendingEnabledFromStatus } from "@cardflow/shared";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useSyncExternalStore } from "react";
 import { getStatus } from "./api";
@@ -93,5 +93,48 @@ export function useGradingEnabled(): boolean {
     if (data) setGradingFromStatus(gradingEnabledFromStatus(data));
   }, [data]);
   const disabled = useSyncExternalStore(subscribeGrading, isGradingDisabledNow, isGradingDisabledNow);
+  return !disabled;
+}
+
+/**
+ * Trending remote kill switch. Source of truth is GET /v1/status `features.trending`.
+ * Defaults to off (safe default when the server doesn't send the flag).
+ */
+let trendingDisabledByServer = true;
+
+const trendingListeners = new Set<() => void>();
+
+function emitTrending() {
+  for (const l of trendingListeners) l();
+}
+
+function setTrendingFromStatus(enabled: boolean) {
+  if (trendingDisabledByServer === !enabled) return;
+  trendingDisabledByServer = !enabled;
+  emitTrending();
+}
+
+function subscribeTrending(listener: () => void) {
+  trendingListeners.add(listener);
+  return () => trendingListeners.delete(listener);
+}
+
+export function isTrendingDisabledNow(): boolean {
+  return trendingDisabledByServer;
+}
+
+/** True only when the server has explicitly turned Trending on. Shares the ["status"] query. */
+export function useTrendingEnabled(): boolean {
+  const { data } = useQuery({
+    queryKey: ["status"],
+    queryFn: getStatus,
+    refetchInterval: STATUS_POLL_MS,
+    staleTime: STATUS_POLL_MS / 2,
+    retry: false,
+  });
+  useEffect(() => {
+    if (data) setTrendingFromStatus(trendingEnabledFromStatus(data));
+  }, [data]);
+  const disabled = useSyncExternalStore(subscribeTrending, isTrendingDisabledNow, isTrendingDisabledNow);
   return !disabled;
 }

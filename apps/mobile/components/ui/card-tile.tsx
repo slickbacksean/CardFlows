@@ -59,7 +59,7 @@ export function CardTile({
       accessibilityLabel={[
         name,
         numberLine,
-        statusLabel,
+        intent ? statusLabel : null,
         valueLabel,
         detailsNeeded ? "Details needed" : null,
         showDraft ? "Draft" : null,

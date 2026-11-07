@@ -70,6 +70,24 @@ A new profile must set its own `environment` and its own variable. Missing or lo
 - Apps pick it up on the next `/v1/status` poll (every `STATUS_POLL_MS`) or immediately on the next livestream call (503 `feature_disabled`). No app update needed.
 - These 503s carry `x-cardflow-feature-disabled` and are excluded from 5xx error-spike alerts and mobile Sentry.
 
+## Trending tab (replaces Grade in the tab bar)
+Grade stays in the codebase (`/v1/grade/*`, `/v1/grading`, `grading.tsx`) but is hidden from the tab bar. Trending is off until Sean turns it on.
+
+| Variable | Default | What it does |
+|---|---|---|
+| `CARD_FLOW_TRENDING_ENABLED` | **off** | API `GET /v1/trending` + `features.trending` on `GET /v1/status`. Apps show the Trending tab only when this is `1` / `true` / `on` / `yes`. Redeploy/restart the API to apply it. |
+| `CARD_FLOW_TRENDING_SNAPSHOT_ENABLED` | off, unless Trending is on | In-process daily pokemontcg.io price snapshot. Turn this on **about 8 days before** the tab so 7-day movers have history. |
+| `CARD_FLOW_TRENDING_SNAPSHOT_INTERVAL_MS` | `86400000` (24h) | How often the API process re-runs the snapshot. Skips if a successful run already finished today (or within 20h). |
+| `POKEMONTCG_API_KEY` | unset | Optional `X-Api-Key` for api.pokemontcg.io (20,000 req/day vs 1,000 without). Server-only; never put this on the phone or in logs. |
+
+**Job schedule**
+- In-process: on API boot (if the snapshot flag is on) then every 24h, with a 20h minimum gap so a restart does not double-fetch.
+- External cron (recommended on Railway): `0 6 * * *` UTC → `POST /ops/trending/snapshot` with `Authorization: Bearer $CARD_FLOW_OPS_TOKEN`. Add `?force=1` to re-run the same UTC day. A full catalog pass is ~80 pages of 250 (`select=id,name,number,set,tcgplayer,images`).
+- Snapshots older than 90 days are deleted.
+- Unmatched pokemontcg.io ids are stored in `pokemon_tcg_id_map` (`mapping_status=unmatched`) and omitted from the tab. See [CARD_ID_MAPPING_PLAN.md](./CARD_ID_MAPPING_PLAN.md) § pokemontcg.io.
+
+The client has **no** `EXPO_PUBLIC_CARD_FLOW_TRENDING_*` variable — same pattern as grading: `useTrendingEnabled()` reads `/v1/status`.
+
 ## Live identity sidecar (DINOv2 fusion ship config)
 
 The `live-identity-openclip` sidecar prefers **three-model fusion** when the H/D/E vars are complete, then the **legacy single** `TRAINED_MODEL_*` path, then OpenCLIP. Model weights, catalogs, `fam.json`, and `hr_cat/` are **not in git** — upload the ship `bundle/` to the Railway volume and keep its relative paths. See [RAILWAY_VOLUME_SETUP.md](./RAILWAY_VOLUME_SETUP.md).

@@ -1,4 +1,4 @@
-import { FEATURE_DISABLED_CODE, FEATURE_DISABLED_HEADER, featureDisabledBody, gradingEnabledFromEnv, GRADING_DISABLED_COPY, livestreamEnabledFromEnv } from "@cardflow/shared";
+import { FEATURE_DISABLED_CODE, FEATURE_DISABLED_HEADER, featureDisabledBody, gradingEnabledFromEnv, GRADING_DISABLED_COPY, livestreamEnabledFromEnv, trendingEnabledFromEnv } from "@cardflow/shared";
 import { buildDexSet, dexOwnedCountsBySet, type DexCatalogCard, type DexSetSummary, type TcgdexSetBrief } from "@cardflow/shared";
 import { createHash, randomBytes, randomInt, timingSafeEqual } from "node:crypto";
 import path from "node:path";
@@ -199,6 +199,9 @@ import { classifyTrainingLabelSource } from "@cardflow/shared";
 import { isMemorySqlitePath } from "./db/migrate";
 import { isAdmin } from "./admin-auth";
 import { registerStatusRoutes } from "./routes/status";
+import { registerTrendingRoutes } from "./routes/trending";
+import { runPokemonTcgSnapshot } from "./pokemon-tcg-snapshot-job";
+import type { SqliteStorePort } from "./sqlite-store";
 import { registerSalesRoutes } from "./routes/sales";
 import { premiumRequiredBody, recordGradeEstimate, registerGradeHistoryRoutes } from "./routes/grade-history";
 import {
@@ -563,6 +566,13 @@ export interface CreateAppOptions {
    * read per request. Off: grading routes answer 503 feature_disabled; /v1/status reports it.
    */
   gradingEnabled?: () => boolean;
+  /**
+   * Trending remote kill switch. Defaults to `CARD_FLOW_TRENDING_ENABLED` (off unless 1/true/on/yes).
+   * Off: GET /v1/trending answers 503 feature_disabled; /v1/status reports it.
+   */
+  trendingEnabled?: () => boolean;
+  /** Tests inject a mock fetch for the pokemontcg.io snapshot job. */
+  pokemonTcgFetch?: typeof fetch;
   /** YOLO on livestream frames. Empty until the AGPL flag and weights file are both set. */
   liveVideoObb?: () => ObbDetector | null;
   /** Prepare photo-estimate provider. Tests default to mock; flag off injects unavailable. */
@@ -1228,6 +1238,8 @@ export function createApp(
     options.livestreamEnabled ?? (() => livestreamEnabledFromEnv(process.env.CARD_FLOW_LIVESTREAM_ENABLED));
   const gradingEnabled =
     options.gradingEnabled ?? (() => gradingEnabledFromEnv(process.env.CARD_FLOW_GRADING_ENABLED));
+  const trendingEnabled =
+    options.trendingEnabled ?? (() => trendingEnabledFromEnv(process.env.CARD_FLOW_TRENDING_ENABLED));
   // Policy Reviewer (Oct 20): remote off switch for Live Scan, ahead of auth and body parsing.
   app.use("/v1/livestream/*", async (c, next) => {
     if (!livestreamEnabled()) {
@@ -1250,6 +1262,14 @@ export function createApp(
   app.use("/v1/grading/*", gradingGate);
   app.use("/v1/grade/*", gradingGate);
   app.use("/v1/inventory/:inventoryItemId/grade-*", gradingGate);
+
+  app.use("/v1/trending", async (c, next) => {
+    if (!trendingEnabled()) {
+      c.header(FEATURE_DISABLED_HEADER, "trending");
+      return c.json(featureDisabledBody("trending"), 503);
+    }
+    return next();
+  });
 
   app.use("/v1/*", async (c, next) => {
     if (c.req.method === "GET" || c.req.method === "HEAD") return next();
@@ -1493,7 +1513,7 @@ export function createApp(
 
   registerStatusRoutes(app, {
     cacheMs: options.statusCacheMs,
-    features: () => ({ livestream: livestreamEnabled(), grading: gradingEnabled() }),
+    features: () => ({ livestream: livestreamEnabled(), grading: gradingEnabled(), trending: trendingEnabled() }),
     inputs: async () => {
       const engine = gradeEngineProbe ? await boundedProbe(gradeEngineProbe) : null;
       return {
@@ -1504,6 +1524,22 @@ export function createApp(
         opsMessage: process.env.CARD_FLOW_STATUS_MESSAGE ?? null,
       };
     },
+  });
+
+  const sqliteForTrending = "db" in store ? (store as SqliteStorePort) : null;
+  registerTrendingRoutes(app, {
+    trendingEnabled,
+    sqliteStore: sqliteForTrending,
+    runSnapshot: sqliteForTrending
+      ? (force) =>
+          runPokemonTcgSnapshot({
+            store: sqliteForTrending,
+            force,
+            fetchImpl: options.pokemonTcgFetch,
+          })
+      : undefined,
+    opsToken: opsToken ?? null,
+    timingSafeEqualString,
   });
 
   app.get("/v1/catalog/search", async (c) => {

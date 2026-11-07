@@ -204,6 +204,7 @@ describe("UX review: data, stale banner, slow loading", () => {
     for (const [file, kind] of [
       ["app/(tabs)/collection.tsx", 'kind="prices"'],
       ["app/(tabs)/grading.tsx", "<StaleBanner"],
+      ["app/(tabs)/trending.tsx", 'kind="prices"'],
     ] as const) {
       const source = read(file);
       expect(source, file).toContain("screenDataState(");
@@ -331,6 +332,10 @@ describe("P5 screen states: every main screen uses the shared component", () => 
     Grade: {
       file: "app/(tabs)/grading.tsx",
       needs: ["<ScreenError", "<ScreenLoading", "<ScreenEmpty", "<InlineError", "actionErrorMessage("],
+    },
+    Trending: {
+      file: "app/(tabs)/trending.tsx",
+      needs: ["<ScreenError", "<ScreenLoading", "<ScreenEmpty", "actionErrorMessage("],
     },
     MyDEX: {
       file: "app/(tabs)/collection.tsx",

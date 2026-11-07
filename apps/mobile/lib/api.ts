@@ -314,8 +314,11 @@ async function request<T>(
       (extra as Error & { signupRequired?: SignupReason }).signupRequired = reason;
       notifySignupRequired(reason);
     }
-    // Live Scan remote kill switch: any 503 feature_disabled flips the app's flag right away.
-    if (response.status === 503 && body.code === FEATURE_DISABLED_CODE) markLivestreamDisabled();
+    // Live Scan remote kill switch: a livestream 503 feature_disabled flips the app's flag right away.
+    const feature = (data as { feature?: unknown }).feature;
+    if (response.status === 503 && body.code === FEATURE_DISABLED_CODE && feature === "livestream") {
+      markLivestreamDisabled();
+    }
     throw extra;
   }
   return data;
@@ -1015,6 +1018,10 @@ export function getDraftClipboard(draftId: string) {
 /** P1-21 status banners. */
 export function getStatus() {
   return callApi(apiContract.getStatus);
+}
+
+export function getTrending(window: "24h" | "7d" = "7d", limit = 20) {
+  return callApi(apiContract.getTrending, { query: { window, limit: String(limit) } });
 }
 
 export function getHealth() {

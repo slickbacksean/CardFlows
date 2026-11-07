@@ -1,3 +1,8 @@
+/**
+ * Hidden from the tab bar (Trending replaced it). Deep links and
+ * CARD_FLOW_GRADING_ENABLED still reach this screen; /v1/grade/* and the
+ * Prepare / Submitted / Returned pipeline stay in the API.
+ */
 import {
   canMarkSubmittedCopyReturned,
   canMovePurchasedCopyToSubmitted,

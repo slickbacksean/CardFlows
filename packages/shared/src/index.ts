@@ -891,5 +891,7 @@ export * from "./scan-quota";
 export * from "./dex";
 export * from "./terms";
 export * from "./livestream-kill-switch";
+export * from "./trending";
+export * from "./pokemon-tcg-map";
 export * from "./sentry-release";
 export * from "./training-capture";
