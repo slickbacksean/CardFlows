@@ -1125,6 +1125,66 @@ export const trainingImages = sqliteTable(
   ],
 );
 
+/**
+ * pokemontcg.io card id → TCGdex catalog id. Unmatched rows stay here for ops
+ * (counts + unmatched_reason) and are omitted from the Trending API.
+ */
+export const pokemonTcgIdMap = sqliteTable(
+  "pokemon_tcg_id_map",
+  {
+    pokemontcgCardId: text("pokemontcg_card_id").primaryKey(),
+    tcgdexId: text("tcgdex_id"),
+    mappingStatus: text("mapping_status").notNull(),
+    mappingMethod: text("mapping_method").notNull(),
+    setId: text("set_id"),
+    setName: text("set_name"),
+    number: text("number"),
+    name: text("name"),
+    imageUrl: text("image_url"),
+    unmatchedReason: text("unmatched_reason"),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (table) => [
+    index("pokemon_tcg_id_map_tcgdex_idx").on(table.tcgdexId),
+    check("pokemon_tcg_id_map_status_chk", sql`${table.mappingStatus} in ('matched', 'unmatched')`),
+  ],
+);
+
+/**
+ * Daily market prices from pokemontcg.io `tcgplayer.prices.*.market`.
+ * One row per card + UTC date + finish. Nothing else.
+ */
+export const pokemonTcgPriceSnapshots = sqliteTable(
+  "pokemon_tcg_price_snapshots",
+  {
+    pokemontcgCardId: text("pokemontcg_card_id").notNull(),
+    snapshotDate: text("snapshot_date").notNull(),
+    variant: text("variant").notNull(),
+    marketPriceCents: integer("market_price_cents").notNull(),
+    tcgplayerUpdatedAt: text("tcgplayer_updated_at"),
+  },
+  (table) => [
+    primaryKey({ columns: [table.pokemontcgCardId, table.snapshotDate, table.variant] }),
+    index("pokemon_tcg_price_snapshots_date_idx").on(table.snapshotDate),
+  ],
+);
+
+/** One row per snapshot job run (success / skip / fail). Used for "prices as of". */
+export const pokemonTcgSnapshotRuns = sqliteTable("pokemon_tcg_snapshot_runs", {
+  runId: text("run_id").primaryKey(),
+  startedAt: text("started_at").notNull(),
+  finishedAt: text("finished_at"),
+  status: text("status").notNull(),
+  snapshotDate: text("snapshot_date"),
+  pagesFetched: integer("pages_fetched").notNull().default(0),
+  cardsSeen: integer("cards_seen").notNull().default(0),
+  snapshotsWritten: integer("snapshots_written").notNull().default(0),
+  matched: integer("matched").notNull().default(0),
+  unmatched: integer("unmatched").notNull().default(0),
+  maxTcgplayerUpdatedAt: text("max_tcgplayer_updated_at"),
+  error: text("error"),
+});
+
 export const schema = {
   ageConfirmations,
   authIdentities,
@@ -1188,4 +1248,7 @@ export const schema = {
   trainingDataOptOuts,
   scanCorrectionFeedback,
   trainingImages,
+  pokemonTcgIdMap,
+  pokemonTcgPriceSnapshots,
+  pokemonTcgSnapshotRuns,
 };

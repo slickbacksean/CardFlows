@@ -263,6 +263,25 @@ On catalog outage: if `(language, tcgdex_id)` is already in PokeSniper cache / p
 **Version:** 2026-09-12  
 **Spike deliverable for review** — Mapping plan + mock fixtures only; no production tables.
 
+## pokemontcg.io → TCGdex (Trending snapshots)
+
+Catalog identity stays **TCGdex `tcgdex_id`**. pokemontcg.io ids are never inventory keys. The daily snapshot job maps them in `pokemon_tcg_id_map`:
+
+| pokemontcg.io | TCGdex | Method |
+|---|---|---|
+| `base1-4` | `base1-4` | `exact_id` (WotC / many SWSH ids already match) |
+| `sv1-1` | `sv01-001` | `padded_local_id` (SV set ids zero-padded; numeric local ids padded to 3) |
+| `sv3pt5-150` | `sv03.5-150` | `set_alias` (`pt5` → `.5`) |
+| unparseable (`broken`) or unknown set prefix | `tcgdex_id` null | `unmatched` + `unmatched_reason` |
+
+Unmatched rows are **omitted from GET /v1/trending** (no catalog detail to open). Count is on the payload as `unmatchedCount`. Inspect with:
+
+```sql
+SELECT unmatched_reason, count(*) FROM pokemon_tcg_id_map WHERE mapping_status = 'unmatched' GROUP BY 1;
+```
+
+We do **not** add `pokemontcg` to `card_external_ids` (that table is still `tcgdex` \| `cardsight` only, and requires a `cardflow_card_id` which does not exist for never-scanned catalog cards).
+
 ## Set-name table and phone snapshot (P1-04)
 
 - `packages/shared/src/set-name-map.ts` holds the curated set-name → TCGdex set-ID table, including vendor spellings and promo sets. Every ID was checked against `api.tcgdex.net/v2/en/sets/<id>`. Recognition mapping and catalog search use the table first and fall back to TCGdex name search.

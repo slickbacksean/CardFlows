@@ -12,6 +12,7 @@ const SCREENS = [
   "apps/mobile/app/(tabs)/scan-tab.tsx",
   "apps/mobile/app/(tabs)/collection.tsx",
   "apps/mobile/app/(tabs)/grading.tsx",
+  "apps/mobile/app/(tabs)/trending.tsx",
   "apps/mobile/app/scan/[scanId].tsx",
   "apps/mobile/app/capture.tsx",
   "apps/mobile/components/ui/photo-grade-flow.tsx",

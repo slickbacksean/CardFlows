@@ -113,7 +113,8 @@ Railway-provided (don't set): `RAILWAY_VOLUME_MOUNT_PATH`, `RAILWAY_VOLUME_NAME`
 | `CARD_FLOW_GUEST_BROWSE` | leave unset / off | leave unset / off | no | Guest look-around retired (Sean, Oct 18); app never mints guests. |
 | `CARD_FLOW_INVITE_ALEX/JORDAN` | leave unset | leave unset | no | App no longer offers invite codes (Sean, Oct 18). Legacy API route only. |
 | `CARDSIGHT_API_KEY` (+`CARD_FLOW_CARDSIGHT_ADAPTER=on`) | only if testing | when approved | **yes** | |
-| `POKETRACE_API_KEY`, `POKEMONTCG_API_KEY` | if used | if used | **yes** | |
+| `POKETRACE_API_KEY`, `POKEMONTCG_API_KEY` | if used | if used | **yes** | pokemontcg.io key is for the Trending snapshot job (`X-Api-Key`) |
+| `CARD_FLOW_TRENDING_ENABLED` / `CARD_FLOW_TRENDING_SNAPSHOT_ENABLED` | leave unset / off | off until Sean turns Trending on | no | Tab hidden until API flag is on. Turn snapshot on ~8 days first. See `docs/RELEASE_ENV.md`. |
 | PokéCollector (`CARD_FLOW_POKECOLLECTOR_URL/TOKEN/ADMIN_USERNAME/ADMIN_PASSWORD/LINK_KEY/PREVIOUS_LINK_KEYS/USER_PEPPER`) | off | off until PokéCollector is hosted and PR #97 merged | **yes** | out of scope here |
 | `CARD_FLOW_LIVE_IDENTITY_OPENCLIP_URL/TOKEN` | if sidecar hosted | same | token **yes** | the sidecar isn't in this plan |
 | `LITESTREAM_BUCKET` | `cardflow-backups-staging` | `cardflow-backups-production` | no | |

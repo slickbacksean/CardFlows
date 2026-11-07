@@ -140,11 +140,15 @@ if (rapidOCRConfig.enabled) {
 
 // Newsletter weekly draft job (creates drafts only, never sends automatically)
 import { startWeeklyNewsletterJob } from "./newsletter-job";
+import { startPokemonTcgSnapshotJob } from "./pokemon-tcg-snapshot-job";
+import { trendingEnabledFromEnv } from "@cardflow/shared";
 let newsletterJob: { stop: () => void } | null = null;
+let trendingSnapshotJob: { stop: () => void } | null = null;
 if (selection.kind === "sqlite") {
   const sqliteStore = store as any;
   if (sqliteStore.db) {
     newsletterJob = startWeeklyNewsletterJob(sqliteStore);
+    trendingSnapshotJob = startPokemonTcgSnapshotJob({ store: sqliteStore });
   }
 }
 
@@ -167,6 +171,9 @@ const server = serve({ fetch: app.fetch, port }, (info) => {
   console.log(
     `Live identity OpenCLIP: ${liveIdentityOpenclip ? "on" : "off"} (${openclipReason})`,
   );
+  console.log(
+    `Trending: ${trendingEnabledFromEnv(process.env.CARD_FLOW_TRENDING_ENABLED) ? "on" : "off"} (CARD_FLOW_TRENDING_ENABLED)`,
+  );
   if (resolveDevAutoSession()) {
     console.warn(
       "Dev auto-session is on. Requests without a token act as the default tester. Set CARD_FLOW_DEV_AUTO_SESSION=false outside local dev.",
@@ -185,6 +192,7 @@ function shutdown(signal: string) {
   photoRetention.stop();
   diskMonitor?.stop();
   newsletterJob?.stop();
+  trendingSnapshotJob?.stop();
   const finish = () => {
     try {
       (store as { close?: () => void }).close?.();

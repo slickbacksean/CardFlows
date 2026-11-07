@@ -18,6 +18,7 @@ describe("browse-only guests", () => {
       "/v1/grading",
       "/v1/preferences",
       "/v1/sales",
+      "/v1/trending",
     ]) {
       expect(guestRouteAllowed("GET", path), path).toBe(true);
     }
