@@ -56,6 +56,7 @@ Repeat for `preview`, and for `development` if wanted. `apps/mobile/.env.example
 ## API env (staging and production)
 - **`CARD_FLOW_ULTRALYTICS_AGPL_ACCEPTED` must stay unset** on the staging and production API until Sean makes the license decision (Ultralytics YOLO is AGPL-3.0). While it's unset, live-video YOLO is off and the weights are never loaded.
 - `SENTRY_DSN` / `SENTRY_ENVIRONMENT` are set on Railway (see [SENTRY.md](./SENTRY.md)).
+- **Migration `0034_process_state`:** additive. No new env vars. On deploy the entrypoint applies it under `flock` (grade jobs, abuse rate-limit buckets, deletion receipts, 24 h recognition cache). Grade-job request bodies land at `/data/grade/jobs/`. Left in memory on purpose: 15 min price cache, `/v1/status` banner (~30 s), OBB/OCR/YOLO engines, ops-metrics samples, PokéCollector JWT cache and pacer, PokéCollector delete-as-user fallback mappings (the queue rows are already in SQLite), grade upload staging (15 min), in-flight pregrade coalescing, scan/write idempotency in-flight registry (completed work is in SQLite), admin token-bucket limits (minutes-long windows).
 
 ## API URL per profile (Dev Ops, blocking)
 There is **no hardcoded default**. Set `EXPO_PUBLIC_API_URL` as an EAS environment variable on each environment, so a profile that extends production can't silently point at prod:
@@ -85,6 +86,7 @@ Grade stays in the codebase (`/v1/grade/*`, `/v1/grading`, `grading.tsx`) but is
 - External cron (recommended on Railway): `0 6 * * *` UTC → `POST /ops/trending/snapshot` with `Authorization: Bearer $CARD_FLOW_OPS_TOKEN`. Add `?force=1` to re-run the same UTC day. A full catalog pass is ~80 pages of 250 (`select=id,name,number,set,tcgplayer,images`).
 - Snapshots older than 90 days are deleted.
 - Unmatched pokemontcg.io ids are stored in `pokemon_tcg_id_map` (`mapping_status=unmatched`) and omitted from the tab. See [CARD_ID_MAPPING_PLAN.md](./CARD_ID_MAPPING_PLAN.md) § pokemontcg.io.
+- Migration `0035_trending_prices` (after `0034_process_state`): mapping table, daily snapshots, run log.
 
 The client has **no** `EXPO_PUBLIC_CARD_FLOW_TRENDING_*` variable — same pattern as grading: `useTrendingEnabled()` reads `/v1/status`.
 

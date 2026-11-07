@@ -237,7 +237,14 @@
       "idx": 33,
       "version": "6",
       "when": 1793202800000,
-      "tag": "0034_trending_prices",
+      "tag": "0034_process_state",
+      "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "6",
+      "when": 1793289200000,
+      "tag": "0035_trending_prices",
       "breakpoints": true
     }
   ]

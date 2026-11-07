@@ -67,16 +67,33 @@ describe("P1-05 CardSight adapter (recorded responses)", () => {
   });
 
 
-  it("charges the budget only after a successful identify (not on errors/timeouts)", async () => {
+  it("reserves the budget before identify and releases it on errors/timeouts", async () => {
     const consumeBudget = vi.fn(() => true);
+    const releaseBudget = vi.fn();
     const okFetch = vi.fn(async () => json(200, { detections: [{ confidence: "high", card: { name: "Pikachu" } }] }));
-    await createCardSightRecognitionProvider({ apiKey: "k", fetch: okFetch as never, budgetAvailable: () => true, consumeBudget, sleep: noSleep }).identifyCard(req);
+    await createCardSightRecognitionProvider({
+      apiKey: "k",
+      fetch: okFetch as never,
+      consumeBudget,
+      releaseBudget,
+      sleep: noSleep,
+    }).identifyCard(req);
     expect(consumeBudget).toHaveBeenCalledTimes(1);
+    expect(releaseBudget).not.toHaveBeenCalled();
 
     const failConsume = vi.fn(() => true);
+    const failRelease = vi.fn();
     const badFetch = vi.fn(async () => new Response("{}", { status: 500 }));
-    await createCardSightRecognitionProvider({ apiKey: "k", fetch: badFetch as never, budgetAvailable: () => true, consumeBudget: failConsume, sleep: noSleep, maxRetries: 0 }).identifyCard(req);
-    expect(failConsume).not.toHaveBeenCalled();
+    await createCardSightRecognitionProvider({
+      apiKey: "k",
+      fetch: badFetch as never,
+      consumeBudget: failConsume,
+      releaseBudget: failRelease,
+      sleep: noSleep,
+      maxRetries: 0,
+    }).identifyCard(req);
+    expect(failConsume).toHaveBeenCalledTimes(1);
+    expect(failRelease).toHaveBeenCalledTimes(1);
   });
 
   it("quota exhausted → no call, alert, and the fallback answers", async () => {

@@ -202,6 +202,13 @@ export function normalizeEmail(email: string): string {
   return email.trim().toLowerCase();
 }
 
+/**
+ * Process-state tables that happen to have a user_id but are not leftover account rows.
+ * `deleted_users` is the 24 h tombstone written *after* delete — counting or sweeping it
+ * as residual user data would make a successful deletion look incomplete.
+ */
+const PROCESS_STATE_USER_TABLES = new Set(["deleted_users"]);
+
 /** Tables with a user_id column, found from the live schema so new tables are never missed. */
 function userIdTables(sqlite: Database.Database): string[] {
   const tables = sqlite
@@ -209,6 +216,7 @@ function userIdTables(sqlite: Database.Database): string[] {
     .all() as Array<{ name: string }>;
   return tables
     .map((t) => t.name)
+    .filter((name) => !PROCESS_STATE_USER_TABLES.has(name))
     .filter((name) =>
       (sqlite.prepare(`PRAGMA table_info(\`${name}\`)`).all() as Array<{ name: string }>).some((c) => c.name === "user_id"),
     );

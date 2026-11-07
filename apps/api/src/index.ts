@@ -57,11 +57,7 @@ const { client: liveIdentityOpenclip, reason: openclipReason } =
 const cardSightBudget = cardSightMonthlyBudgetFromEnv();
 const cardMagicIdReserve = cardMagicIdReserveFromEnv(process.env, cardSightBudget);
 const cardSight = cardSightAdapterFromEnv(process.env, {
-  // Peek before the call; charge only after a successful billable response.
-  budgetAvailable: () => {
-    if (cardSightBudget == null) return true;
-    return store.getVendorQuotaUsage("cardsight", calendarMonthKey(new Date())) < cardSightBudget;
-  },
+  // Atomic reserve before HTTP; release on a miss so errors/timeouts do not keep the slot.
   consumeBudget: () =>
     consumeCardSightBudget({
       consume: store.consumeVendorQuota,
@@ -70,6 +66,10 @@ const cardSight = cardSightAdapterFromEnv(process.env, {
       now: new Date(),
       onUsage: (used, cap) => opsMetrics.recordCardSightBudgetUsage(used, cap),
     }),
+  releaseBudget: () => {
+    if (cardSightBudget == null) return;
+    store.releaseVendorQuota("cardsight", calendarMonthKey(new Date()));
+  },
 });
 const cardMagic = cardMagicFromEnv(process.env, {
   // Same global monthly budget as identify (one CardSight plan).
@@ -183,7 +183,7 @@ const server = serve({ fetch: app.fetch, port }, (info) => {
 
 // Railway redeploys send SIGTERM (30 s drain). Stop taking requests, give in-flight work up
 // to 10 s, then close SQLite (checkpoints the WAL) so Litestream's final sync sees it all.
-// In-memory grade jobs are lost; the app treats a missing job as "retry".
+// Grade jobs are persisted on the volume and resumed after this process starts.
 let shuttingDown = false;
 function shutdown(signal: string) {
   if (shuttingDown) return;

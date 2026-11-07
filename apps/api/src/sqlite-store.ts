@@ -49,6 +49,7 @@ import type { TrainingDataStorePort } from "./training-data-store";
 import { serverPepper } from "./server-pepper";
 import { shouldRetainForTraining, saveTrainingImage } from "./training-image-storage";
 import { applyMvpMigrations, isMemorySqlitePath } from "./db/migrate";
+import { createSqliteProcessStateStore } from "./process-state-store";
 import {
   gradeImageStorageCandidates,
   gradeImageStorageRef,
@@ -2080,6 +2081,15 @@ export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStor
     })();
   }
 
+  function releaseVendorQuota(provider: string, monthKey: string): void {
+    sqlite
+      .prepare(
+        `UPDATE vendor_quota_usage SET used = used - 1
+         WHERE provider = ? AND month_key = ? AND used > 0`,
+      )
+      .run(provider, monthKey);
+  }
+
   function listPortfolioSnapshots(
     userId: string,
     sinceDate?: string | null,
@@ -2312,6 +2322,8 @@ export function createSqliteStore(options: CreateSqliteStoreOptions): SqliteStor
     consumeGradeQuota,
     getVendorQuotaUsage,
     consumeVendorQuota,
+    releaseVendorQuota,
+    processState: createSqliteProcessStateStore(sqlite, sqliteDir),
     saveConfirmEvent,
     listConfirmEvents,
     confirmCounts,

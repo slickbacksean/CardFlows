@@ -79,6 +79,7 @@ import {
   type CreatedSession,
   type SessionRecord,
 } from "./session";
+import { createMemoryProcessStateStore, type ProcessStateStore } from "./process-state-store";
 
 export type { ScanImageBytes, ScanImageMimeType, GradeImageBytes };
 export type { CreatedSession, SessionRecord };
@@ -907,6 +908,10 @@ export interface StorePort {
   consumeGradeQuota: (userId: string, input: GradeQuotaConsumeInput) => GradeQuotaConsumeResult;
   getVendorQuotaUsage: (provider: string, monthKey: string) => number;
   consumeVendorQuota: (provider: string, monthKey: string, cap: number) => boolean;
+  /** Give back a reserved vendor-quota slot when the billed call failed. */
+  releaseVendorQuota: (provider: string, monthKey: string) => void;
+  /** Restart-critical process Maps (rate limits, deletion receipts, recognition cache, grade jobs). */
+  processState: ProcessStateStore;
   /** P1-26 confirm log. */
   saveConfirmEvent: (event: ConfirmEvent) => void;
   listConfirmEvents: (options?: { since?: string; limit?: number }) => ConfirmEvent[];
@@ -1067,6 +1072,12 @@ export function createMemoryStore(): StorePort {
     return true;
   }
 
+  function releaseVendorQuota(provider: string, monthKey: string): void {
+    const used = getVendorQuotaUsage(provider, monthKey);
+    if (used <= 0) return;
+    vendorUsage.set(vendorKey(provider, monthKey), used - 1);
+  }
+
   const purchaseLedger = createMemoryPurchaseLedger();
   const recordPurchase = (item: InventoryItemRecord | undefined) => {
     if (item?.purchase) {
@@ -1176,6 +1187,8 @@ export function createMemoryStore(): StorePort {
     consumeGradeQuota,
     getVendorQuotaUsage,
     consumeVendorQuota,
+    releaseVendorQuota,
+    processState: createMemoryProcessStateStore(),
     ...confirmLog,
     saveUserPriceSnapshot(userId: string, snapshot: UserPriceSnapshot) {
       userPrices.push({ ...snapshot, userId });

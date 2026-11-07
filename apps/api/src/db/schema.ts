@@ -884,6 +884,66 @@ export const userBlocks = sqliteTable(
   ],
 );
 
+/** Abuse/quota windows that must survive a Railway redeploy (grades, detect, auth, guest mints). */
+export const rateLimitBuckets = sqliteTable(
+  "rate_limit_buckets",
+  {
+    bucketId: text("bucket_id").primaryKey(),
+    count: integer("count").notNull(),
+    resetAt: integer("reset_at").notNull(),
+  },
+  (table) => [index("rate_limit_buckets_reset_idx").on(table.resetAt)],
+);
+
+/** User IDs deleted in the last 24 h so in-flight work still 410s after a restart. */
+export const deletedUsers = sqliteTable("deleted_users", {
+  userId: text("user_id").primaryKey(),
+  deletedAt: integer("deleted_at").notNull(),
+});
+
+/** Hashed bearer of a just-deleted account; a retried delete is 410 instead of 401. */
+export const deletionReceipts = sqliteTable("deletion_receipts", {
+  receiptKey: text("receipt_key").primaryKey(),
+  deletedAt: integer("deleted_at").notNull(),
+});
+
+/** 24 h confident-identify cache. Survives restarts so a redeploy does not re-bill CardSight. */
+export const recognitionCache = sqliteTable(
+  "recognition_cache",
+  {
+    cacheKey: text("cache_key").primaryKey(),
+    valueJson: text("value_json").notNull(),
+    source: text("source").notNull(),
+    fetchedAt: text("fetched_at").notNull(),
+    expiresAt: integer("expires_at").notNull(),
+  },
+  (table) => [index("recognition_cache_expires_idx").on(table.expiresAt)],
+);
+
+/** P1-07 async pre-grade jobs. Request bodies live next to SQLite at grade/jobs/<job_id>.bin. */
+export const gradeJobs = sqliteTable(
+  "grade_jobs",
+  {
+    jobId: text("job_id").primaryKey(),
+    userId: text("user_id").notNull(),
+    createdAt: integer("created_at").notNull(),
+    status: text("status", { enum: ["queued", "running", "waiting", "done", "failed"] }).notNull(),
+    retryAfterSeconds: integer("retry_after_seconds"),
+    estimateJson: text("estimate_json"),
+    error: text("error"),
+    requestId: text("request_id"),
+    inventoryItemId: text("inventory_item_id").notNull(),
+    contentType: text("content_type"),
+    url: text("url").notNull(),
+    identityJson: text("identity_json").notNull(),
+  },
+  (table) => [
+    index("grade_jobs_user_idx").on(table.userId),
+    index("grade_jobs_created_idx").on(table.createdAt),
+    check("grade_jobs_status_chk", sql`${table.status} in ('queued', 'running', 'waiting', 'done', 'failed')`),
+  ],
+);
+
 /** Sean (Oct 25): Comment rate limiting (10 per hour per user). */
 export const commentRateLimits = sqliteTable(
   "comment_rate_limits",
@@ -1175,6 +1235,11 @@ export const schema = {
   contentReports,
   userBlocks,
   commentRateLimits,
+  rateLimitBuckets,
+  deletedUsers,
+  deletionReceipts,
+  recognitionCache,
+  gradeJobs,
   cardPriceHistory,
   setTrendSnapshots,
   newsletterSubscriptions,
