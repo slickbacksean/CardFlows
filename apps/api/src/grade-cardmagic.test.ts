@@ -32,10 +32,12 @@ describe("tryCardMagicForGrade ID reserve + charge-on-success", () => {
     log.mockRestore();
   });
 
-  it("charges budget and user cap only after a successful CardMagic response", async () => {
+  it("reserves budget and user cap before CardMagic and releases them on a miss", async () => {
     const failProcess = vi.fn(async () => ({ ok: false as const, reason: "timeout", elapsedMs: 1 }));
     const consumeBudget = vi.fn(() => true);
+    const releaseBudget = vi.fn();
     const takeUse = vi.fn(() => true);
+    const releaseUse = vi.fn();
     await tryCardMagicForGrade({
       gate: {
         client: { process: failProcess } as unknown as CardMagicClient,
@@ -43,13 +45,17 @@ describe("tryCardMagicForGrade ID reserve + charge-on-success", () => {
         budgetRemaining: () => true,
         userCapRemaining: () => true,
         consumeBudget,
+        releaseBudget,
         takeUse,
+        releaseUse,
       },
       still: { bytes: JPEG, mimeType: "image/jpeg" },
       side: "front",
     });
-    expect(consumeBudget).not.toHaveBeenCalled();
-    expect(takeUse).not.toHaveBeenCalled();
+    expect(takeUse).toHaveBeenCalledTimes(1);
+    expect(consumeBudget).toHaveBeenCalledTimes(1);
+    expect(releaseUse).toHaveBeenCalledTimes(1);
+    expect(releaseBudget).toHaveBeenCalledTimes(1);
 
     const okProcess = vi.fn(async () => ({
       ok: true as const,
@@ -64,12 +70,16 @@ describe("tryCardMagicForGrade ID reserve + charge-on-success", () => {
         budgetRemaining: () => true,
         userCapRemaining: () => true,
         consumeBudget,
+        releaseBudget,
         takeUse,
+        releaseUse,
       },
       still: { bytes: JPEG, mimeType: "image/jpeg" },
       side: "front",
     });
-    expect(consumeBudget).toHaveBeenCalledTimes(1);
-    expect(takeUse).toHaveBeenCalledTimes(1);
+    expect(consumeBudget).toHaveBeenCalledTimes(2);
+    expect(takeUse).toHaveBeenCalledTimes(2);
+    expect(releaseUse).toHaveBeenCalledTimes(1);
+    expect(releaseBudget).toHaveBeenCalledTimes(1);
   });
 });

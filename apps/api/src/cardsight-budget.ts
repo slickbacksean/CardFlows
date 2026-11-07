@@ -22,6 +22,16 @@ export function consumeCardSightBudget(input: {
   return ok;
 }
 
+/** Give back a reserved CardSight slot when the vendor call did not succeed. */
+export function releaseCardSightBudget(input: {
+  release: (provider: string, monthKey: string) => void;
+  cap: number | null;
+  now: Date;
+}): void {
+  if (!input.cap) return;
+  input.release("cardsight", calendarMonthKey(input.now));
+}
+
 /**
  * CardMagic may run only while total CardSight calls this month (ID + CardMagic)
  * are below `cap - reserve`. Card ID keeps the full cap.

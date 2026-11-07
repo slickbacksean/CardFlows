@@ -40,6 +40,8 @@ export interface ConsentStore {
   events(userId: string, provider?: ConsentProvider): ConsentEvent[];
   /** Backend review M5: take one CardSight call from this user's month; false once `cap` is used. */
   takeMonthlyUse(userId: string, monthKey: string, cap: number): boolean;
+  /** Give back a reserved slot when the vendor call did not succeed (floor 0). */
+  releaseMonthlyUse(userId: string, monthKey: string): void;
   monthlyUse(userId: string, monthKey: string): number;
   deleteUser(userId: string): number;
 }
@@ -101,6 +103,11 @@ export function createMemoryConsentStore(): ConsentStore {
       if (row.used >= cap) return false;
       usage.set(k(userId, monthKey), { userId, used: row.used + 1 });
       return true;
+    },
+    releaseMonthlyUse(userId, monthKey) {
+      const row = usage.get(k(userId, monthKey));
+      if (!row || row.used <= 0) return;
+      usage.set(k(userId, monthKey), { userId, used: row.used - 1 });
     },
     monthlyUse: (userId, monthKey) => usage.get(k(userId, monthKey))?.used ?? 0,
     deleteUser(userId) {
@@ -187,6 +194,18 @@ export function createSqliteConsentStore(db: BetterSQLite3Database<typeof schema
         })
         .run();
       return res.changes > 0;
+    },
+    releaseMonthlyUse(userId, monthKey) {
+      db.update(cardsightUserUsage)
+        .set({ used: sql`max(0, ${cardsightUserUsage.used} - 1)` })
+        .where(
+          and(
+            eq(cardsightUserUsage.userId, userId),
+            eq(cardsightUserUsage.monthKey, monthKey),
+            sql`${cardsightUserUsage.used} > 0`,
+          ),
+        )
+        .run();
     },
     monthlyUse(userId, monthKey) {
       const row = db
