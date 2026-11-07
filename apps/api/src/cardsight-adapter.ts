@@ -32,15 +32,18 @@ export interface CardSightAdapterOptions {
   maxRetries?: number;
   /**
    * Peek: false when the monthly budget is used up (no call, no charge).
-   * Prefer this over calling consumeBudget before the request.
+   * The real gate is consumeBudget (atomic). This is a fast path for tests.
    */
   budgetAvailable?: () => boolean;
   /**
-   * Charge the global monthly budget only after a successful billable response
-   * (HTTP 2xx mapped to ok:true). Errors, timeouts and 4xx/5xx do not charge
-   * (CardSight billing on failures is unconfirmed — we don't charge on errors).
+   * Reserve one global monthly slot before the vendor HTTP call. False means the
+   * cap is already used — no call. Pair with releaseBudget on a non-billable outcome
+   * so errors/timeouts/4xx/5xx do not keep the slot (CardSight billing on failures
+   * is unconfirmed).
    */
   consumeBudget?: () => boolean;
+  /** Give back a reserved slot when the identify did not succeed. */
+  releaseBudget?: () => void;
   /** Ops alert hook (quota exhausted, auth failure). Never receives the key or image. */
   onAlert?: (event: { code: string; httpStatus?: number }) => void;
   sleep?: (ms: number) => Promise<void>;
@@ -183,43 +186,60 @@ export function createCardSightRecognitionProvider(options: CardSightAdapterOpti
   return {
     name: "cardsight",
     async identifyCard(req: IdentifyCardRequest) {
-      // Peek only — charge happens after a successful billable response below.
-      if (options.budgetAvailable && !options.budgetAvailable()) {
+      // Atomic reserve before HTTP so concurrent requests cannot overshoot the cap.
+      // Net charge stays success-only: releaseBudget on any non-billable outcome.
+      let reserved = false;
+      if (options.consumeBudget) {
+        if (!options.consumeBudget()) {
+          options.onAlert?.({ code: "QUOTA_EXCEEDED" });
+          return failure({ code: "QUOTA_EXCEEDED", message: "Card matching is unavailable right now. Search by name or number.", retryable: false });
+        }
+        reserved = true;
+      } else if (options.budgetAvailable && !options.budgetAvailable()) {
         options.onAlert?.({ code: "QUOTA_EXCEEDED" });
         return failure({ code: "QUOTA_EXCEEDED", message: "Card matching is unavailable right now. Search by name or number.", retryable: false });
       }
+      const release = () => {
+        if (reserved) options.releaseBudget?.();
+      };
       const path = req.segment ? `/v1/identify/card/${encodeURIComponent(req.segment)}` : "/v1/identify/card";
       let lastStatus: number | null = null;
-      for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
-        if (attempt > 0) await sleep(250 * 2 ** (attempt - 1));
-        const controller = new AbortController();
-        const timer = setTimeout(() => controller.abort(), timeoutMs);
-        const started = Date.now();
-        try {
-          const form = new FormData();
-          form.append("image", new Blob([req.image], { type: req.mimeType }), "card");
-          const res = await doFetch(`${baseUrl}${path}`, {
-            method: "POST",
-            headers: { "X-API-Key": options.apiKey },
-            body: form,
-            signal: controller.signal,
-          });
-          if (res.ok) {
-            const mapped = mapCardSightWire(await res.json().catch(() => null), Date.now() - started);
-            // Charge only on a successful billable response (ok:true). Failures/timeouts/4xx do not.
-            if (mapped.ok) options.consumeBudget?.();
-            return mapped;
+      try {
+        for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
+          if (attempt > 0) await sleep(250 * 2 ** (attempt - 1));
+          const controller = new AbortController();
+          const timer = setTimeout(() => controller.abort(), timeoutMs);
+          const started = Date.now();
+          try {
+            const form = new FormData();
+            form.append("image", new Blob([req.image], { type: req.mimeType }), "card");
+            const res = await doFetch(`${baseUrl}${path}`, {
+              method: "POST",
+              headers: { "X-API-Key": options.apiKey },
+              body: form,
+              signal: controller.signal,
+            });
+            if (res.ok) {
+              const mapped = mapCardSightWire(await res.json().catch(() => null), Date.now() - started);
+              if (mapped.ok) return mapped;
+              release();
+              return mapped;
+            }
+            lastStatus = res.status;
+            if (res.status === 401 || res.status === 403) options.onAlert?.({ code: "PROVIDER_AUTH", httpStatus: res.status });
+            if (!isRetryableStatus(res.status)) break;
+          } catch {
+            lastStatus = null;
+          } finally {
+            clearTimeout(timer);
           }
-          lastStatus = res.status;
-          if (res.status === 401 || res.status === 403) options.onAlert?.({ code: "PROVIDER_AUTH", httpStatus: res.status });
-          if (!isRetryableStatus(res.status)) break;
-        } catch {
-          lastStatus = null;
-        } finally {
-          clearTimeout(timer);
         }
+        release();
+        return failure(cardSightErrorFor(lastStatus));
+      } catch (error) {
+        release();
+        throw error;
       }
-      return failure(cardSightErrorFor(lastStatus));
     },
   };
 }

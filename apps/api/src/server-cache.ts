@@ -5,6 +5,7 @@ import type {
   CardPricingProvider,
   PriceEstimateRequest,
 } from "@cardflow/shared";
+import type { RecognitionCacheStore } from "./process-state-store";
 
 /** P1-03: short-lived server caches. Every cached value carries its source and fetched_at. */
 export const PRICE_CACHE_TTL_MS = 15 * 60 * 1000;
@@ -54,6 +55,11 @@ export class TtlCache<T> {
   get size() {
     return this.map.size;
   }
+
+  /** Restore a persisted entry without resetting TTL or hit/miss counters. */
+  put(key: string, entry: CacheEntry<T>): void {
+    this.map.set(key, entry);
+  }
 }
 
 export function priceCacheKey(req: PriceEstimateRequest & { condition?: string | null }): string {
@@ -87,10 +93,13 @@ export function imageCacheKey(bytes: Uint8Array, mimeType: string): string {
 }
 
 /** Recognition by image hash. Only confident, usable results are cached. */
-export function createRecognitionCache(options: { ttlMs?: number; now?: () => number } = {}) {
+export function createRecognitionCache(
+  options: { ttlMs?: number; now?: () => number; persist?: RecognitionCacheStore } = {},
+) {
+  const now = options.now ?? Date.now;
   const cache = new TtlCache<CardFlowNormalizedRecognitionResult>(
     options.ttlMs ?? RECOGNITION_CACHE_TTL_MS,
-    options.now,
+    now,
   );
   return {
     cache,
@@ -103,10 +112,19 @@ export function createRecognitionCache(options: { ttlMs?: number; now?: () => nu
       // whose photos stay on the local matcher, and vice versa.
       const key = `${source}:${imageCacheKey(image.bytes, image.mimeType)}`;
       const hit = cache.get(key);
-      // Backend review: a cache hit is not a vendor call, so it never carries the vendor's request id.
       if (hit) return { ...hit.value, vendorRequestId: null };
+      const persisted = options.persist?.get(key, now());
+      if (persisted) {
+        cache.put(key, persisted);
+        cache.hits += 1;
+        cache.misses = Math.max(0, cache.misses - 1);
+        return { ...persisted.value, vendorRequestId: null };
+      }
       const result = await identify();
-      if (isCacheableRecognition(result)) cache.set(key, result, source);
+      if (isCacheableRecognition(result)) {
+        const entry = cache.set(key, result, source);
+        options.persist?.set(key, entry, 5000);
+      }
       return result;
     },
   };

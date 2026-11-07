@@ -1,4 +1,6 @@
 import type { Context, MiddlewareHandler } from "hono";
+import type { RateLimitBucketStore } from "./process-state-store";
+import { createMemoryRateLimitStore } from "./process-state-store";
 
 type Env = NodeJS.Dict<string | undefined>;
 
@@ -91,39 +93,31 @@ export function clientIp(
 }
 
 /**
- * In-memory fixed-window limiter. Fine for one instance; use a shared store
- * (Redis/DB) before running several replicas.
+ * Fixed-window limiter. Backed by SQLite on Railway so a redeploy cannot reset
+ * daily/hourly abuse caps. In-memory store is the default for unit tests.
  */
 export function createRateLimiter(
   windows: RateWindow[],
   now: () => number = Date.now,
+  buckets: RateLimitBucketStore = createMemoryRateLimitStore(),
+  name = "",
 ): (key: string) => { allowed: true } | { allowed: false; retryAfterSeconds: number } {
-  const buckets = new Map<string, { count: number; resetAt: number }>();
   let lastSweep = now();
+  const prefix = name ? `${name}:` : "";
   return (key) => {
     const t = now();
     if (t - lastSweep > MINUTE) {
-      for (const [k, bucket] of buckets) if (bucket.resetAt <= t) buckets.delete(k);
+      buckets.prune(t);
       lastSweep = t;
     }
-    let retryAfterMs = 0;
-    for (const window of windows) {
-      const id = `${window.windowMs}:${key}`;
-      const bucket = buckets.get(id);
-      if (bucket && bucket.resetAt > t && bucket.count >= window.max) {
-        retryAfterMs = Math.max(retryAfterMs, bucket.resetAt - t);
-      }
-    }
-    if (retryAfterMs > 0) {
-      return { allowed: false, retryAfterSeconds: Math.max(1, Math.ceil(retryAfterMs / 1000)) };
-    }
-    for (const window of windows) {
-      const id = `${window.windowMs}:${key}`;
-      const bucket = buckets.get(id);
-      if (!bucket || bucket.resetAt <= t) buckets.set(id, { count: 1, resetAt: t + window.windowMs });
-      else bucket.count += 1;
-    }
-    return { allowed: true };
+    return buckets.takeWindows(
+      windows.map((window) => ({
+        bucketId: `${prefix}${window.windowMs}:${key}`,
+        windowMs: window.windowMs,
+        max: window.max,
+      })),
+      t,
+    );
   };
 }
 
@@ -132,6 +126,8 @@ export function rateLimitMiddleware(
   config: RateLimitConfig | null,
   keys: (c: Context) => Array<string | null>,
   now: () => number = Date.now,
+  buckets?: RateLimitBucketStore,
+  name = "",
 ): MiddlewareHandler {
   if (!config) return async (_c, next) => next();
   const limiter = createRateLimiter(
@@ -140,6 +136,8 @@ export function rateLimitMiddleware(
       { windowMs: DAY, max: config.perDay },
     ],
     now,
+    buckets,
+    name,
   );
   return async (c, next) => {
     for (const key of keys(c)) {
@@ -155,9 +153,13 @@ export function rateLimitMiddleware(
 }
 
 /** Middleware: one shared daily bucket for the whole instance. 429 + Retry-After. */
-export function globalDailyCapMiddleware(cap: number | null, now: () => number = Date.now): MiddlewareHandler {
+export function globalDailyCapMiddleware(
+  cap: number | null,
+  now: () => number = Date.now,
+  buckets?: RateLimitBucketStore,
+): MiddlewareHandler {
   if (!cap) return async (_c, next) => next();
-  const limiter = createRateLimiter([{ windowMs: DAY, max: cap }], now);
+  const limiter = createRateLimiter([{ windowMs: DAY, max: cap }], now, buckets, "grade-daily");
   return async (c, next) => {
     const result = limiter("global");
     if (!result.allowed) {

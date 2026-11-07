@@ -274,6 +274,8 @@ describe("Backend review M5: every user table and file on a real temp-dir store"
       for (const table of tables) {
         const cols = raw.prepare(`PRAGMA table_info(\`${table}\`)`).all() as Array<{ name: string; type: string; notnull: number; dflt_value: unknown; pk: number }>;
         if (!cols.some((c) => c.name === "user_id")) continue;
+        // Tombstone written after delete — not leftover account data.
+        if (table === "deleted_users") continue;
         const already = (raw.prepare(`SELECT COUNT(*) AS n FROM \`${table}\` WHERE user_id = ?`).get(userId) as { n: number }).n;
         if (already > 0) {
           seeded.push(table);
@@ -283,6 +285,7 @@ describe("Backend review M5: every user table and file on a real temp-dir store"
         for (const col of cols) {
           if (col.name === "user_id") values[col.name] = userId;
           else if (col.name === "kind") values[col.name] = KIND[table] ?? "grant";
+          else if (col.name === "status" && table === "grade_jobs") values[col.name] = "queued";
           else if (col.name in CHECKED) values[col.name] = CHECKED[col.name];
           else if (col.name === "scan_id") values[col.name] = scanId;
           else if (col.name === "inventory_item_id") values[col.name] = itemId;

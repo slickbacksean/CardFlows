@@ -22,10 +22,14 @@ export interface GradeCardMagicGate {
   userCapRemaining?: () => boolean;
   /** Peek: false when the global monthly budget is used up (no call). */
   budgetRemaining?: () => boolean;
-  /** Charge one from the per-user monthly CardSight cap — only after a successful CardMagic response. */
+  /** Reserve one per-user monthly CardSight slot before the vendor call. */
   takeUse?: () => boolean;
-  /** Charge the global budget — only after a successful CardMagic response. */
+  /** Give back the per-user slot when CardMagic did not succeed. */
+  releaseUse?: () => void;
+  /** Reserve the global budget before the vendor call. */
   consumeBudget?: () => boolean;
+  /** Give back the global slot when CardMagic did not succeed. */
+  releaseBudget?: () => void;
 }
 
 export interface GradeCardMagicSuccess {
@@ -72,7 +76,7 @@ export async function tryCardMagicForGrade(input: {
     console.info(`grade-cardmagic side=${side} path=local reason=id_reserve`);
     return { path: "local", reason: "id_reserve" };
   }
-  // Peek only — charge after a successful CardMagic response (same rule as identify).
+  // Peek is a fast skip; the real gate is the atomic reserve below.
   if (gate.budgetRemaining && !gate.budgetRemaining()) {
     console.info(`grade-cardmagic side=${side} path=local reason=budget`);
     return { path: "local", reason: "budget" };
@@ -81,13 +85,33 @@ export async function tryCardMagicForGrade(input: {
     console.info(`grade-cardmagic side=${side} path=local reason=user_cap`);
     return { path: "local", reason: "user_cap" };
   }
+  // Atomic reserve before HTTP so concurrent requests cannot overshoot the cap.
+  // Net charge stays success-only: release on any miss.
+  if (gate.takeUse && !gate.takeUse()) {
+    console.info(`grade-cardmagic side=${side} path=local reason=user_cap`);
+    return { path: "local", reason: "user_cap" };
+  }
+  if (gate.consumeBudget && !gate.consumeBudget()) {
+    gate.releaseUse?.();
+    console.info(`grade-cardmagic side=${side} path=local reason=budget`);
+    return { path: "local", reason: "budget" };
+  }
 
-  const result = await gate.client.process({
-    bytes: still.bytes,
-    mimeType: still.mimeType,
-    fileName: `${side}.jpg`,
-  });
+  let result: CardMagicResult;
+  try {
+    result = await gate.client.process({
+      bytes: still.bytes,
+      mimeType: still.mimeType,
+      fileName: `${side}.jpg`,
+    });
+  } catch (error) {
+    gate.releaseUse?.();
+    gate.releaseBudget?.();
+    throw error;
+  }
   if (!result.ok) {
+    gate.releaseUse?.();
+    gate.releaseBudget?.();
     console.info(
       `grade-cardmagic side=${side} path=local reason=${result.reason} http=${result.httpStatus ?? "-"} ms=${result.elapsedMs}`,
     );
@@ -95,12 +119,11 @@ export async function tryCardMagicForGrade(input: {
   }
   const first = result.cards[0];
   if (!first?.cardJpeg.byteLength) {
+    gate.releaseUse?.();
+    gate.releaseBudget?.();
     console.info(`grade-cardmagic side=${side} path=local reason=empty ms=${result.elapsedMs}`);
     return { path: "local", reason: "empty", result };
   }
-  // Successful billable CardMagic response — charge now (not before the call).
-  gate.consumeBudget?.();
-  gate.takeUse?.();
   const cleanedCard = stripImageMetadata(first.cardJpeg, "image/jpeg");
   console.info(
     `grade-cardmagic side=${side} path=cardmagic cards=${result.count} corners=${Object.keys(first.corners).length} ms=${result.elapsedMs}`,

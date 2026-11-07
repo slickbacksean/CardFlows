@@ -31,7 +31,7 @@ import {
 } from "./social-auth";
 import type { CardMagicClient } from "./cardmagic-adapter";
 import { cardMagicCornersToExtraShots, tryCardMagicForGrade, type GradeCropPath } from "./grade-cardmagic";
-import { canCardMagicUseBudget, consumeCardSightBudget } from "./cardsight-budget";
+import { canCardMagicUseBudget, consumeCardSightBudget, releaseCardSightBudget } from "./cardsight-budget";
 import { ALLOWANCE_TOMBSTONE_TTL_MS, allowanceTombstoneKey, normalizeEmail, type DeletionAuditKind } from "./account-store";
 import { routePath } from "hono/route";
 import { CARDSIGHT_CONSENT_VERSION, INVITED_USERS, EMAIL_CODE_LIFETIME_SENDS, EMAIL_SENDS_PER_ADDRESS_PER_DAY, UNVERIFIED_ACCOUNT_TTL_DAYS, EMAIL_CODE_LENGTH, EMAIL_RESEND_COOLDOWN_MS, EMAIL_UNVERIFIED_CODE, EMAIL_VERIFICATION_COPY, EMAIL_VERIFICATION_TTL_MS, isEmailCode, passwordResetEmailText, verificationEmailText, quotaAnchor, quotaPeriodFor, ACCOUNT_AUTH_COPY, ACCOUNT_DELETION_COPY, PASSWORD_RESET_TTL_MS, GUEST_MINT_WINDOW_MS, GUEST_SESSION_TTL_MS, isValidEmail, passwordProblem, GUEST_USER_PREFIX, SIGNUP_REQUIRED_CODE, guestIdentity, guestRouteBlockReason, isGuestUserId, isHot, parsePerfBatch, signupMessage, type SignupReason } from "@cardflow/shared";
@@ -714,26 +714,11 @@ export function createApp(
   const guestMintsPerHour = options.guestMintsPerHour ?? 10;
   /** Scan Idempotency-Key -> first scan ID (body hash, in-flight, 24 h). */
   const scanIdempotency = createIdempotencyRegistry<string>(() => now().getTime());
-  /** Guest mints per client IP in the last hour. Pruned on every mint. */
-  const guestMints = new Map<string, { windowStart: number; count: number }>();
-  /**
-   * Backend review M1 (P4): user IDs deleted in the last 24 h. Work that was in flight when the
-   * account was deleted (a scan waiting on recognition, a grade job) checks this before it saves.
-   */
-  const deletedUserIds = new Map<string, number>();
-  /**
-   * Backend review H1 (P4): short-lived, PII-free deletion receipts keyed by a hash of the bearer
-   * token, so a retried delete (the first response was lost) gets 410 instead of a plain 401.
-   */
-  const deletionReceipts = new Map<string, number>();
   const DELETION_MEMORY_TTL_MS = 24 * 60 * 60 * 1000;
   const deletionReceiptKey = (token: string) => createHash("sha256").update(`cardflow-deletion-receipt\0${token}`).digest("hex");
-  const pruneDeletionMemory = () => {
-    const cutoff = now().getTime() - DELETION_MEMORY_TTL_MS;
-    for (const [id, at] of deletedUserIds) if (at < cutoff) deletedUserIds.delete(id);
-    for (const [key, at] of deletionReceipts) if (at < cutoff) deletionReceipts.delete(key);
-  };
-  const wasDeleted = (userId: string) => deletedUserIds.has(userId);
+  const deletionCutoff = () => now().getTime() - DELETION_MEMORY_TTL_MS;
+  const pruneDeletionMemory = () => store.processState.deletionMemory.prune(deletionCutoff());
+  const wasDeleted = (userId: string) => store.processState.deletionMemory.wasDeleted(userId, deletionCutoff());
   const accountDeletedBody = { ok: false as const, code: "account_deleted" as const, error: "This account was deleted." };
   let gradeJobRoutes: GradeJobRoutes | null = null;
   /**
@@ -821,9 +806,13 @@ export function createApp(
     if (!process.env.VITEST) console.info(JSON.stringify({ event: "scan_correction", ...correction }));
   };
   const serverCache = options.serverCache ?? serverCacheEnabledFromEnv();
+  // Prices stay in memory (15 min, not a billed vendor). Recognition is persisted so a
+  // redeploy does not re-call CardSight for the same photo.
   const basePricing = options.pricing ?? offPricingProvider;
   const pricing = serverCache ? cachedPricingProvider(basePricing) : basePricing;
-  const recognitionCache = serverCache ? createRecognitionCache() : null;
+  const recognitionCache = serverCache
+    ? createRecognitionCache({ persist: store.processState.recognitionCache })
+    : null;
   const cardSightUserCaps = options.cardSightUserCaps ?? { signedIn: CARDSIGHT_USER_MONTHLY_CAP_DEFAULT };
   const cardMagic = options.cardMagic ?? null;
   const cardSightMonthlyBudget =
@@ -854,16 +843,25 @@ export function createApp(
     // Per-account product cap is monthly (grade quota). Per-IP (and burst) stay here for abuse.
     return [`user:${String(c.get("userId") ?? "anon")}`, ip ? `ip:${ip}` : null];
   };
+  const clockMs = () => now().getTime();
   const gradeRateLimit = rateLimitMiddleware(
     options.gradeRateLimit === undefined ? gradeRateLimitFromEnv() : options.gradeRateLimit,
     rateKeys,
+    clockMs,
+    store.processState.rateLimits,
+    "grade",
   );
   const detectRateLimit = rateLimitMiddleware(
     options.detectRateLimit === undefined ? detectRateLimitFromEnv() : options.detectRateLimit,
     rateKeys,
+    clockMs,
+    store.processState.rateLimits,
+    "detect",
   );
   const gradeDailyCap = globalDailyCapMiddleware(
     options.gradeDailyCap === undefined ? globalGradeDailyCapFromEnv() : options.gradeDailyCap,
+    clockMs,
+    store.processState.rateLimits,
   );
   const gradeGate = options.gradeGate ?? null;
   const gradeCapacity = async (c: Context, next: () => Promise<void>) => {
@@ -1197,16 +1195,13 @@ export function createApp(
     if (!guestMode) return c.json({ ok: false, error: "Not found" }, 404);
     const ip = clientIp(c, trustProxyHops, socketAddress) ?? "unknown";
     const nowMs = now().getTime();
-    for (const [key, entry] of guestMints) if (nowMs - entry.windowStart >= GUEST_MINT_WINDOW_MS) guestMints.delete(key);
-    const bucket = guestMints.get(ip);
-    if (bucket) {
-      if (bucket.count >= guestMintsPerHour) {
-        c.header("Retry-After", String(Math.ceil((bucket.windowStart + GUEST_MINT_WINDOW_MS - nowMs) / 1000)));
-        return c.json({ ok: false, error: "Too many requests" }, 429);
-      }
-      bucket.count += 1;
-    } else {
-      guestMints.set(ip, { windowStart: nowMs, count: 1 });
+    const mint = store.processState.rateLimits.takeWindows(
+      [{ bucketId: `guest:${GUEST_MINT_WINDOW_MS}:${ip}`, windowMs: GUEST_MINT_WINDOW_MS, max: guestMintsPerHour }],
+      nowMs,
+    );
+    if (!mint.allowed) {
+      c.header("Retry-After", String(mint.retryAfterSeconds));
+      return c.json({ ok: false, error: "Too many requests" }, 429);
     }
     const userId = `${GUEST_USER_PREFIX}${crypto.randomUUID()}`;
     const minted = store.accounts.mintSession(userId, {
@@ -1383,7 +1378,7 @@ export function createApp(
       const session = getSessionByToken(token, now());
       if (!session) {
         // Backend review H1: a repeat delete with the token that deleted the account → 410.
-        if (c.req.method === "POST" && c.req.path === "/v1/account/delete" && deletionReceipts.has(deletionReceiptKey(token))) {
+        if (c.req.method === "POST" && c.req.path === "/v1/account/delete" && store.processState.deletionMemory.hasReceipt(deletionReceiptKey(token), deletionCutoff())) {
           return c.json(accountDeletedBody, 410);
         }
         return c.json({ ok: false, error: "Unauthorized" }, 401);
@@ -2056,25 +2051,17 @@ export function createApp(
     return c.json({ ok: true, returned: listGradingReturned(userId) });
   });
 
-  /** Fixed-window limiter for auth routes. Keys are pruned as they expire. */
-  const authHits = new Map<string, { windowStart: number; count: number }>();
+  /** Fixed-window limiter for auth routes. Persisted so a redeploy cannot reset lockouts. */
   const overLimit = (key: string, limit: number, windowMs: number): boolean => {
     const nowMs = now().getTime();
-    if (authHits.size > 10_000) {
-      for (const [k, v] of authHits) if (nowMs - v.windowStart >= 60 * 60 * 1000) authHits.delete(k);
-    }
-    const hit = authHits.get(key);
-    if (!hit || nowMs - hit.windowStart >= windowMs) {
-      authHits.set(key, { windowStart: nowMs, count: 1 });
-      return false;
-    }
-    hit.count += 1;
-    return hit.count > limit;
+    store.processState.rateLimits.prune(nowMs);
+    const count = store.processState.rateLimits.increment(`auth:${key}`, windowMs, nowMs);
+    return count > limit;
   };
   /** Peek without counting (H1: only failed sign-ins count). */
   const isLimited = (key: string, limit: number, windowMs: number): boolean => {
-    const hit = authHits.get(key);
-    return Boolean(hit && now().getTime() - hit.windowStart < windowMs && hit.count >= limit);
+    const hit = store.processState.rateLimits.peek(`auth:${key}`, now().getTime());
+    return Boolean(hit && hit.count >= limit);
   };
   const authLimits = {
     signupPerIp: options.authLimits?.signupPerIp ?? 10,
@@ -2621,7 +2608,7 @@ export function createApp(
     }
     // Backend review M1/L1: in-flight work is refused from now on, and in-memory state goes.
     pruneDeletionMemory();
-    deletedUserIds.set(userId, now().getTime());
+    store.processState.deletionMemory.markDeleted(userId, now().getTime());
     scanIdempotency.purgePrefix(`${userId}\0`);
     writeIdempotency.purgePrefix(`${userId}\0`);
     gradeJobRoutes?.purgeUser(userId);
@@ -2740,7 +2727,7 @@ export function createApp(
     }
     const { rows, photos, staged, rowsDeleted, pokecollector } = deleteUserEverything(userId, "self");
     const token = parseBearerToken(c.req.header("authorization"));
-    if (token) deletionReceipts.set(deletionReceiptKey(token), now().getTime());
+    if (token) store.processState.deletionMemory.putReceipt(deletionReceiptKey(token), now().getTime());
     return c.json({
       // Re-review M1: never waits on PokéCollector ("queued": deleted in the background).
       pokecollector,
@@ -3119,17 +3106,21 @@ export function createApp(
           store.consents.monthlyUse(userId, monthKey) < userCap
             ? options.cardSight
             : null;
-        // Charge per-user cap only after a successful CardSight response (errors/timeouts don't count).
-        // Global budget is charged inside the adapter the same way (consumeBudget after ok:true).
+        // Reserve the per-user cap before the vendor call so concurrent scans cannot
+        // overshoot. Release on a miss so errors/timeouts still don't count.
+        // Global budget is reserved inside the adapter the same way.
         const runLive = cardSight
           ? async () => {
-              if (store.consents.monthlyUse(userId, monthKey) >= userCap) return runLocal();
-              const first = await cardSight.identifyCard(identifyRequest);
-              if (first.ok) {
-                store.consents.takeMonthlyUse(userId, monthKey, userCap);
-                return first;
+              if (!store.consents.takeMonthlyUse(userId, monthKey, userCap)) return runLocal();
+              try {
+                const first = await cardSight.identifyCard(identifyRequest);
+                if (first.ok) return first;
+                store.consents.releaseMonthlyUse(userId, monthKey);
+                return runLocal();
+              } catch (error) {
+                store.consents.releaseMonthlyUse(userId, monthKey);
+                throw error;
               }
-              return runLocal();
             }
           : runLocal;
         recognition = recognitionCache
@@ -3707,7 +3698,14 @@ export function createApp(
               now: now(),
               onUsage: (used, cap) => metrics.recordCardSightBudgetUsage(used, cap),
             }),
+          releaseBudget: () =>
+            releaseCardSightBudget({
+              release: store.releaseVendorQuota,
+              cap: cardSightMonthlyBudget,
+              now: now(),
+            }),
           takeUse: () => store.consents.takeMonthlyUse(userId, monthKey, userCap),
+          releaseUse: () => store.consents.releaseMonthlyUse(userId, monthKey),
         },
         still: parsed.still,
         side: parsed.side,
@@ -3868,6 +3866,7 @@ export function createApp(
       return Promise.resolve(app.fetch(request));
     },
     bodyLimit: bodyLimit({ maxSize: GRADE_ROUTE_BODY_MAX_BYTES, onError: gradeBodyTooLarge }),
+    jobs: store.processState.gradeJobs,
     ...options.gradeJobLimits,
   });
 
@@ -4549,6 +4548,7 @@ export function createApp(
     }
   });
 
+  gradeJobRoutes?.resumeUnfinished();
   return app;
 }
 
