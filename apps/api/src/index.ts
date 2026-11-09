@@ -140,7 +140,7 @@ if (rapidOCRConfig.enabled) {
 
 // Newsletter weekly draft job (creates drafts only, never sends automatically)
 import { startWeeklyNewsletterJob } from "./newsletter-job";
-import { startPokemonTcgSnapshotJob } from "./pokemon-tcg-snapshot-job";
+import { startTrendingSnapshotJob } from "./trending-snapshot";
 import { trendingEnabledFromEnv } from "@cardflow/shared";
 let newsletterJob: { stop: () => void } | null = null;
 let trendingSnapshotJob: { stop: () => void } | null = null;
@@ -148,7 +148,7 @@ if (selection.kind === "sqlite") {
   const sqliteStore = store as any;
   if (sqliteStore.db) {
     newsletterJob = startWeeklyNewsletterJob(sqliteStore);
-    trendingSnapshotJob = startPokemonTcgSnapshotJob({ store: sqliteStore });
+    trendingSnapshotJob = startTrendingSnapshotJob({ store: sqliteStore });
   }
 }
 

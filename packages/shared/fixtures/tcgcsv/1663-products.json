@@ -1,0 +1,45 @@
+{
+  "totalItems": 2,
+  "success": true,
+  "errors": [],
+  "results": [
+    {
+      "productId": 106996,
+      "name": "Alakazam",
+      "cleanName": "Alakazam",
+      "imageUrl": "https://tcgplayer-cdn.tcgplayer.com/product/106996_200w.jpg",
+      "categoryId": 3,
+      "groupId": 1663,
+      "url": "https://www.tcgplayer.com/product/106996/pokemon-base-set-shadowless-alakazam",
+      "extendedData": [
+        {
+          "name": "Number",
+          "value": "001/102"
+        },
+        {
+          "name": "Rarity",
+          "value": "Holo Rare"
+        }
+      ]
+    },
+    {
+      "productId": 106997,
+      "name": "Blastoise",
+      "cleanName": "Blastoise",
+      "imageUrl": "https://tcgplayer-cdn.tcgplayer.com/product/106997_200w.jpg",
+      "categoryId": 3,
+      "groupId": 1663,
+      "url": "https://www.tcgplayer.com/product/106997/pokemon-base-set-shadowless-blastoise",
+      "extendedData": [
+        {
+          "name": "Number",
+          "value": "002/102"
+        },
+        {
+          "name": "Rarity",
+          "value": "Holo Rare"
+        }
+      ]
+    }
+  ]
+}

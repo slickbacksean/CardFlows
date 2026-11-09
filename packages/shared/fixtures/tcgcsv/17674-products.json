@@ -1,0 +1,64 @@
+{
+  "totalItems": 3,
+  "success": true,
+  "errors": [],
+  "results": [
+    {
+      "productId": 450295,
+      "name": "Mawile V",
+      "cleanName": "Mawile V",
+      "imageUrl": "https://tcgplayer-cdn.tcgplayer.com/product/450295_200w.jpg",
+      "categoryId": 3,
+      "groupId": 17674,
+      "url": "https://www.tcgplayer.com/product/450295/pokemon-swsh12-silver-tempest-trainer-gallery-mawile-v",
+      "extendedData": [
+        {
+          "name": "Number",
+          "value": "TG17/TG30"
+        },
+        {
+          "name": "Rarity",
+          "value": "Ultra Rare"
+        }
+      ]
+    },
+    {
+      "productId": 451398,
+      "name": "Zeraora V",
+      "cleanName": "Zeraora V",
+      "imageUrl": "https://tcgplayer-cdn.tcgplayer.com/product/451398_200w.jpg",
+      "categoryId": 3,
+      "groupId": 17674,
+      "url": "https://www.tcgplayer.com/product/451398/pokemon-swsh12-silver-tempest-trainer-gallery-zeraora-v",
+      "extendedData": [
+        {
+          "name": "Number",
+          "value": "TG16/TG30"
+        },
+        {
+          "name": "Rarity",
+          "value": "Ultra Rare"
+        }
+      ]
+    },
+    {
+      "productId": 452015,
+      "name": "Braixen",
+      "cleanName": "Braixen",
+      "imageUrl": "https://tcgplayer-cdn.tcgplayer.com/product/452015_200w.jpg",
+      "categoryId": 3,
+      "groupId": 17674,
+      "url": "https://www.tcgplayer.com/product/452015/pokemon-swsh12-silver-tempest-trainer-gallery-braixen",
+      "extendedData": [
+        {
+          "name": "Number",
+          "value": "TG01/TG30"
+        },
+        {
+          "name": "Rarity",
+          "value": "Ultra Rare"
+        }
+      ]
+    }
+  ]
+}

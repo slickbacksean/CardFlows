@@ -200,7 +200,7 @@ import { isMemorySqlitePath } from "./db/migrate";
 import { isAdmin } from "./admin-auth";
 import { registerStatusRoutes } from "./routes/status";
 import { registerTrendingRoutes } from "./routes/trending";
-import { runPokemonTcgSnapshot } from "./pokemon-tcg-snapshot-job";
+import { runTrendingSnapshot } from "./trending-snapshot";
 import type { SqliteStorePort } from "./sqlite-store";
 import { registerSalesRoutes } from "./routes/sales";
 import { premiumRequiredBody, recordGradeEstimate, registerGradeHistoryRoutes } from "./routes/grade-history";
@@ -571,8 +571,10 @@ export interface CreateAppOptions {
    * Off: GET /v1/trending answers 503 feature_disabled; /v1/status reports it.
    */
   trendingEnabled?: () => boolean;
-  /** Tests inject a mock fetch for the pokemontcg.io snapshot job. */
+  /** Tests inject a mock fetch for the Trending snapshot job (TCGCSV or pokemontcg.io). */
   pokemonTcgFetch?: typeof fetch;
+  trendingSnapshotFetch?: typeof fetch;
+  trendingPriceSource?: "tcgcsv" | "pokemontcg";
   /** YOLO on livestream frames. Empty until the AGPL flag and weights file are both set. */
   liveVideoObb?: () => ObbDetector | null;
   /** Prepare photo-estimate provider. Tests default to mock; flag off injects unavailable. */
@@ -1527,10 +1529,11 @@ export function createApp(
     sqliteStore: sqliteForTrending,
     runSnapshot: sqliteForTrending
       ? (force) =>
-          runPokemonTcgSnapshot({
+          runTrendingSnapshot({
             store: sqliteForTrending,
             force,
-            fetchImpl: options.pokemonTcgFetch,
+            fetchImpl: options.trendingSnapshotFetch ?? options.pokemonTcgFetch,
+            priceSource: options.trendingPriceSource,
           })
       : undefined,
     opsToken: opsToken ?? null,

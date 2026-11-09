@@ -77,16 +77,20 @@ Grade stays in the codebase (`/v1/grade/*`, `/v1/grading`, `grading.tsx`) but is
 | Variable | Default | What it does |
 |---|---|---|
 | `CARD_FLOW_TRENDING_ENABLED` | **off** | API `GET /v1/trending` + `features.trending` on `GET /v1/status`. Apps show the Trending tab only when this is `1` / `true` / `on` / `yes`. Redeploy/restart the API to apply it. |
-| `CARD_FLOW_TRENDING_SNAPSHOT_ENABLED` | off, unless Trending is on | In-process daily pokemontcg.io price snapshot. Turn this on **about 8 days before** the tab so 7-day movers have history. |
+| `CARD_FLOW_TRENDING_SNAPSHOT_ENABLED` | off, unless Trending is on | In-process daily price snapshot. Default source is TCGCSV. Turn this on **about 8 days before** the tab so 7-day movers have history. |
 | `CARD_FLOW_TRENDING_SNAPSHOT_INTERVAL_MS` | `86400000` (24h) | How often the API process re-runs the snapshot. Skips if a successful run already finished today (or within 20h). |
-| `POKEMONTCG_API_KEY` | unset | Optional `X-Api-Key` for api.pokemontcg.io (20,000 req/day vs 1,000 without). Server-only; never put this on the phone or in logs. |
+| `CARD_FLOW_TRENDING_PRICE_SOURCE` | `tcgcsv` | `tcgcsv` (free daily TCGplayer dumps, no API key) or `pokemontcg` (legacy api.pokemontcg.io fallback). |
+| `CARD_FLOW_TCGCSV_USER_AGENT` | `PokeSniper/1.0 (trending-snapshot)` | User-Agent sent to tcgcsv.com. Their docs block generic/missing agents. |
+| `CARD_FLOW_TCGCSV_REQUEST_DELAY_MS` | `150` | Delay between TCGCSV requests (their docs ask for ≥100ms). |
+| `POKEMONTCG_API_KEY` | unset | Only used when `CARD_FLOW_TRENDING_PRICE_SOURCE=pokemontcg`. Optional `X-Api-Key` for api.pokemontcg.io. Server-only; never put this on the phone or in logs. |
 
 **Job schedule**
 - In-process: on API boot (if the snapshot flag is on) then every 24h, with a 20h minimum gap so a restart does not double-fetch.
-- External cron (recommended on Railway): `0 6 * * *` UTC → `POST /ops/trending/snapshot` with `Authorization: Bearer $CARD_FLOW_OPS_TOKEN`. Add `?force=1` to re-run the same UTC day. A full catalog pass is ~80 pages of 250 (`select=id,name,number,set,tcgplayer,images`).
+- External cron (recommended on Railway): `0 6 * * *` UTC → `POST /ops/trending/snapshot` with `Authorization: Bearer $CARD_FLOW_OPS_TOKEN`. Add `?force=1` to re-run the same UTC day even if last-updated.txt has not changed.
+- TCGCSV path: `GET last-updated.txt`, then Pokemon `categoryId=3` groups, then each group's `products` + `prices`. Skips the pull when last-updated.txt matches the last successful dump. Groups are processed one at a time (small Railway memory). A failed group is skipped; other groups still write. Idempotent upserts per UTC day.
 - Snapshots older than 90 days are deleted.
-- Unmatched pokemontcg.io ids are stored in `pokemon_tcg_id_map` (`mapping_status=unmatched`) and omitted from the tab. See [CARD_ID_MAPPING_PLAN.md](./CARD_ID_MAPPING_PLAN.md) § pokemontcg.io.
-- Migration `0035_trending_prices` (after `0034_process_state`): mapping table, daily snapshots, run log.
+- Unmatched products (unknown set, sealed, non-English) are stored in `pokemon_tcg_id_map` (`mapping_status=unmatched`, TCGCSV keys look like `tcgcsv:{productId}`) and omitted from the tab. See [CARD_ID_MAPPING_PLAN.md](./CARD_ID_MAPPING_PLAN.md) § TCGCSV.
+- Migration `0035_trending_prices` (after `0034_process_state`): mapping table, daily snapshots, run log. No new migration for the TCGCSV switch.
 
 The client has **no** `EXPO_PUBLIC_CARD_FLOW_TRENDING_*` variable — same pattern as grading: `useTrendingEnabled()` reads `/v1/status`.
 

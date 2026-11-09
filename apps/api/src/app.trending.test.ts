@@ -119,7 +119,7 @@ describe("trending API", () => {
     expect(body.popularity.cards[0]?.tcgdexId).toBe("base1-4");
     expect(body.movers.up[0]).toMatchObject({ tcgdexId: "base1-4", changePercent: 50, changeUsd: "+$5.00" });
     expect(body.movers.down[0]?.tcgdexId).toBe("base1-58");
-    expect(body.attribution.pokemontcg).toMatch(/pokemontcg\.io/);
+    expect(body.attribution.pokemontcg).toMatch(/TCGCSV|pokemontcg\.io/);
     store.close();
   });
 
@@ -207,12 +207,18 @@ describe("trending API", () => {
     const dir = mkdtempSync(path.join(tmpdir(), "trending-ops-"));
     dirs.push(dir);
     const store = createSqliteStore({ sqlitePath: path.join(dir, "db.sqlite") });
-    const fetchImpl: typeof fetch = async () =>
-      new Response(JSON.stringify({ data: [], page: 1, pageSize: 250, count: 0, totalCount: 0 }), { status: 200 });
+    const fetchImpl: typeof fetch = async (input) => {
+      const url = String(input);
+      if (url.includes("last-updated.txt")) return new Response("2026-11-08T20:05:45+0000", { status: 200 });
+      if (url.includes("/groups")) {
+        return new Response(JSON.stringify({ success: true, errors: [], results: [], totalItems: 0 }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ data: [], page: 1, pageSize: 250, count: 0, totalCount: 0 }), { status: 200 });
+    };
     const app = createApp(store, {
       trendingEnabled: () => true,
       opsToken: "ops-secret",
-      pokemonTcgFetch: fetchImpl,
+      trendingSnapshotFetch: fetchImpl,
     });
     const missing = await app.request("/ops/trending/snapshot", { method: "POST" });
     expect(missing.status).toBe(401);

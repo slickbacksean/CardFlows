@@ -1126,8 +1126,9 @@ export const trainingImages = sqliteTable(
 );
 
 /**
- * pokemontcg.io card id → TCGdex catalog id. Unmatched rows stay here for ops
- * (counts + unmatched_reason) and are omitted from the Trending API.
+ * External price-source id → TCGdex catalog id. TCGCSV rows use `tcgcsv:{productId}`;
+ * the pokemontcg.io fallback still uses `{set}-{number}`. Unmatched rows stay here
+ * for ops (counts + unmatched_reason) and are omitted from the Trending API.
  */
 export const pokemonTcgIdMap = sqliteTable(
   "pokemon_tcg_id_map",
@@ -1151,8 +1152,8 @@ export const pokemonTcgIdMap = sqliteTable(
 );
 
 /**
- * Daily market prices from pokemontcg.io `tcgplayer.prices.*.market`.
- * One row per card + UTC date + finish. Nothing else.
+ * Daily market prices (TCGCSV `marketPrice` by default, pokemontcg.io fallback).
+ * One row per external card id + UTC date + finish. Nothing else.
  */
 export const pokemonTcgPriceSnapshots = sqliteTable(
   "pokemon_tcg_price_snapshots",

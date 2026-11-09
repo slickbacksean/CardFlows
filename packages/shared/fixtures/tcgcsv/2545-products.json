@@ -1,0 +1,64 @@
+{
+  "totalItems": 3,
+  "success": true,
+  "errors": [],
+  "results": [
+    {
+      "productId": 200300,
+      "name": "Grookey - SWSH001",
+      "cleanName": "Grookey SWSH001",
+      "imageUrl": "https://tcgplayer-cdn.tcgplayer.com/product/200300_200w.jpg",
+      "categoryId": 3,
+      "groupId": 2545,
+      "url": "https://www.tcgplayer.com/product/200300/pokemon-swsh-sword-and-shield-promo-cards-grookey-swsh001",
+      "extendedData": [
+        {
+          "name": "Number",
+          "value": "SWSH001"
+        },
+        {
+          "name": "Rarity",
+          "value": "Promo"
+        }
+      ]
+    },
+    {
+      "productId": 200301,
+      "name": "Scorbunny - SWSH002",
+      "cleanName": "Scorbunny SWSH002",
+      "imageUrl": "https://tcgplayer-cdn.tcgplayer.com/product/200301_200w.jpg",
+      "categoryId": 3,
+      "groupId": 2545,
+      "url": "https://www.tcgplayer.com/product/200301/pokemon-swsh-sword-and-shield-promo-cards-scorbunny-swsh002",
+      "extendedData": [
+        {
+          "name": "Number",
+          "value": "SWSH002"
+        },
+        {
+          "name": "Rarity",
+          "value": "Promo"
+        }
+      ]
+    },
+    {
+      "productId": 200302,
+      "name": "Sobble - SWSH003",
+      "cleanName": "Sobble SWSH003",
+      "imageUrl": "https://tcgplayer-cdn.tcgplayer.com/product/200302_200w.jpg",
+      "categoryId": 3,
+      "groupId": 2545,
+      "url": "https://www.tcgplayer.com/product/200302/pokemon-swsh-sword-and-shield-promo-cards-sobble-swsh003",
+      "extendedData": [
+        {
+          "name": "Number",
+          "value": "SWSH003"
+        },
+        {
+          "name": "Rarity",
+          "value": "Promo"
+        }
+      ]
+    }
+  ]
+}
