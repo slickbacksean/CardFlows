@@ -12,3 +12,8 @@
 - **Apple age rating:** answer the age-rating questionnaire truthfully, then set the higher **18+** rating (App Store Connect > App Information > Age Rating, "Override to higher age rating"). Confirm that control exists once the Apple developer account is set up.
 - **Google Play:** Target audience and content > target age group **18 and over** only. Keep the store listing focused on resellers and collectors (no child-directed art or wording). Answer the IARC content-rating questionnaire truthfully.
 - **Counsel:** check the Utah and Texas app-store age-verification laws before launch, and ask CardSight in writing whether self-attestation is acceptable.
+- **TestFlight (iOS):** first build is EAS `preview` or `production` iOS (Apple Developer account). Privacy labels: [STORE_PRIVACY_LABELS.md](./STORE_PRIVACY_LABELS.md). The IPA must include `PrivacyInfo.xcprivacy` from `apps/mobile/app.json` `ios.privacyManifests` — see [RELEASE_ENV.md](./RELEASE_ENV.md#testflight-ios). After downloading the IPA:
+  ```sh
+  unzip -p *.ipa 'Payload/*.app/PrivacyInfo.xcprivacy'
+  ```
+  Confirm tracking is off, the four collected types (email, user ID, photos, crash data), and required-reason APIs UserDefaults `CA92.1`, FileTimestamp `C617.1`, SystemBootTime `35F9.1`. OTA: rebuild that binary once so it contains `expo-updates`, then `eas update --channel preview` (or `production`). Expo Go is unchanged (`npx expo start`).
