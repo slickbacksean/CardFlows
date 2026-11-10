@@ -893,5 +893,7 @@ export * from "./terms";
 export * from "./livestream-kill-switch";
 export * from "./trending";
 export * from "./pokemon-tcg-map";
+export * from "./tcgcsv-map";
+export * from "./tcgcsv-sets";
 export * from "./sentry-release";
 export * from "./training-capture";

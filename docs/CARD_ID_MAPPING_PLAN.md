@@ -263,7 +263,28 @@ On catalog outage: if `(language, tcgdex_id)` is already in PokeSniper cache / p
 **Version:** 2026-09-12  
 **Spike deliverable for review** — Mapping plan + mock fixtures only; no production tables.
 
-## pokemontcg.io → TCGdex (Trending snapshots)
+## TCGCSV → TCGdex (Trending snapshots)
+
+Catalog identity stays **TCGdex `tcgdex_id`**. TCGCSV / TCGplayer product ids are never inventory keys. The daily snapshot (default `CARD_FLOW_TRENDING_PRICE_SOURCE=tcgcsv`) maps them in `pokemon_tcg_id_map` with `pokemontcg_card_id = tcgcsv:{productId}`:
+
+| TCGCSV | TCGdex | Method |
+|---|---|---|
+| Base Set Alakazam `001/102` | `base1-1` | `group_name` (WotC numbers unpadded) |
+| SV01 Sprigatito `013/198` | `sv01-013` | `group_name` (SV numeric ids padded to 3) |
+| SWSH12 Lugia V `138/195` | `swsh12-138` | `group_name` |
+| SWSH promo `SWSH001` | `swshp-SWSH001` | `group_name` (promo prefix kept) |
+| Silver Tempest TG `TG17/TG30` | `swsh12tg-TG17` | `group_name` (Trainer Gallery is its own TCGdex set) |
+| Booster box / sealed (no Number) | `tcgdex_id` null | `unmatched` + `not_a_card` |
+| JP Exclusive group | skipped | `non_english` |
+| Unknown English group | `tcgdex_id` null | `unknown_set:…` — never invent a set id |
+
+**Printings:** TCGCSV `subTypeName` maps onto the same variant keys pokemontcg.io used (`normal`, `holofoil`, `reverseHolofoil`, `1stEdition`, `1stEditionHolofoil`, `unlimited`, `unlimitedHolofoil`). Unknown printings are camelCased and kept. Missing `marketPrice` skips that finish. Base Set (Shadowless) maps onto `base1`; the printing stays distinct via subtype.
+
+**English only.** Non-English group names are skipped. Dual trainer kits, sealed product lines, and misc promo buckets stay unmatched.
+
+The pokemontcg.io fallback (`CARD_FLOW_TRENDING_PRICE_SOURCE=pokemontcg`) still uses the table below.
+
+## pokemontcg.io → TCGdex (Trending snapshots, fallback)
 
 Catalog identity stays **TCGdex `tcgdex_id`**. pokemontcg.io ids are never inventory keys. The daily snapshot job maps them in `pokemon_tcg_id_map`:
 

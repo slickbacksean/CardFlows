@@ -1,15 +1,10 @@
 /**
- * Daily pokemontcg.io price snapshot.
+ * Daily pokemontcg.io price snapshot (fallback when CARD_FLOW_TRENDING_PRICE_SOURCE=pokemontcg).
  * Writes market cents per finish into pokemon_tcg_price_snapshots and maps ids to TCGdex.
  * Respects rate limits; never prints POKEMONTCG_API_KEY.
  */
-import { desc, eq, lt } from "drizzle-orm";
 import { mapPokemontcgCardToTcgdex, utcDateString } from "@cardflow/shared";
-import {
-  pokemonTcgIdMap,
-  pokemonTcgPriceSnapshots,
-  pokemonTcgSnapshotRuns,
-} from "./db/schema";
+import { pokemonTcgIdMap, pokemonTcgPriceSnapshots } from "./db/schema";
 import {
   fetchPokemonTcgPageWithRetry,
   marketUsdToCents,
@@ -19,40 +14,26 @@ import {
   type PokemonTcgCard,
 } from "./pokemon-tcg-http";
 import type { SqliteStorePort } from "./sqlite-store";
+import {
+  TRENDING_SNAPSHOT_CRON,
+  insertRunningSnapshot,
+  pruneOldPriceSnapshots,
+  skipIfAlreadyRan,
+  trendingSnapshotEnabledFromEnv,
+  trendingSnapshotIntervalMsFromEnv,
+  writeSnapshotRun,
+  type SnapshotRunResult,
+} from "./trending-snapshot-run";
 
-export const TRENDING_SNAPSHOT_INTERVAL_MS = 24 * 60 * 60 * 1000;
-export const TRENDING_SNAPSHOT_MIN_GAP_MS = 20 * 60 * 60 * 1000;
-export const TRENDING_SNAPSHOT_RETENTION_DAYS = 90;
-export const TRENDING_SNAPSHOT_CRON = "0 6 * * *";
-
-export function trendingSnapshotEnabledFromEnv(env: NodeJS.Dict<string | undefined> = process.env): boolean {
-  const explicit = env.CARD_FLOW_TRENDING_SNAPSHOT_ENABLED?.trim().toLowerCase();
-  if (explicit) return ["1", "true", "on", "yes"].includes(explicit);
-  const trending = env.CARD_FLOW_TRENDING_ENABLED?.trim().toLowerCase();
-  return ["1", "true", "on", "yes"].includes(trending ?? "");
-}
-
-export function trendingSnapshotIntervalMsFromEnv(env: NodeJS.Dict<string | undefined> = process.env): number {
-  const raw = env.CARD_FLOW_TRENDING_SNAPSHOT_INTERVAL_MS?.trim();
-  if (!raw) return TRENDING_SNAPSHOT_INTERVAL_MS;
-  const n = Number(raw);
-  return Number.isFinite(n) && n > 0 ? n : TRENDING_SNAPSHOT_INTERVAL_MS;
-}
-
-export interface SnapshotRunResult {
-  ok: boolean;
-  status: "success" | "failed" | "skipped";
-  runId: string;
-  snapshotDate: string | null;
-  pagesFetched: number;
-  cardsSeen: number;
-  snapshotsWritten: number;
-  matched: number;
-  unmatched: number;
-  maxTcgplayerUpdatedAt: string | null;
-  skipped?: boolean;
-  error?: string;
-}
+export {
+  TRENDING_SNAPSHOT_CRON,
+  TRENDING_SNAPSHOT_INTERVAL_MS,
+  TRENDING_SNAPSHOT_MIN_GAP_MS,
+  TRENDING_SNAPSHOT_RETENTION_DAYS,
+  trendingSnapshotEnabledFromEnv,
+  trendingSnapshotIntervalMsFromEnv,
+} from "./trending-snapshot-run";
+export type { SnapshotRunResult } from "./trending-snapshot-run";
 
 export interface RunSnapshotOptions {
   store: SqliteStorePort;
@@ -77,54 +58,6 @@ function finishesFromCard(card: PokemonTcgCard): Array<{ variant: string; cents:
   return out;
 }
 
-function latestSuccessfulRun(store: SqliteStorePort): { snapshotDate: string; finishedAt: string } | null {
-  const row = store.db
-    .select({
-      snapshotDate: pokemonTcgSnapshotRuns.snapshotDate,
-      finishedAt: pokemonTcgSnapshotRuns.finishedAt,
-    })
-    .from(pokemonTcgSnapshotRuns)
-    .where(eq(pokemonTcgSnapshotRuns.status, "success"))
-    .orderBy(desc(pokemonTcgSnapshotRuns.finishedAt))
-    .limit(1)
-    .all()[0];
-  if (!row?.snapshotDate || !row.finishedAt) return null;
-  return { snapshotDate: row.snapshotDate, finishedAt: row.finishedAt };
-}
-
-function writeRun(store: SqliteStorePort, runId: string, result: SnapshotRunResult, startedAt?: string): void {
-  const finishedAt = new Date().toISOString();
-  const existing = store.db
-    .select({ runId: pokemonTcgSnapshotRuns.runId })
-    .from(pokemonTcgSnapshotRuns)
-    .where(eq(pokemonTcgSnapshotRuns.runId, runId))
-    .all()[0];
-  const values = {
-    finishedAt,
-    status: result.status === "skipped" ? "success" : result.status,
-    snapshotDate: result.snapshotDate,
-    pagesFetched: result.pagesFetched,
-    cardsSeen: result.cardsSeen,
-    snapshotsWritten: result.snapshotsWritten,
-    matched: result.matched,
-    unmatched: result.unmatched,
-    maxTcgplayerUpdatedAt: result.maxTcgplayerUpdatedAt,
-    error: result.error ?? null,
-  };
-  if (existing) {
-    store.db.update(pokemonTcgSnapshotRuns).set(values).where(eq(pokemonTcgSnapshotRuns.runId, runId)).run();
-    return;
-  }
-  store.db
-    .insert(pokemonTcgSnapshotRuns)
-    .values({
-      runId,
-      startedAt: startedAt ?? finishedAt,
-      ...values,
-    })
-    .run();
-}
-
 export async function runPokemonTcgSnapshot(options: RunSnapshotOptions): Promise<SnapshotRunResult> {
   const now = options.now ?? new Date();
   const snapshotDate = utcDateString(now);
@@ -134,52 +67,10 @@ export async function runPokemonTcgSnapshot(options: RunSnapshotOptions): Promis
   const sleep = options.sleep ?? sleepMs;
   const delayMs = pokemonTcgRequestDelayMs(Boolean(apiKey));
 
-  if (!options.force) {
-    const last = latestSuccessfulRun(options.store);
-    if (last?.snapshotDate === snapshotDate) {
-      return {
-        ok: true,
-        status: "skipped",
-        runId,
-        snapshotDate,
-        pagesFetched: 0,
-        cardsSeen: 0,
-        snapshotsWritten: 0,
-        matched: 0,
-        unmatched: 0,
-        maxTcgplayerUpdatedAt: null,
-        skipped: true,
-      };
-    }
-    if (last?.finishedAt) {
-      const gap = now.getTime() - Date.parse(last.finishedAt);
-      if (Number.isFinite(gap) && gap < TRENDING_SNAPSHOT_MIN_GAP_MS) {
-        return {
-          ok: true,
-          status: "skipped",
-          runId,
-          snapshotDate: last.snapshotDate,
-          pagesFetched: 0,
-          cardsSeen: 0,
-          snapshotsWritten: 0,
-          matched: 0,
-          unmatched: 0,
-          maxTcgplayerUpdatedAt: null,
-          skipped: true,
-        };
-      }
-    }
-  }
+  const skipped = skipIfAlreadyRan(options.store, now, options.force, runId);
+  if (skipped) return skipped;
 
-  options.store.db
-    .insert(pokemonTcgSnapshotRuns)
-    .values({
-      runId,
-      startedAt,
-      status: "running",
-      snapshotDate,
-    })
-    .run();
+  insertRunningSnapshot(options.store, runId, startedAt, snapshotDate);
 
   let pagesFetched = 0;
   let cardsSeen = 0;
@@ -293,8 +184,7 @@ export async function runPokemonTcgSnapshot(options: RunSnapshotOptions): Promis
       await sleep(delayMs);
     }
 
-    const cutoff = utcDateString(new Date(now.getTime() - TRENDING_SNAPSHOT_RETENTION_DAYS * 24 * 60 * 60 * 1000));
-    options.store.db.delete(pokemonTcgPriceSnapshots).where(lt(pokemonTcgPriceSnapshots.snapshotDate, cutoff)).run();
+    pruneOldPriceSnapshots(options.store, now);
 
     const result: SnapshotRunResult = {
       ok: true,
@@ -308,7 +198,7 @@ export async function runPokemonTcgSnapshot(options: RunSnapshotOptions): Promis
       unmatched,
       maxTcgplayerUpdatedAt,
     };
-    writeRun(options.store, runId, result, startedAt);
+    writeSnapshotRun(options.store, runId, result, startedAt);
     return result;
   } catch (error) {
     const message = error instanceof Error ? error.message : "snapshot failed";
@@ -325,7 +215,7 @@ export async function runPokemonTcgSnapshot(options: RunSnapshotOptions): Promis
       maxTcgplayerUpdatedAt,
       error: message,
     };
-    writeRun(options.store, runId, result, startedAt);
+    writeSnapshotRun(options.store, runId, result, startedAt);
     return result;
   }
 }

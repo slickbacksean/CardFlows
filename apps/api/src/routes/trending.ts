@@ -4,7 +4,7 @@ import type { CardFlowApp } from "../app-env";
 import { emptyTrendingPayload, loadTrendingPayload } from "../trending";
 import { parseTrendingWindow } from "@cardflow/shared";
 import type { SqliteStorePort } from "../sqlite-store";
-import type { SnapshotRunResult } from "../pokemon-tcg-snapshot-job";
+import type { SnapshotRunResult } from "../trending-snapshot-run";
 
 export interface TrendingRouteDeps {
   trendingEnabled: () => boolean;

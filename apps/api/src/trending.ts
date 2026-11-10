@@ -1,5 +1,5 @@
 /**
- * Assemble GET /v1/trending from snapshotted pokemontcg.io prices + anonymous activity.
+ * Assemble GET /v1/trending from snapshotted TCGCSV (or pokemontcg.io fallback) prices + anonymous activity.
  */
 import { and, desc, eq, gte, sql } from "drizzle-orm";
 import {
@@ -10,6 +10,7 @@ import {
   pairPriceDeltas,
   parseTrendingWindow,
   POKEMONTCG_NOTICE,
+  TCGCSV_NOTICE,
   previousSnapshotDate,
   rankPopularCards,
   selectMovers,
@@ -33,6 +34,7 @@ import {
   pokemonTcgSnapshotRuns,
 } from "./db/schema";
 import type { SqliteStorePort } from "./sqlite-store";
+import { trendingPriceSourceFromEnv } from "./trending-snapshot-run";
 
 const ACTIVITY_WINDOW_MS: Record<TrendingWindow, number> = {
   "24h": 24 * 60 * 60 * 1000,
@@ -40,6 +42,7 @@ const ACTIVITY_WINDOW_MS: Record<TrendingWindow, number> = {
 };
 
 export function emptyTrendingPayload(window: TrendingWindow, now = new Date()): TrendingPayload {
+  const priceSource = trendingPriceSourceFromEnv();
   return {
     ok: true,
     window,
@@ -58,7 +61,7 @@ export function emptyTrendingPayload(window: TrendingWindow, now = new Date()): 
     },
     unmatchedCount: 0,
     attribution: {
-      pokemontcg: POKEMONTCG_NOTICE,
+      pokemontcg: priceSource === "pokemontcg" ? POKEMONTCG_NOTICE : TCGCSV_NOTICE,
       tcgplayer: TCGPLAYER_NOTICE,
     },
   };

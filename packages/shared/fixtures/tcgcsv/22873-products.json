@@ -1,0 +1,64 @@
+{
+  "totalItems": 3,
+  "success": true,
+  "errors": [],
+  "results": [
+    {
+      "productId": 475417,
+      "name": "Sprigatito",
+      "cleanName": "Sprigatito",
+      "imageUrl": "https://tcgplayer-cdn.tcgplayer.com/product/475417_200w.jpg",
+      "categoryId": 3,
+      "groupId": 22873,
+      "url": "https://www.tcgplayer.com/product/475417/pokemon-sv01-scarlet-and-violet-base-set-sprigatito",
+      "extendedData": [
+        {
+          "name": "Number",
+          "value": "013/198"
+        },
+        {
+          "name": "Rarity",
+          "value": "Common"
+        }
+      ]
+    },
+    {
+      "productId": 475418,
+      "name": "Fuecoco",
+      "cleanName": "Fuecoco",
+      "imageUrl": "https://tcgplayer-cdn.tcgplayer.com/product/475418_200w.jpg",
+      "categoryId": 3,
+      "groupId": 22873,
+      "url": "https://www.tcgplayer.com/product/475418/pokemon-sv01-scarlet-and-violet-base-set-fuecoco",
+      "extendedData": [
+        {
+          "name": "Number",
+          "value": "036/198"
+        },
+        {
+          "name": "Rarity",
+          "value": "Common"
+        }
+      ]
+    },
+    {
+      "productId": 475419,
+      "name": "Quaxly",
+      "cleanName": "Quaxly",
+      "imageUrl": "https://tcgplayer-cdn.tcgplayer.com/product/475419_200w.jpg",
+      "categoryId": 3,
+      "groupId": 22873,
+      "url": "https://www.tcgplayer.com/product/475419/pokemon-sv01-scarlet-and-violet-base-set-quaxly",
+      "extendedData": [
+        {
+          "name": "Number",
+          "value": "052/198"
+        },
+        {
+          "name": "Rarity",
+          "value": "Common"
+        }
+      ]
+    }
+  ]
+}

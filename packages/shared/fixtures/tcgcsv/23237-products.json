@@ -1,0 +1,74 @@
+{
+  "totalItems": 4,
+  "success": true,
+  "errors": [],
+  "results": [
+    {
+      "productId": 502548,
+      "name": "Squirtle - 007/165",
+      "cleanName": "Squirtle 007 165",
+      "imageUrl": "https://tcgplayer-cdn.tcgplayer.com/product/502548_200w.jpg",
+      "categoryId": 3,
+      "groupId": 23237,
+      "url": "https://www.tcgplayer.com/product/502548/pokemon-sv-scarlet-and-violet-151-squirtle-007-165",
+      "extendedData": [
+        {
+          "name": "Number",
+          "value": "007/165"
+        },
+        {
+          "name": "Rarity",
+          "value": "Common"
+        }
+      ]
+    },
+    {
+      "productId": 502549,
+      "name": "Squirtle - 170/165",
+      "cleanName": "Squirtle 170 165",
+      "imageUrl": "https://tcgplayer-cdn.tcgplayer.com/product/502549_200w.jpg",
+      "categoryId": 3,
+      "groupId": 23237,
+      "url": "https://www.tcgplayer.com/product/502549/pokemon-sv-scarlet-and-violet-151-squirtle-170-165",
+      "extendedData": [
+        {
+          "name": "Number",
+          "value": "170/165"
+        },
+        {
+          "name": "Rarity",
+          "value": "Illustration Rare"
+        }
+      ]
+    },
+    {
+      "productId": 502550,
+      "name": "Wartortle - 008/165",
+      "cleanName": "Wartortle 008 165",
+      "imageUrl": "https://tcgplayer-cdn.tcgplayer.com/product/502550_200w.jpg",
+      "categoryId": 3,
+      "groupId": 23237,
+      "url": "https://www.tcgplayer.com/product/502550/pokemon-sv-scarlet-and-violet-151-wartortle-008-165",
+      "extendedData": [
+        {
+          "name": "Number",
+          "value": "008/165"
+        },
+        {
+          "name": "Rarity",
+          "value": "Uncommon"
+        }
+      ]
+    },
+    {
+      "productId": 501999,
+      "name": "151 Pokemon Center Elite Trainer Box (Exclusive)",
+      "cleanName": "151 Pokemon Center Elite Trainer Box Exclusive",
+      "imageUrl": "https://tcgplayer-cdn.tcgplayer.com/product/501999_200w.jpg",
+      "categoryId": 3,
+      "groupId": 23237,
+      "url": "https://www.tcgplayer.com/product/501999/pokemon-sv-scarlet-and-violet-151-151-pokemon-center-elite-trainer-box-exclusive",
+      "extendedData": []
+    }
+  ]
+}

@@ -1,4 +1,9 @@
 import {
+  POKEMONTCG_NOTICE,
+  POKEMONTCG_SITE_URL,
+  POKEMONTCG_SOURCE_LABEL,
+  TCGCSV_SITE_URL,
+  TCGCSV_SOURCE_LABEL,
   TRENDING_DISABLED_COPY,
   actionErrorMessage,
   formatSignedPercent,
@@ -163,7 +168,12 @@ export default function TrendingScreen() {
           </Section>
         </>
       )}
-      <PokemonTcgAttribution />
+      <PokemonTcgAttribution
+        notice={payload?.attribution.pokemontcg}
+        sourceLabel={payload?.attribution.pokemontcg === POKEMONTCG_NOTICE ? POKEMONTCG_SOURCE_LABEL : TCGCSV_SOURCE_LABEL}
+        siteUrl={payload?.attribution.pokemontcg === POKEMONTCG_NOTICE ? POKEMONTCG_SITE_URL : TCGCSV_SITE_URL}
+        siteLabel={payload?.attribution.pokemontcg === POKEMONTCG_NOTICE ? "pokemontcg.io" : "tcgcsv.com"}
+      />
       {loadError ? <Text style={styles.hidden}>{actionErrorMessage(loadError, TRENDING_DISABLED_COPY)}</Text> : null}
     </ScrollView>
   );

@@ -30,6 +30,8 @@ function chunks(line: string): string[] {
 /** Not about the screen: card set names, other apps' "collection", API paths, code names. */
 const NOT_THE_SCREEN = [
   /Legendary Collection/,
+  /Classic Collection/,
+  /Radiant Collection/,
   /TCG Trader collection/,
   /PokéCollector for collection/,
   /\/(api|v1)\/collection/,

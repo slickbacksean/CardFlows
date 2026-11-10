@@ -1,0 +1,97 @@
+{
+  "totalItems": 10,
+  "success": true,
+  "errors": [],
+  "results": [
+    {
+      "groupId": 23237,
+      "name": "SV: Scarlet & Violet 151",
+      "abbreviation": "MEW",
+      "isSupplemental": false,
+      "publishedOn": "2023-09-22T00:00:00",
+      "modifiedOn": "2026-11-02T20:58:04.147",
+      "categoryId": 3
+    },
+    {
+      "groupId": 22873,
+      "name": "SV01: Scarlet & Violet Base Set",
+      "abbreviation": "SVI",
+      "isSupplemental": false,
+      "publishedOn": "2023-03-31T00:00:00",
+      "modifiedOn": "2026-10-23T13:39:43.043",
+      "categoryId": 3
+    },
+    {
+      "groupId": 3170,
+      "name": "SWSH12: Silver Tempest",
+      "abbreviation": "SWSH12",
+      "isSupplemental": false,
+      "publishedOn": "2022-11-11T00:00:00",
+      "modifiedOn": "2026-10-14T13:14:39.083",
+      "categoryId": 3
+    },
+    {
+      "groupId": 17674,
+      "name": "SWSH12: Silver Tempest Trainer Gallery",
+      "abbreviation": "SWSH12: TG",
+      "isSupplemental": false,
+      "publishedOn": "2022-11-11T00:00:00",
+      "modifiedOn": "2026-09-10T18:13:54.153",
+      "categoryId": 3
+    },
+    {
+      "groupId": 2545,
+      "name": "SWSH: Sword & Shield Promo Cards",
+      "abbreviation": "SWSD",
+      "isSupplemental": false,
+      "publishedOn": "2019-11-15T00:00:00",
+      "modifiedOn": "2026-10-28T17:50:29.22",
+      "categoryId": 3
+    },
+    {
+      "groupId": 23095,
+      "name": "Ash vs Team Rocket Deck Kit (JP Exclusive)",
+      "abbreviation": "AVTR",
+      "isSupplemental": false,
+      "publishedOn": "2017-04-21T00:00:00",
+      "modifiedOn": "2026-02-27T17:37:47.043",
+      "categoryId": 3
+    },
+    {
+      "groupId": 1441,
+      "name": "Gym Heroes",
+      "abbreviation": "G1",
+      "isSupplemental": false,
+      "publishedOn": "2000-10-14T00:00:00",
+      "modifiedOn": "2026-10-12T13:30:25.363",
+      "categoryId": 3
+    },
+    {
+      "groupId": 604,
+      "name": "Base Set",
+      "abbreviation": "BS",
+      "isSupplemental": false,
+      "publishedOn": "1999-01-09T00:00:00",
+      "modifiedOn": "2026-10-19T18:50:49.3",
+      "categoryId": 3
+    },
+    {
+      "groupId": 1663,
+      "name": "Base Set (Shadowless)",
+      "abbreviation": "BSS",
+      "isSupplemental": false,
+      "publishedOn": "1999-01-09T00:00:00",
+      "modifiedOn": "2026-10-26T13:55:46.507",
+      "categoryId": 3
+    },
+    {
+      "groupId": 2374,
+      "name": "Miscellaneous Cards & Products",
+      "abbreviation": "MCAP",
+      "isSupplemental": true,
+      "publishedOn": "2026-11-08T20:00:05.7186154Z",
+      "modifiedOn": "2026-11-06T20:20:09.83",
+      "categoryId": 3
+    }
+  ]
+}

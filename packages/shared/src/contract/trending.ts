@@ -1,4 +1,4 @@
-/** Trending tab: popularity + market movers from snapshotted pokemontcg.io prices. */
+/** Trending tab: popularity + market movers from snapshotted TCGCSV / pokemontcg.io prices. */
 import { z } from "zod";
 import type { TrendingPayload } from "../trending";
 import { defineRoute, typed } from "./core";

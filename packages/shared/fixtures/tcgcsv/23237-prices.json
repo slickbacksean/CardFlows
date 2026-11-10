@@ -1,0 +1,60 @@
+{
+  "success": true,
+  "errors": [],
+  "results": [
+    {
+      "productId": 501999,
+      "lowPrice": 1083.0,
+      "midPrice": 1366.35,
+      "highPrice": 3000.0,
+      "marketPrice": 1152.26,
+      "directLowPrice": null,
+      "subTypeName": "Normal"
+    },
+    {
+      "productId": 502548,
+      "lowPrice": 0.12,
+      "midPrice": 0.45,
+      "highPrice": 96.95,
+      "marketPrice": 0.46,
+      "directLowPrice": 0.43,
+      "subTypeName": "Reverse Holofoil"
+    },
+    {
+      "productId": 502548,
+      "lowPrice": 0.05,
+      "midPrice": 0.28,
+      "highPrice": 20.0,
+      "marketPrice": 0.28,
+      "directLowPrice": 0.09,
+      "subTypeName": "Normal"
+    },
+    {
+      "productId": 502549,
+      "lowPrice": 69.99,
+      "midPrice": 88.13,
+      "highPrice": 956.0,
+      "marketPrice": 77.66,
+      "directLowPrice": 91.75,
+      "subTypeName": "Holofoil"
+    },
+    {
+      "productId": 502550,
+      "lowPrice": 0.05,
+      "midPrice": 0.28,
+      "highPrice": 19.54,
+      "marketPrice": 0.27,
+      "directLowPrice": null,
+      "subTypeName": "Normal"
+    },
+    {
+      "productId": 502550,
+      "lowPrice": 0.18,
+      "midPrice": 0.5,
+      "highPrice": 40.0,
+      "marketPrice": 0.45,
+      "directLowPrice": 0.5,
+      "subTypeName": "Reverse Holofoil"
+    }
+  ]
+}

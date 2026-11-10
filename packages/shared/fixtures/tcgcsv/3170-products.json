@@ -1,0 +1,74 @@
+{
+  "totalItems": 4,
+  "success": true,
+  "errors": [],
+  "results": [
+    {
+      "productId": 450289,
+      "name": "Lugia V",
+      "cleanName": "Lugia V",
+      "imageUrl": "https://tcgplayer-cdn.tcgplayer.com/product/450289_200w.jpg",
+      "categoryId": 3,
+      "groupId": 3170,
+      "url": "https://www.tcgplayer.com/product/450289/pokemon-swsh12-silver-tempest-lugia-v",
+      "extendedData": [
+        {
+          "name": "Number",
+          "value": "138/195"
+        },
+        {
+          "name": "Rarity",
+          "value": "Ultra Rare"
+        }
+      ]
+    },
+    {
+      "productId": 450290,
+      "name": "Serperior VSTAR",
+      "cleanName": "Serperior VSTAR",
+      "imageUrl": "https://tcgplayer-cdn.tcgplayer.com/product/450290_200w.jpg",
+      "categoryId": 3,
+      "groupId": 3170,
+      "url": "https://www.tcgplayer.com/product/450290/pokemon-swsh12-silver-tempest-serperior-vstar",
+      "extendedData": [
+        {
+          "name": "Number",
+          "value": "008/195"
+        },
+        {
+          "name": "Rarity",
+          "value": "Ultra Rare"
+        }
+      ]
+    },
+    {
+      "productId": 450292,
+      "name": "Radiant Jirachi",
+      "cleanName": "Radiant Jirachi",
+      "imageUrl": "https://tcgplayer-cdn.tcgplayer.com/product/450292_200w.jpg",
+      "categoryId": 3,
+      "groupId": 3170,
+      "url": "https://www.tcgplayer.com/product/450292/pokemon-swsh12-silver-tempest-radiant-jirachi",
+      "extendedData": [
+        {
+          "name": "Number",
+          "value": "120/195"
+        },
+        {
+          "name": "Rarity",
+          "value": "Radiant Rare"
+        }
+      ]
+    },
+    {
+      "productId": 283388,
+      "name": "Silver Tempest Booster Pack",
+      "cleanName": "Silver Tempest Booster Pack",
+      "imageUrl": "https://tcgplayer-cdn.tcgplayer.com/product/283388_200w.jpg",
+      "categoryId": 3,
+      "groupId": 3170,
+      "url": "https://www.tcgplayer.com/product/283388/pokemon-swsh12-silver-tempest-silver-tempest-booster-pack",
+      "extendedData": []
+    }
+  ]
+}

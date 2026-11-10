@@ -22,6 +22,11 @@ export const POKEMONTCG_NOTICE =
   "Price data is for information only. See stores for final prices. This product is not produced, endorsed, supported, or affiliated with Nintendo or The Pokémon Company. Data provided by the Pokémon TCG API (pokemontcg.io).";
 export const POKEMONTCG_SITE_URL = "https://pokemontcg.io";
 
+export const TCGCSV_SOURCE_LABEL = "Price data from TCGCSV (TCGplayer market dumps)";
+export const TCGCSV_NOTICE =
+  "Price data is for information only. See stores for final prices. This product is not produced, endorsed, supported, or affiliated with Nintendo or The Pokémon Company. Daily market dumps from TCGCSV (tcgcsv.com), which republishes TCGplayer prices.";
+export const TCGCSV_SITE_URL = "https://tcgcsv.com";
+
 export const TRENDING_POPULARITY_ACTIVITY_LABEL = "Most popular on PokeSniper";
 export const TRENDING_POPULARITY_FALLBACK_LABEL =
   "Highest-value cards — not enough PokeSniper activity yet";
@@ -30,10 +35,13 @@ export const TRENDING_VARIANT_LABELS: Record<string, string> = {
   normal: "Normal",
   holofoil: "Holo",
   reverseHolofoil: "Reverse",
+  "1stEdition": "1st Edition",
   "1stEditionHolofoil": "1st Edition Holo",
   "1stEditionNormal": "1st Edition",
   unlimitedHolofoil: "Unlimited Holo",
   unlimited: "Unlimited",
+  shadowless: "Shadowless",
+  shadowlessHolofoil: "Shadowless Holo",
 };
 
 export function trendingVariantLabel(variant: string): string {
