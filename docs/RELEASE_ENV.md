@@ -1,13 +1,13 @@
 # Release env layout (P4)
 
-Expo Go keeps working, and there are no new native modules. **Preview and production builds need one real value, `EXPO_PUBLIC_API_URL`.** Everything else is optional and stays off until Sean sets it.
+Expo Go keeps working (`npx expo start`; Expo Go already includes `expo-updates` and ignores this project's EAS channels). **Preview and production builds need one real value, `EXPO_PUBLIC_API_URL`.** Everything else is optional and stays off until Sean sets it. A TestFlight/dev-client iOS binary must **rebuild** once so it contains `expo-updates`.
 
 ## EAS profiles (`apps/mobile/eas.json`)
 | Profile | Use | `APP_ENV` | EAS environment | Status today |
 |---|---|---|---|---|
-| `development` | Dev client, internal | `development` | `development` | Android works now. iOS needs the Apple account. |
-| `preview` | Internal test build | `preview` | `preview` | **Android preview works now** (APK, internal distribution). iOS (ad hoc / TestFlight) is blocked until the Apple Developer account exists. |
-| `production` | Store build | `production` | `production` | Android AAB works once the API URL is set. iOS is blocked on the Apple account. |
+| `development` | Dev client, internal | `development` | `development` | Android works now. iOS needs the Apple account. EAS Update channel `development`. |
+| `preview` | Internal test build | `preview` | `preview` | **Android preview works now** (APK, internal distribution). iOS (ad hoc / TestFlight) is blocked until the Apple Developer account exists. EAS Update channel `preview`. |
+| `production` | Store build | `production` | `production` | Android AAB works once the API URL is set. iOS is blocked on the Apple account. EAS Update channel `production`. |
 
 All three profiles extend `base` (Node 22.22.0 and the PostHog host). Preview and production also set `SENTRY_DISABLE_AUTO_UPLOAD=true`; see Sentry below. **No secret or per-environment value is committed.** Real values go in EAS environment variables:
 
@@ -143,16 +143,43 @@ If the reranker model/hr_cat is missing, the sidecar serves fusion-only (warning
 
 Keep `TRAINED_MODEL_WEIGHTS` / `_CAT_FULL` / `_ART` / `_CAT_IDS`. Do **not** change accept/margin defaults for this path (`0.68` / `0.02`).
 
-## OTA updates (EAS Update): configured, needs a rebuild
-EAS Update config is in place (Oct 20), but OTA updates don't work until a new native build includes `expo-updates`:
-- `app.json`: `runtimeVersion: { "policy": "fingerprint" }` (Dev Ops: a native change gets a new runtime automatically) and `updates.url` (`https://u.expo.dev/<EAS project id>`).
-- `eas.json`: `channel: "preview"` and `channel: "production"` on those profiles (development has none).
-- **Not done yet:** `expo-updates` isn't installed (no new native module while we're on Expo Go). To turn it on: `npx expo install expo-updates`, then **rebuild** preview/production with EAS. Until then the config is inert and eas-cli may warn about the channel.
-- Publish: `eas update --channel production --message "..."`. Roll back with `eas update:republish`.
+## OTA updates (EAS Update)
+`expo-updates` is installed (`apps/mobile`, SDK 57). Config was already in place; OTA still needs a **rebuild** of each native binary so the module is in the IPA/APK:
+- `app.json`: `runtimeVersion: { "policy": "fingerprint" }` (Dev Ops: a native change gets a new runtime automatically) and `updates.url` (`https://u.expo.dev/<EAS project id>`). `updates.enabled` is true, `checkAutomatically` is `ON_LOAD`, `fallbackToCacheTimeout` is 0.
+- `eas.json` channels match the profiles: `development`, `preview`, `production`.
+- **Expo Go still works.** `npx expo start` loads JS from Metro. Expo Go already includes `expo-updates`; it ignores this project's fingerprint `runtimeVersion` and EAS channels. Do not call `Updates.reloadAsync` / `checkForUpdateAsync` on the Expo Go path (Sentry reads `Updates.channel` only when not in Expo Go).
+- After the next EAS **rebuild**: publish with `eas update --channel production --message "..."`. Same for `preview` and `development`. Roll back with `eas update:republish`.
+
+## TestFlight (iOS)
+First iOS TestFlight is an EAS `preview` or `production` iOS build (Apple Developer account). Do not treat this as a store submit or a Railway deploy.
+
+### Privacy manifest
+`apps/mobile/app.json` `ios.privacyManifests` is compiled into the app target's `PrivacyInfo.xcprivacy` on prebuild. There is no committed `PrivacyInfo.xcprivacy`. After an EAS iOS build, download the IPA and confirm the file is in the bundle:
+
+```sh
+unzip -p *.ipa 'Payload/*.app/PrivacyInfo.xcprivacy'
+```
+
+Expect `NSPrivacyTracking` false, empty `NSPrivacyTrackingDomains`, and:
+
+**Collected data** (from the app and https://pokesniper.app/privacy — not tracking; no extra types):
+- `NSPrivacyCollectedDataTypeEmailAddress` — sign-in / sign-up; linked; App Functionality.
+- `NSPrivacyCollectedDataTypeUserID` — account id and community handle; linked; App Functionality.
+- `NSPrivacyCollectedDataTypePhotosorVideos` — scan/grade photos, and (Terms) scan photos kept temporarily for PokeSniper's own matcher; linked; App Functionality + Other (training).
+- `NSPrivacyCollectedDataTypeCrashData` — Sentry, opt-in Send crash reports; **not** linked; App Functionality.
+
+**Required-reason APIs** (app code + local `cardflow-live-video` + Expo modules statically linked into the app; SDK-only reason codes such as `0A2A.1` stay on the SDK manifests):
+- `UserDefaults` `CA92.1` — app-only defaults. The app uses SecureStore, not AsyncStorage; `expo-updates` writes OTA config to `UserDefaults.standard`, and Expo/RN do the same for app-only settings. No App Group (`1C8F.1`).
+- `FileTimestamp` `C617.1` — metadata of files in the app container (`expo-file-system` `File.exists` / write / delete on `Paths.document` and `Paths.cache`: scan queue, write queue, catalog snapshot, item index, account-deletion photo cleanup).
+- `SystemBootTime` `35F9.1` — elapsed time / timers. `expo-device` is imported (runtime + perf) and declares this; React Native's timing code does too. Local live-video uses `CFAbsoluteTimeGetCurrent` / `CACurrentMediaTime`, which are not required-reason APIs.
+
+Not declared: disk space (the app never queries free/total space) and active keyboards (`KeyboardAvoidingView` is not `activeInputModes`).
+
+`npx expo config --type public` (from `apps/mobile`) prints the same `ios.privacyManifests`. `npx expo prebuild --platform ios --no-install` in a throwaway copy writes `ios/PokeSniper/PrivacyInfo.xcprivacy`; do not commit that `ios/` tree.
 
 ## Sentry
 - **Off without a DSN:** `initMobileSentry()` returns before `require("@sentry/react-native")`. It also returns when Settings > **Send crash reports** is off (off by default; opt-in; turning it off closes the client right away).
-- Dev builds never send (`enabled: !__DEV__`). Events carry `environment` (`EXPO_PUBLIC_SENTRY_ENVIRONMENT` if set, else `EXPO_PUBLIC_APP_ENV`, which matches the EAS channel names), `release` (`app.pokesniper.mobile@<version>+<build>`) and `dist` (build number). See `sentryReleaseTags` in packages/shared.
+- Dev builds never send (`enabled: !__DEV__`). Events carry `environment` (`EXPO_PUBLIC_SENTRY_ENVIRONMENT` if set, else the expo-updates channel on a native build, else `EXPO_PUBLIC_APP_ENV`; those names match the EAS channels), `release` (`app.pokesniper.mobile@<version>+<build>`) and `dist` (build number). See `sentryReleaseTags` in packages/shared. Expo Go does not read `Updates.channel`.
 - **Scrubbing:** `sendDefaultPii: false`; no screenshots, view hierarchy, replay, tracing or failed-request capture. `beforeSend` runs `scrubSentryEvent`, which drops:
   - request bodies, cookies, and the `Authorization` and `X-CardFlow-App-Key` headers;
   - emails, IP addresses, bearer tokens, and JWT-like or long base64 blobs, including ones embedded in longer strings;
@@ -186,7 +213,7 @@ EAS Update config is in place (Oct 20), but OTA updates don't work until a new n
 
 ## App Store Connect (once the Apple account exists)
 - **Age rating:** the **18+** rating is set in App Store Connect (App Information > Age Rating, override to the higher rating after answering the questionnaire truthfully). It isn't a build setting. See APP_REVIEW_NOTES.md.
-- Privacy labels: see STORE_PRIVACY_LABELS.md (includes Diagnostics > Crash Data).
+- Privacy labels: see STORE_PRIVACY_LABELS.md (includes Diagnostics > Crash Data). The IPA privacy manifest is under [TestFlight (iOS)](#testflight-ios).
 
 ## Sign in with Apple
 A stub. See [SIGN_IN_WITH_APPLE.md](./SIGN_IN_WITH_APPLE.md).

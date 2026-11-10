@@ -20,11 +20,23 @@ function isExpoGo(): boolean {
   return Constants.appOwnership === "expo" || Constants.executionEnvironment === "storeClient";
 }
 
+/** EAS Update channel on a native build. Expo Go has expo-updates but no EAS channel. */
+function easUpdateChannel(): string | undefined {
+  if (isExpoGo()) return undefined;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const Updates = require("expo-updates") as { channel?: string | null };
+    const channel = Updates.channel?.trim();
+    return channel || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 /**
  * Dev Ops review: environment, release and dist so events line up with EAS builds.
- * release = bundle@version+build. environment = EXPO_PUBLIC_SENTRY_ENVIRONMENT, else
- * EXPO_PUBLIC_APP_ENV (same names as the eas.json profiles and EAS Update channels). expo-updates
- * isn't in the build yet, so its runtime channel isn't read; see docs/SENTRY.md.
+ * release = bundle@version+build. environment = EXPO_PUBLIC_SENTRY_ENVIRONMENT, else the
+ * expo-updates channel, else EXPO_PUBLIC_APP_ENV (same names as eas.json EAS Update channels).
  */
 function sentryRelease() {
   const config = Constants.expoConfig;
@@ -34,6 +46,7 @@ function sentryRelease() {
     version: config?.version,
     build,
     sentryEnvironment: process.env.EXPO_PUBLIC_SENTRY_ENVIRONMENT,
+    updatesChannel: easUpdateChannel(),
     appEnv: process.env.EXPO_PUBLIC_APP_ENV,
   });
 }

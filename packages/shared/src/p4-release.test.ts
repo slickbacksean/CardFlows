@@ -102,18 +102,100 @@ describe("P4: EAS profiles and env layout", () => {
     expect(read("docs/RELEASE_ENV.md")).toContain("SENTRY_DISABLE_AUTO_UPLOAD");
   });
 
-  it("Dev Ops: EAS Update is configured (channels + appVersion runtime) but expo-updates needs a rebuild", () => {
-    // Expo Go only for now: no new native module in this PR.
-    expect(read("apps/mobile/package.json")).not.toContain("expo-updates");
+  it("Dev Ops: expo-updates is installed and wired to fingerprint runtime + EAS channels", () => {
+    expect(read("apps/mobile/package.json")).toMatch(/"expo-updates":\s*"~57\./);
     const raw = JSON.parse(read("apps/mobile/eas.json")) as { build: Record<string, { channel?: string }> };
+    expect(raw.build.development?.channel).toBe("development");
     expect(raw.build.preview?.channel).toBe("preview");
     expect(raw.build.production?.channel).toBe("production");
-    expect(raw.build.development?.channel).toBeUndefined();
-    const app = JSON.parse(read("apps/mobile/app.json")) as { expo: { runtimeVersion?: unknown; updates?: { url?: string }; extra: { eas: { projectId: string } } } };
+    const app = JSON.parse(read("apps/mobile/app.json")) as {
+      expo: {
+        plugins: Array<string | [string, unknown]>;
+        runtimeVersion?: unknown;
+        updates?: { url?: string; enabled?: boolean; checkAutomatically?: string };
+        extra: { eas: { projectId: string } };
+      };
+    };
+    expect(app.expo.plugins).toContain("expo-updates");
     expect(app.expo.runtimeVersion).toEqual({ policy: "fingerprint" });
     expect(app.expo.updates?.url).toBe(`https://u.expo.dev/${app.expo.extra.eas.projectId}`);
+    expect(app.expo.updates?.enabled).toBe(true);
+    expect(app.expo.updates?.checkAutomatically).toBe("ON_LOAD");
     const doc = read("docs/RELEASE_ENV.md");
-    for (const needle of ["EAS Update", "expo-updates", "rebuild", "channel", "runtimeVersion", "updates.url"]) expect(doc).toContain(needle);
+    for (const needle of ["EAS Update", "expo-updates", "rebuild", "channel", "runtimeVersion", "updates.url", "Expo Go"]) expect(doc).toContain(needle);
+    expect(read("apps/mobile/lib/sentry.ts")).toContain("require(\"expo-updates\")");
+    expect(read("apps/mobile/lib/sentry.ts")).toContain("if (isExpoGo()) return undefined");
+  });
+
+  it("TestFlight: app-level iOS privacy manifest matches the privacy policy (no extra collection)", () => {
+    const app = JSON.parse(read("apps/mobile/app.json")) as {
+      expo: {
+        ios: {
+          privacyManifests: {
+            NSPrivacyTracking: boolean;
+            NSPrivacyTrackingDomains: string[];
+            NSPrivacyCollectedDataTypes: Array<{
+              NSPrivacyCollectedDataType: string;
+              NSPrivacyCollectedDataTypeLinked: boolean;
+              NSPrivacyCollectedDataTypeTracking: boolean;
+              NSPrivacyCollectedDataTypePurposes: string[];
+            }>;
+            NSPrivacyAccessedAPITypes: Array<{
+              NSPrivacyAccessedAPIType: string;
+              NSPrivacyAccessedAPITypeReasons: string[];
+            }>;
+          };
+        };
+      };
+    };
+    const manifests = app.expo.ios.privacyManifests;
+    expect(manifests.NSPrivacyTracking).toBe(false);
+    expect(manifests.NSPrivacyTrackingDomains).toEqual([]);
+
+    const collected = Object.fromEntries(manifests.NSPrivacyCollectedDataTypes.map((row) => [row.NSPrivacyCollectedDataType, row]));
+    expect(Object.keys(collected).sort()).toEqual([
+      "NSPrivacyCollectedDataTypeCrashData",
+      "NSPrivacyCollectedDataTypeEmailAddress",
+      "NSPrivacyCollectedDataTypePhotosorVideos",
+      "NSPrivacyCollectedDataTypeUserID",
+    ]);
+    expect(collected.NSPrivacyCollectedDataTypeEmailAddress).toMatchObject({
+      NSPrivacyCollectedDataTypeLinked: true,
+      NSPrivacyCollectedDataTypeTracking: false,
+      NSPrivacyCollectedDataTypePurposes: ["NSPrivacyCollectedDataTypePurposeAppFunctionality"],
+    });
+    expect(collected.NSPrivacyCollectedDataTypeUserID).toMatchObject({
+      NSPrivacyCollectedDataTypeLinked: true,
+      NSPrivacyCollectedDataTypeTracking: false,
+      NSPrivacyCollectedDataTypePurposes: ["NSPrivacyCollectedDataTypePurposeAppFunctionality"],
+    });
+    expect(collected.NSPrivacyCollectedDataTypePhotosorVideos).toMatchObject({
+      NSPrivacyCollectedDataTypeLinked: true,
+      NSPrivacyCollectedDataTypeTracking: false,
+      NSPrivacyCollectedDataTypePurposes: [
+        "NSPrivacyCollectedDataTypePurposeAppFunctionality",
+        "NSPrivacyCollectedDataTypePurposeOther",
+      ],
+    });
+    expect(collected.NSPrivacyCollectedDataTypeCrashData).toMatchObject({
+      NSPrivacyCollectedDataTypeLinked: false,
+      NSPrivacyCollectedDataTypeTracking: false,
+      NSPrivacyCollectedDataTypePurposes: ["NSPrivacyCollectedDataTypePurposeAppFunctionality"],
+    });
+
+    const accessed = Object.fromEntries(manifests.NSPrivacyAccessedAPITypes.map((row) => [row.NSPrivacyAccessedAPIType, row.NSPrivacyAccessedAPITypeReasons]));
+    expect(accessed).toEqual({
+      NSPrivacyAccessedAPICategoryUserDefaults: ["CA92.1"],
+      NSPrivacyAccessedAPICategoryFileTimestamp: ["C617.1"],
+      NSPrivacyAccessedAPICategorySystemBootTime: ["35F9.1"],
+    });
+    expect(accessed).not.toHaveProperty("NSPrivacyAccessedAPICategoryDiskSpace");
+    expect(accessed).not.toHaveProperty("NSPrivacyAccessedAPICategoryActiveKeyboards");
+
+    const liveVideo = read("apps/mobile/modules/cardflow-live-video/ios/CardFlowLiveVideoModule.swift");
+    expect(liveVideo).not.toMatch(/UserDefaults|NSUserDefaults|systemUptime|mach_absolute_time|statfs|activeInputModes|NSFileCreationDate|NSFileModificationDate/);
+    expect(read("docs/RELEASE_ENV.md")).toContain("unzip -p *.ipa 'Payload/*.app/PrivacyInfo.xcprivacy'");
+    expect(read("docs/APP_REVIEW_NOTES.md")).toContain("unzip -p *.ipa 'Payload/*.app/PrivacyInfo.xcprivacy'");
   });
 
   it("commits no API URL, DSN or analytics key (they're EAS environment variables)", () => {
