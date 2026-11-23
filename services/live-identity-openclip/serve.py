@@ -27,6 +27,12 @@ Env (OpenCLIP fallback):
   LIVE_IDENTITY_WARP        1 (default) straightens crop; 0 = old crop only
   LIVE_IDENTITY_LIVE_FLOOR  Lower similarity when winner is clearly ahead (default 0.80)
   LIVE_IDENTITY_LIVE_FLOOR_MARGIN  Margin required for floor (default 0.045)
+
+Env (card-language router, default OFF — do not enable in production):
+  LANG_ROUTER_V2=0          Unset or 0: /v1/match is unchanged.
+                            1: retune EN/JA/ZH catalog choice from OCR + top-1 cosines.
+  LANG_CATALOG_JA / _ZH / _ZH_HANS / _ZH_TW
+                            Optional catalog paths. EN-only (the default) is a no-op.
 """
 
 from __future__ import annotations
@@ -46,6 +52,7 @@ from fastapi import FastAPI, File, Form, Header, HTTPException, UploadFile
 from fastapi.responses import JSONResponse
 from PIL import Image
 
+from lang_router import apply_language_route, lang_router_v2_enabled, registry_from_env
 from orb_rerank import rerank_near_tie
 from warp import warp_card
 from trained_dinov2 import load_trained_model, TrainedModel
@@ -69,6 +76,8 @@ NAME_ACCEPT = float(os.environ.get("LIVE_IDENTITY_NAME_ACCEPT", "0.74"))
 WARP = os.environ.get("LIVE_IDENTITY_WARP", "1").strip() != "0"
 EMBED_MODEL = "ViT-B-32"
 EMBED_PRETRAINED = "openai"
+# Paths only. Existence is checked when LANG_ROUTER_V2 is on; catalog bytes are never read.
+_LANG_REGISTRY = registry_from_env()
 
 app = FastAPI(title="cardflow-live-identity-openclip", docs_url=None, redoc_url=None)
 
@@ -410,6 +419,43 @@ def _name_hints(name: str | None, names: str | None) -> list[str]:
   return unique[:3]
 
 
+def _router_ocr_text(ocr: str | None, name: str | None, names: str | None) -> str:
+  """Raw OCR plus name hints. Used only when LANG_ROUTER_V2 is on."""
+  parts: list[str] = []
+  if ocr and ocr.strip():
+    parts.append(ocr)
+  if names and names.strip():
+    parts.append(names)
+  elif name and name.strip():
+    parts.append(name)
+  return "\n".join(parts)
+
+
+def _en_top_score(payload: dict[str, Any]) -> dict[str, float] | None:
+  similarity = payload.get("similarity")
+  if isinstance(similarity, bool) or not isinstance(similarity, (int, float)):
+    return None
+  return {"en": float(similarity)}
+
+
+def _apply_lang_router(
+  payload: dict[str, Any],
+  ocr: str | None,
+  name: str | None,
+  names: str | None,
+) -> dict[str, Any]:
+  """LANG_ROUTER_V2 off: same dict, no router call, no extra JSON keys."""
+  if not lang_router_v2_enabled():
+    return payload
+  return apply_language_route(
+    payload,
+    _router_ocr_text(ocr, name, names),
+    scores=_en_top_score(payload),
+    registry=_LANG_REGISTRY,
+    enabled=True,
+  )
+
+
 def _number_hints(number: str | None, numbers: str | None) -> list[str]:
   hints: list[str] = []
   if numbers:
@@ -453,6 +499,7 @@ async def match(
   names: str | None = Form(default=None),
   number: str | None = Form(default=None),
   numbers: str | None = Form(default=None),
+  ocr: str | None = Form(default=None),
   authorization: str | None = Header(default=None),
   x_cardflow_token: str | None = Header(default=None, alias="X-CardFlow-Token"),
 ) -> JSONResponse:
@@ -527,21 +574,20 @@ async def match(
       "rerankMs": rerank_ms,
       "totalMs": ms(received, finished),
     }
-    return JSONResponse(
-      {
-        "ok": True,
-        "pipeline": _pipeline,
-        "accepted": accepted,
-        "reason": reason,
-        "orb": orb_mode,
-        "tcgdexId": top["tcgdexId"] if accepted else None,
-        "similarity": top["similarity"] if top else None,
-        "margin": margin,
-        "warped": warped,
-        "timings": timings,
-        "candidates": candidates,
-      }
-    )
+    payload = {
+      "ok": True,
+      "pipeline": _pipeline,
+      "accepted": accepted,
+      "reason": reason,
+      "orb": orb_mode,
+      "tcgdexId": top["tcgdexId"] if accepted else None,
+      "similarity": top["similarity"] if top else None,
+      "margin": margin,
+      "warped": warped,
+      "timings": timings,
+      "candidates": candidates,
+    }
+    return JSONResponse(_apply_lang_router(payload, ocr, name, names))
   
   # OpenCLIP fallback
   query = _embed(image)
@@ -589,21 +635,20 @@ async def match(
     "orbMs": ms(searched, finished),
     "totalMs": ms(received, finished),
   }
-  return JSONResponse(
-    {
-      "ok": True,
-      "pipeline": _pipeline,
-      "accepted": accepted,
-      "reason": reason,
-      "orb": orb_mode,
-      "tcgdexId": top["tcgdexId"] if accepted else None,
-      "similarity": top["similarity"] if top else None,
-      "margin": margin,
-      "warped": warped,
-      "timings": timings,
-      "candidates": candidates[:TOPK],
-    }
-  )
+  payload = {
+    "ok": True,
+    "pipeline": _pipeline,
+    "accepted": accepted,
+    "reason": reason,
+    "orb": orb_mode,
+    "tcgdexId": top["tcgdexId"] if accepted else None,
+    "similarity": top["similarity"] if top else None,
+    "margin": margin,
+    "warped": warped,
+    "timings": timings,
+    "candidates": candidates[:TOPK],
+  }
+  return JSONResponse(_apply_lang_router(payload, ocr, name, names))
 
 
 if __name__ == "__main__":

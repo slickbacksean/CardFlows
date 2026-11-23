@@ -77,6 +77,12 @@ Match: `POST http://127.0.0.1:8092/v1/match` multipart field `crop` (JPEG/PNG of
 
 Accept gate: top-1 similarity ≥ `LIVE_IDENTITY_ACCEPT` (default `0.86`) **and** top-1 − top-2 ≥ `LIVE_IDENTITY_MARGIN` (default `0.02`). A near-tie is re-ranked with ORB inliers when a local reference image exists (`LIVE_IDENTITY_REF_DIR`, or `images/` next to the index, or `../images`). Missing OpenCV or a missing image keeps the cosine order. Responses carry `reason`: `accepted`, `below_threshold`, or `ambiguous`, plus `orb`: `orb` or `cosine`. `/health` reports `matchP50Ms` and `matchP95Ms` for recent matches. Re-tune on the built index with `python scripts/eval_accept.py`.
 
+## Card language router (off by default)
+
+`LANG_ROUTER_V2` defaults **off** (unset or `0`). While it is off, `POST /v1/match` is unchanged and still answers from the single live catalog. Do not set this in Railway or production: a leave-one-seller-out refit of the thresholds is not stable yet.
+
+`LANG_ROUTER_V2=1` retunes catalog choice from OCR script plus each catalog's top-1 raw cosine (`en` / `ja` / `zh`). Optional paths `LANG_CATALOG_JA`, `LANG_CATALOG_ZH`, `LANG_CATALOG_ZH_HANS`, and `LANG_CATALOG_ZH_TW` register extra catalogs (not loaded from git). If only English is configured, the registry is a no-op and the match body stays the English answer. An optional raw OCR form field `ocr` is read only when the flag is on. Thresholds: `LANG_ROUTER_HANZI_JA_MARGIN` (0.02), `LANG_ROUTER_LATIN_EN_FLOOR` (0.35), `LANG_ROUTER_LATIN_BEST_OVER_EN` (0.08), `LANG_ROUTER_LATIN_BEST_OVER_OTHER` (0.05).
+
 ## Wire into PokeSniper API
 
 ```bash
@@ -95,6 +101,7 @@ Run unit tests with tiny random model (no real weights needed):
 ```bash
 pytest test_trained_dinov2.py -v
 python test_ship_scanner.py   # fusion math, rerank p>0.9, missing-file fallback
+python test_lang_router.py    # EN/JA/ZH router branches; flag off matches baseline
 ```
 
 ## ONNX Export (Optional)
