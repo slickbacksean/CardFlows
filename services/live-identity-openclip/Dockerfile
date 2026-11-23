@@ -58,6 +58,7 @@ RUN pip install --index-url https://download.pytorch.org/whl/cpu \
 COPY --chown=app:app \
      serve.py \
      fusion_score.py \
+     lang_router.py \
      orb_rerank.py \
      printing_rerank.py \
      trained_dinov2.py \
